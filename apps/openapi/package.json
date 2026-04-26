@@ -4,7 +4,8 @@
   "description": "Convert an OpenAPI 3.x / Swagger 2.0 document into type declarations for TypeScript, Dart and 25+ other languages.",
   "license": "MIT",
   "files": [
-    "dist"
+    "dist",
+    "README_zh.md"
   ],
   "type": "module",
   "main": "./dist/index.mjs",
