@@ -16,12 +16,7 @@ import path from "path";
 
 import { quicktype, InputData, JSONSchemaInput } from "quicktype-core";
 
-import {
-  type BaseConfig,
-  type EmitContext,
-  type EmitOutput,
-  type LangConfig,
-} from "./config/shared";
+import { type BaseConfig, type EmitContext, type EmitOutput, type LangConfig } from "./config/shared";
 import { buildMegaSchema, loadOpenAPI, type MegaSchemaResult } from "./schema";
 
 export * from "./http-types";
@@ -56,6 +51,7 @@ export * from "./config/typescript-zod";
 export * from "./schema";
 export * from "./emitters/typescript-emitter";
 export * from "./emitters/dart-emitter";
+export * from "./http-types";
 
 // 其它 25 种语言可按需 import：
 //   import { configureJava }                    from './config/java'
@@ -86,25 +82,34 @@ export * from "./emitters/dart-emitter";
 
 const PROJECT_ROOT = process.cwd();
 
+/** 把 `base.source` 的 5 种形态压成一行短描述，避免内联字符串塞满日志 */
+function describeSource(source: string | Record<string, unknown>): string {
+  if (typeof source !== "string") return "[object]";
+  if (/^https?:\/\//i.test(source)) return source;
+  const trimmed = source.trimStart();
+  if (trimmed.startsWith("{") || trimmed.startsWith("[")) {
+    return `[inline JSON, ${source.length} chars]`;
+  }
+  if (source.includes("\n")) {
+    return `[inline YAML, ${source.length} chars]`;
+  }
+  return source;
+}
+
 // ============================================================================
 // 主函数：generate
 // ============================================================================
 
 export async function generate(base: BaseConfig, langs: LangConfig[]): Promise<void> {
-  const sourceLabel = typeof base.source === "string" ? base.source : "[object]";
-  console.log(`[openapi-to-lang] Loading OpenAPI: ${sourceLabel}`);
+  console.log(`[openapi2lang] Loading OpenAPI: ${describeSource(base.source)}`);
   const doc = await loadOpenAPI(base.source, PROJECT_ROOT);
 
-  console.log("[openapi-to-lang] Building mega-schema...");
+  console.log("[openapi2lang] Building mega-schema...");
   const meta = buildMegaSchema(doc, base);
-  console.log(
-    `[openapi-to-lang] components: ${meta.componentNames.length} | ops: ${meta.ops.length} | definitions: ${
-      Object.keys(meta.schema.definitions).length
-    }`,
-  );
+  console.log(`[openapi2lang] components: ${meta.componentNames.length} | ops: ${meta.ops.length} | definitions: ${Object.keys(meta.schema.definitions).length}`);
 
   for (const lang of langs) {
-    console.log(`[openapi-to-lang] Running quicktype for language: ${lang.base.lang}`);
+    console.log(`[openapi2lang] Running quicktype for language: ${lang.base.lang}`);
     const outputs = await runLang(lang, meta);
     for (const { filename, content } of outputs) {
       const absPath = path.resolve(PROJECT_ROOT, lang.base.dir, filename);
@@ -114,7 +119,7 @@ export async function generate(base: BaseConfig, langs: LangConfig[]): Promise<v
     }
   }
 
-  console.log("[openapi-to-lang] Done.");
+  console.log("[openapi2lang] Done.");
 }
 
 /** 单个语言的全流程：构建 InputData → 调 quicktype → emitter 回调或默认输出 */
@@ -149,9 +154,7 @@ async function runLang(cfg: LangConfig, meta: MegaSchemaResult): Promise<EmitOut
 /** 无 emitter 时的默认行为：剥 quicktype 顶部用法注释 + 拼 fileHeader → 单文件落到 modelsFile */
 function defaultEmit(cfg: LangConfig, raw: string): EmitOutput[] {
   if (!cfg.base.modelsFile) {
-    throw new Error(
-      `语言 '${cfg.base.lang}' 既没有 emitter 也没有 base.modelsFile；二者至少需要其一`,
-    );
+    throw new Error(`语言 '${cfg.base.lang}' 既没有 emitter 也没有 base.modelsFile；二者至少需要其一`);
   }
   return [
     {

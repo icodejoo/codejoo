@@ -33,13 +33,7 @@ const DEFAULT_OTHERS: CJsonOthersOptions = {
   "print-style": "print-formatted", // [quicktype 默认 'print-formatted']
 };
 
-type NamingStyle =
-  | "pascal-case"
-  | "underscore-case"
-  | "camel-case"
-  | "upper-underscore-case"
-  | "pascal-case-upper-acronyms"
-  | "camel-case-upper-acronyms";
+type NamingStyle = "pascal-case" | "underscore-case" | "camel-case" | "upper-underscore-case" | "pascal-case-upper-acronyms" | "camel-case-upper-acronyms";
 
 export interface ConfigureCJsonInput {
   base?: Partial<CJsonBase>;

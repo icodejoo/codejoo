@@ -8,12 +8,7 @@
 //   packages/quicktype-core/src/language/JavaScript/language.ts (TS 通过 ...javaScriptOptions 继承)
 
 import { emitTypescript } from "../emitters/typescript-emitter";
-import {
-  DEFAULT_INFERENCE_FLAGS,
-  type CommonBase,
-  type InferenceFlags,
-  type LangConfig,
-} from "./shared";
+import { DEFAULT_INFERENCE_FLAGS, type CommonBase, type InferenceFlags, type LangConfig } from "./shared";
 
 // ============================================================================
 // 工厂

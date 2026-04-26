@@ -9,14 +9,7 @@
 
 import type { DartLangConfig } from "../config/dart";
 import type { EmitContext, EmitOutput } from "../config/shared";
-import {
-  opCamelName,
-  opKey,
-  type MegaSchemaResult,
-  type OperationData,
-  type ReqInfo,
-  type ResponseRef,
-} from "../schema";
+import { opCamelName, opKey, type MegaSchemaResult, type OperationData, type ReqInfo, type ResponseRef } from "../schema";
 
 // ============================================================================
 // 入口：emit

@@ -4,9 +4,7 @@
 import type { CommonBase, LangConfig } from "./shared";
 import { DEFAULT_INFERENCE_FLAGS, type InferenceFlags } from "./shared";
 
-export function configureTypescriptEffectSchema(
-  input: ConfigureTsEffectInput = {},
-): TsEffectLangConfig {
+export function configureTypescriptEffectSchema(input: ConfigureTsEffectInput = {}): TsEffectLangConfig {
   const cfg: TsEffectLangConfig = {
     base: {
       lang: "typescript-effect-schema",

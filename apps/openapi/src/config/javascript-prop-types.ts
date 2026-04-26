@@ -4,9 +4,7 @@
 import type { CommonBase, LangConfig } from "./shared";
 import { DEFAULT_INFERENCE_FLAGS, type InferenceFlags } from "./shared";
 
-export function configureJavascriptPropTypes(
-  input: ConfigureJsPropTypesInput = {},
-): JsPropTypesLangConfig {
+export function configureJavascriptPropTypes(input: ConfigureJsPropTypesInput = {}): JsPropTypesLangConfig {
   const cfg: JsPropTypesLangConfig = {
     base: {
       lang: "javascript-prop-types",

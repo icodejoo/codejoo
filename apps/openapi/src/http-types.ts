@@ -6,11 +6,7 @@ type RefsLike<R> = { [K in keyof R]: { [M in keyof R[K]]: Tuple } };
 // 把 spec request 元组直接预编译成 rest 参数形态：
 //   []           → [body?: undefined]   （spec 声明可空）
 //   [payload: X] → [body: X]             （spec 必填）
-type BodyTuple<Req> = Req extends readonly []
-  ? [body?: undefined]
-  : Req extends readonly [infer X]
-    ? [body: X]
-    : [body?: any];
+type BodyTuple<Req> = Req extends readonly [] ? [body?: undefined] : Req extends readonly [infer X] ? [body: X] : [body?: any];
 
 /**
  * 由生成的 PathRefs 推导出完整的请求约束类型集合。
@@ -21,7 +17,7 @@ type BodyTuple<Req> = Req extends readonly []
  *
  * @example
  * ```ts
- * import type { OpenApi, Request } from '@codejoo/openapi-to-lang'
+ * import type { OpenApi, Request } from '@codejoo/openapi2lang'
  * import type { PathRefs } from './types/paths'
  *
  * type Api = OpenApi<PathRefs>
@@ -59,33 +55,13 @@ export type OpenApi<R extends RefsLike<R>> = {
 // 调用点 path 参数的形态：
 //   M 命中 spec → 该 method 下所有 path 字面量提示 + (string & {}) 兜底
 //   M 未命中    → 任意字符串
-type PathHint<A, M> = A extends { Method: infer KM; PathsOf: infer PM }
-  ? M extends KM
-    ? (M extends keyof PM ? PM[M] : never) | (string & {})
-    : string & {}
-  : string & {};
+type PathHint<A, M> = A extends { Method: infer KM; PathsOf: infer PM } ? (M extends KM ? (M extends keyof PM ? PM[M] : never) | (string & {}) : string & {}) : string & {};
 
 // 显式 R 优先，否则查 Res 表，未命中回退 any
-type ResolveRes<A, R, M, P> = [unknown] extends [R]
-  ? A extends { Res: infer T }
-    ? P extends keyof T
-      ? M extends keyof T[P]
-        ? T[P][M]
-        : any
-      : any
-    : any
-  : R;
+type ResolveRes<A, R, M, P> = [unknown] extends [R] ? (A extends { Res: infer T } ? (P extends keyof T ? (M extends keyof T[P] ? T[P][M] : any) : any) : any) : R;
 
 // 显式 Q 优先（强制 [body: Q]），否则查 Body 表，未命中回退 [body?: any]
-type ResolveBody<A, Q, M, P> = [unknown] extends [Q]
-  ? A extends { Body: infer T }
-    ? P extends keyof T
-      ? M extends keyof T[P]
-        ? T[P][M]
-        : [body?: any]
-      : [body?: any]
-    : [body?: any]
-  : [body: Q];
+type ResolveBody<A, Q, M, P> = [unknown] extends [Q] ? (A extends { Body: infer T } ? (P extends keyof T ? (M extends keyof T[P] ? T[P][M] : [body?: any]) : [body?: any]) : [body?: any]) : [body: Q];
 
 // 内部签名：Refs 实例化的 OpenApi 作为闭包变量传入，避免每个泛型位置重复展开
 type RequestSig<A> = A extends {
@@ -94,12 +70,7 @@ type RequestSig<A> = A extends {
   Res: any;
   Body: any;
 }
-  ? <
-      R = unknown,
-      Q = unknown,
-      const M extends KM | (string & {}) = KM,
-      const P extends PathHint<A, M> = PathHint<A, M>,
-    >(
+  ? <R = unknown, Q = unknown, const M extends KM | (string & {}) = KM, const P extends PathHint<A, M> = PathHint<A, M>>(
       method: M,
       path: P,
       ...args: ResolveBody<A, NoInfer<Q>, M, P>

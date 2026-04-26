@@ -6,12 +6,7 @@
 // 来源：packages/quicktype-core/src/language/Dart/language.ts
 
 import { emitDart } from "../emitters/dart-emitter";
-import {
-  DEFAULT_INFERENCE_FLAGS,
-  type CommonBase,
-  type InferenceFlags,
-  type LangConfig,
-} from "./shared";
+import { DEFAULT_INFERENCE_FLAGS, type CommonBase, type InferenceFlags, type LangConfig } from "./shared";
 
 // ============================================================================
 // 工厂
@@ -22,9 +17,7 @@ export function configureDart(input: ConfigureDartInput = {}): DartLangConfig {
     base: {
       lang: "dart",
       dir: input.base?.dir ?? "./types/dart",
-      fileHeader:
-        input.base?.fileHeader ??
-        "// !!! 脚本自动生成，请勿修改\n// ignore_for_file: type=lint\n\n",
+      fileHeader: input.base?.fileHeader ?? "// !!! 脚本自动生成，请勿修改\n// ignore_for_file: type=lint\n\n",
       inferenceFlags: { ...DEFAULT_INFERENCE_FLAGS, ...input.base?.inferenceFlags },
       modelsFile: input.base?.modelsFile ?? "models.dart",
       pathsFile: input.base?.pathsFile ?? "paths.dart",

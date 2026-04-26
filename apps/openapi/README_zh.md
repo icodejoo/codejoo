@@ -1,4 +1,6 @@
-# @codejoo/openapi-to-lang
+# @codejoo/openapi2lang
+
+> 🌐 **语言：** **中文** · [English](./README.md)
 
 将 OpenAPI 3.x（或 Swagger 2.0）文档转换为 TypeScript、Dart 及 25+ 种语言的类型声明。底层由 [quicktype-core](https://github.com/quicktype/quicktype) 驱动。
 
@@ -14,13 +16,12 @@
    - 5.1 [生成的文件结构](#51-生成的文件结构)
    - 5.2 [命名空间布局](#52-命名空间布局)
    - 5.3 [PathRefs — 核心数据结构](#53-pathrefs--核心数据结构)
-6. [用生成的类型实现类型安全的 fetch](#6-用生成的类型实现类型安全的-fetch)
-   - 6.1 [构建 fetch 包装层](#61-构建-fetch-包装层)
-   - 6.2 [泛型推导 — request()](#62-泛型推导--request)
-   - 6.3 [泛型推导 — 快捷方法](#63-泛型推导--快捷方法)
-   - 6.4 [推导链原理详解](#64-推导链原理详解)
-   - 6.5 [编译期自动拦截的错误](#65-编译期自动拦截的错误)
-   - 6.6 [未声明路径的逃生通道](#66-未声明路径的逃生通道)
+6. [用 `Request<PathRefs>` 实现类型安全的 fetch](#6-用-requestpathrefs-实现类型安全的-fetch)
+   - 6.1 [构建请求包装层](#61-构建请求包装层)
+   - 6.2 [调用点自动推导](#62-调用点自动推导)
+   - 6.3 [显式泛型：覆盖与逃生](#63-显式泛型覆盖与逃生)
+   - 6.4 [编译期自动拦截的错误](#64-编译期自动拦截的错误)
+   - 6.5 [可选：在其上封装快捷方法](#65-可选在其上封装快捷方法)
 7. [configureTypescript() 选项](#7-configuretypescript-选项)
 8. [Dart 输出](#8-dart-输出)
 9. [其他语言](#9-其他语言)
@@ -33,9 +34,9 @@
 ## 1. 安装
 
 ```bash
-pnpm add @codejoo/openapi-to-lang
+pnpm add @codejoo/openapi2lang
 # 或
-npm install @codejoo/openapi-to-lang
+npm install @codejoo/openapi2lang
 ```
 
 > **Node 要求：** Node.js 16 及以上（ESM 包）。
@@ -47,12 +48,7 @@ npm install @codejoo/openapi-to-lang
 在项目根目录创建脚本（例如 `scripts/gen-types.mjs`）：
 
 ```js
-import {
-  generate,
-  configureBase,
-  configureTypescript,
-  configureDart,
-} from "@codejoo/openapi-to-lang";
+import { generate, configureBase, configureTypescript, configureDart } from "@codejoo/openapi2lang";
 
 await generate(
   configureBase({
@@ -76,17 +72,17 @@ node scripts/gen-types.mjs
 控制台输出（所有文件均为绝对路径，方便定位）：
 
 ```
-[openapi-to-lang] Loading OpenAPI: https://petstore3.swagger.io/api/v3/openapi.json
-[openapi-to-lang] Building mega-schema...
-[openapi-to-lang] components: 5 | ops: 19 | definitions: 42
-[openapi-to-lang] Running quicktype for language: typescript
+[openapi2lang] Loading OpenAPI: https://petstore3.swagger.io/api/v3/openapi.json
+[openapi2lang] Building mega-schema...
+[openapi2lang] components: 5 | ops: 19 | definitions: 42
+[openapi2lang] Running quicktype for language: typescript
   Written: /your/project/types/response.d.ts
   Written: /your/project/types/request.d.ts
   Written: /your/project/types/paths.d.ts
-[openapi-to-lang] Running quicktype for language: dart
+[openapi2lang] Running quicktype for language: dart
   Written: /your/project/types/dart/models.dart
   Written: /your/project/types/dart/paths.dart
-[openapi-to-lang] Done.
+[openapi2lang] Done.
 ```
 
 ---
@@ -223,67 +219,141 @@ declare namespace model {
 
 ---
 
-## 6. 用生成的类型实现类型安全的 fetch
+## 6. 用 `Request<PathRefs>` 实现类型安全的 fetch
 
-三个 `.d.ts` 落盘并通过 `tsconfig.json` 纳入后，将其接入 fetch 层。
+三个 `.d.ts` 落盘并通过 `tsconfig.json` 纳入后，借助本包导出的 `Request` 泛型把它们接入 fetch 层。运行时只写一份，类型从生成的 `PathRefs` 自动推导。
 
-### 6.1 构建 fetch 包装层
+### 6.1 构建请求包装层
 
 ```ts
 // src/api/client.ts
+import type { Request } from "@codejoo/openapi2lang";
 
-type Refs = model.PathRefs;
+async function impl(method: string, path: string, body?: unknown): Promise<unknown> {
+  const init: RequestInit = { method: method.toUpperCase() };
+  let url = path;
 
-type Tuple = readonly [unknown, unknown];
-type FallbackTuple = readonly [any, any];
+  if (body !== undefined) {
+    if (method.toLowerCase() === "get") {
+      // GET 把 body 序列化为 query string
+      const params = new URLSearchParams(body as Record<string, string>).toString();
+      if (params) url += (url.includes("?") ? "&" : "?") + params;
+    } else {
+      init.headers = { "Content-Type": "application/json" };
+      init.body = JSON.stringify(body);
+    }
+  }
 
-/**
- * 核心查找类型：给定 path P 和 method M，从 PathRefs 中返回对应的有标签元组。
- * P 或 M 未在 spec 中声明时，退化为 [any, any]。
- */
-type Operation<P, M> = P extends keyof Refs
-  ? M extends keyof Refs[P]
-    ? Refs[P][M] & Tuple
-    : FallbackTuple
-  : FallbackTuple;
-
-/** 所有声明了方法 M 的 path */
-type PathsWith<M extends string> = {
-  [P in keyof Refs]: M extends keyof Refs[P] ? P : never;
-}[keyof Refs & string];
-
-/** 已声明的 path（带自动补全） + 任意字符串（退化为 any） */
-type LoosePath<M extends string> = PathsWith<M> | (string & {});
-/** 已声明的方法（带自动补全） + 任意字符串 */
-type LooseMethod<P> = (P extends keyof Refs ? keyof Refs[P] : never) | (string & {});
-
-// ---------------------------------------------------------------------------
-// 通用 request()
-// ---------------------------------------------------------------------------
-
-export async function request<P extends keyof Refs | (string & {}), M extends LooseMethod<P>>(
-  path: P,
-  method: M,
-  payload: Operation<P, M>[1],
-): Promise<Operation<P, M>[0]> {
-  const res = await fetch(path as string, {
-    method: String(method),
-    headers: { "Content-Type": "application/json" },
-    body: payload !== undefined ? JSON.stringify(payload) : undefined,
-  });
-  if (!res.ok) throw new Error(`HTTP ${res.status} ${res.statusText}`);
+  const res = await fetch(url, init);
   return res.json();
 }
 
-// ---------------------------------------------------------------------------
-// 快捷方法：get / post / put / del / patch
-// ---------------------------------------------------------------------------
+// 通过 cast 把宽松类型的 impl 升级成完全类型安全的 API
+export const request = impl as Request<model.PathRefs>;
+```
 
-function buildHttpMethod<const M extends "get" | "post" | "put" | "delete" | "patch">(method: M) {
-  return <P extends LoosePath<M>>(
-    path: P,
-    payload: Operation<P, M>[1],
-  ): Promise<Operation<P, M>[0]> => request(path as never, method as never, payload as never);
+`Request<R>` 产出的签名（极简化版）：
+
+```ts
+function request<R = unknown, Q = unknown, M extends Method, P extends PathHint<M>>(method: M, path: P, ...args: ResolvedBody<Q, M, P>): Promise<ResolvedRes<R, M, P>>;
+```
+
+- **`M`、`P`** —— 从调用点参数自动推导
+- **`R`、`Q`** —— 显式泛型参数，覆盖 spec 推导（用于 mock / 未上线接口的逃生通道）
+- **`...args`** —— 根据 spec 请求元组形态展开为 `[body: X]`（必填）或 `[body?: undefined]`（可选）
+- **返回类型** —— 来自 spec 响应位；spec 未命中 path/method 时退化为 `any`
+
+### 6.2 调用点自动推导
+
+```ts
+import { request } from "@/api/client";
+
+// ✅ method + path 自动推导；payload 按 spec 校验
+const pet = await request("get", "/pet/{petId}", { petId: 1 });
+//    ^ Promise<model.Pet>
+
+// ✅ POST + body
+const order = await request("post", "/store/order", {
+  id: 10,
+  petId: 1,
+  quantity: 2,
+  status: "placed",
+  complete: false,
+});
+//    ^ Promise<model.Order>
+
+// ✅ 数组响应
+const pets = await request("get", "/pet/findByStatus", { status: "available" });
+//    ^ Promise<Array<model.Pet>>
+
+// ✅ 路径参数 + body 字段全部拍平（没有嵌套的 `body:` 包装）
+await request("put", "/user/{username}", {
+  username: "john", // 路径参数（来自 extends 注入的扩展字段）
+  email: "john@example.com", // body 字段（继承自 model.User）
+});
+```
+
+### 6.3 显式泛型：覆盖与逃生
+
+`request<R, Q>(...)` 让你绕过 spec 推导。常用于 spec 里没有的端点（mock、第三方、未上线）。
+
+```ts
+// path 在 spec 中 → R/Q 自动从 spec 取
+await request("get", "/pet/{petId}", { petId: 1 });
+
+// path 不在 spec、不传泛型 → R = any, Q = any
+const r = await request("get", "/internal/healthcheck");
+
+// path 不在 spec、显式 R → 响应是 Pet，body 不校验
+const c = await request<model.Pet>("get", "/x");
+
+// 显式 R + Q → 两端都用户指定，body 强制必填
+const d = await request<model.Pet, string>("post", "/x", "body-as-string");
+```
+
+类型规则按优先级：
+
+1. 显式 `<R, Q>` 优先级最高，覆盖 spec
+2. 否则按 spec 推导（响应来自 `PathRefs[P][M][0]`、body 来自 `PathRefs[P][M][1]`）
+3. spec 未命中 → 响应/body 退化为 `any`
+4. spec 请求元组为空 `[]` → body 可选；非空 `[payload: X]` → body 必填
+
+### 6.4 编译期自动拦截的错误
+
+```ts
+// ❌ spec 标注 GET /pet/findByStatus 的 body 必填
+// @ts-expect-error - body required
+await request("get", "/pet/findByStatus");
+
+// ❌ 缺少必填字段
+await request("get", "/pet/{petId}", {});
+// Error: Property 'petId' is missing in type '{}'
+//        but required in type 'model.req.GetPetById'
+
+// ❌ 字段类型错误
+await request("get", "/pet/{petId}", { petId: "one" });
+// Error: Type 'string' is not assignable to type 'number'
+
+// ❌ PUT 缺少路径参数
+await request("put", "/user/{username}", { email: "john@example.com" });
+// Error: Property 'username' is missing in type '...'
+//        but required in type 'model.req.UpdateUser'
+```
+
+### 6.5 可选：在其上封装快捷方法
+
+如果你想要 `get(path, body)` 而不是 `request("get", path, body)`，用本包同时导出的 `OpenApi<R>` 类型组合——它已预算好 `Method`、`MethodOf`、`PathsOf`、`Res`、`Body` 等查找表，免去重复造轮子。
+
+```ts
+import type { OpenApi } from "@codejoo/openapi2lang";
+import { request } from "./client";
+
+type Api = OpenApi<model.PathRefs>;
+// Api["PathsOf"]["get"] → '/pet/{petId}' | '/pet/findByStatus' | ...
+
+function buildHttpMethod<const M extends Api["Method"]>(method: M) {
+  return <P extends Api["PathsOf"][M] | (string & {})>(path: P, ...body: P extends keyof Api["Body"] ? (M extends keyof Api["Body"][P] ? Api["Body"][P][M] : [body?: any]) : [body?: any]) =>
+    request(method as never, path as never, ...(body as never[]));
 }
 
 export const get = buildHttpMethod("get");
@@ -291,171 +361,15 @@ export const post = buildHttpMethod("post");
 export const put = buildHttpMethod("put");
 export const del = buildHttpMethod("delete");
 export const patch = buildHttpMethod("patch");
+
+// 调用更短：
+const pet = await get("/pet/{petId}", { petId: 1 });
+//    ^ Promise<model.Pet>
 ```
 
-> `(string & {})` 是一个 TypeScript 技巧：运行时等价于 `string`，但阻止编译器将字面量联合"宽化"（widening），从而保留编辑器的自动补全能力。
+`buildHttpMethod` 上的 `const M extends Api["Method"]` 修饰符确保 `'get'` 不被宽化成 `string`；否则 `PathsOf[string]` 产出 `never`，path 补全失效。
 
-### 6.2 泛型推导 — request()
-
-```ts
-import { request } from "@/api/client";
-
-// ✅ 类型完全自动推导，无需任何注解
-const pet = await request("/pet/{petId}", "get", { petId: 1 });
-//    ^ model.Pet
-
-const order = await request("/store/order", "post", {
-  id: 10,
-  petId: 1,
-  quantity: 2,
-  status: "placed",
-  complete: false,
-});
-//    ^ model.Order
-
-// ✅ 数组响应
-const pets = await request("/pet/findByStatus", "get", { status: "available" });
-//    ^ Array<model.Pet>
-
-// ✅ 带路径参数 + body 字段（全部拍平，无嵌套）
-await request("/user/{username}", "put", {
-  username: "john", // 路径参数（来自 extends 的扩展字段）
-  email: "john@example.com", // body 字段（继承自 model.User）
-});
-
-// ✅ 未声明的端点 → 退化为 any，不阻断编译
-const r = await request("/internal/healthcheck", "OPTIONS" as any, undefined);
-//    ^ any
-```
-
-**TypeScript 逐步解析过程：**
-
-```
-request('/pet/{petId}', 'get', payload)
-  │
-  ├─ P = '/pet/{petId}'          ← 从第一个参数字面量推导
-  ├─ M = 'get'                   ← 从第二个参数字面量推导
-  │
-  ├─ Operation<'/pet/{petId}', 'get'>
-  │       = Refs['/pet/{petId}']['get'] & Tuple
-  │       = [response: model.Pet, request: model.req.GetPetById] & Tuple
-  │
-  ├─ payload 类型 = Operation<P,M>[1] = model.req.GetPetById  ← 第三个参数在此检查
-  └─ 返回类型    = Operation<P,M>[0] = model.Pet
-```
-
-### 6.3 泛型推导 — 快捷方法
-
-```ts
-import { get, post, put, del, patch } from "@/api/client";
-
-// ✅ path 自动收窄为支持 GET 的路径集合
-const order = await get("/store/order/{orderId}", { orderId: 1 });
-//    ^ model.Order
-//
-// 编辑器只补全支持 GET 的路径：
-//   '/pet/findByStatus' | '/pet/findByTags' | '/pet/{petId}'
-//   | '/store/inventory' | '/store/order/{orderId}' | …
-
-// ✅ POST + body
-const created = await post("/store/order", {
-  id: 10,
-  petId: 1,
-  quantity: 2,
-  status: "placed",
-  complete: false,
-});
-//    ^ model.Order
-
-// ✅ PUT：路径参数 + body 字段全部拍平（无嵌套 body:）
-await put("/user/{username}", {
-  username: "john", // 路径参数（扩展字段）
-  email: "john@example.com", // body 字段（继承自 model.User）
-});
-
-// ✅ DELETE
-await del("/pet/{petId}", { petId: 1 });
-
-// ✅ 未声明路径 → 退化为 any
-await get("/temporary-mock", { anything: true });
-```
-
-**快捷方法的推导过程：**
-
-```
-get('/pet/{petId}', payload)
-  │
-  ├─ M 固定为 'get'（TS 5+ const 泛型，字面量不被宽化）
-  ├─ P extends LoosePath<'get'>
-  │       = PathsWith<'get'> | (string & {})
-  │       = '/pet/{petId}' | '/pet/findByStatus' | … | (string & {})
-  │
-  ├─ P 从第一个参数字面量推导为 '/pet/{petId}'
-  │
-  ├─ Operation<'/pet/{petId}', 'get'>
-  │       = [response: model.Pet, request: model.req.GetPetById]
-  │
-  ├─ payload 类型 = Operation<P,'get'>[1] = model.req.GetPetById
-  └─ 返回类型    = Promise<model.Pet>
-```
-
-`buildHttpMethod` 上的 `const M extends ...` 修饰符确保 `'get'` 不被宽化为 `string`；否则 `PathsWith<string>` 产出 `never`，补全失效。
-
-### 6.4 推导链原理详解
-
-```
-PathRefs ──► Operation<P, M>
-                │
-                ├── [0]  响应类型   →  Promise<…> 返回值类型
-                └── [1]  请求类型   →  payload 参数的约束类型
-```
-
-`Operation<P, M>` 这一个条件类型只计算一次，结果同时复用于 payload 约束和返回类型。TypeScript 对泛型类型结果有缓存，`Operation<'/pet/{petId}', 'get'>[0]` 和 `[1]` 共用同一份解析实例，无冗余开销。
-
-对比之前常见的 `extends ... infer` 模式：
-
-```ts
-// ❌ 老写法 — 两次条件类型求值，大型 schema 下明显更慢
-type Res<P, M> = M extends keyof Refs[P]
-  ? Refs[P][M] extends { response: infer R }
-    ? R
-    : any
-  : any;
-```
-
-### 6.5 编译期自动拦截的错误
-
-```ts
-// ❌ '/store/order' 不支持 GET — 编译期报错
-get("/store/order", {});
-// Error: Argument of type '"/store/order"' is not assignable to
-//        parameter of type 'PathsWith<"get"> | (string & {})'
-
-// ❌ 缺少必填字段
-get("/pet/{petId}", {});
-// Error: Property 'petId' is missing in type '{}'
-//        but required in type 'model.req.GetPetById'
-
-// ❌ 字段类型错误
-get("/pet/{petId}", { petId: "one" });
-// Error: Type 'string' is not assignable to type 'number'
-
-// ❌ PUT 时缺少路径参数
-put("/user/{username}", { email: "john@example.com" });
-// Error: Property 'username' is missing in type '...'
-//        but required in type 'model.req.UpdateUser'
-```
-
-### 6.6 未声明路径的逃生通道
-
-当 `path` 不在 `PathRefs` 的 key 集合中（或该方法未声明），`Operation<P, M>` 返回 `FallbackTuple = readonly [any, any]`。payload 和响应均为 `any`——无类型检查，编译不报错。
-
-```ts
-// 通过，r 类型为 any
-const r = await get("/internal/debug", { flag: true });
-```
-
-如需禁用逃生通道、强制只允许声明的路径，去掉 `LoosePath<M>` 中的 `| (string & {})` 即可。
+> `(string & {})` 是 TypeScript 技巧：运行时是 `string`，但阻止编译器把字面量联合"宽化"（widening）合并，从而保留 IDE 的字面量自动补全。把它从 `LoosePath<M>` 去掉就关闭了"任意 path"的逃生通道。
 
 ---
 
@@ -618,7 +532,7 @@ import {
   configurePhp,
   configureCpp,
   // … 其余语言
-} from "@codejoo/openapi-to-lang";
+} from "@codejoo/openapi2lang";
 
 await generate(configureBase({ source: "./openapi.yaml" }), [
   configureTypescript(),
@@ -646,7 +560,7 @@ configureJava({
 Emitter 是 quicktype 运行后调用的回调，接收原始输出和完整的 OpenAPI 元数据，返回 `{ filename, content }` 数组以写出多个文件。
 
 ```ts
-import type { EmitContext, EmitOutput, LangConfig } from "@codejoo/openapi-to-lang";
+import type { EmitContext, EmitOutput, LangConfig } from "@codejoo/openapi2lang";
 
 function myEmitter(ctx: EmitContext): EmitOutput[] {
   const { raw, meta, cfg } = ctx;

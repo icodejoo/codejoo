@@ -1,6 +1,6 @@
 {
-  "name": "@codejoo/openapi-to-lang",
-  "version": "1.0.0",
+  "name": "@codejoo/openapi2lang",
+  "version": "1.0.1",
   "description": "Convert an OpenAPI 3.x / Swagger 2.0 document into type declarations for TypeScript, Dart and 25+ other languages.",
   "license": "MIT",
   "files": [
@@ -17,13 +17,15 @@
     },
     "./package.json": "./package.json"
   },
+  "publishConfig": {
+    "access": "public"
+  },
   "scripts": {
     "fmt": "vp fmt -c oxfmt.config.ts",
     "lint": "vp lint -c oxlint.config.ts",
     "check": "vp fmt -c oxfmt.config.ts --check && vp lint -c oxlint.config.ts",
     "build": "pnpm run fmt && vp pack",
-    "dev": "vp pack --watch",
-    "prepublishOnly": "pnpm run check && vp pack"
+    "dev": "vp pack --watch"
   },
   "dependencies": {
     "js-yaml": "^4.1.0",

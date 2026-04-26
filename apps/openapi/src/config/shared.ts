@@ -25,15 +25,7 @@ export function configureBase(input: ConfigureBaseInput): BaseConfig {
   return {
     source: input.source,
     strictObjects: input.strictObjects ?? true,
-    httpMethodOrder: input.httpMethodOrder ?? [
-      "get",
-      "post",
-      "put",
-      "delete",
-      "patch",
-      "options",
-      "head",
-    ],
+    httpMethodOrder: input.httpMethodOrder ?? ["get", "post", "put", "delete", "patch", "options", "head"],
     conflictSuffix: input.conflictSuffix ?? ((base, n) => `${base}$${n}`),
   };
 }
@@ -62,7 +54,16 @@ export const DEFAULT_INFERENCE_FLAGS: InferenceFlags = {
  * 凡是与语言有关的（哪怕"看起来通用"，如 inferenceFlags），都放进对应 LangConfig.base。
  */
 export interface ConfigureBaseInput {
-  /** OpenAPI doc 来源：http/https URL、本地路径（.json/.yaml/.yml），或已解析的 JSON 对象 */
+  /**
+   * OpenAPI doc 来源，5 种形态自动识别：
+   *   1. 已解析对象（如 `import json from './openapi.json'`）
+   *   2. http/https URL，自动 fetch
+   *   3. 内联 JSON 字符串（trim 后以 `{` 或 `[` 开头）
+   *   4. 内联 YAML 字符串（含换行的字符串）
+   *   5. 本地文件路径（.json / .yaml / .yml）
+   *
+   * 全部归一为 JS 对象 → mega-schema → JSON.stringify → quicktype 单 source 渲染。
+   */
   source: string | Record<string, unknown>;
   /** 是否在 normalize 阶段给"显式有 properties 但没设 additionalProperties"的 object 注入 false（默认 true） */
   strictObjects?: boolean;

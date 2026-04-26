@@ -1,4 +1,6 @@
-# @codejoo/openapi-to-lang
+# @codejoo/openapi2lang
+
+> 🌐 **Languages:** **English** · [中文](./README_zh.md)
 
 Converts an OpenAPI 3.x (or Swagger 2.0) document into type declarations for TypeScript, Dart, and 25+ other languages. Powered by [quicktype-core](https://github.com/quicktype/quicktype).
 
@@ -14,13 +16,12 @@ Converts an OpenAPI 3.x (or Swagger 2.0) document into type declarations for Typ
    - 5.1 [Generated File Structure](#51-generated-file-structure)
    - 5.2 [Namespace Layout](#52-namespace-layout)
    - 5.3 [PathRefs — the key data structure](#53-pathrefs--the-key-data-structure)
-6. [Type-Safe Fetch with Generated Types](#6-type-safe-fetch-with-generated-types)
-   - 6.1 [Build the fetch wrapper](#61-build-the-fetch-wrapper)
-   - 6.2 [Generic inference — request()](#62-generic-inference--request)
-   - 6.3 [Generic inference — shortcut methods](#63-generic-inference--shortcut-methods)
-   - 6.4 [How the inference chain works](#64-how-the-inference-chain-works)
-   - 6.5 [Compile-time errors caught automatically](#65-compile-time-errors-caught-automatically)
-   - 6.6 [Escape hatch for undeclared paths](#66-escape-hatch-for-undeclared-paths)
+6. [Type-Safe Fetch with `Request<PathRefs>`](#6-type-safe-fetch-with-requestpathrefs)
+   - 6.1 [Build the request wrapper](#61-build-the-request-wrapper)
+   - 6.2 [Auto-inferred call sites](#62-auto-inferred-call-sites)
+   - 6.3 [Explicit generics: override or escape](#63-explicit-generics-override-or-escape)
+   - 6.4 [Compile-time errors caught automatically](#64-compile-time-errors-caught-automatically)
+   - 6.5 [Optional: build shortcut methods on top](#65-optional-build-shortcut-methods-on-top)
 7. [configureTypescript() Options](#7-configuretypescript-options)
 8. [Dart Output](#8-dart-output)
 9. [Other Languages](#9-other-languages)
@@ -33,9 +34,9 @@ Converts an OpenAPI 3.x (or Swagger 2.0) document into type declarations for Typ
 ## 1. Installation
 
 ```bash
-pnpm add @codejoo/openapi-to-lang
+pnpm add @codejoo/openapi2lang
 # or
-npm install @codejoo/openapi-to-lang
+npm install @codejoo/openapi2lang
 ```
 
 > **Node requirement:** Node.js 16 or above (ESM package).
@@ -47,12 +48,7 @@ npm install @codejoo/openapi-to-lang
 Create a script (e.g. `scripts/gen-types.mjs`) in your project root:
 
 ```js
-import {
-  generate,
-  configureBase,
-  configureTypescript,
-  configureDart,
-} from "@codejoo/openapi-to-lang";
+import { generate, configureBase, configureTypescript, configureDart } from "@codejoo/openapi2lang";
 
 await generate(
   configureBase({
@@ -76,17 +72,17 @@ node scripts/gen-types.mjs
 Console output (all absolute paths so you know exactly where files landed):
 
 ```
-[openapi-to-lang] Loading OpenAPI: https://petstore3.swagger.io/api/v3/openapi.json
-[openapi-to-lang] Building mega-schema...
-[openapi-to-lang] components: 5 | ops: 19 | definitions: 42
-[openapi-to-lang] Running quicktype for language: typescript
+[openapi2lang] Loading OpenAPI: https://petstore3.swagger.io/api/v3/openapi.json
+[openapi2lang] Building mega-schema...
+[openapi2lang] components: 5 | ops: 19 | definitions: 42
+[openapi2lang] Running quicktype for language: typescript
   Written: /your/project/types/response.d.ts
   Written: /your/project/types/request.d.ts
   Written: /your/project/types/paths.d.ts
-[openapi-to-lang] Running quicktype for language: dart
+[openapi2lang] Running quicktype for language: dart
   Written: /your/project/types/dart/models.dart
   Written: /your/project/types/dart/paths.dart
-[openapi-to-lang] Done.
+[openapi2lang] Done.
 ```
 
 ---
@@ -220,67 +216,141 @@ Using a tuple (not an object) means we can read `[0]` / `[1]` directly without `
 
 ---
 
-## 6. Type-Safe Fetch with Generated Types
+## 6. Type-Safe Fetch with `Request<PathRefs>`
 
-Once the three `.d.ts` files are on disk and included in `tsconfig.json`, wire them up to your fetch layer.
+Once the three `.d.ts` files are on disk and included in `tsconfig.json`, wire them up to your fetch layer through the `Request` generic exported from this package. You write the runtime once; the types are derived from the generated `PathRefs`.
 
-### 6.1 Build the fetch wrapper
+### 6.1 Build the request wrapper
 
 ```ts
 // src/api/client.ts
+import type { Request } from "@codejoo/openapi2lang";
 
-type Refs = model.PathRefs;
+async function impl(method: string, path: string, body?: unknown): Promise<unknown> {
+  const init: RequestInit = { method: method.toUpperCase() };
+  let url = path;
 
-type Tuple = readonly [unknown, unknown];
-type FallbackTuple = readonly [any, any];
+  if (body !== undefined) {
+    if (method.toLowerCase() === "get") {
+      // serialize body as query string for GET
+      const params = new URLSearchParams(body as Record<string, string>).toString();
+      if (params) url += (url.includes("?") ? "&" : "?") + params;
+    } else {
+      init.headers = { "Content-Type": "application/json" };
+      init.body = JSON.stringify(body);
+    }
+  }
 
-/**
- * Core lookup: given a path P and method M, return the labeled tuple from PathRefs.
- * Falls back to [any, any] if either P or M is not declared in the spec.
- */
-type Operation<P, M> = P extends keyof Refs
-  ? M extends keyof Refs[P]
-    ? Refs[P][M] & Tuple
-    : FallbackTuple
-  : FallbackTuple;
-
-/** All paths that declare method M */
-type PathsWith<M extends string> = {
-  [P in keyof Refs]: M extends keyof Refs[P] ? P : never;
-}[keyof Refs & string];
-
-/** Declared paths for M, plus any arbitrary string (degraded to any) */
-type LoosePath<M extends string> = PathsWith<M> | (string & {});
-/** Declared methods for P, plus any arbitrary string */
-type LooseMethod<P> = (P extends keyof Refs ? keyof Refs[P] : never) | (string & {});
-
-// ---------------------------------------------------------------------------
-// Universal request()
-// ---------------------------------------------------------------------------
-
-export async function request<P extends keyof Refs | (string & {}), M extends LooseMethod<P>>(
-  path: P,
-  method: M,
-  payload: Operation<P, M>[1],
-): Promise<Operation<P, M>[0]> {
-  const res = await fetch(path as string, {
-    method: String(method),
-    headers: { "Content-Type": "application/json" },
-    body: payload !== undefined ? JSON.stringify(payload) : undefined,
-  });
-  if (!res.ok) throw new Error(`HTTP ${res.status} ${res.statusText}`);
+  const res = await fetch(url, init);
   return res.json();
 }
 
-// ---------------------------------------------------------------------------
-// Shortcut methods: get / post / put / del / patch
-// ---------------------------------------------------------------------------
+// loosely-typed `impl` is upgraded to a fully type-safe API by the cast.
+export const request = impl as Request<model.PathRefs>;
+```
 
-function buildHttpMethod<const M extends "get" | "post" | "put" | "delete" | "patch">(method: M) {
-  return <P extends LoosePath<M>>(
-    path: P,
-    payload: Operation<P, M>[1],
-  ): Promise<Operation<P, M>[0]> => request(path as never, method as never, payload as never);
+`Request<R>` produces (greatly simplified):
+
+```ts
+function request<R = unknown, Q = unknown, M extends Method, P extends PathHint<M>>(method: M, path: P, ...args: ResolvedBody<Q, M, P>): Promise<ResolvedRes<R, M, P>>;
+```
+
+- **`M`, `P`** — inferred from the call-site arguments
+- **`R`, `Q`** — explicit type parameters that override spec inference (escape hatch for mock / undeclared endpoints)
+- **`...args`** — `[body: X]` (required) or `[body?: undefined]` (optional) depending on the spec's request tuple
+- **return type** — pulled from the spec's response slot, or `any` if `path`/`method` not declared
+
+### 6.2 Auto-inferred call sites
+
+```ts
+import { request } from "@/api/client";
+
+// ✅ method + path inferred; payload type checked against spec
+const pet = await request("get", "/pet/{petId}", { petId: 1 });
+//    ^ Promise<model.Pet>
+
+// ✅ POST with body
+const order = await request("post", "/store/order", {
+  id: 10,
+  petId: 1,
+  quantity: 2,
+  status: "placed",
+  complete: false,
+});
+//    ^ Promise<model.Order>
+
+// ✅ Array response
+const pets = await request("get", "/pet/findByStatus", { status: "available" });
+//    ^ Promise<Array<model.Pet>>
+
+// ✅ Path param + body field flat (no nested `body:` wrapper)
+await request("put", "/user/{username}", {
+  username: "john", // path parameter (extends-injected)
+  email: "john@example.com", // body field (inherited from model.User)
+});
+```
+
+### 6.3 Explicit generics: override or escape
+
+`request<R, Q>(...)` lets you bypass spec inference. Useful for endpoints that don't appear in the spec (mocks, third-party, not yet shipped).
+
+```ts
+// path is in spec → R/Q auto-pulled from spec
+await request("get", "/pet/{petId}", { petId: 1 });
+
+// path NOT in spec, no generics → R = any, Q = any
+const r = await request("get", "/internal/healthcheck");
+
+// path NOT in spec, explicit R → response is Pet, body unchecked
+const c = await request<model.Pet>("get", "/x");
+
+// explicit R + Q → both body and response are user-typed; forces body required
+const d = await request<model.Pet, string>("post", "/x", "body-as-string");
+```
+
+Type rules in priority order:
+
+1. Explicit `<R, Q>` wins over spec
+2. Otherwise spec inference (response from `PathRefs[P][M][0]`, body from `PathRefs[P][M][1]`)
+3. Spec misses → response/body fall back to `any`
+4. Spec request tuple `[]` → body optional; `[payload: X]` → body required
+
+### 6.4 Compile-time errors caught automatically
+
+```ts
+// ❌ spec marks body as required for GET /pet/findByStatus
+// @ts-expect-error - body required
+await request("get", "/pet/findByStatus");
+
+// ❌ missing required field
+await request("get", "/pet/{petId}", {});
+// Error: Property 'petId' is missing in type '{}'
+//        but required in type 'model.req.GetPetById'
+
+// ❌ wrong field type
+await request("get", "/pet/{petId}", { petId: "one" });
+// Error: Type 'string' is not assignable to type 'number'
+
+// ❌ PUT path param missing
+await request("put", "/user/{username}", { email: "john@example.com" });
+// Error: Property 'username' is missing in type '...'
+//        but required in type 'model.req.UpdateUser'
+```
+
+### 6.5 Optional: build shortcut methods on top
+
+If you prefer `get(path, body)` over `request("get", path, body)`, compose with the `OpenApi<R>` type also exported from this package — it pre-computes lookup tables (`Method`, `MethodOf`, `PathsOf`, `Res`, `Body`) so you don't reinvent them.
+
+```ts
+import type { OpenApi } from "@codejoo/openapi2lang";
+import { request } from "./client";
+
+type Api = OpenApi<model.PathRefs>;
+// Api["PathsOf"]["get"] → '/pet/{petId}' | '/pet/findByStatus' | ...
+
+function buildHttpMethod<const M extends Api["Method"]>(method: M) {
+  return <P extends Api["PathsOf"][M] | (string & {})>(path: P, ...body: P extends keyof Api["Body"] ? (M extends keyof Api["Body"][P] ? Api["Body"][P][M] : [body?: any]) : [body?: any]) =>
+    request(method as never, path as never, ...(body as never[]));
 }
 
 export const get = buildHttpMethod("get");
@@ -288,160 +358,15 @@ export const post = buildHttpMethod("post");
 export const put = buildHttpMethod("put");
 export const del = buildHttpMethod("delete");
 export const patch = buildHttpMethod("patch");
+
+// Usage is even shorter:
+const pet = await get("/pet/{petId}", { petId: 1 });
+//    ^ Promise<model.Pet>
 ```
 
-> `(string & {})` is a TypeScript trick: it widens to any string at runtime but prevents the compiler from collapsing the union, so IDE autocompletion still lists the known literal paths.
+The `const M extends Api["Method"]` modifier on `buildHttpMethod` ensures `'get'` is never widened to `string` (otherwise `PathsOf[string]` would produce `never` and break path autocompletion).
 
-### 6.2 Generic inference — request()
-
-```ts
-import { request } from "@/api/client";
-
-// ✅ Fully inferred — no type annotations needed
-const pet = await request("/pet/{petId}", "get", { petId: 1 });
-//    ^ model.Pet
-
-const order = await request("/store/order", "post", {
-  id: 10,
-  petId: 1,
-  quantity: 2,
-  status: "placed",
-  complete: false,
-});
-//    ^ model.Order
-
-// ✅ Array response
-const pets = await request("/pet/findByStatus", "get", { status: "available" });
-//    ^ Array<model.Pet>
-
-// ✅ Custom / undeclared endpoint — degrades to any, does not block compilation
-const r = await request("/internal/healthcheck", "OPTIONS" as any, undefined);
-//    ^ any
-```
-
-**How TypeScript resolves the types step by step:**
-
-```
-request('/pet/{petId}', 'get', payload)
-  │
-  ├─ P = '/pet/{petId}'           ← inferred from first argument
-  ├─ M = 'get'                    ← inferred from second argument
-  │
-  ├─ Operation<'/pet/{petId}', 'get'>
-  │     = Refs['/pet/{petId}']['get'] & Tuple
-  │     = [response: model.Pet, request: model.req.GetPetById] & Tuple
-  │
-  ├─ payload type  = Operation<P,M>[1] = model.req.GetPetById   ← third argument checked here
-  └─ return type   = Operation<P,M>[0] = model.Pet
-```
-
-### 6.3 Generic inference — shortcut methods
-
-```ts
-import { get, post, put, del, patch } from "@/api/client";
-
-// ✅ Path auto-narrows to paths that declare GET
-const order = await get("/store/order/{orderId}", { orderId: 1 });
-//    ^ model.Order
-//
-// IDE completes only GET-supporting paths:
-//   '/pet/findByStatus' | '/pet/findByTags' | '/pet/{petId}'
-//   | '/store/inventory' | '/store/order/{orderId}' | '/user/{username}' | …
-
-// ✅ POST with body
-const created = await post("/store/order", {
-  id: 10,
-  petId: 1,
-  quantity: 2,
-  status: "placed",
-  complete: false,
-});
-//    ^ model.Order
-
-// ✅ PUT with both path param and body
-await put("/user/{username}", {
-  username: "john", // path param
-  email: "john@example.com", // body field
-});
-
-// ✅ DELETE
-await del("/pet/{petId}", { petId: 1 });
-
-// ✅ Undeclared path — degrades to any
-await get("/temporary-mock", { anything: true });
-```
-
-**How shortcut inference works:**
-
-```
-get('/pet/{petId}', payload)
-  │
-  ├─ M is fixed as 'get' (const generic — TS 5+ const modifier)
-  ├─ P extends LoosePath<'get'>
-  │       = PathsWith<'get'> | (string & {})
-  │       = '/pet/{petId}' | '/pet/findByStatus' | … | (string & {})
-  │
-  ├─ P is inferred as '/pet/{petId}' from the first argument literal
-  │
-  ├─ Operation<'/pet/{petId}', 'get'>
-  │       = [response: model.Pet, request: model.req.GetPetById]
-  │
-  ├─ payload type = Operation<P,'get'>[1] = model.req.GetPetById
-  └─ return type  = Promise<model.Pet>
-```
-
-The `const M extends ...` modifier on `buildHttpMethod` ensures the method literal `'get'` is never widened to `string`, which would otherwise cause `PathsWith<string>` to produce `never`.
-
-### 6.4 How the inference chain works
-
-```
-PathRefs ──► Operation<P, M>
-                │
-                ├── [0]  response type   →  Promise<…> return type
-                └── [1]  request type    →  payload parameter type
-```
-
-The single conditional type `Operation<P, M>` is evaluated once and its result is reused for both the payload constraint and the return type. TypeScript caches generic type resolutions, so `Operation<'/pet/{petId}', 'get'>[0]` and `[1]` share the same resolved instance — no redundant work.
-
-Contrast with the heavier `extends ... infer` pattern that was common before this approach:
-
-```ts
-// ❌ Old pattern — two conditional evaluations, slower on large schemas
-type Res<P, M> = M extends keyof Refs[P]
-  ? Refs[P][M] extends { response: infer R }
-    ? R
-    : any
-  : any;
-```
-
-### 6.5 Compile-time errors caught automatically
-
-```ts
-// ❌ '/store/order' has no GET — caught at compile time
-get("/store/order", {});
-// Error: Argument of type '"/store/order"' is not assignable to
-//        parameter of type 'PathsWith<"get"> | (string & {})'
-
-// ❌ Missing required field
-get("/pet/{petId}", {});
-// Error: Property 'petId' is missing in type '{}'
-//        but required in type 'model.req.GetPetById'
-
-// ❌ Wrong field type
-get("/pet/{petId}", { petId: "one" });
-// Error: Type 'string' is not assignable to type 'number'
-```
-
-### 6.6 Escape hatch for undeclared paths
-
-When `path` does not match any key in `PathRefs` (or the method is not declared for that path), `Operation<P, M>` returns `FallbackTuple = readonly [any, any]`. Payload and response are both `any` — no type checking, no compilation error.
-
-```ts
-// Passes without error; r is typed as any
-const r = await get("/internal/debug", { flag: true });
-```
-
-To disable the escape hatch and enforce only declared paths, remove `| (string & {})` from `LoosePath<M>`.
+> `(string & {})` is a TypeScript trick: widens to any string at runtime but prevents the compiler from collapsing the union, so IDE autocompletion still lists the known literal paths. Drop it from `LoosePath<M>` to disable the "any path" escape hatch.
 
 ---
 
@@ -618,7 +543,7 @@ import {
   configureTypescriptZod,
   configureTypescriptEffectSchema,
   configureJsonSchema,
-} from "@codejoo/openapi-to-lang";
+} from "@codejoo/openapi2lang";
 
 await generate(configureBase({ source: "./openapi.yaml" }), [
   configureTypescript(),
@@ -646,7 +571,7 @@ configureJava({
 An emitter is a function called after quicktype runs, receiving the raw quicktype output and the full OpenAPI metadata. Return an array of `{ filename, content }` to write multiple files.
 
 ```ts
-import type { EmitContext, EmitOutput, LangConfig } from "@codejoo/openapi-to-lang";
+import type { EmitContext, EmitOutput, LangConfig } from "@codejoo/openapi2lang";
 
 function myEmitter(ctx: EmitContext): EmitOutput[] {
   const { raw, meta, cfg } = ctx;

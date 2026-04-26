@@ -38,13 +38,7 @@ const DEFAULT_OTHERS: CppOthersOptions = {
   "enum-type": "int",
 };
 
-type NamingStyle =
-  | "pascal-case"
-  | "underscore-case"
-  | "camel-case"
-  | "upper-underscore-case"
-  | "pascal-case-upper-acronyms"
-  | "camel-case-upper-acronyms";
+type NamingStyle = "pascal-case" | "underscore-case" | "camel-case" | "upper-underscore-case" | "pascal-case-upper-acronyms" | "camel-case-upper-acronyms";
 
 export interface ConfigureCppInput {
   base?: Partial<CppBase>;

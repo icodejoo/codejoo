@@ -11,14 +11,7 @@
 
 import type { TsLangConfig } from "../config/typescript";
 import type { EmitContext, EmitOutput } from "../config/shared";
-import {
-  opKey,
-  type MegaSchemaResult,
-  type OperationData,
-  type ReqInfo,
-  type ResponseRef,
-  type Schema,
-} from "../schema";
+import { opKey, type MegaSchemaResult, type OperationData, type ReqInfo, type ResponseRef, type Schema } from "../schema";
 
 // ============================================================================
 // 入口：emit
@@ -38,11 +31,7 @@ export function emitTypescript(ctx: EmitContext): EmitOutput[] {
 // 切分 + 包装
 // ============================================================================
 
-function splitAndWrap(
-  quicktypeOutput: string,
-  meta: MegaSchemaResult,
-  cfg: TsLangConfig,
-): { responseFile: string; requestFile: string } {
+function splitAndWrap(quicktypeOutput: string, meta: MegaSchemaResult, cfg: TsLangConfig): { responseFile: string; requestFile: string } {
   // 后处理 #1：T[] → Array<T>（注释行不动，保留 JSDoc 中的原始示例）
   const transformed = bracketArrayToGeneric(quicktypeOutput);
   const blocks = parseBlocks(transformed);
@@ -74,12 +63,7 @@ function splitAndWrap(
   for (const op of meta.ops) {
     const info = meta.reqInfoOf.get(opKey(op.path, op.method));
     if (!info) continue;
-    if (
-      info.kind !== "ref-alias" &&
-      info.kind !== "ref-alias-extends" &&
-      info.kind !== "body-alias"
-    )
-      continue;
+    if (info.kind !== "ref-alias" && info.kind !== "ref-alias-extends" && info.kind !== "body-alias") continue;
 
     const jsdoc = renderJsDoc(op, "  ");
     if (jsdoc) refAliasLines.push(jsdoc);
@@ -90,8 +74,7 @@ function splitAndWrap(
       refAliasLines.push(`  interface ${info.name} extends ${ns}.${info.refName} {`);
       for (const prop of info.extendsProps) {
         const opt = prop.required ? "" : "?";
-        const desc =
-          typeof prop.schema?.description === "string" ? prop.schema.description : undefined;
+        const desc = typeof prop.schema?.description === "string" ? prop.schema.description : undefined;
         if (desc) refAliasLines.push(...renderPropJsDoc(desc, "    "));
         refAliasLines.push(`    ${prop.name}${opt}: ${schemaToTsType(prop.schema, ns)}`);
       }
@@ -107,9 +90,7 @@ function splitAndWrap(
   const reqOrdered = sortEnumsFirst(reqBlocks);
 
   const responseText = resOrdered.map((b) => indentBlock(stripBlockExport(b.text))).join("\n\n");
-  const requestText = reqOrdered
-    .map((b) => indentBlock(rewriteRefs(stripBlockExport(b.text), needsPrefix, ns)))
-    .join("\n\n");
+  const requestText = reqOrdered.map((b) => indentBlock(rewriteRefs(stripBlockExport(b.text), needsPrefix, ns))).join("\n\n");
 
   const requestNs = `${ns}.${cfg.base.requestNamespace}`;
 
@@ -139,10 +120,7 @@ function extractDeclName(chunk: string): string | null {
     const trimmed = raw.trim();
     if (!trimmed) continue;
     if (trimmed.startsWith("//") || trimmed.startsWith("/*") || trimmed.startsWith("*")) continue;
-    const m =
-      /^(?:export\s+|declare\s+)*(?:type|interface|enum|class|const)\s+([A-Za-z_$][\w$]*)/.exec(
-        trimmed,
-      );
+    const m = /^(?:export\s+|declare\s+)*(?:type|interface|enum|class|const)\s+([A-Za-z_$][\w$]*)/.exec(trimmed);
     return m ? m[1] : null;
   }
   return null;
@@ -179,8 +157,7 @@ function rewriteRefs(text: string, needsPrefix: Set<string>, ns: string): string
     .map((line) => {
       const trimmed = line.trim();
       if (!trimmed) return line;
-      if (trimmed.startsWith("//") || trimmed.startsWith("/*") || trimmed.startsWith("*"))
-        return line;
+      if (trimmed.startsWith("//") || trimmed.startsWith("/*") || trimmed.startsWith("*")) return line;
       return line.replace(pattern, (_m, name) => `${ns}.${name}`);
     })
     .join("\n");
@@ -199,8 +176,7 @@ function bracketArrayToGeneric(src: string): string {
     .split("\n")
     .map((line) => {
       const trimmed = line.trim();
-      if (trimmed.startsWith("//") || trimmed.startsWith("/*") || trimmed.startsWith("*"))
-        return line;
+      if (trimmed.startsWith("//") || trimmed.startsWith("/*") || trimmed.startsWith("*")) return line;
       return rewriteArrayBracketsInLine(line);
     })
     .join("\n");
@@ -270,9 +246,7 @@ function isEnumLike(b: TsBlock): boolean {
   const m = /^(?:export\s+|declare\s+)*type\s+\w+\s*=\s*(.+?);?\s*$/.exec(code);
   if (!m) return false;
   const tokens = m[1].split("|").map((t) => t.trim());
-  return tokens.every(
-    (t) => /^"(?:[^"\\]|\\.)*"$/.test(t) || t === "null" || /^-?\d+(?:\.\d+)?$/.test(t),
-  );
+  return tokens.every((t) => /^"(?:[^"\\]|\\.)*"$/.test(t) || t === "null" || /^-?\d+(?:\.\d+)?$/.test(t));
 }
 
 // ============================================================================
@@ -368,11 +342,7 @@ function renderJsDoc(op: OperationData, indent: string): string | null {
 function renderPropJsDoc(desc: string, indent: string): string[] {
   const lines = desc.split("\n").map((l) => l.replace(/\*\//g, "*\\/"));
   if (lines.length === 1) return [`${indent}/** ${lines[0]} */`];
-  return [
-    `${indent}/**`,
-    ...lines.map((l) => `${indent} * ${l}`.replace(/\s+$/, "")),
-    `${indent} */`,
-  ];
+  return [`${indent}/**`, ...lines.map((l) => `${indent} * ${l}`.replace(/\s+$/, "")), `${indent} */`];
 }
 
 // ============================================================================
@@ -395,16 +365,11 @@ function schemaToTsType(schema: Schema, ns: string): string {
     return m ? `${ns}.${m[1]}` : "unknown";
   }
 
-  const types: string[] = Array.isArray(schema.type)
-    ? schema.type
-    : typeof schema.type === "string"
-      ? [schema.type]
-      : [];
+  const types: string[] = Array.isArray(schema.type) ? schema.type : typeof schema.type === "string" ? [schema.type] : [];
   const hasNull = types.includes("null");
   const nonNull = types.filter((t) => t !== "null");
 
-  const base =
-    nonNull.length === 0 ? "unknown" : nonNull.map((t) => primToTs(t, schema, ns)).join(" | ");
+  const base = nonNull.length === 0 ? "unknown" : nonNull.map((t) => primToTs(t, schema, ns)).join(" | ");
 
   return hasNull ? `${base} | null` : base;
 }

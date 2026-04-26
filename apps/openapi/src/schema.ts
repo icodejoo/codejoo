@@ -33,34 +33,82 @@ import type { BaseConfig } from "./config/shared";
 //   1. 看扩展名（.yaml / .yml → YAML；否则尝试 JSON）
 //   2. JSON.parse 抛错时回退到 YAML 解析（兼容内容是 YAML 但无扩展名的远程 URL）
 
-export async function loadOpenAPI(
-  source: string | Record<string, unknown>,
-  projectRoot: string,
-): Promise<OpenAPIDoc> {
+/**
+ * 统一入口：把 5 种输入形态都解析成 JS 对象（最终被 buildMegaSchema → JSON.stringify 喂给 quicktype）。
+ *
+ * `source` 接受：
+ *   1. 已解析对象       —— 直接走归一化（如 `import json from './openapi.json'`）
+ *   2. 远程 URL          —— `http(s)://...`，fetch 后按内容解析
+ *   3. 内联 JSON 字符串  —— 以 `{` 或 `[` 开头（trim 后），直接 JSON.parse
+ *   4. 内联 YAML 字符串  —— 含换行符的字符串视为内联文本（路径不会有换行）
+ *   5. 文件路径          —— 其余字符串当作绝对/相对路径，按扩展名 / 内容嗅探解析
+ */
+export async function loadOpenAPI(source: string | Record<string, unknown>, projectRoot: string): Promise<OpenAPIDoc> {
+  // 形态 1：已是 JS 对象
   if (typeof source !== "string") {
     return convertV2ToV3(source as OpenAPIDoc);
   }
 
-  let text: string;
-  let urlPathname = "";
-  if (/^https?:\/\//i.test(source)) {
-    const r = await fetch(source);
-    if (!r.ok) throw new Error(`fetch ${source} -> ${r.status} ${r.statusText}`);
-    text = await r.text();
-    urlPathname = new URL(source).pathname;
-  } else {
-    const full = path.isAbsolute(source) ? source : path.resolve(projectRoot, source);
-    text = await fs.readFile(full, "utf-8");
-    urlPathname = full;
-  }
+  const classified = classifySource(source);
 
-  return convertV2ToV3(parseDoc(text, urlPathname));
+  switch (classified.kind) {
+    // 形态 3：内联 JSON 文本——sourceLabel 用伪扩展名让 parseDoc 走 JSON 优先路径
+    case "inline-json":
+      return convertV2ToV3(parseDoc(classified.text, "<inline.json>"));
+
+    // 形态 4：内联 YAML 文本——伪 .yaml 扩展名让 parseDoc 直走 YAML
+    case "inline-yaml":
+      return convertV2ToV3(parseDoc(classified.text, "<inline.yaml>"));
+
+    // 形态 2：远程 URL
+    case "url": {
+      const r = await fetch(classified.value);
+      if (!r.ok) throw new Error(`fetch ${classified.value} -> ${r.status} ${r.statusText}`);
+      const text = await r.text();
+      return convertV2ToV3(parseDoc(text, new URL(classified.value).pathname));
+    }
+
+    // 形态 5：文件路径
+    case "file": {
+      const full = path.isAbsolute(classified.path) ? classified.path : path.resolve(projectRoot, classified.path);
+      const text = await fs.readFile(full, "utf-8");
+      return convertV2ToV3(parseDoc(text, full));
+    }
+  }
 }
 
+type ClassifiedSource = { kind: "url"; value: string } | { kind: "inline-json"; text: string } | { kind: "inline-yaml"; text: string } | { kind: "file"; path: string };
+
+/**
+ * 按以下优先级辨别字符串语义：
+ *   url      → 以 http(s):// 开头
+ *   inline-json → trim 后以 `{` 或 `[` 开头（OpenAPI 顶层是 object，普通用户也常 paste JSON）
+ *   inline-yaml → 字符串含换行（文件路径不会带换行；YAML doc 至少多行）
+ *   file     → 兜底，当作路径
+ */
+function classifySource(source: string): ClassifiedSource {
+  if (/^https?:\/\//i.test(source)) {
+    return { kind: "url", value: source };
+  }
+  const trimmed = source.trimStart();
+  if (trimmed.startsWith("{") || trimmed.startsWith("[")) {
+    return { kind: "inline-json", text: source };
+  }
+  if (source.includes("\n")) {
+    return { kind: "inline-yaml", text: source };
+  }
+  return { kind: "file", path: source };
+}
+
+/**
+ * 把字符串解析成 JS 对象。
+ *
+ * - sourceLabel 以 `.yaml`/`.yml` 结尾 → 走 YAML 解析
+ * - 否则 → 先 JSON.parse，失败回退 YAML（兜底无扩展名的 YAML 流）
+ */
 function parseDoc(text: string, sourceLabel: string): OpenAPIDoc {
   const isYamlExt = /\.ya?ml$/i.test(sourceLabel);
   if (isYamlExt) return yaml.load(text) as OpenAPIDoc;
-  // 默认按 JSON；解析失败则回退 YAML（兜底无扩展名的 YAML 流）
   try {
     return JSON.parse(text) as OpenAPIDoc;
   } catch {
@@ -102,9 +150,7 @@ function convertV2ToV3(doc: OpenAPIDoc): OpenAPIDoc {
   const matchVer = (s: string, major: string) => s === major || s.startsWith(`${major}.`);
   if (matchVer(openapi, "3")) return doc; // v3 不需要转
   if (!matchVer(swagger, "2")) {
-    console.warn(
-      `⚠️  未识别的 OpenAPI 版本（swagger='${swagger}', openapi='${openapi}'），按 v3 形态尝试处理`,
-    );
+    console.warn(`⚠️  未识别的 OpenAPI 版本（swagger='${swagger}', openapi='${openapi}'），按 v3 形态尝试处理`);
     return doc;
   }
   console.log(`📦 检测到 Swagger ${swagger}，转换为 OpenAPI 3.0`);
@@ -114,8 +160,7 @@ function convertV2ToV3(doc: OpenAPIDoc): OpenAPIDoc {
   const producesGlobal: string[] = Array.isArray(out.produces) ? out.produces : [];
 
   // 共享 parameters 用于解引用 op-level $ref
-  const sharedParams: Record<string, any> =
-    out.parameters && typeof out.parameters === "object" ? out.parameters : {};
+  const sharedParams: Record<string, any> = out.parameters && typeof out.parameters === "object" ? out.parameters : {};
 
   // 1. 逐 op 转换：先解 $ref 参数，再拆 body/formData，再把 type 字段塞进 schema
   for (const [_pathKey, item] of Object.entries(out.paths || {})) {
@@ -133,8 +178,7 @@ function convertV2ToV3(doc: OpenAPIDoc): OpenAPIDoc {
   // 2. 组件搬迁
   out.components = out.components || {};
   if (out.definitions) out.components.schemas = { ...out.components.schemas, ...out.definitions };
-  if (out.parameters)
-    out.components.parameters = { ...out.components.parameters, ...out.parameters };
+  if (out.parameters) out.components.parameters = { ...out.components.parameters, ...out.parameters };
   if (out.responses) out.components.responses = { ...out.components.responses, ...out.responses };
 
   // 3. 全文档 $ref 路径改写
@@ -159,12 +203,7 @@ function convertV2ToV3(doc: OpenAPIDoc): OpenAPIDoc {
 }
 
 /** 把 v2 op 的 parameters / requestBody / responses / consumes / produces 全部转成 v3 形态 */
-function convertV2Operation(
-  op: any,
-  sharedParams: Record<string, any>,
-  consumesGlobal: string[],
-  producesGlobal: string[],
-): void {
+function convertV2Operation(op: any, sharedParams: Record<string, any>, consumesGlobal: string[], producesGlobal: string[]): void {
   const consumes = Array.isArray(op.consumes) ? op.consumes : consumesGlobal;
   const produces = Array.isArray(op.produces) ? op.produces : producesGlobal;
 
@@ -219,19 +258,7 @@ function convertV2Params(params: any[], sharedParams: Record<string, any>): any[
 /** v2 query/path/header 参数：把 type/format/items/enum/default/minimum/maximum/pattern 等塞进 schema */
 function v2NonBodyParamToV3(p: any): any {
   if (p.schema) return p; // 已是 v3 形态
-  const NON_SCHEMA_KEYS = new Set([
-    "name",
-    "in",
-    "required",
-    "description",
-    "deprecated",
-    "example",
-    "allowEmptyValue",
-    "collectionFormat",
-    "style",
-    "explode",
-    "allowReserved",
-  ]);
+  const NON_SCHEMA_KEYS = new Set(["name", "in", "required", "description", "deprecated", "example", "allowEmptyValue", "collectionFormat", "style", "explode", "allowReserved"]);
   const head: Record<string, any> = {};
   const schemaLike: Record<string, any> = {};
   for (const [k, v] of Object.entries(p)) {
@@ -270,16 +297,13 @@ function formDataToRequestBody(formParams: any[], consumes: string[]): any {
   let hasFile = false;
   for (const f of formParams) {
     const { name, required: req, in: _in, description, ...rest } = f;
-    const schema: any =
-      rest.type === "file" ? ((hasFile = true), { type: "string", format: "binary" }) : { ...rest };
+    const schema: any = rest.type === "file" ? ((hasFile = true), { type: "string", format: "binary" }) : { ...rest };
     if (description) schema.description = description;
     properties[name] = schema;
     if (req) required.push(name);
   }
   const mt =
-    consumes.find((c) => c === "multipart/form-data") ??
-    consumes.find((c) => c === "application/x-www-form-urlencoded") ??
-    (hasFile ? "multipart/form-data" : "application/x-www-form-urlencoded");
+    consumes.find((c) => c === "multipart/form-data") ?? consumes.find((c) => c === "application/x-www-form-urlencoded") ?? (hasFile ? "multipart/form-data" : "application/x-www-form-urlencoded");
   const schema: any = { type: "object", properties };
   if (required.length) schema.required = required;
   return { required: required.length > 0, content: { [mt]: { schema } } };
@@ -292,12 +316,9 @@ function rewriteV2Refs(node: any): void {
     return;
   }
   if (typeof node.$ref === "string") {
-    if (node.$ref.startsWith("#/definitions/"))
-      node.$ref = "#/components/schemas/" + node.$ref.slice("#/definitions/".length);
-    else if (node.$ref.startsWith("#/parameters/"))
-      node.$ref = "#/components/parameters/" + node.$ref.slice("#/parameters/".length);
-    else if (node.$ref.startsWith("#/responses/"))
-      node.$ref = "#/components/responses/" + node.$ref.slice("#/responses/".length);
+    if (node.$ref.startsWith("#/definitions/")) node.$ref = "#/components/schemas/" + node.$ref.slice("#/definitions/".length);
+    else if (node.$ref.startsWith("#/parameters/")) node.$ref = "#/components/parameters/" + node.$ref.slice("#/parameters/".length);
+    else if (node.$ref.startsWith("#/responses/")) node.$ref = "#/components/responses/" + node.$ref.slice("#/responses/".length);
   }
   for (const v of Object.values(node)) rewriteV2Refs(v);
 }
@@ -405,11 +426,7 @@ export const opKey = (p: string, method: string): string => `${p}::${method}`;
 // 遍历 op + 抽取数据
 // ============================================================================
 
-function forEachOperation(
-  doc: OpenAPIDoc,
-  baseCfg: BaseConfig,
-  fn: (op: OperationData) => void,
-): void {
+function forEachOperation(doc: OpenAPIDoc, baseCfg: BaseConfig, fn: (op: OperationData) => void): void {
   const paths = Object.keys(doc.paths || {}).sort();
   const methodOrder = baseCfg.httpMethodOrder;
   for (const p of paths) {
@@ -481,10 +498,7 @@ function extractSuccessResponse(op: any): Schema | null {
   if (!responses || typeof responses !== "object") return null;
   const codes = Object.keys(responses);
   // 优先 2xx，其次 default，其次第一个有 content 的
-  const code =
-    codes.find((c) => /^2\d\d$/.test(c)) ||
-    (codes.includes("default") ? "default" : codes.find((c) => responses[c]?.content)) ||
-    null;
+  const code = codes.find((c) => /^2\d\d$/.test(c)) || (codes.includes("default") ? "default" : codes.find((c) => responses[c]?.content)) || null;
   if (!code) return null;
   const content = responses[code]?.content;
   if (!content || typeof content !== "object") return null;
@@ -519,15 +533,7 @@ function pickMediaType(content: Record<string, any>): string | null {
 // 不动：description（quicktype 渲染为注释）、enum、oneOf/anyOf/allOf、
 //   properties/required/items/additionalProperties（已显式设值）、type、其它 known format。
 
-const STRIP_KEYS = new Set([
-  "example",
-  "examples",
-  "readOnly",
-  "writeOnly",
-  "xml",
-  "externalDocs",
-  "discriminator",
-]);
+const STRIP_KEYS = new Set(["example", "examples", "readOnly", "writeOnly", "xml", "externalDocs", "discriminator"]);
 const REF_PREFIX_OPENAPI = "#/components/schemas/";
 const REF_PREFIX_TARGET = "#/definitions/";
 
@@ -607,9 +613,7 @@ function augmentDescription(orig: any, out: Record<string, any>): void {
   if (orig.maxItems !== undefined) tags.push(`@maxItems ${orig.maxItems}`);
   if (orig.uniqueItems) tags.push("@uniqueItems");
   if (orig.deprecated) {
-    tags.push(
-      typeof orig.deprecated === "string" ? `@deprecated ${orig.deprecated}` : "@deprecated",
-    );
+    tags.push(typeof orig.deprecated === "string" ? `@deprecated ${orig.deprecated}` : "@deprecated");
   }
   if (orig.readOnly) tags.push("@readonly");
   if (orig.writeOnly) tags.push("@writeonly");
@@ -642,9 +646,7 @@ function formatLiteral(v: unknown): string {
 }
 
 function rewriteRef(ref: string): string {
-  return ref.startsWith(REF_PREFIX_OPENAPI)
-    ? REF_PREFIX_TARGET + ref.slice(REF_PREFIX_OPENAPI.length)
-    : ref;
+  return ref.startsWith(REF_PREFIX_OPENAPI) ? REF_PREFIX_TARGET + ref.slice(REF_PREFIX_OPENAPI.length) : ref;
 }
 
 /**
@@ -701,8 +703,7 @@ function applyStrictObjects(node: Record<string, any>, baseCfg: BaseConfig): voi
   if (!("properties" in node)) return;
   if ("additionalProperties" in node) return;
   const t = node.type;
-  const compatible =
-    t === undefined || t === "object" || (Array.isArray(t) && t.includes("object"));
+  const compatible = t === undefined || t === "object" || (Array.isArray(t) && t.includes("object"));
   if (!compatible) return;
   node.additionalProperties = false;
 }
@@ -905,11 +906,7 @@ function synthesizeRequestSchema(op: OperationData, baseCfg: BaseConfig): Synthe
 
   for (const p of op.params) {
     if (p.in === "cookie") continue; // 不暴露 cookie（通常 server 注入）
-    properties[p.name] = withParamMeta(
-      normalizeSchema(p.schema, /*stripTopTitle*/ true, baseCfg),
-      p.description,
-      p.deprecated,
-    );
+    properties[p.name] = withParamMeta(normalizeSchema(p.schema, /*stripTopTitle*/ true, baseCfg), p.description, p.deprecated);
     if (p.required) required.push(p.name);
   }
 
@@ -968,8 +965,7 @@ function withParamMeta(schema: Schema, description?: string, deprecated?: boolea
     // augmentDescription 可能已把 @default/@pattern 等写入 description；param 描述应前置
     out.description = out.description ? `${description}\n\n${out.description}` : description;
   }
-  if (deprecated)
-    out.description = out.description ? `${out.description}\n\n(deprecated)` : "(deprecated)";
+  if (deprecated) out.description = out.description ? `${out.description}\n\n(deprecated)` : "(deprecated)";
   return out;
 }
 
@@ -984,15 +980,11 @@ function combineDocs(...parts: (string | undefined)[]): string {
 function pureRefName(schema: Schema): string | null {
   if (!schema || typeof schema !== "object") return null;
   if (typeof schema.$ref !== "string") return null;
-  const m =
-    /^#\/components\/schemas\/(.+)$/.exec(schema.$ref) ??
-    /^#\/definitions\/(.+)$/.exec(schema.$ref);
+  const m = /^#\/components\/schemas\/(.+)$/.exec(schema.$ref) ?? /^#\/definitions\/(.+)$/.exec(schema.$ref);
   return m ? m[1] : null;
 }
 
-function inlineableObjectProps(
-  schema: Schema,
-): { properties: Record<string, Schema>; required: string[] } | null {
+function inlineableObjectProps(schema: Schema): { properties: Record<string, Schema>; required: string[] } | null {
   if (!schema || typeof schema !== "object") return null;
   if (schema.$ref) return null;
   if (schema.oneOf || schema.anyOf || schema.allOf) return null;
@@ -1017,12 +1009,7 @@ function pickPrimaryType(t: any): string | undefined {
 // 响应分类（决定 paths 里 response 槽如何写）
 // ============================================================================
 
-function classifyResponse(
-  op: OperationData,
-  usedNames: Set<string>,
-  definitions: Record<string, Schema>,
-  baseCfg: BaseConfig,
-): ResponseRef {
+function classifyResponse(op: OperationData, usedNames: Set<string>, definitions: Record<string, Schema>, baseCfg: BaseConfig): ResponseRef {
   const raw = op.responseSchema;
   if (raw == null) return { kind: "none" };
 
@@ -1033,8 +1020,7 @@ function classifyResponse(
 
   const primary = pickPrimaryType(norm.type);
   if (primary === "string") return { kind: "primitive", primitive: "string" };
-  if (primary === "integer" || primary === "number")
-    return { kind: "primitive", primitive: "number" };
+  if (primary === "integer" || primary === "number") return { kind: "primitive", primitive: "number" };
   if (primary === "boolean") return { kind: "primitive", primitive: "boolean" };
 
   if (primary === "array") {
@@ -1043,8 +1029,7 @@ function classifyResponse(
     if (itemRef) return { kind: "array-of-ref", name: itemRef };
     const itemPrim = pickPrimaryType(items?.type);
     if (itemPrim === "string") return { kind: "array-of-primitive", primitive: "string" };
-    if (itemPrim === "integer" || itemPrim === "number")
-      return { kind: "array-of-primitive", primitive: "number" };
+    if (itemPrim === "integer" || itemPrim === "number") return { kind: "array-of-primitive", primitive: "number" };
     if (itemPrim === "boolean") return { kind: "array-of-primitive", primitive: "boolean" };
     return inlineResponseAlias(op, norm, usedNames, definitions, baseCfg);
   }
@@ -1056,8 +1041,7 @@ function classifyResponse(
       if (apRef) return { kind: "map-of-ref", name: apRef };
       const apPrim = pickPrimaryType(ap.type);
       if (apPrim === "string") return { kind: "map-of-primitive", primitive: "string" };
-      if (apPrim === "integer" || apPrim === "number")
-        return { kind: "map-of-primitive", primitive: "number" };
+      if (apPrim === "integer" || apPrim === "number") return { kind: "map-of-primitive", primitive: "number" };
       if (apPrim === "boolean") return { kind: "map-of-primitive", primitive: "boolean" };
     } else if (ap === true) {
       return { kind: "map-of-primitive", primitive: "unknown" };
@@ -1069,13 +1053,7 @@ function classifyResponse(
   return inlineResponseAlias(op, norm, usedNames, definitions, baseCfg);
 }
 
-function inlineResponseAlias(
-  op: OperationData,
-  schema: Schema,
-  usedNames: Set<string>,
-  definitions: Record<string, Schema>,
-  baseCfg: BaseConfig,
-): ResponseRef {
+function inlineResponseAlias(op: OperationData, schema: Schema, usedNames: Set<string>, definitions: Record<string, Schema>, baseCfg: BaseConfig): ResponseRef {
   const base = opTypeName(op) + "Response";
   const name = uniqueName(base, usedNames, baseCfg);
   definitions[name] = schema;
