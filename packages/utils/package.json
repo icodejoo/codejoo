@@ -1,0 +1,40 @@
+{
+  "name": "utils",
+  "version": "0.0.0",
+  "description": "A starter for creating a TypeScript package.",
+  "homepage": "https://github.com/author/library#readme",
+  "bugs": {
+    "url": "https://github.com/author/library/issues"
+  },
+  "license": "MIT",
+  "author": "Author Name <author.name@mail.com>",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/author/library.git"
+  },
+  "files": [
+    "dist"
+  ],
+  "type": "module",
+  "exports": {
+    ".": "./dist/index.mjs",
+    "./package.json": "./package.json"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "scripts": {
+    "fmt": "vp fmt -c oxfmt.config.ts",
+    "lint": "vp lint -c oxlint.config.ts",
+    "check": "vp fmt -c oxfmt.config.ts --check && vp lint -c oxlint.config.ts",
+    "build": "pnpm run fmt && vp pack",
+    "dev": "vp pack --watch",
+    "test": "vp test",
+    "prepublishOnly": "pnpm run check && vp pack"
+  },
+  "devDependencies": {
+    "@types/node": "catalog:",
+    "@typescript/native-preview": "catalog:",
+    "vite-plus": "catalog:"
+  }
+}

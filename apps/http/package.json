@@ -1,0 +1,23 @@
+{
+  "name": "axios-http",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "fmt": "vp fmt -c oxfmt.config.ts",
+    "lint": "vp lint -c oxlint.config.ts",
+    "check": "vp fmt -c oxfmt.config.ts --check && vp lint -c oxlint.config.ts",
+    "dev:fe": "pnpm run fmt && vp dev",
+    "dev:be": "bun --watch ./server/index.ts"
+  },
+  "dependencies": {
+    "axios": "^1.13.6",
+    "express": "^5.2.1"
+  },
+  "devDependencies": {
+    "@types/express": "^5.0.6",
+    "@types/node": "catalog:",
+    "@typescript/native-preview": "catalog:",
+    "vite-plus": "catalog:"
+  }
+}
