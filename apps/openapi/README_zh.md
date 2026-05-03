@@ -1,6 +1,6 @@
 # @codejoo/openapi2lang
 
-> 🌐 **语言：** **中文** · [English](./README.md)
+> 🌐 **语言：** **中文** · [English](https://github.com/gapkukb/codejoo/blob/main/apps/openapi/README.md)
 
 将 OpenAPI 3.x（或 Swagger 2.0）文档转换为 TypeScript、Dart 及 25+ 种语言的类型声明。底层由 [quicktype-core](https://github.com/quicktype/quicktype) 驱动。
 
@@ -8,26 +8,38 @@
 
 ## 目录
 
-1. [安装](#1-安装)
-2. [快速开始](#2-快速开始)
-3. [generate() API](#3-generate-api)
-4. [configureBase() 选项](#4-configurebase-选项)
-5. [TypeScript 输出](#5-typescript-输出)
-   - 5.1 [生成的文件结构](#51-生成的文件结构)
-   - 5.2 [命名空间布局](#52-命名空间布局)
-   - 5.3 [PathRefs — 核心数据结构](#53-pathrefs--核心数据结构)
-6. [用 `Request<PathRefs>` 实现类型安全的 fetch](#6-用-requestpathrefs-实现类型安全的-fetch)
-   - 6.1 [构建请求包装层](#61-构建请求包装层)
-   - 6.2 [调用点自动推导](#62-调用点自动推导)
-   - 6.3 [显式泛型：覆盖与逃生](#63-显式泛型覆盖与逃生)
-   - 6.4 [编译期自动拦截的错误](#64-编译期自动拦截的错误)
-   - 6.5 [可选：在其上封装快捷方法](#65-可选在其上封装快捷方法)
-7. [configureTypescript() 选项](#7-configuretypescript-选项)
-8. [Dart 输出](#8-dart-输出)
-9. [其他语言](#9-其他语言)
-10. [自定义 Emitter](#10-自定义-emitter)
-11. [推断标志 (Inference Flags)](#11-推断标志-inference-flags)
-12. [流水线架构](#12-流水线架构)
+- [@codejoo/openapi2lang](#codejooopenapi2lang)
+  - [目录](#目录)
+  - [1. 安装](#1-安装)
+  - [2. 快速开始](#2-快速开始)
+  - [3. generate() API](#3-generate-api)
+  - [4. configureBase() 选项](#4-configurebase-选项)
+  - [5. TypeScript 输出](#5-typescript-输出)
+    - [5.1 生成的文件结构](#51-生成的文件结构)
+    - [5.2 命名空间布局](#52-命名空间布局)
+      - [请求类型生成规则](#请求类型生成规则)
+    - [5.3 PathRefs — 核心数据结构](#53-pathrefs--核心数据结构)
+  - [6. 用 `Request<PathRefs>` 实现类型安全的 fetch](#6-用-requestpathrefs-实现类型安全的-fetch)
+    - [6.1 构建请求包装层](#61-构建请求包装层)
+    - [6.2 调用点自动推导](#62-调用点自动推导)
+    - [6.3 显式泛型：覆盖与逃生](#63-显式泛型覆盖与逃生)
+    - [6.4 编译期自动拦截的错误](#64-编译期自动拦截的错误)
+    - [6.5 可选：在其上封装快捷方法](#65-可选在其上封装快捷方法)
+  - [7. configureTypescript() 选项](#7-configuretypescript-选项)
+    - [7.1 base 选项](#71-base-选项)
+    - [7.2 primary 选项（quicktype 渲染器）](#72-primary-选项quicktype-渲染器)
+    - [7.3 others 选项](#73-others-选项)
+    - [7.4 示例：使用 interface 替代 type](#74-示例使用-interface-替代-type)
+    - [7.5 示例：将 date-time 字符串推导为 Date](#75-示例将-date-time-字符串推导为-date)
+  - [8. Dart 输出](#8-dart-输出)
+    - [8.1 base 选项](#81-base-选项)
+    - [8.2 primary 选项](#82-primary-选项)
+    - [8.3 others 选项](#83-others-选项)
+    - [8.4 示例：使用 freezed](#84-示例使用-freezed)
+  - [9. 其他语言](#9-其他语言)
+  - [10. 自定义 Emitter](#10-自定义-emitter)
+  - [11. 推断标志 (Inference Flags)](#11-推断标志-inference-flags)
+  - [12. 流水线架构](#12-流水线架构)
 
 ---
 
@@ -255,7 +267,11 @@ export const request = impl as Request<model.PathRefs>;
 `Request<R>` 产出的签名（极简化版）：
 
 ```ts
-function request<R = unknown, Q = unknown, M extends Method, P extends PathHint<M>>(method: M, path: P, ...args: ResolvedBody<Q, M, P>): Promise<ResolvedRes<R, M, P>>;
+function request<R = unknown, Q = unknown, M extends Method, P extends PathHint<M>>(
+  method: M,
+  path: P,
+  ...args: ResolvedBody<Q, M, P>
+): Promise<ResolvedRes<R, M, P>>;
 ```
 
 - **`M`、`P`** —— 从调用点参数自动推导
@@ -352,8 +368,14 @@ type Api = OpenApi<model.PathRefs>;
 // Api["PathsOf"]["get"] → '/pet/{petId}' | '/pet/findByStatus' | ...
 
 function buildHttpMethod<const M extends Api["Method"]>(method: M) {
-  return <P extends Api["PathsOf"][M] | (string & {})>(path: P, ...body: P extends keyof Api["Body"] ? (M extends keyof Api["Body"][P] ? Api["Body"][P][M] : [body?: any]) : [body?: any]) =>
-    request(method as never, path as never, ...(body as never[]));
+  return <P extends Api["PathsOf"][M] | (string & {})>(
+    path: P,
+    ...body: P extends keyof Api["Body"]
+      ? M extends keyof Api["Body"][P]
+        ? Api["Body"][P][M]
+        : [body?: any]
+      : [body?: any]
+  ) => request(method as never, path as never, ...(body as never[]));
 }
 
 export const get = buildHttpMethod("get");

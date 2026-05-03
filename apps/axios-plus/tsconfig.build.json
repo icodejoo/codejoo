@@ -1,0 +1,24 @@
+// 给 `tsx scripts/build.ts` 用的 transpile-only 编译配置：
+//   - 走 tsc 把每个 .ts 单独编译成 .js + .d.ts，**保留 import 关系**（不 bundle）
+//   - 后处理脚本再做：相对路径补 `.js` 扩展、helper.ts / objects/*.ts 的目录化重定位
+//
+// 关键开关：
+//   - `module: 'ESNext'`        保持 import 语句原样输出（不 transform 成 CJS）
+//   - `moduleResolution: 'bundler'`  允许源码用扩展名缺省的 `from './foo'`，由后处理补 `.js`
+//   - `declaration: true`       同时产出 .d.ts，每个 .ts 一份（无 chunks）
+//   - 不开 `emitDeclarationOnly`  我们要 .js + .d.ts 都拿到
+{
+  "extends": "./tsconfig.tsup.json",
+  "compilerOptions": {
+    "rootDir": "src",
+    "outDir": ".build-tmp",
+    "declaration": true,
+    "emitDeclarationOnly": false,
+    "noEmit": false,
+    "sourceMap": false,
+    "removeComments": false,
+    "importHelpers": false
+  },
+  "include": ["src", "types"],
+  "exclude": ["**/*.test.ts", "test/**", "e2e/**", "server/**"]
+}

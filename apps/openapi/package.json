@@ -1,6 +1,6 @@
 {
   "name": "@codejoo/openapi2lang",
-  "version": "1.0.1",
+  "version": "1.0.6",
   "description": "Convert an OpenAPI 3.x / Swagger 2.0 document into type declarations for TypeScript, Dart and 25+ other languages.",
   "license": "MIT",
   "files": [

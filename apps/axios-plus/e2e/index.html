@@ -1,0 +1,32 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>http-plugins · 浏览器 E2E</title>
+    <link rel="stylesheet" href="./style.css" />
+</head>
+
+<body>
+    <header class="hero">
+        <h1>http-plugins · 浏览器端 E2E 演示</h1>
+        <p class="subtitle">
+            每张卡片对应一个插件场景：点击 <kbd>运行</kbd> 触发，下方观察输出。
+            浏览器对 <code>/api/*</code> 的请求由 vite proxy 转发到后台 Bun mock server。
+        </p>
+        <p class="subtitle">
+            <strong>启动</strong>：先 <code>bun server/dev.ts</code> 起 mock，再 <code>vite --mode e2e</code> 起 dev。
+        </p>
+        <div class="global-loading">
+            <div class="spinner" id="global-spinner"></div>
+            <span id="loading-state" class="muted">idle</span>
+        </div>
+    </header>
+
+    <main id="scenarios"></main>
+
+    <script type="module" src="./main.ts"></script>
+</body>
+
+</html>

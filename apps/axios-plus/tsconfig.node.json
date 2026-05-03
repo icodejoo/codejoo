@@ -1,0 +1,9 @@
+{
+  "compilerOptions": {
+    "composite": true,
+    "module": "ESNext",
+    "moduleResolution": "bundler",
+    "types": ["node"] // 重点：只在这里加载 @types/node
+  },
+  "include": ["vite.config.ts","tsup.config.ts","server"]
+}

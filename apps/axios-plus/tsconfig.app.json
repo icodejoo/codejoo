@@ -1,0 +1,15 @@
+{
+  "compilerOptions": {
+    "composite": true,
+    "target": "ESNext",
+    "module": "ESNext",
+    "moduleResolution": "bundler",
+    "lib": ["DOM", "DOM.Iterable", "ESNext"],
+    "strict": true,
+    "types": [] // 重点：显式设置为空，防止全局 Node 类型渗入
+  },
+  "include": ["src","test","types","e2e"],
+  // Playwright spec 走自己的 transpile（@playwright/test 内置 SWC），它的类型依赖 node
+  // 全局；让 app tsconfig 跳过这些文件，避免 playwright-core 类型把 node 全局拽进来。
+  "exclude": ["e2e/tests/**", "playwright.config.ts"]
+}

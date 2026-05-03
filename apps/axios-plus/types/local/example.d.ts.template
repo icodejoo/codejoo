@@ -1,0 +1,27 @@
+/* ─────────────────────────────────────────────────────────────────────────────
+ * Local PathRefs extension — TEMPLATE
+ *
+ * Copy this file to `types/local/<feature>.d.ts` to register paths that the
+ * codegen hasn't caught up with yet. The interface declaration below merges
+ * into the global `model.PathRefs` produced by `types/paths.d.ts`, so your
+ * additions are visible to autocomplete, type-inference and the runtime.
+ *
+ * Delete the file (or just the entry) once codegen ships the official type.
+ *
+ * Tuple shape — must match the codegen format:
+ *     [response: <ResponseType>, request: [payload: <PayloadType>] | []]
+ * ──────────────────────────────────────────────────────────────────────────── */
+
+declare namespace model {
+  interface PathRefs {
+    // Example: a POST endpoint not yet in the spec
+    '/pet/draft': {
+      post: [response: model.Pet, request: [payload: model.req.AddPet]];
+    };
+
+    // Example: an experimental GET with no payload and unknown response shape
+    '/experimental/whatever': {
+      get: [response: unknown, request: []];
+    };
+  }
+}

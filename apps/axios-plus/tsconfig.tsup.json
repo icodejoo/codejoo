@@ -1,0 +1,20 @@
+// 给 tsup 用的 dts 编译配置 —— 只用于 `tsup` 内部 rollup-plugin-dts
+// 时的类型解析；不参与 src/test 的类型检查。
+{
+  "compilerOptions": {
+    "target": "ESNext",
+    "module": "ESNext",
+    "moduleResolution": "bundler",
+    "lib": ["DOM", "DOM.Iterable", "ESNext"],
+    "strict": true,
+    "skipLibCheck": true,
+    "declaration": true,
+    "emitDeclarationOnly": true,
+    "isolatedModules": true,
+    "types": [],
+    // TS 6.0 起对老选项发告警；这里把所有 < 6.0 的 deprecated option 静音
+    "ignoreDeprecations": "6.0"
+  },
+  "include": ["src", "types"],
+  "exclude": ["**/*.test.ts", "test/**", "e2e/**", "server/**"]
+}

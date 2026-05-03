@@ -1,6 +1,6 @@
 # @codejoo/openapi2lang
 
-> 🌐 **Languages:** **English** · [中文](./README_zh.md)
+> 🌐 **Languages:** **English** · [中文](https://github.com/gapkukb/codejoo/blob/main/apps/openapi/README_zh.md)
 
 Converts an OpenAPI 3.x (or Swagger 2.0) document into type declarations for TypeScript, Dart, and 25+ other languages. Powered by [quicktype-core](https://github.com/quicktype/quicktype).
 
@@ -8,26 +8,38 @@ Converts an OpenAPI 3.x (or Swagger 2.0) document into type declarations for Typ
 
 ## Table of Contents
 
-1. [Installation](#1-installation)
-2. [Quick Start](#2-quick-start)
-3. [generate() API](#3-generate-api)
-4. [configureBase() Options](#4-configurebase-options)
-5. [TypeScript Output](#5-typescript-output)
-   - 5.1 [Generated File Structure](#51-generated-file-structure)
-   - 5.2 [Namespace Layout](#52-namespace-layout)
-   - 5.3 [PathRefs — the key data structure](#53-pathrefs--the-key-data-structure)
-6. [Type-Safe Fetch with `Request<PathRefs>`](#6-type-safe-fetch-with-requestpathrefs)
-   - 6.1 [Build the request wrapper](#61-build-the-request-wrapper)
-   - 6.2 [Auto-inferred call sites](#62-auto-inferred-call-sites)
-   - 6.3 [Explicit generics: override or escape](#63-explicit-generics-override-or-escape)
-   - 6.4 [Compile-time errors caught automatically](#64-compile-time-errors-caught-automatically)
-   - 6.5 [Optional: build shortcut methods on top](#65-optional-build-shortcut-methods-on-top)
-7. [configureTypescript() Options](#7-configuretypescript-options)
-8. [Dart Output](#8-dart-output)
-9. [Other Languages](#9-other-languages)
-10. [Custom Emitters](#10-custom-emitters)
-11. [Inference Flags](#11-inference-flags)
-12. [Pipeline Architecture](#12-pipeline-architecture)
+- [@codejoo/openapi2lang](#codejooopenapi2lang)
+  - [Table of Contents](#table-of-contents)
+  - [1. Installation](#1-installation)
+  - [2. Quick Start](#2-quick-start)
+  - [3. generate() API](#3-generate-api)
+  - [4. configureBase() Options](#4-configurebase-options)
+  - [5. TypeScript Output](#5-typescript-output)
+    - [5.1 Generated File Structure](#51-generated-file-structure)
+    - [5.2 Namespace Layout](#52-namespace-layout)
+      - [Request type generation rules](#request-type-generation-rules)
+    - [5.3 PathRefs — the key data structure](#53-pathrefs--the-key-data-structure)
+  - [6. Type-Safe Fetch with `Request<PathRefs>`](#6-type-safe-fetch-with-requestpathrefs)
+    - [6.1 Build the request wrapper](#61-build-the-request-wrapper)
+    - [6.2 Auto-inferred call sites](#62-auto-inferred-call-sites)
+    - [6.3 Explicit generics: override or escape](#63-explicit-generics-override-or-escape)
+    - [6.4 Compile-time errors caught automatically](#64-compile-time-errors-caught-automatically)
+    - [6.5 Optional: build shortcut methods on top](#65-optional-build-shortcut-methods-on-top)
+  - [7. configureTypescript() Options](#7-configuretypescript-options)
+    - [7.1 base options](#71-base-options)
+    - [7.2 primary options (quicktype renderer)](#72-primary-options-quicktype-renderer)
+    - [7.3 others options](#73-others-options)
+    - [7.4 Example: use `interface` instead of `type`](#74-example-use-interface-instead-of-type)
+    - [7.5 Example: infer date-time strings as `Date`](#75-example-infer-date-time-strings-as-date)
+  - [8. Dart Output](#8-dart-output)
+    - [8.1 base options](#81-base-options)
+    - [8.2 primary options](#82-primary-options)
+    - [8.3 others options](#83-others-options)
+    - [8.4 Example: freezed](#84-example-freezed)
+  - [9. Other Languages](#9-other-languages)
+  - [10. Custom Emitters](#10-custom-emitters)
+  - [11. Inference Flags](#11-inference-flags)
+  - [12. Pipeline Architecture](#12-pipeline-architecture)
 
 ---
 
@@ -252,7 +264,11 @@ export const request = impl as Request<model.PathRefs>;
 `Request<R>` produces (greatly simplified):
 
 ```ts
-function request<R = unknown, Q = unknown, M extends Method, P extends PathHint<M>>(method: M, path: P, ...args: ResolvedBody<Q, M, P>): Promise<ResolvedRes<R, M, P>>;
+function request<R = unknown, Q = unknown, M extends Method, P extends PathHint<M>>(
+  method: M,
+  path: P,
+  ...args: ResolvedBody<Q, M, P>
+): Promise<ResolvedRes<R, M, P>>;
 ```
 
 - **`M`, `P`** — inferred from the call-site arguments
@@ -349,8 +365,14 @@ type Api = OpenApi<model.PathRefs>;
 // Api["PathsOf"]["get"] → '/pet/{petId}' | '/pet/findByStatus' | ...
 
 function buildHttpMethod<const M extends Api["Method"]>(method: M) {
-  return <P extends Api["PathsOf"][M] | (string & {})>(path: P, ...body: P extends keyof Api["Body"] ? (M extends keyof Api["Body"][P] ? Api["Body"][P][M] : [body?: any]) : [body?: any]) =>
-    request(method as never, path as never, ...(body as never[]));
+  return <P extends Api["PathsOf"][M] | (string & {})>(
+    path: P,
+    ...body: P extends keyof Api["Body"]
+      ? M extends keyof Api["Body"][P]
+        ? Api["Body"][P][M]
+        : [body?: any]
+      : [body?: any]
+  ) => request(method as never, path as never, ...(body as never[]));
 }
 
 export const get = buildHttpMethod("get");

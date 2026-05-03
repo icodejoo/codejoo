@@ -1,0 +1,26 @@
+{
+  "permissions": {
+    "allow": [
+      "Read",
+      "Edit",
+      "Bash",
+      "LS",
+      "Glob",
+      "Grep",
+      "PowerShell",
+      "CMD",
+      "Cmd",
+      "Command",
+      "PowerShell($c = [System.IO.File]::ReadAllText\\('d:\\\\workspaces\\\\http-plugin\\\\src\\\\plugins\\\\auth\\\\auth.ts'\\); $c.Length; $c.Substring\\(0, [Math]::Min\\(200, $c.Length\\)\\))",
+      "PowerShell(npx tsc --noEmit 2>&1)",
+      "PowerShell(npx tsc --noEmit; \"ExitCode: $LASTEXITCODE\")",
+      "PowerShell(npx vitest run src/plugins/cache 2>&1)",
+      "PowerShell($out = npx tsc --noEmit 2>&1 | Out-String; \"EXIT: $LASTEXITCODE\"; if \\($out\\) { $out } else { \"\\(no output\\)\" })",
+      "PowerShell($out = npx tsc --noEmit 2>&1 | Out-String; \"EXIT: $LASTEXITCODE\"; if \\($out.Trim\\(\\)\\) { $out } else { \"\\(no output\\)\" })",
+      "PowerShell($out = npx tsc --noEmit 2>&1 | Out-String; \"EXIT: $LASTEXITCODE\"; if \\($out.Trim\\(\\)\\) { $out } else { \"\\(clean\\)\" })",
+      "PowerShell(npm run build 2>&1 | Select-Object -Last 50; \"EXIT: $LASTEXITCODE\")",
+      "PowerShell(npm run build 2>&1 | Select-Object -Last 60; \"EXIT: $LASTEXITCODE\")",
+      "PowerShell(npm run build 2>&1 | Select-Object -Last 80; \"EXIT: $LASTEXITCODE\")"
+    ]
+  }
+}
