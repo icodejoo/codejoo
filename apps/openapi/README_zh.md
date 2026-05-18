@@ -267,11 +267,7 @@ export const request = impl as Request<model.PathRefs>;
 `Request<R>` 产出的签名（极简化版）：
 
 ```ts
-function request<R = unknown, Q = unknown, M extends Method, P extends PathHint<M>>(
-  method: M,
-  path: P,
-  ...args: ResolvedBody<Q, M, P>
-): Promise<ResolvedRes<R, M, P>>;
+function request<R = unknown, Q = unknown, M extends Method, P extends PathHint<M>>(method: M, path: P, ...args: ResolvedBody<Q, M, P>): Promise<ResolvedRes<R, M, P>>;
 ```
 
 - **`M`、`P`** —— 从调用点参数自动推导
@@ -368,14 +364,8 @@ type Api = OpenApi<model.PathRefs>;
 // Api["PathsOf"]["get"] → '/pet/{petId}' | '/pet/findByStatus' | ...
 
 function buildHttpMethod<const M extends Api["Method"]>(method: M) {
-  return <P extends Api["PathsOf"][M] | (string & {})>(
-    path: P,
-    ...body: P extends keyof Api["Body"]
-      ? M extends keyof Api["Body"][P]
-        ? Api["Body"][P][M]
-        : [body?: any]
-      : [body?: any]
-  ) => request(method as never, path as never, ...(body as never[]));
+  return <P extends Api["PathsOf"][M] | (string & {})>(path: P, ...body: P extends keyof Api["Body"] ? (M extends keyof Api["Body"][P] ? Api["Body"][P][M] : [body?: any]) : [body?: any]) =>
+    request(method as never, path as never, ...(body as never[]));
 }
 
 export const get = buildHttpMethod("get");

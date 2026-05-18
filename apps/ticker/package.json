@@ -1,7 +1,7 @@
 {
-  "name": "http-plugins",
-  "private": true,
+  "name": "@codejoo/ticker",
   "version": "0.0.0",
+  "private": true,
   "type": "module",
   "main": "./dist/index.mjs",
   "module": "./dist/index.mjs",
@@ -19,6 +19,7 @@
     },
     "./package.json": "./package.json"
   },
+  "sideEffects": false,
   "files": [
     "dist",
     "src",
@@ -29,20 +30,16 @@
     "fmt": "vp fmt -c oxfmt.config.ts",
     "lint": "vp lint -c oxlint.config.ts",
     "check": "vp fmt -c oxfmt.config.ts --check && vp lint -c oxlint.config.ts",
-    "build": "vp pack",
+    "build": "vp pack && node scripts/post-minify.mjs",
     "dev": "vp pack --watch",
     "test": "vp test"
   },
   "devDependencies": {
     "@types/node": "catalog:",
     "@typescript/native-preview": "catalog:",
+    "jsdom": "^25.0.1",
+    "terser": "catalog:",
     "vite-plus": "catalog:",
     "vitest": "catalog:"
-  },
-  "peerDependencies": {
-    "axios": "^1.15.2"
-  },
-  "dependencies": {
-    "@codejoo/openapi2lang": "^1.0.6"
   }
 }

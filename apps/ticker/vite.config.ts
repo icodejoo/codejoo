@@ -9,10 +9,7 @@ export default defineConfig({
       target: 'es2015',
       fixedExtension: true,
       dts: { tsgo: true },
-      clean: true,
-      deps: {
-        neverBundle: ['axios']
-      }
+      clean: true
     },
     {
       entry: 'src/index.ts',
@@ -22,10 +19,7 @@ export default defineConfig({
       minify: true,
       dts: false,
       clean: false,
-      outExtensions: () => ({ js: '.min.js' }),
-      deps: {
-        neverBundle: ['axios']
-      }
+      outExtensions: () => ({ js: '.min.js' })
     }
   ]
 })
