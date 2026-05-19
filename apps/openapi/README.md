@@ -264,11 +264,7 @@ export const request = impl as Request<model.PathRefs>;
 `Request<R>` produces (greatly simplified):
 
 ```ts
-function request<R = unknown, Q = unknown, M extends Method, P extends PathHint<M>>(
-  method: M,
-  path: P,
-  ...args: ResolvedBody<Q, M, P>
-): Promise<ResolvedRes<R, M, P>>;
+function request<R = unknown, Q = unknown, M extends Method, P extends PathHint<M>>(method: M, path: P, ...args: ResolvedBody<Q, M, P>): Promise<ResolvedRes<R, M, P>>;
 ```
 
 - **`M`, `P`** — inferred from the call-site arguments
@@ -365,14 +361,8 @@ type Api = OpenApi<model.PathRefs>;
 // Api["PathsOf"]["get"] → '/pet/{petId}' | '/pet/findByStatus' | ...
 
 function buildHttpMethod<const M extends Api["Method"]>(method: M) {
-  return <P extends Api["PathsOf"][M] | (string & {})>(
-    path: P,
-    ...body: P extends keyof Api["Body"]
-      ? M extends keyof Api["Body"][P]
-        ? Api["Body"][P][M]
-        : [body?: any]
-      : [body?: any]
-  ) => request(method as never, path as never, ...(body as never[]));
+  return <P extends Api["PathsOf"][M] | (string & {})>(path: P, ...body: P extends keyof Api["Body"] ? (M extends keyof Api["Body"][P] ? Api["Body"][P][M] : [body?: any]) : [body?: any]) =>
+    request(method as never, path as never, ...(body as never[]));
 }
 
 export const get = buildHttpMethod("get");
