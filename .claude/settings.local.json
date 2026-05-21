@@ -1,0 +1,19 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(pnpm install *)",
+      "Bash(pnpm test *)",
+      "Bash(pnpm build *)",
+      "Bash(pnpm check *)",
+      "Bash(pnpm fmt *)",
+      "Bash(pnpm lint *)",
+      "Bash(npx vp *)",
+      "Bash(node -e \"console.log\\(require\\('@voidzero-dev/vite-plus-test/package.json'\\).version\\)\")",
+      "Bash(node -e \"const p = require\\('@voidzero-dev/vite-plus-test/package.json'\\); console.log\\('peerDeps:', JSON.stringify\\(p.peerDependencies, null, 2\\)\\); console.log\\('vitest-pinned:', p.dependencies?.vitest\\)\")",
+      "Bash(pnpm add *)",
+      "Bash(npx playwright *)",
+      "Bash(pnpm test:browser)"
+    ],
+    "defaultMode": "bypassPermissions"
+  }
+}

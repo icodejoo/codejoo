@@ -1,0 +1,50 @@
+{
+  "name": "@codejoo/timer",
+  "version": "0.0.0",
+  "private": true,
+  "files": [
+    "dist",
+    "src",
+    "README.md",
+    "README.zh-CN.md"
+  ],
+  "type": "module",
+  "sideEffects": false,
+  "main": "./dist/index.mjs",
+  "module": "./dist/index.mjs",
+  "types": "./dist/index.d.mts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.mts",
+      "production": "./dist/index.min.js",
+      "import": "./dist/index.mjs",
+      "default": "./dist/index.mjs"
+    },
+    "./min": {
+      "types": "./dist/index.d.mts",
+      "default": "./dist/index.min.js"
+    },
+    "./package.json": "./package.json"
+  },
+  "scripts": {
+    "fmt": "vp fmt -c oxfmt.config.ts",
+    "lint": "vp lint -c oxlint.config.ts",
+    "check": "vp fmt -c oxfmt.config.ts --check && vp lint -c oxlint.config.ts",
+    "build": "vp pack && node scripts/post-minify.mjs",
+    "dev": "vp dev",
+    "dev:lib": "vp pack --watch",
+    "test": "vp test",
+    "test:browser": "vp test -c vitest.browser.config.ts"
+  },
+  "devDependencies": {
+    "@types/node": "catalog:",
+    "@typescript/native-preview": "catalog:",
+    "@vitest/browser": "catalog:",
+    "@vitest/browser-playwright": "catalog:",
+    "jsdom": "^25.0.1",
+    "playwright": "catalog:",
+    "terser": "catalog:",
+    "vite-plus": "catalog:",
+    "vitest": "catalog:"
+  }
+}
