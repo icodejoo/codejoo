@@ -13,7 +13,7 @@ import { defineConfig } from "oxfmt";
  * default export 必须是 `{ fmt: {...} }`（实测：flat OxfmtConfig 会报 "Expected a `fmt` field"）。
  */
 const fmt = defineConfig({
-  printWidth: 200,
+  printWidth: 220,
   tabWidth: 2,
   useTabs: false,
   semi: true,

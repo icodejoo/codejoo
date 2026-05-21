@@ -9,7 +9,8 @@
     "check": "vp run -r check",
     "build": "vp run -r build",
     "ready": "pnpm run check && vp run -r test && pnpm run build",
-    "dev": "vp run website#dev"
+    "dev": "vp run website#dev",
+    "dev:timer": "vp run @codejoo/timer#dev"
   },
   "devDependencies": {
     "@typescript/native-preview": "catalog:",
