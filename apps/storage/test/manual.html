@@ -1,0 +1,264 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>@codejoo/storage — 手动测试 / Manual Playground</title>
+    <style>
+      body { font: 13px/1.5 ui-monospace, Menlo, Consolas, monospace; margin: 20px; color: #1a1a1a; }
+      h1 { font-size: 18px; }
+      h2 { font-size: 14px; margin: 18px 0 6px; border-bottom: 1px solid #ddd; padding-bottom: 4px; }
+      section { margin-bottom: 8px; }
+      input[type="text"], input[type="number"] { font: inherit; padding: 3px 6px; border: 1px solid #ccc; border-radius: 4px; }
+      input[type="text"] { width: 140px; }
+      input[type="number"] { width: 90px; }
+      button { font: inherit; padding: 3px 10px; margin: 2px; border: 1px solid #888; border-radius: 4px; background: #f6f6f6; cursor: pointer; }
+      button:hover { background: #eaeaea; }
+      label { margin-right: 10px; white-space: nowrap; }
+      .row { margin: 4px 0; }
+      #log { background: #0d1117; color: #c9d1d9; padding: 10px; border-radius: 6px; height: 280px; overflow: auto; white-space: pre-wrap; }
+      #log .ok { color: #7ee787; }
+      #log .err { color: #ff7b72; }
+      #log .dim { color: #8b949e; }
+      .hint { color: #888; font-size: 12px; }
+    </style>
+  </head>
+  <body>
+    <h1>@codejoo/storage — 手动测试台 / Manual Playground</h1>
+    <p class="hint">
+      值输入框支持 JSON（如 <code>{"a":1}</code>、<code>true</code>、<code>42</code>），无法解析则按字符串处理。<br />
+      Value inputs accept JSON; otherwise treated as a string. 通过 <code>pnpm dev</code> 打开 <code>/test/manual.html</code>。
+    </p>
+
+    <h2>1. ls / ss（同步 localStorage / sessionStorage）</h2>
+    <section>
+      <div class="row">
+        <label><input type="radio" name="layer" value="ls" checked /> ls</label>
+        <label><input type="radio" name="layer" value="ss" /> ss</label>
+        key <input id="b-key" type="text" value="demo" />
+        value <input id="b-val" type="text" value='{"hello":"world"}' />
+        ttl(ms) <input id="b-ttl" type="number" placeholder="optional" />
+      </div>
+      <div class="row">
+        <button data-act="b-set">set</button>
+        <button data-act="b-set-ttl">set + ttl</button>
+        <button data-act="b-get">get</button>
+        <button data-act="b-get-def">get("DEFAULT")</button>
+        <button data-act="b-remove">remove</button>
+        <button data-act="b-clear">clear</button>
+        <button data-act="b-length">length</button>
+        <button data-act="b-rawls">查看底层 localStorage 原始值</button>
+      </div>
+    </section>
+
+    <h2>2. db（IndexedDB，异步）</h2>
+    <section>
+      <div class="row">
+        key <input id="d-key" type="text" value="user" />
+        value <input id="d-val" type="text" value='{"id":1}' />
+        ttl(ms) <input id="d-ttl" type="number" placeholder="optional" />
+      </div>
+      <div class="row">
+        <button data-act="d-set">set</button>
+        <button data-act="d-set-ttl">set + ttl</button>
+        <button data-act="d-get">get</button>
+        <button data-act="d-remove">remove</button>
+        <button data-act="d-clear">clear</button>
+        <button data-act="d-length">length</button>
+      </div>
+    </section>
+
+    <h2>3. 选项 Playground（namespace / sliding / raw / memoized / codec）</h2>
+    <section>
+      <div class="row">
+        <label><input id="o-memoized" type="checkbox" /> memoized</label>
+        <label><input id="o-sliding" type="checkbox" /> sliding</label>
+        <label><input id="o-raw" type="checkbox" /> raw</label>
+        <label><input id="o-codeable" type="checkbox" /> codeable</label>
+        <label><input id="o-enckey" type="checkbox" /> enckey</label>
+        namespace <input id="o-ns" type="text" value="app" />
+        codec 口令 <input id="o-pw" type="text" value="secret" />
+        <button data-act="o-build">应用选项（重建 storage）</button>
+      </div>
+      <div class="row">
+        key <input id="o-key" type="text" value="k" />
+        value <input id="o-val" type="text" value='{"n":1}' />
+        ttl(ms) <input id="o-ttl" type="number" value="5000" />
+        <button data-act="o-set">set</button>
+        <button data-act="o-get">get</button>
+        <button data-act="o-remove">remove</button>
+        <button data-act="o-raw">查看底层原始值</button>
+        <button data-act="o-debug">debug（解密快照）</button>
+      </div>
+      <p class="hint">
+        提示：<b>勾选/改动上方任一选项即自动应用</b>（无需手动点「应用选项」）；namespace、codec 改动后立刻对随后的 set/get 生效。<br />
+        ① 开 codeable + 填口令后 set，再点「查看底层原始值」可看到被混淆、非明文（且带 namespace 前缀）。<br />
+        ② <b>sliding 必须配合 ttl</b>：sliding 是「读命中时按 ttl 重算 expireAt」，<b>不填 ttl 就没有 expireAt，自然不会更新</b>。
+        填 ttl → set → 隔一会 → get → 再「查看底层原始值」，可见 expireAt 前移。<br />
+        ③ 注意：改了 codec 口令后，之前用旧口令写入的数据将解不开（读出为 null）——这是预期行为。
+      </p>
+    </section>
+
+    <h2>4. fast / lazy（绑定 key 的快捷器）</h2>
+    <section>
+      <div class="row">
+        key <input id="f-key" type="text" value="token" />
+        value <input id="f-val" type="text" value="abc" />
+        <button data-act="f-bind">fast(ls, key)</button>
+        <button data-act="f-set">.set</button>
+        <button data-act="f-get">.get</button>
+        <button data-act="f-remove">.remove</button>
+        <button data-act="f-lazy">lazy(ls, key) → 调用两次看是否复用</button>
+      </div>
+    </section>
+
+    <h2>5. JSONX（Date / Map / Set / bigint 可逆）</h2>
+    <section>
+      <div class="row">
+        <button data-act="j-roundtrip">stringify 一个富类型对象 → parse 回来</button>
+      </div>
+    </section>
+
+    <h2>6. buildCodec（混淆编解码）</h2>
+    <section>
+      <div class="row">
+        口令 <input id="c-pw" type="text" value="pw" />
+        明文 <input id="c-text" type="text" value="hello 中文 🎉" />
+        <button data-act="c-encode">encode</button>
+        <button data-act="c-decode">encode → decode（同口令）</button>
+        <button data-act="c-wrong">encode → decode（错口令，应得 null）</button>
+      </div>
+    </section>
+
+    <h2>日志 / Log <button data-act="log-clear" style="float:right">clear log</button></h2>
+    <div id="log"></div>
+
+    <script type="module">
+      import {
+        buildStorage,
+        buildCodec,
+        fast,
+        lazy,
+        debug,
+        JSONX,
+        IdbStorage,
+      } from "../src/index.ts";
+
+      const logEl = document.getElementById("log");
+      function fmt(v) {
+        if (v instanceof Map) return "Map(" + JSON.stringify([...v]) + ")";
+        if (v instanceof Set) return "Set(" + JSON.stringify([...v]) + ")";
+        if (v instanceof Date) return "Date(" + v.toISOString() + ")";
+        if (typeof v === "bigint") return v + "n";
+        try { return JSON.stringify(v); } catch { return String(v); }
+      }
+      function log(label, value, cls = "ok") {
+        const line = document.createElement("div");
+        line.className = cls;
+        line.textContent = `» ${label}` + (value === undefined ? "" : `  →  ${fmt(value)}`);
+        logEl.prepend(line);
+      }
+      function err(label, e) { log(label + " ✗ " + (e?.message || e), undefined, "err"); }
+      function parseVal(s) { try { return JSON.parse(s); } catch { return s; } }
+      const $ = (id) => document.getElementById(id);
+      const val = (id) => $(id).value;
+      const num = (id) => ($(id).value === "" ? undefined : Number($(id).value));
+
+      // 基础 ls/ss
+      const { ls, ss } = buildStorage();
+      const layer = () => (document.querySelector('input[name="layer"]:checked').value === "ls" ? ls : ss);
+
+      // db
+      const dbApi = buildStorage({ db: new IdbStorage("manual-playground-db") }).db;
+
+      // 选项 playground（可重建）
+      let optApi = buildStorage().ls;
+
+      // fast/lazy
+      let fastAcc = null;
+
+      const actions = {
+        "b-set": () => { layer().set(val("b-key"), parseVal(val("b-val"))); log(`ls/ss set ${val("b-key")}`, parseVal(val("b-val"))); },
+        "b-set-ttl": () => { layer().set(val("b-key"), parseVal(val("b-val")), num("b-ttl")); log(`set ttl=${num("b-ttl")}`, parseVal(val("b-val"))); },
+        "b-get": () => log(`get ${val("b-key")}`, layer().get(val("b-key"))),
+        "b-get-def": () => log(`get ${val("b-key")} (default)`, layer().get(val("b-key"), "DEFAULT")),
+        "b-remove": () => { layer().remove(val("b-key")); log(`remove ${val("b-key")}`); },
+        "b-clear": () => { layer().clear(); log("clear"); },
+        "b-length": () => log("length", layer().length),
+        "b-rawls": () => log(`localStorage["${val("b-key")}"]`, localStorage.getItem(val("b-key")), "dim"),
+
+        "d-set": async () => { await dbApi.set(val("d-key"), parseVal(val("d-val"))); log(`db set ${val("d-key")}`, parseVal(val("d-val"))); },
+        "d-set-ttl": async () => { await dbApi.set(val("d-key"), parseVal(val("d-val")), num("d-ttl")); log(`db set ttl=${num("d-ttl")}`); },
+        "d-get": async () => log(`db get ${val("d-key")}`, await dbApi.get(val("d-key"))),
+        "d-remove": async () => { await dbApi.remove(val("d-key")); log(`db remove ${val("d-key")}`); },
+        "d-clear": async () => { await dbApi.clear(); log("db clear"); },
+        "d-length": async () => log("db length", await dbApi.length),
+
+        "o-build": () => {
+          const opts = {
+            memoized: $("o-memoized").checked,
+            sliding: $("o-sliding").checked,
+            raw: $("o-raw").checked,
+            namespace: val("o-ns") || undefined,
+          };
+          if ($("o-codeable").checked || $("o-enckey").checked) opts.codec = buildCodec(val("o-pw"));
+          if ($("o-codeable").checked) opts.codeable = true;
+          if ($("o-enckey").checked) opts.enckey = true;
+          optApi = buildStorage(opts).ls;
+          log("已重建 storage，选项", opts, "dim");
+        },
+        "o-set": () => { optApi.set(val("o-key"), parseVal(val("o-val")), num("o-ttl")); log(`opt set ${val("o-key")}`, parseVal(val("o-val"))); },
+        "o-get": () => log(`opt get ${val("o-key")}`, optApi.get(val("o-key"))),
+        "o-remove": () => { optApi.remove(val("o-key")); log(`opt remove ${val("o-key")}`); },
+        "o-raw": () => {
+          const k = (val("o-ns") ? val("o-ns") + ":" : "") + val("o-key");
+          log(`localStorage["${k}"]`, localStorage.getItem(k), "dim");
+        },
+        "o-debug": () => log("debug 解密快照", debug(optApi)),
+
+        "f-bind": () => { fastAcc = fast(ls, val("f-key")); log(`fast(ls, "${val("f-key")}") 已绑定`); },
+        "f-set": () => { (fastAcc ??= fast(ls, val("f-key"))).set(parseVal(val("f-val"))); log(".set", parseVal(val("f-val"))); },
+        "f-get": () => log(".get", (fastAcc ??= fast(ls, val("f-key"))).get()),
+        "f-remove": () => { (fastAcc ??= fast(ls, val("f-key"))).remove(); log(".remove"); },
+        "f-lazy": () => {
+          const getter = lazy(ls, val("f-key"));
+          const a = getter(), b = getter();
+          log("lazy 两次调用返回同一实例", a === b);
+        },
+
+        "j-roundtrip": () => {
+          const data = { when: new Date(), tags: new Set([1, 2]), map: new Map([["x", 9n]]), big: 42n };
+          const str = JSONX.stringify(data);
+          log("JSONX.stringify", str, "dim");
+          const back = JSONX.parse(str);
+          log("parse 回来类型", `Date=${back.when instanceof Date}, Set=${back.tags instanceof Set}, Map=${back.map instanceof Map}, bigint=${typeof back.big === "bigint"}`);
+        },
+
+        "c-encode": () => log("encode", buildCodec(val("c-pw")).encode(val("c-text"))),
+        "c-decode": () => {
+          const enc = buildCodec(val("c-pw")).encode(val("c-text"));
+          log("encode→decode 同口令", buildCodec(val("c-pw")).decode(enc));
+        },
+        "c-wrong": () => {
+          const enc = buildCodec(val("c-pw")).encode(val("c-text"));
+          log("encode→decode 错口令", buildCodec(val("c-pw") + "X").decode(enc));
+        },
+
+        "log-clear": () => { logEl.innerHTML = ""; },
+      };
+
+      document.body.addEventListener("click", async (e) => {
+        const act = e.target?.dataset?.act;
+        if (!act || !actions[act]) return;
+        try { await actions[act](); } catch (ex) { err(act, ex); }
+      });
+
+      // 选项区任一输入变化即自动「应用选项」，免去手动点按钮（namespace/codec 等切换后立刻生效）
+      for (const id of ["o-memoized", "o-sliding", "o-raw", "o-codeable", "o-enckey", "o-ns", "o-pw"]) {
+        $(id).addEventListener("change", () => actions["o-build"]());
+      }
+
+      log("Playground ready — 点击按钮手动测试各 API", undefined, "dim");
+    </script>
+  </body>
+</html>
