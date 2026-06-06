@@ -1,0 +1,722 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>@codejoo/counter — API 测试台</title>
+    <style>
+      :root { color-scheme: light dark; }
+      * { box-sizing: border-box; }
+      body {
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+        margin: 0; padding: 20px; color: #1d1d1f; background: #f5f5f7; line-height: 1.5;
+      }
+      h1 { font-size: 20px; margin: 0 0 4px; }
+      h2 { font-size: 15px; margin: 0 0 12px; color: #06c; }
+      .sub { color: #888; font-size: 12px; margin: 0 0 20px; }
+      .grid { display: grid; grid-template-columns: 1fr 360px; gap: 16px; align-items: start; }
+      section {
+        background: #fff; border: 1px solid #e2e2e6; border-radius: 10px;
+        padding: 16px; margin-bottom: 16px;
+      }
+      .row { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; margin: 8px 0; }
+      .row > span.lbl { min-width: 120px; color: #555; font-size: 13px; }
+      button {
+        padding: 6px 12px; border: 1px solid #c7c7cc; background: #fff;
+        border-radius: 6px; cursor: pointer; font-size: 13px; transition: .12s;
+      }
+      button:hover { background: #06c; color: #fff; border-color: #06c; }
+      button.driver { border-color: #34c759; color: #248a3d; font-weight: 600; }
+      button.danger { border-color: #ff3b30; color: #d70015; }
+      .num {
+        display: inline-block; min-width: 150px; padding: 4px 12px;
+        background: #111; color: #30d158; font-family: ui-monospace, "SF Mono", monospace;
+        border-radius: 5px; font-size: 14px; text-align: center;
+      }
+      .tag { font-size: 11px; color: #888; }
+      #log {
+        background: #0d0d12; color: #c7f59b; font-family: ui-monospace, monospace;
+        font-size: 12px; border-radius: 8px; padding: 12px; height: 520px;
+        overflow-y: auto; white-space: pre-wrap; word-break: break-all;
+      }
+      #log .t { color: #5a6b7a; }
+      #log .ev { color: #ffd60a; }
+      #log .err { color: #ff6b6b; }
+      .pill { padding: 2px 8px; border-radius: 99px; background: #eef; font-size: 11px; color: #339; }
+      code { background: #f0f0f3; padding: 1px 5px; border-radius: 4px; font-size: 12px; }
+    </style>
+  </head>
+  <body>
+    <h1>@codejoo/counter — API 测试台</h1>
+    <p class="sub">
+      引入 <code>./dist/index.mjs</code> 进行黑盒测试 · 覆盖 counter / countup / countdown 全部公开 API
+      <span class="pill">驱动状态: <b id="driverState">stopped</b></span>
+    </p>
+
+    <div class="grid">
+      <div>
+        <!-- ============ CORE counter ============ -->
+        <section>
+          <h2>0. core · counter（RAF 驱动）</h2>
+          <p class="tag">
+            countup / countdown 都是插件，必须先 <code>counter.use(plugin.install())</code> 再
+            <code>counter.start()</code> 才会逐帧推进。下面两个插件已在页面加载时 use 完毕。
+          </p>
+          <div class="row">
+            <button class="driver" id="start">counter.start()</button>
+            <button class="driver" id="stop">counter.stop()</button>
+            <button id="tickOnce">counter.tick(手动一帧)</button>
+          </div>
+        </section>
+
+        <!-- ============ COUNTUP ============ -->
+        <section>
+          <h2>1. countup · 数字滚动</h2>
+
+          <div class="row">
+            <span class="lbl">渲染目标 A</span>
+            <span class="num" id="cuA">0</span>
+            <span class="tag">el + onUpdate/onDone</span>
+          </div>
+          <div class="row">
+            <span class="lbl">渲染目标 B</span>
+            <span class="num" id="cuB">0</span>
+            <span class="tag">自定义 formatter（货币）</span>
+          </div>
+
+          <div class="row">
+            <button id="cu1">countup(to)</button>
+            <button id="cu2">countup(to, label)</button>
+            <button id="cu3">countup(to, options)</button>
+            <button id="cu4">countup(to, from, label)</button>
+            <button id="cu5">countup(to, from, options)</button>
+            <button id="cu6">countup({...full options})</button>
+          </div>
+          <div class="row">
+            <button id="cuEasing">自定义 easing(linear)</button>
+            <button id="cuFmt">自定义 formatter ₱ + 千分位</button>
+            <button id="cuFps">fps:1（慢速更新）</button>
+            <button id="cuLazy">lazy:true（手动激活）</button>
+          </div>
+          <div class="row">
+            <button id="cuInitRender">初始化即渲染（不 start 也显示初值）</button>
+          </div>
+          <div class="row">
+            <button id="cuRemove">countup.remove(最近 id)</button>
+            <button id="cuClearLabel">countup.clear("group-x")</button>
+            <button class="danger" id="cuClearAll">countup.clear()</button>
+            <button id="cuUpdate">countup.update(最近 id → 9999)</button>
+            <button id="cuReadd">完成后再 update（重新入队）</button>
+            <button id="cuDefaults">countup.defaults</button>
+          </div>
+
+          <h2 style="margin-top:16px">压力测试 · 数十个 countup 并发渲染</h2>
+          <p class="tag">每个格子是独立 countup 任务（label="stress"），共用同一 RAF 驱动。观察是否流畅、有无掉帧。</p>
+          <div class="row">
+            <button class="driver" id="cuStress50">并发 50 个</button>
+            <button class="driver" id="cuStress200">并发 200 个</button>
+            <button class="danger" id="cuStressClear">countup.clear("stress")</button>
+            <span class="tag" id="cuStressInfo">活动: 0 · 完成: 0</span>
+          </div>
+          <div
+            id="cuStressGrid"
+            style="display:grid; grid-template-columns:repeat(auto-fill,minmax(70px,1fr)); gap:4px; margin-top:8px;"
+          ></div>
+
+          <h2 style="margin-top:16px">GC 回收验证 · once:true 完成即销毁</h2>
+          <p class="tag">
+            用 <code>FinalizationRegistry</code> 观测任务关联的 DOM 节点是否被回收。<br />
+            <b>once:true</b> 完成后库不再持有任务 → 可回收；<b>once:false</b> 被 taskMap 保留（供 update 重入队）→ 不回收。<br />
+            提示：Chrome 需以 <code>--js-flags="--expose-gc"</code> 启动才能手动触发 GC，否则点“制造内存压力”被动触发。
+          </p>
+          <div class="row">
+            <button class="driver" id="gcOnceTrue">批量 300 · once:true（可回收）</button>
+            <button id="gcOnceFalse">批量 300 · once:false（被保留）</button>
+            <button id="gcForce">尝试触发 GC</button>
+            <span class="tag" id="gcInfo">创建: 0 · 已回收: 0</span>
+          </div>
+        </section>
+
+        <!-- ============ COUNTDOWN ============ -->
+        <section>
+          <h2>2. countdown · 倒计时</h2>
+          <p class="tag">⏱ tick 节流为 <b>1 秒</b> 粒度（tickGap &lt; 1000ms 直接 return），所以画面每秒跳一次。</p>
+
+          <div class="row">
+            <span class="lbl">渲染目标 C</span>
+            <span class="num" id="cdC">--:--:--</span>
+            <span class="tag">HH:mm:ss</span>
+          </div>
+          <div class="row">
+            <span class="lbl">渲染目标 D</span>
+            <span class="num" id="cdD">--</span>
+            <span class="tag">自定义模板 DD天 HH:mm:ss</span>
+          </div>
+
+          <div class="row">
+            <button id="cd1">countdown(60000)（默认 ms 解析器）</button>
+            <button id="cd2">countdown(90, {resolver:"seconds"})</button>
+          </div>
+          <div class="row">
+            <button id="cd3">countdown(Date 对象)</button>
+            <button id="cd4">countdown("2026-12-31 23:59:59")</button>
+            <button id="cd5">countdown({fmt:"DD天 HH:mm:ss"})</button>
+          </div>
+          <div class="row">
+            <button id="cd6">autokill + onDone（5 秒后自删）</button>
+            <button id="cd7">自定义 fmt 函数</button>
+            <button id="cd8">自定义 render 函数</button>
+            <button id="cd9">分组 label="news"</button>
+          </div>
+          <div class="row">
+            <button id="cdRemove">countdown.remove(最近 id)</button>
+            <button id="cdClearLabel">countdown.clear("news")</button>
+            <button class="danger" id="cdClearAll">countdown.clear()</button>
+            <button id="cdDefaults">countdown.defauls</button>
+          </div>
+          <div class="row">
+            <span class="lbl">offset 校时</span>
+            <button id="cdOffsetMinus">offset -10s（服务器更慢，倒计时 +10s）</button>
+            <button id="cdOffsetPlus">offset +10s（服务器更快，倒计时 -10s）</button>
+            <button id="cdOffsetReset">offset 归零</button>
+          </div>
+        </section>
+
+        <!-- ============ LAZY / OBSERVER ============ -->
+        <section>
+          <h2>3. lazy + observer · 进入视口才运行</h2>
+          <p class="tag">
+            lazy:true 初始化不入队，由 IntersectionObserver 观测；元素<b>进入</b>滚动容器才入队运行，<b>离开</b>则暂停。
+            这里用 <code>createLazyObserver({root})</code> 把观测根设为下面的滚动框。
+          </p>
+          <div class="row">
+            <button class="driver" id="lazyCreate">创建 lazy countup + countdown</button>
+            <button class="danger" id="lazyClear">clear("lazy")</button>
+            <span class="tag" id="lazyState">状态: 未创建</span>
+          </div>
+          <div
+            id="lazyScroll"
+            style="height:120px; overflow:auto; border:1px solid #c7c7cc; border-radius:8px; padding:8px; margin-top:8px;"
+          >
+            <div style="height:160px; display:flex; align-items:center; justify-content:center; color:#999;">
+              ↓ 向下滚动，让计数器进入视口 ↓
+            </div>
+            <div class="row">
+              <span class="lbl">lazy countup</span>
+              <span class="num" id="lazyCu">—</span>
+            </div>
+            <div class="row">
+              <span class="lbl">lazy countdown</span>
+              <span class="num" id="lazyCd">—</span>
+            </div>
+            <div style="height:160px; display:flex; align-items:center; justify-content:center; color:#999;">
+              ↑ 向上滚动让其离开视口会暂停 ↑
+            </div>
+          </div>
+        </section>
+      </div>
+
+      <!-- ============ LOG ============ -->
+      <section style="position: sticky; top: 20px;">
+        <h2>事件日志 <button id="clearLog" style="float:right">clear</button></h2>
+        <div id="log"></div>
+      </section>
+    </div>
+
+    <script type="module">
+      import { counter, countup, countdown, createLazyObserver } from "./dist/index.mjs";
+
+      // 暴露到控制台方便手动调试
+      window.counter = counter;
+      window.countup = countup;
+      window.countdown = countdown;
+
+      // ---------- 日志工具 ----------
+      const logEl = document.getElementById("log");
+      const pad = (n) => String(n).padStart(2, "0");
+      function log(msg, cls = "") {
+        const d = new Date();
+        const t = `${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}.${String(d.getMilliseconds()).padStart(3, "0")}`;
+        const line = document.createElement("div");
+        line.innerHTML = `<span class="t">${t}</span> <span class="${cls}">${msg}</span>`;
+        logEl.appendChild(line);
+        logEl.scrollTop = logEl.scrollHeight;
+      }
+      document.getElementById("clearLog").onclick = () => (logEl.innerHTML = "");
+
+      // ---------- 注册插件（核心步骤）----------
+      try {
+        counter.use(countup.install());
+        counter.use(countdown.install());
+        log(`counter.use(countup.install()) ✓ → counter.up = ${typeof counter.up}`, "ev");
+        log(`counter.use(countdown.install()) ✓ → counter.down = ${typeof counter.down}`, "ev");
+      } catch (e) {
+        log(`插件注册失败: ${e.message}`, "err");
+      }
+
+      // ---------- 驱动控制 ----------
+      const driverState = document.getElementById("driverState");
+      document.getElementById("start").onclick = () => {
+        counter.start();
+        driverState.textContent = "running";
+        log("counter.start() ▶", "ev");
+      };
+      document.getElementById("stop").onclick = () => {
+        counter.stop();
+        driverState.textContent = "stopped";
+        log("counter.stop() ⏸", "ev");
+      };
+      document.getElementById("tickOnce").onclick = () => {
+        counter.tick(performance.now());
+        log("counter.tick(performance.now()) 手动推进一帧", "ev");
+      };
+
+      // ======================================================
+      //  countup 测试
+      // ======================================================
+      const cuA = document.getElementById("cuA");
+      const cuB = document.getElementById("cuB");
+      let lastCuId = -1;
+
+      // 1) countup(to)
+      document.getElementById("cu1").onclick = () => {
+        lastCuId = countup({
+          to: 1000,
+          el: cuA,
+          onUpdate: (f, v) => {},
+          onDone: (t) => log(`[cu1] onDone → ${t._value}`, "ev"),
+        });
+        log(`countup({to:1000, el}) → id=${lastCuId}`);
+      };
+
+      // 2) countup(to, label)
+      document.getElementById("cu2").onclick = () => {
+        lastCuId = countup(5000, "group-x");
+        log(`countup(5000, "group-x") → id=${lastCuId}（无 el，仅内部计算）`);
+      };
+
+      // 3) countup(to, options)
+      document.getElementById("cu3").onclick = () => {
+        lastCuId = countup(2000, { el: cuA, duration: 3000, onDone: () => log("[cu3] onDone", "ev") });
+        log(`countup(2000, {el, duration:3000}) → id=${lastCuId}`);
+      };
+
+      // 4) countup(to, from, label)
+      document.getElementById("cu4").onclick = () => {
+        lastCuId = countup(900, 100, "group-x");
+        log(`countup(900, 100, "group-x") → id=${lastCuId}（from=100→to=900）`);
+      };
+
+      // 5) countup(to, from, options)
+      document.getElementById("cu5").onclick = () => {
+        lastCuId = countup(888, 0, { el: cuA, duration: 2000 });
+        log(`countup(888, 0, {el, duration:2000}) → id=${lastCuId}`);
+      };
+
+      // 6) countup({...full options})
+      document.getElementById("cu6").onclick = () => {
+        lastCuId = countup({
+          el: cuA,
+          from: 0,
+          to: 123456,
+          duration: 2500,
+          fps: 30,
+          formatter: (v) => Math.round(v).toLocaleString("en-US"),
+          onUpdate: (f) => {},
+          onDone: (t) => log(`[cu6] onDone → ${t._value}`, "ev"),
+        });
+        log(`countup({full options}) → id=${lastCuId}`);
+      };
+
+      // easing 自定义（linear）
+      document.getElementById("cuEasing").onclick = () => {
+        lastCuId = countup({ el: cuA, to: 1000, duration: 3000, easing: (t) => t });
+        log(`countup easing:linear → id=${lastCuId}`);
+      };
+
+      // formatter 货币
+      document.getElementById("cuFmt").onclick = () => {
+        lastCuId = countup({
+          el: cuB,
+          from: 0,
+          to: 999999.99,
+          duration: 3000,
+          formatter: (v) => "₱" + v.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 }),
+        });
+        log(`countup 货币 formatter → id=${lastCuId}`);
+      };
+
+      // fps 慢速
+      document.getElementById("cuFps").onclick = () => {
+        lastCuId = countup({ el: cuB, to: 50, duration: 5000, fps: 1, formatter: (v) => v.toFixed(2) });
+        log(`countup fps:1 → id=${lastCuId}（每秒约更新 1 次）`);
+      };
+
+      // lazy（_active=false，需手动激活）
+      document.getElementById("cuLazy").onclick = () => {
+        const id = countup({ el: cuA, to: 777, duration: 2000, lazy: true });
+        lastCuId = id;
+        log(`countup lazy:true → id=${id}，_active=false 不会自动跑`, "ev");
+        // 演示：手动翻转 _active（库未暴露 resume，这里直接演示其语义）
+        setTimeout(() => {
+          // 通过 defaults/队列无法访问，仅作说明
+          log(`(lazy 任务需 observer 命中才激活；此处仅演示创建)`, "ev");
+        }, 50);
+      };
+
+      // 初始化即渲染：先 stop 驱动，再创建任务，元素应立刻显示初值（不依赖动画帧）
+      document.getElementById("cuInitRender").onclick = () => {
+        counter.stop();
+        driverState.textContent = "stopped";
+        cuA.textContent = "（占位·未渲染）";
+        const id = countup({
+          el: cuA,
+          from: 42,
+          to: 9999,
+          duration: 2000,
+          formatter: (v) => Math.round(v).toString(),
+        });
+        lastCuId = id;
+        log(`已 stop 驱动后 countup({from:42}) → id=${id}：cuA 立即显示 "${cuA.textContent}"（初始化渲染一帧，无跳变）`, "ev");
+      };
+
+      document.getElementById("cuRemove").onclick = () => {
+        countup.remove(lastCuId);
+        log(`countup.remove(${lastCuId})`);
+      };
+      document.getElementById("cuClearLabel").onclick = () => {
+        countup.clear("group-x");
+        log(`countup.clear("group-x")`);
+      };
+      document.getElementById("cuClearAll").onclick = () => {
+        countup.clear();
+        log(`countup.clear() 清空全部`, "err");
+      };
+      document.getElementById("cuUpdate").onclick = () => {
+        countup.update(lastCuId, 9999);
+        log(`countup.update(${lastCuId}, 9999) → 从当前显示值平滑过渡到 9999`, "ev");
+      };
+
+      // 完成后再 update：验证“已完成任务重新加入队列”这条修复
+      document.getElementById("cuReadd").onclick = () => {
+        const id = countup({
+          el: cuA,
+          from: 0,
+          to: 100,
+          duration: 1500,
+          formatter: (v) => Math.round(v).toString(),
+          onDone: (t) => {
+            log(`[re-add] 任务 ${t.id} 完成于 ${t._value}，2 秒后 update(${t.id}, 500) 重新入队`, "ev");
+            setTimeout(() => {
+              countup.update(t.id, 500);
+              log(`[re-add] update(${t.id}, 500) → 已完成的任务重新滚动 100 → 500`, "ev");
+            }, 2000);
+          },
+        });
+        lastCuId = id;
+        log(`countup({to:100}) 先跑完 → id=${id}，完成后自动演示重新入队`);
+      };
+      document.getElementById("cuDefaults").onclick = () => {
+        log(`countup.defaults = ${JSON.stringify(countup.defaults, (k, v) => (typeof v === "function" ? "[fn]" : v))}`);
+      };
+
+      // ---------- 压力测试：数十/上百个 countup 并发 ----------
+      const stressGrid = document.getElementById("cuStressGrid");
+      const stressInfo = document.getElementById("cuStressInfo");
+      let stressActive = 0;
+      let stressDone = 0;
+      const refreshStressInfo = () => {
+        stressInfo.textContent = `活动: ${stressActive} · 完成: ${stressDone}`;
+      };
+
+      function runStress(n) {
+        // 先清掉上一批，避免无限堆积
+        countup.clear("stress");
+        stressGrid.innerHTML = "";
+        stressActive = n;
+        stressDone = 0;
+        refreshStressInfo();
+
+        // 不开驱动就看不到动画，自动确保运行
+        counter.start();
+        driverState.textContent = "running";
+
+        const t0 = performance.now();
+        for (let i = 0; i < n; i++) {
+          const cell = document.createElement("span");
+          cell.className = "num";
+          cell.style.minWidth = "0";
+          cell.style.fontSize = "12px";
+          cell.style.padding = "2px 4px";
+          cell.textContent = "0";
+          stressGrid.appendChild(cell);
+
+          // 随机目标 / 时长 / 帧率，模拟真实混合负载
+          const to = Math.floor(1000 + Math.random() * 99000);
+          const duration = Math.floor(1500 + Math.random() * 3500);
+          countup({
+            el: cell,
+            from: 0,
+            to,
+            duration,
+            label: "stress",
+            formatter: (v) => Math.round(v).toLocaleString("en-US"),
+            onDone: () => {
+              stressActive--;
+              stressDone++;
+              refreshStressInfo();
+            },
+          });
+        }
+        log(`压力测试：并发创建 ${n} 个 countup，建表耗时 ${(performance.now() - t0).toFixed(1)}ms`, "ev");
+      }
+
+      document.getElementById("cuStress50").onclick = () => runStress(50);
+      document.getElementById("cuStress200").onclick = () => runStress(200);
+      document.getElementById("cuStressClear").onclick = () => {
+        countup.clear("stress");
+        stressGrid.innerHTML = "";
+        stressActive = 0;
+        stressDone = 0;
+        refreshStressInfo();
+        log(`countup.clear("stress") 清空压力测试任务`, "err");
+      };
+
+      // ---------- GC 回收验证 ----------
+      const gcInfo = document.getElementById("gcInfo");
+      let gcCreated = 0;
+      let gcCollected = 0;
+      const refreshGcInfo = () =>
+        (gcInfo.textContent = `创建: ${gcCreated} · 已回收: ${gcCollected}`);
+      // 每当被登记的对象（DOM 节点）被 GC 回收，回调触发一次
+      const gcRegistry = new FinalizationRegistry((tag) => {
+        gcCollected++;
+        refreshGcInfo();
+      });
+
+      function runGcStress(n, once) {
+        counter.start();
+        driverState.textContent = "running";
+        gcCreated = n;
+        gcCollected = 0;
+        refreshGcInfo();
+
+        // 用临时数组持有元素，完成后整体丢弃；元素不挂到可见 DOM 树，
+        // 这样能否被回收只取决于「库内是否还持有任务(task.el)」
+        let cells = [];
+        let done = 0;
+        for (let i = 0; i < n; i++) {
+          const cell = document.createElement("span");
+          cell.textContent = "0";
+          gcRegistry.register(cell, i); // 登记，回收时通知
+          cells.push(cell);
+          countup({
+            el: cell,
+            from: 0,
+            to: 50000,
+            duration: 1000 + Math.random() * 1500,
+            once,
+            label: "gc",
+            formatter: (v) => Math.round(v).toString(),
+            onDone: () => {
+              if (++done === n) {
+                // 全部完成：丢弃测试侧的强引用
+                cells.length = 0;
+                cells = null;
+                log(
+                  `GC 测试(once:${once}) ${n} 个任务全部完成，已丢弃测试侧引用。` +
+                    (once
+                      ? "库内也已销毁 → 应可被 GC 回收"
+                      : "但 taskMap 仍保留 task.el → 不会被回收"),
+                  "ev",
+                );
+              }
+            },
+          });
+        }
+        log(`GC 测试：创建 ${n} 个 countup（once:${once}）`, "ev");
+      }
+
+      document.getElementById("gcOnceTrue").onclick = () => runGcStress(300, true);
+      document.getElementById("gcOnceFalse").onclick = () => runGcStress(300, false);
+      document.getElementById("gcForce").onclick = () => {
+        if (typeof window.gc === "function") {
+          window.gc();
+          log("window.gc() 已调用（需 --expose-gc），稍候看“已回收”计数", "ev");
+        } else {
+          // 没有 --expose-gc：制造内存压力，诱导浏览器 GC
+          let junk = [];
+          for (let i = 0; i < 200; i++) junk.push(new Array(100000).fill(i));
+          junk = null;
+          log("未启用 --expose-gc：已制造内存压力被动诱导 GC（回收有延迟，可多点几次）", "err");
+        }
+      };
+      refreshGcInfo();
+
+      // ======================================================
+      //  countdown 测试
+      // ======================================================
+      const cdC = document.getElementById("cdC");
+      const cdD = document.getElementById("cdD");
+      let lastCdId = -1;
+
+      // 1) 默认毫秒解析器：60000 → now + 60s
+      document.getElementById("cd1").onclick = () => {
+        lastCdId = countdown({
+          endTime: 60000,
+          el: cdC,
+          onUpdate: (f, v) => {},
+          onDone: (t) => log(`[cd1] onDone（归零）`, "ev"),
+        });
+        log(`countdown({endTime:60000, el}) → id=${lastCdId}（默认 ms 解析）`);
+      };
+
+      // 2) resolver: seconds
+      document.getElementById("cd2").onclick = () => {
+        lastCdId = countdown({ endTime: 90, el: cdC, resolver: "seconds" });
+        log(`countdown({endTime:90, resolver:"seconds"}) → id=${lastCdId}（90 秒）`);
+      };
+
+      // 3) Date 对象
+      document.getElementById("cd3").onclick = () => {
+        const dt = new Date(Date.now() + 2 * 60 * 1000);
+        lastCdId = countdown({ endTime: dt, el: cdC });
+        log(`countdown({endTime:Date(+2min)}) → id=${lastCdId}`);
+      };
+
+      // 4) 日期字符串
+      document.getElementById("cd4").onclick = () => {
+        lastCdId = countdown({ endTime: "2026-12-31 23:59:59", el: cdD, fmt: "DD天 HH:mm:ss" });
+        log(`countdown("2026-12-31 23:59:59", fmt:DD天) → id=${lastCdId}`);
+      };
+
+      // 5) 自定义模板 fmt（字符串）
+      document.getElementById("cd5").onclick = () => {
+        lastCdId = countdown({ endTime: 3 * 86400000 + 5000, el: cdD, resolver: "millseconds", fmt: "DD天 HH:mm:ss" });
+        log(`countdown(fmt:"DD天 HH:mm:ss") → id=${lastCdId}`);
+      };
+
+      // 6) autokill + onDone
+      document.getElementById("cd6").onclick = () => {
+        lastCdId = countdown({
+          endTime: 5000,
+          el: cdC,
+          autokill: true,
+          onDone: (t) => log(`[cd6] onDone + autokill → 任务 id=${t.id} 自动移除`, "ev"),
+        });
+        log(`countdown(autokill:true, 5s) → id=${lastCdId}`);
+      };
+
+      // 7) 自定义 fmt 函数
+      document.getElementById("cd7").onclick = () => {
+        lastCdId = countdown({
+          endTime: 120000,
+          el: cdC,
+          fmt: (v) => `剩 ${v[1]} 时 ${v[2]} 分 ${v[3]} 秒`, // v = [d,h,m,s,ms]
+        });
+        log(`countdown(fmt 为函数) → id=${lastCdId}`);
+      };
+
+      // 8) 自定义 render 函数
+      document.getElementById("cd8").onclick = () => {
+        lastCdId = countdown({
+          endTime: 100000,
+          el: cdD,
+          render: (el, formatted, values) => {
+            el.textContent = "⏳ " + formatted;
+            el.style.color = values[3] % 2 ? "#ff9f0a" : "#30d158";
+          },
+        });
+        log(`countdown(自定义 render) → id=${lastCdId}`);
+      };
+
+      // 9) 分组 label
+      document.getElementById("cd9").onclick = () => {
+        lastCdId = countdown({ endTime: 300000, el: cdC }, "news");
+        log(`countdown({...}, "news") 分组 → id=${lastCdId}`);
+      };
+
+      document.getElementById("cdRemove").onclick = () => {
+        countdown.remove(lastCdId);
+        log(`countdown.remove(${lastCdId})`);
+      };
+      document.getElementById("cdClearLabel").onclick = () => {
+        countdown.clear("news");
+        log(`countdown.clear("news")`);
+      };
+      document.getElementById("cdClearAll").onclick = () => {
+        countdown.clear();
+        log(`countdown.clear() 清空全部`, "err");
+      };
+      document.getElementById("cdDefaults").onclick = () => {
+        log(`countdown.defauls = ${JSON.stringify(countdown.defauls, (k, v) => (typeof v === "function" ? "[fn]" : v))}`);
+      };
+
+      // offset 校时：设置后所有在跑倒计时立即整体平移并重渲染
+      const setOffset = (val) => {
+        const before = countdown.defauls.offset;
+        countdown.defauls.offset = val; // 触发 setter → syncOffset(delta)
+        log(`countdown.defauls.offset: ${before} → ${val}（delta=${val - before}，所有倒计时 cd -= delta 并立即重渲染）`, "ev");
+      };
+      document.getElementById("cdOffsetMinus").onclick = () => setOffset(countdown.defauls.offset - 10000);
+      document.getElementById("cdOffsetPlus").onclick = () => setOffset(countdown.defauls.offset + 10000);
+      document.getElementById("cdOffsetReset").onclick = () => setOffset(0);
+
+      // ======================================================
+      //  lazy + observer 测试
+      // ======================================================
+      const lazyScroll = document.getElementById("lazyScroll");
+      const lazyCu = document.getElementById("lazyCu");
+      const lazyCd = document.getElementById("lazyCd");
+      const lazyState = document.getElementById("lazyState");
+      // 以滚动容器为观测根，threshold 触发即视为进入/离开
+      const lazyObserver = createLazyObserver({ root: lazyScroll, threshold: 0.5 });
+
+      document.getElementById("lazyCreate").onclick = () => {
+        countup.clear("lazy");
+        countdown.clear("lazy");
+        counter.start();
+        driverState.textContent = "running";
+
+        countup({
+          el: lazyCu,
+          from: 0,
+          to: 100000,
+          duration: 6000,
+          lazy: true,
+          observer: lazyObserver,
+          label: "lazy",
+          formatter: (v) => Math.round(v).toLocaleString("en-US"),
+          onUpdate: () => (lazyState.textContent = "状态: countup 运行中（可见）"),
+          onDone: () => log(`[lazy] countup 完成`, "ev"),
+        });
+
+        countdown({
+          el: lazyCd,
+          endTime: 600000, // 10 分钟
+          lazy: true,
+          observer: lazyObserver,
+          label: "lazy",
+          fmt: "mm:ss",
+        });
+
+        lazyState.textContent = "状态: 已创建（滚动使其进入视口才会跑）";
+        log(`创建 lazy countup + countdown（observer.root = 滚动框）。初始未入队，滚动触发`, "ev");
+      };
+
+      document.getElementById("lazyClear").onclick = () => {
+        countup.clear("lazy");
+        countdown.clear("lazy");
+        lazyCu.textContent = "—";
+        lazyCd.textContent = "—";
+        lazyState.textContent = "状态: 已清空";
+        log(`clear("lazy") 清空懒任务（并停止观测）`, "err");
+      };
+
+      // 自动启动驱动，省去一步
+      counter.start();
+      driverState.textContent = "running";
+      log("页面就绪，counter 已自动 start()。逐个点击按钮测试各 API。", "ev");
+    </script>
+  </body>
+</html>

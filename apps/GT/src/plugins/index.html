@@ -1,0 +1,54 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Document</title>
+    <style>
+      * {
+        margin: 0;
+        padding: 0;
+        box-sizing: border-box;
+      }
+      .amounts {
+        height: 1em;
+        font-size: 40px;
+        line-height: 1;
+        display: inline-flex;
+        background-color: red;
+        color: white;
+        font-variant-numeric: tabular-nums;
+        overflow-y: hidden;
+        font-family: fantasy;
+        translate: 0 33.333%;
+      }
+      .digi {
+        display: inline-flex;
+        flex-direction: column;
+        height: 3em;
+      }
+      .amount {
+        height: 1em;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="amounts"></div>
+    <div class="date"></div>
+  </body>
+  <script type="module">
+    import render from "./dist/index.js";
+    render(document.querySelector(".amounts"), "12,300.01");
+
+    setTimeout(() => {
+      console.log(123);
+
+      render(document.querySelector(".amounts"), "112,300.01");
+    //   setTimeout(() => {
+    //     console.log(456);
+
+    //     render(document.querySelector(".amounts"), "300.01");
+    //   }, 1000);
+    }, 1000);
+  </script>
+</html>

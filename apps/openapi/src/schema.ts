@@ -302,8 +302,7 @@ function formDataToRequestBody(formParams: any[], consumes: string[]): any {
     properties[name] = schema;
     if (req) required.push(name);
   }
-  const mt =
-    consumes.find((c) => c === "multipart/form-data") ?? consumes.find((c) => c === "application/x-www-form-urlencoded") ?? (hasFile ? "multipart/form-data" : "application/x-www-form-urlencoded");
+  const mt = consumes.find((c) => c === "multipart/form-data") ?? consumes.find((c) => c === "application/x-www-form-urlencoded") ?? (hasFile ? "multipart/form-data" : "application/x-www-form-urlencoded");
   const schema: any = { type: "object", properties };
   if (required.length) schema.required = required;
   return { required: required.length > 0, content: { [mt]: { schema } } };

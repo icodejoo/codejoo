@@ -1,0 +1,378 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Rolling · 金额滚动动画测试</title>
+    <style>
+        :root {
+            color-scheme: dark;
+            --bg: #0f1115;
+            --panel: #1a1d24;
+            --border: #2a2f3a;
+            --text: #e6e8ee;
+            --muted: #8b93a7;
+            --accent: #4f8cff;
+            --accent-hover: #6aa1ff;
+            --success: #36d399;
+            --danger: #f87272;
+        }
+        * { box-sizing: border-box; }
+        body {
+            margin: 0;
+            min-height: 100vh;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC",
+                "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
+            background: var(--bg);
+            color: var(--text);
+            padding: 32px 24px 80px;
+        }
+        h1 {
+            margin: 0 0 8px;
+            font-size: 22px;
+            font-weight: 600;
+        }
+        .subtitle {
+            color: var(--muted);
+            margin-bottom: 28px;
+            font-size: 13px;
+        }
+        .grid {
+            display: grid;
+            gap: 20px;
+            max-width: 960px;
+            margin: 0 auto;
+            grid-template-columns: 1fr;
+        }
+        .card {
+            background: var(--panel);
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            padding: 20px 22px;
+        }
+        .case-title {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin-bottom: 14px;
+            font-size: 13px;
+            color: var(--muted);
+            letter-spacing: 0.5px;
+            text-transform: uppercase;
+        }
+        .case-title .tag {
+            background: rgba(79, 140, 255, 0.15);
+            color: var(--accent);
+            padding: 2px 8px;
+            border-radius: 999px;
+            font-size: 11px;
+            text-transform: none;
+            letter-spacing: 0;
+        }
+        .display {
+            font-size: 44px;
+            font-weight: 700;
+            letter-spacing: 0.02em;
+            color: var(--text);
+            padding: 18px 6px;
+            min-height: 64px;
+        }
+        .display.small { font-size: 28px; padding: 10px 4px; }
+        .controls {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
+            margin-top: 8px;
+        }
+        button {
+            background: #262b35;
+            color: var(--text);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            padding: 8px 14px;
+            font-size: 13px;
+            cursor: pointer;
+            transition: background 120ms ease, border-color 120ms ease;
+            font-family: inherit;
+        }
+        button:hover {
+            background: #303641;
+            border-color: #3a414e;
+        }
+        button.primary {
+            background: var(--accent);
+            border-color: var(--accent);
+            color: #fff;
+        }
+        button.primary:hover { background: var(--accent-hover); border-color: var(--accent-hover); }
+        button.success { background: var(--success); border-color: var(--success); color: #0b1f17; }
+        button.danger { background: var(--danger); border-color: var(--danger); color: #2b0e0e; }
+        input[type="text"], input[type="number"] {
+            background: #11141a;
+            border: 1px solid var(--border);
+            color: var(--text);
+            border-radius: 8px;
+            padding: 8px 12px;
+            font-size: 13px;
+            font-family: inherit;
+            min-width: 160px;
+        }
+        input:focus { outline: none; border-color: var(--accent); }
+        .row {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            flex-wrap: wrap;
+        }
+        .label { color: var(--muted); font-size: 12px; }
+        .currency {
+            color: var(--success);
+            font-weight: 600;
+            margin-right: 6px;
+        }
+        .perf-stats {
+            font-size: 12px;
+            color: var(--muted);
+            margin-top: 10px;
+            font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+        }
+    </style>
+</head>
+<body>
+    <h1>Rolling · 金额滚动动画测试</h1>
+    <div class="subtitle">基于 transform 的 GPU 加速数字滚动 · 仅变化位重排</div>
+
+    <div class="grid">
+        <!-- 用例 1：基础动画 -->
+        <section class="card">
+            <div class="case-title">
+                <span>用例 1 · 基础递增 / 递减</span>
+                <span class="tag">同长度</span>
+            </div>
+            <div class="display"><span id="case1"></span></div>
+            <div class="controls">
+                <button class="primary" data-act="c1-add">+ 100</button>
+                <button class="primary" data-act="c1-sub">- 100</button>
+                <button data-act="c1-rand">随机</button>
+                <button data-act="c1-snap">snap 重置</button>
+            </div>
+        </section>
+
+        <!-- 用例 2：金额（带千分位 + 小数） -->
+        <section class="card">
+            <div class="case-title">
+                <span>用例 2 · 货币格式（千分位 + 小数）</span>
+                <span class="tag">含静态字符</span>
+            </div>
+            <div class="display">
+                <span class="currency">¥</span><span id="case2"></span>
+            </div>
+            <div class="controls">
+                <button class="primary" data-act="c2-buy">购买 +199.99</button>
+                <button data-act="c2-refund">退款 -50.00</button>
+                <button class="success" data-act="c2-bonus">奖金 ×2</button>
+                <button data-act="c2-zero">清零</button>
+            </div>
+        </section>
+
+        <!-- 用例 3：from/to + floor 长度规则 -->
+        <section class="card">
+            <div class="case-title">
+                <span>用例 3 · 长度变化（floor = from.length = 3）</span>
+                <span class="tag">grow / shrink front</span>
+            </div>
+            <div class="display"><span id="case3"></span></div>
+            <div style="color:var(--muted);font-size:12px;margin-bottom:8px;">
+                构造：<code>from="123" → to="45678"</code>，初始动画 len=5。
+                floor=3 是 from 的长度，是动画 DOM 长度的下限。
+            </div>
+            <div class="controls">
+                <button class="primary" data-act="c3-grow">update("12345678") → len=8</button>
+                <button data-act="c3-shrink">update("42") → len=3（floor）</button>
+                <button data-act="c3-mid">update("9999") → len=4</button>
+                <button data-act="c3-eq">update("777") → len=3</button>
+            </div>
+        </section>
+
+        <!-- 用例 4：自定义参数 -->
+        <section class="card">
+            <div class="case-title">
+                <span>用例 4 · 参数调节</span>
+                <span class="tag">duration / stagger</span>
+            </div>
+            <div class="display"><span id="case4"></span></div>
+            <div class="row" style="margin-top: 6px;">
+                <span class="label">duration</span>
+                <input type="number" id="c4-duration" value="700" min="100" max="3000" step="100" />
+                <span class="label">stagger</span>
+                <input type="number" id="c4-stagger" value="40" min="0" max="300" step="10" />
+                <span class="label">方向</span>
+                <select id="c4-from" style="background:#11141a;color:var(--text);border:1px solid var(--border);border-radius:8px;padding:8px;font-family:inherit;">
+                    <option value="right">right → left</option>
+                    <option value="left">left → right</option>
+                </select>
+            </div>
+            <div class="controls">
+                <button class="primary" data-act="c4-rand">滚一次</button>
+                <button data-act="c4-zero">归零</button>
+            </div>
+        </section>
+
+        <!-- 用例 5：自定义输入 -->
+        <section class="card">
+            <div class="case-title">
+                <span>用例 5 · 自由输入</span>
+                <span class="tag">任意字符串</span>
+            </div>
+            <div class="display small"><span id="case5"></span></div>
+            <div class="row">
+                <input type="text" id="c5-input" placeholder="如 1,234.56 / -88.00" value="1,234.56" />
+                <button class="primary" data-act="c5-apply">update</button>
+                <button data-act="c5-snap">snap</button>
+            </div>
+        </section>
+
+        <!-- 用例 6：性能压力 -->
+        <section class="card">
+            <div class="case-title">
+                <span>用例 6 · 性能压力（20 位 × 高频更新）</span>
+                <span class="tag">FPS 监控</span>
+            </div>
+            <div class="display small"><span id="case6"></span></div>
+            <div class="controls">
+                <button class="primary" data-act="c6-start">开始压测</button>
+                <button class="danger" data-act="c6-stop">停止</button>
+            </div>
+            <div class="perf-stats" id="c6-stats">FPS: -- · updates: 0</div>
+        </section>
+    </div>
+
+    <script src="./index.js"></script>
+    <script>
+        // ---- 用例 1 ----
+        const f = (n) => n.toFixed(2);
+        let v1 = 1000.00;
+        const r1 = render({ el: "#case1", value: f(v1) });
+
+        // ---- 用例 2 ----
+        const formatMoney = (n) => {
+            const sign = n < 0 ? "-" : "";
+            const [i, d = "00"] = Math.abs(n).toFixed(2).split(".");
+            const withSep = i.replace(/\B(?=(\d{3})+(?!\d))/g, ",");
+            return sign + withSep + "." + d;
+        };
+        let v2 = 0;
+        const r2 = render({ el: "#case2", value: formatMoney(v2), duration: 900, stagger: 50 });
+
+        // ---- 用例 3 ---- from/to 构造 + floor 长度规则
+        const r3 = render({ el: "#case3", value: "123", to: "45678" });
+
+        // ---- 用例 4 ----
+        let v4 = 12345;
+        const r4 = render({ el: "#case4", value: String(v4) });
+
+        // ---- 用例 5 ----
+        const r5 = render({ el: "#case5", value: "1,234.56" });
+
+        // ---- 用例 6 ----
+        const r6 = render({
+            el: "#case6",
+            value: "0".repeat(20),
+            duration: 400,
+            stagger: 15,
+        });
+
+        // ---- 事件委托 ----
+        document.addEventListener("click", (e) => {
+            const act = e.target?.dataset?.act;
+            if (!act) return;
+            switch (act) {
+                case "c1-add": v1 += 100; r1.update(f(v1)); break;
+                case "c1-sub": v1 -= 100; r1.update(f(v1)); break;
+                case "c1-rand":
+                    v1 = Math.floor(Math.random() * 999999) / 100;
+                    r1.update(f(v1));
+                    break;
+                case "c1-snap": v1 = 1000.00; r1.snap(f(v1)); break;
+
+                case "c2-buy": v2 += 199.99; r2.update(formatMoney(v2)); break;
+                case "c2-refund": v2 -= 50.00; r2.update(formatMoney(v2)); break;
+                case "c2-bonus": v2 *= 2; r2.update(formatMoney(v2)); break;
+                case "c2-zero": v2 = 0; r2.update(formatMoney(v2)); break;
+
+                case "c3-grow": r3.update("12345678"); break;
+                case "c3-shrink": r3.update("42"); break;
+                case "c3-mid": r3.update("9999"); break;
+                case "c3-eq": r3.update("777"); break;
+
+                case "c4-rand": {
+                    const dur = +document.getElementById("c4-duration").value || 700;
+                    const stg = +document.getElementById("c4-stagger").value || 0;
+                    const from = document.getElementById("c4-from").value;
+                    v4 = Math.floor(Math.random() * 99999);
+                    r4.update(String(v4).padStart(5, "0"), {
+                        duration: dur,
+                        stagger: stg,
+                        staggerFrom: from,
+                    });
+                    break;
+                }
+                case "c4-zero": v4 = 0; r4.update("00000"); break;
+
+                case "c5-apply": {
+                    const v = document.getElementById("c5-input").value;
+                    r5.update(v);
+                    break;
+                }
+                case "c5-snap": {
+                    const v = document.getElementById("c5-input").value;
+                    r5.snap(v);
+                    break;
+                }
+
+                case "c6-start": startStress(); break;
+                case "c6-stop": stopStress(); break;
+            }
+        });
+
+        // ---- 用例 6：性能监控 ----
+        let stressTimer = null;
+        let stressCount = 0;
+        let frames = 0;
+        let lastFpsTick = performance.now();
+        let fps = 0;
+        const stats = document.getElementById("c6-stats");
+
+        function fpsLoop() {
+            frames++;
+            const now = performance.now();
+            if (now - lastFpsTick >= 500) {
+                fps = Math.round((frames * 1000) / (now - lastFpsTick));
+                frames = 0;
+                lastFpsTick = now;
+                stats.textContent = `FPS: ${fps} · updates: ${stressCount}`;
+            }
+            if (stressTimer !== null) requestAnimationFrame(fpsLoop);
+        }
+
+        function startStress() {
+            if (stressTimer !== null) return;
+            stressCount = 0;
+            frames = 0;
+            lastFpsTick = performance.now();
+            requestAnimationFrame(fpsLoop);
+            stressTimer = setInterval(() => {
+                const v = String(Math.floor(Math.random() * 1e20)).padStart(20, "0");
+                r6.update(v);
+                stressCount++;
+            }, 120);
+        }
+        function stopStress() {
+            if (stressTimer === null) return;
+            clearInterval(stressTimer);
+            stressTimer = null;
+            stats.textContent = `FPS: ${fps} · updates: ${stressCount} (stopped)`;
+        }
+    </script>
+</body>
+</html>
