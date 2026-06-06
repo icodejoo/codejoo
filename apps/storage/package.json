@@ -1,7 +1,9 @@
  {
   "name": "@codejoo/storage",
   "version": "0.0.1",
-  "private": true,
+  "publishConfig": {
+    "access": "public"
+  },
   "files": [
     "dist",
     "src",
