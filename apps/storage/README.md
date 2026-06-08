@@ -1,6 +1,6 @@
 # @codejoo/storage
 
-English | [简体中文](https://github.com/icodejoo/codejoo/tree/main/apps/storage)
+English | [简体中文](https://github.com/icodejoo/codejoo/tree/main/apps/storage/README.zh-CN.md)
 
 A tiny, type-safe wrapper over `localStorage` / `sessionStorage` / `IndexedDB` with one unified API: TTL & absolute expiry, sliding renewal, namespaces, pluggable serialization (incl. `Date` / `Map` / `Set` / `bigint`), an optional obfuscation codec, an opt-in in-memory cache, and a key-bound shortcut helper. Sync backends return values; the async IndexedDB backend returns Promises — **decided by generics, one code path**.
 

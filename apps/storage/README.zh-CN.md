@@ -1,6 +1,6 @@
 # @codejoo/storage
 
-[English](./README.md) | 简体中文
+[English](https://github.com/icodejoo/codejoo/blob/main/apps/storage/README.md) | 简体中文
 
 对 `localStorage` / `sessionStorage` / `IndexedDB` 的轻量、类型安全封装，统一一套 API：TTL 与绝对过期、滑动续期、命名空间、可插拔序列化（含 `Date` / `Map` / `Set` / `bigint`）、可选混淆 codec、按需开启的内存缓存，以及绑定 key 的快捷访问器。同步后端返回值，异步的 IndexedDB 后端返回 Promise —— **由泛型区分，一套实现**。
 
