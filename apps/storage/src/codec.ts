@@ -67,7 +67,7 @@ function fnv1a(bytes: Uint8Array, start: number): number {
  * 注意：password 仅决定 XOR key。改 password 会导致旧数据无法解出（无迁移），
  * 且因 key 同样打包进产物，自定义 password 并不带来实质安全提升——按需使用。
  */
-export function buildCodec(password?: string): Codec {
+export function codec(password?: string): Codec {
   const key = password ? encoder.encode(password) : DEFAULT_KEY;
 
   /** XOR 是对合运算，加解密同一套逻辑 */

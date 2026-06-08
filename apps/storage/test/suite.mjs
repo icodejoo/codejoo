@@ -3,12 +3,12 @@
 // （通过 vite 即时转译源码，无需先 build；也可改为从 ../dist/esm/index.mjs 导入测试产物。）
 import {
   factory,
-  buildCodec,
+  codec,
   fast,
   batchFast,
   lazy,
   debug,
-  IdbStorage,
+  Idb,
   JSONX,
 } from "../src/index.ts";
 
@@ -222,24 +222,24 @@ async function run() {
   // ===== codec 编解码 =====
   group("codec — 混淆/编解码");
   await test("codeable + codec：底层被混淆，读出仍是原值", () => {
-    const { ls: c } = factory({ codeable: true, codec: buildCodec("pw") });
+    const { ls: c } = factory({ codeable: true, codec: codec("pw") });
     c.set("secret", "topsecret");
     const raw = localStorage.getItem("secret");
     assert(raw != null && !raw.includes("topsecret"), "底层不应包含明文");
     assertEq(c.get("secret"), "topsecret");
   });
-  await test("buildCodec encode/decode 往返", () => {
-    const codec = buildCodec("k");
-    assertEq(codec.decode(codec.encode("abc中文🎉")), "abc中文🎉");
+  await test("codec encode/decode 往返", () => {
+    const cdc = codec("k");
+    assertEq(cdc.decode(cdc.encode("abc中文🎉")), "abc中文🎉");
   });
-  await test("buildCodec 错误口令解码 → null", () => {
-    const enc = buildCodec("right").encode("data");
-    assertEq(buildCodec("wrong").decode(enc), null);
+  await test("codec 错误口令解码 → null", () => {
+    const enc = codec("right").encode("data");
+    assertEq(codec("wrong").decode(enc), null);
   });
   await test("codec key 变更：旧数据解不开 → 回退默认值", () => {
-    const { ls: c1 } = factory({ codeable: true, codec: buildCodec("old") });
+    const { ls: c1 } = factory({ codeable: true, codec: codec("old") });
     c1.set("mig", "v");
-    const { ls: c2 } = factory({ codeable: true, codec: buildCodec("new") });
+    const { ls: c2 } = factory({ codeable: true, codec: codec("new") });
     assertEq(c2.get("mig", "fallback"), "fallback");
   });
 
@@ -320,7 +320,7 @@ async function run() {
   // ===== enckey（键加密） =====
   group("enckey — 键加密");
   await test("enckey 加密存储键，get 仍可读", () => {
-    const { ls: e } = factory({ codeable: true, codec: buildCodec("k1"), enckey: true });
+    const { ls: e } = factory({ codeable: true, codec: codec("k1"), enckey: true });
     e.clear();
     e.set("secretKey", "v");
     assertEq(localStorage.getItem("secretKey"), null, "明文键不应存在");
@@ -331,14 +331,14 @@ async function run() {
   // ===== debug（解密快照，独立导入，保留命名空间） =====
   group("debug — 解密快照");
   await test("debug 返回保留命名空间的明文快照（加密场景）", () => {
-    const { ls: e } = factory({ codeable: true, codec: buildCodec("k2"), enckey: true, namespace: "ns" });
+    const { ls: e } = factory({ codeable: true, codec: codec("k2"), enckey: true, namespace: "ns" });
     e.clear();
     e.set("a", 1);
     e.set("b", { x: 2 });
     assertEq(debug(e), { "ns:a": 1, "ns:b": { x: 2 } }); // 键保留 ns 前缀
   });
   await test("debug 分别作用于 ls / ss / db", async () => {
-    const store = factory({ db: new IdbStorage("codejoo-test-debug") });
+    const store = factory({ db: new Idb("codejoo-test-debug") });
     store.ls.clear();
     store.ss.clear();
     await store.db.clear();
@@ -358,10 +358,10 @@ async function run() {
     assert(sessionStorage.getItem("sk") != null);
   });
 
-  // ===== IdbStorage（异步）直接用 =====
-  group("IdbStorage — 异步底层");
-  const idb = new IdbStorage("codejoo-test-db");
-  await test("IdbStorage set/get/remove/length/key", async () => {
+  // ===== Idb（异步）直接用 =====
+  group("Idb — 异步底层");
+  const idb = new Idb("codejoo-test-db");
+  await test("Idb set/get/remove/length/key", async () => {
     await idb.clear();
     await idb.set("a", "1");
     await idb.set("b", "2");
@@ -378,7 +378,7 @@ async function run() {
 
   // ===== db（异步 proxy，全特性） =====
   group("db — 异步 proxy");
-  const { db } = factory({ db: new IdbStorage("codejoo-test-db2"), namespace: "x" });
+  const { db } = factory({ db: new Idb("codejoo-test-db2"), namespace: "x" });
   await test("db set/get（返回 Promise）", async () => {
     await db.clear();
     const p = db.set("k", { v: 1 });
@@ -411,7 +411,7 @@ async function run() {
     } catch {
       threw = true;
     }
-    assert(threw, "应抛出『先传入 IdbStorage』错误");
+    assert(threw, "应抛出『先传入 Idb』错误");
   });
 
   // ===== destroy（资源回收） =====
@@ -425,7 +425,7 @@ async function run() {
     assertEq(m.get("d"), "changed", "destroy 后缓存已清，读到底层值");
   });
   await test("factory.destroy 统一释放 ls/ss/db（返回 Promise）", async () => {
-    const store = factory({ db: new IdbStorage("codejoo-test-destroy") });
+    const store = factory({ db: new Idb("codejoo-test-destroy") });
     store.ls.set("k", "v");
     await store.db.set("k", "dv");
     const p = store.destroy();

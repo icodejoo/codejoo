@@ -16,7 +16,7 @@ export interface SyncStore {
   length: number;
 }
 
-/** 异步键值存储后端（IndexedDB 持久层，IdbStorage 实现） */
+/** 异步键值存储后端（IndexedDB 持久层，Idb 实现） */
 export interface AsyncStorage {
   get(key: string): Promise<string | null>;
   set(key: string, value: string): Promise<void>;
@@ -58,7 +58,7 @@ export interface BaseStorageOptions {
   enckey?: boolean;
   /**
    * 额外的 IndexedDB 持久层实例（**异步** API，不常驻内存镜像，容量更大），暴露为 factory().db。
-   * 需自行 `import { IdbStorage }` 构造后传入：`db: new IdbStorage()`（不内置，按需引入便于 tree-shaking）。
+   * 需自行 `import { Idb }` 构造后传入：`db: new Idb()`（不内置，按需引入便于 tree-shaking）。
    * IndexedDB 不可用时其内部自动退回内存；未传实例时使用 db 会抛错提示先传入。
    * 注意：db 为异步存储，不经同步 proxy，故 ttl/codec/namespace 等选项暂不作用于 db。
    */

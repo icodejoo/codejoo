@@ -2,7 +2,7 @@ import type { SyncStore } from "./interface";
 
 /**
  * 内存存储：基于 Map 的同步实现（单标签页，无跨标签）。
- * 用途：proxy 的读缓存（MemoCache）、原生存储不可用时的兜底（SyncStore）、IdbStorage 的内存镜像。
+ * 用途：proxy 的读缓存（MemoCache）、原生存储不可用时的兜底（SyncStore）、Idb 的内存镜像。
  */
 export class Memory implements SyncStore {
   private store = new Map<string, any>();

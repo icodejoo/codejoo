@@ -2,9 +2,9 @@ export * from "./interface";
 
 export { JSONX } from "./serialization";
 
-export { buildCodec } from "./codec";
+export { codec } from "./codec";
 
-export { IdbStorage } from "./idb";
+export { Idb } from "./idb";
 
 export { debug } from "./debug";
 

@@ -51,7 +51,7 @@ export interface Handlers<S extends SyncStore | AsyncStorage> {
   setNamespace(namespace?: string): void;
   readonly length: Result<S, number>;
   /**
-   * 释放资源：清空 memo 读缓存，并断开可关闭的后端（如 IdbStorage 的 IndexedDB 连接），
+   * 释放资源：清空 memo 读缓存，并断开可关闭的后端（如 Idb 的 IndexedDB 连接），
    * 便于 GC 回收。**不删除已落盘数据**（localStorage/IndexedDB 内容保留）。
    * 异步后端返回 Promise，可 await 以确保连接已断开。
    */
@@ -326,14 +326,14 @@ export function proxy<S extends SyncStore | AsyncStorage>(
       memo.clear();
       return out(st.clear()) as Result<S, void>;
     },
-    /** 释放资源：清空 memo 读缓存，并断开可关闭的后端（IdbStorage）。不删除已落盘数据 */
+    /** 释放资源：清空 memo 读缓存，并断开可关闭的后端（Idb）。不删除已落盘数据 */
     destroy: (): Result<S, void> => {
       memo.clear();
       const close = (st as { destroy?: () => Maybe<void> }).destroy;
       return out(close ? close.call(st) : undefined) as Result<S, void>;
     },
     get length(): Result<S, number> {
-      // 注意：必须 st.length() 直接调用以保留 this；先取出再调用会丢失绑定（IdbStorage 内部用到 this）
+      // 注意：必须 st.length() 直接调用以保留 this；先取出再调用会丢失绑定（Idb 内部用到 this）
       return (
         isAsync ? (st as { length(): Promise<number> }).length() : (st.length as number)
       ) as Result<S, number>;

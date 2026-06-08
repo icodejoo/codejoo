@@ -8,7 +8,7 @@ import { Memory } from "./memory";
 
 const STORE = "kv";
 
-export class IdbStorage {
+export class Idb {
   private name: string;
   private db?: Promise<IDBDatabase>;
   /** IndexedDB 不可用时的内存兜底；为真即走纯内存 */

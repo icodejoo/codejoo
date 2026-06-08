@@ -13,14 +13,14 @@ A tiny ESM library: **one unified API over three backends**. Sync backends (`loc
 | --- | --- |
 | `interface.ts` | All types: `BaseStorageOptions`, `StorageOptions` (per-call), `StorageEntity`, `Codec`, `SyncStore`, `AsyncStorage`, `MemoCache`. |
 | `proxy.ts` | **Core**. `proxy<S>(storage, memo, opts)` → `Handlers<S>`. Shared helpers `settings`/`writeArgs`/`buildEntity`, sync/async combinators `chain`/`attempt`/`out`, and exported `Result<S,T>` + `Handlers<S>`. |
-| `memory.ts` | `Memory` — plain Map-based sync store (cache + native-unavailable fallback + IdbStorage mirror). |
-| `idb.ts` | `IdbStorage` — **async** IndexedDB backend (no full mirror; falls back to `Memory` when IDB unusable). |
-| `codec.ts` | `buildCodec(password?)` — XOR + custom-alphabet base64 + FNV checksum. **Obfuscation, not encryption.** |
+| `memory.ts` | `Memory` — plain Map-based sync store (cache + native-unavailable fallback + Idb mirror). |
+| `idb.ts` | `Idb` — **async** IndexedDB backend (no full mirror; falls back to `Memory` when IDB unusable). |
+| `codec.ts` | `codec(password?)` — XOR + custom-alphabet base64 + FNV checksum. **Obfuscation, not encryption.** |
 | `serialization.ts` | `JSONX` — JSON-compatible, round-trips Date/Map/Set/bigint via a `__jt__` tag. |
 | `fast.ts` | `fast`/`lazy`/`batchFast` — key-bound shortcut accessors. |
 | `debug.ts` | `debug(handler)` — standalone (tree-shakeable) decrypted snapshot. |
 | `core.ts` | `factory(opts?)` → `{ ls, ss, db, destroy }`; adapts native Storage to the `get/set/remove` vocabulary; `unimpl()` placeholder for unprovided `db`; `destroy()` releases all three layers (returns Promise; keeps persisted data). |
-| `helper.ts` | `supported` = `{ storage, indexedDB }` runtime feature flags (mutable; IdbStorage flips `indexedDB` on runtime failure). |
+| `helper.ts` | `supported` = `{ storage, indexedDB }` runtime feature flags (mutable; Idb flips `indexedDB` on runtime failure). |
 
 ## Key invariants & gotchas (learned the hard way — keep these)
 

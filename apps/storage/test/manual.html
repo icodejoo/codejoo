@@ -119,7 +119,7 @@
       </div>
     </section>
 
-    <h2>6. buildCodec（混淆编解码）</h2>
+    <h2>6. codec（混淆编解码）</h2>
     <section>
       <div class="row">
         口令 <input id="c-pw" type="text" value="pw" />
@@ -136,12 +136,12 @@
     <script type="module">
       import {
         factory,
-        buildCodec,
+        codec,
         fast,
         lazy,
         debug,
         JSONX,
-        IdbStorage,
+        Idb,
       } from "../src/index.ts";
 
       const logEl = document.getElementById("log");
@@ -169,7 +169,7 @@
       const layer = () => (document.querySelector('input[name="layer"]:checked').value === "ls" ? ls : ss);
 
       // db
-      const dbApi = factory({ db: new IdbStorage("manual-playground-db") }).db;
+      const dbApi = factory({ db: new Idb("manual-playground-db") }).db;
 
       // 选项 playground（可重建）
       let optApi = factory().ls;
@@ -201,7 +201,7 @@
             raw: $("o-raw").checked,
             namespace: val("o-ns") || undefined,
           };
-          if ($("o-codeable").checked || $("o-enckey").checked) opts.codec = buildCodec(val("o-pw"));
+          if ($("o-codeable").checked || $("o-enckey").checked) opts.codec = codec(val("o-pw"));
           if ($("o-codeable").checked) opts.codeable = true;
           if ($("o-enckey").checked) opts.enckey = true;
           optApi = factory(opts).ls;
@@ -234,14 +234,14 @@
           log("parse 回来类型", `Date=${back.when instanceof Date}, Set=${back.tags instanceof Set}, Map=${back.map instanceof Map}, bigint=${typeof back.big === "bigint"}`);
         },
 
-        "c-encode": () => log("encode", buildCodec(val("c-pw")).encode(val("c-text"))),
+        "c-encode": () => log("encode", codec(val("c-pw")).encode(val("c-text"))),
         "c-decode": () => {
-          const enc = buildCodec(val("c-pw")).encode(val("c-text"));
-          log("encode→decode 同口令", buildCodec(val("c-pw")).decode(enc));
+          const enc = codec(val("c-pw")).encode(val("c-text"));
+          log("encode→decode 同口令", codec(val("c-pw")).decode(enc));
         },
         "c-wrong": () => {
-          const enc = buildCodec(val("c-pw")).encode(val("c-text"));
-          log("encode→decode 错口令", buildCodec(val("c-pw") + "X").decode(enc));
+          const enc = codec(val("c-pw")).encode(val("c-text"));
+          log("encode→decode 错口令", codec(val("c-pw") + "X").decode(enc));
         },
 
         "log-clear": () => { logEl.innerHTML = ""; },

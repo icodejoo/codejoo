@@ -1,6 +1,6 @@
 # @codejoo/storage
 
-English | [简体中文](./README.zh-CN.md)
+English | [简体中文](https://github.com/icodejoo/codejoo/tree/main/apps/storage)
 
 A tiny, type-safe wrapper over `localStorage` / `sessionStorage` / `IndexedDB` with one unified API: TTL & absolute expiry, sliding renewal, namespaces, pluggable serialization (incl. `Date` / `Map` / `Set` / `bigint`), an optional obfuscation codec, an opt-in in-memory cache, and a key-bound shortcut helper. Sync backends return values; the async IndexedDB backend returns Promises — **decided by generics, one code path**.
 
@@ -29,12 +29,12 @@ ls.clear();
 ls.length;                        // number of entries
 ```
 
-With IndexedDB (async, large quota). `IdbStorage` is **not bundled by default** — import it yourself:
+With IndexedDB (async, large quota). `Idb` is **not bundled by default** — import it yourself:
 
 ```ts
-import { factory, IdbStorage } from "@codejoo/storage";
+import { factory, Idb } from "@codejoo/storage";
 
-const { db } = factory({ db: new IdbStorage() });
+const { db } = factory({ db: new Idb() });
 
 await db.set("user", { id: 1 });  // Promise<void>
 await db.get("user");             // Promise<{ id: 1 }>
@@ -65,7 +65,7 @@ Returns `{ ls, ss, db, destroy, setNamespace }` over `localStorage`, `sessionSto
 | `force`       | `boolean`                           | No       | `true`           | On quota error, purge expired entries and retry the write; otherwise log & give up. **Sync backends only.**  |
 | `readonly`    | `boolean`                           | No       | `false`          | Write-once: only write when the key is empty (absent/expired); otherwise discard the write.                  |
 | `enckey`      | `boolean`                           | No       | `false`          | Also encrypt the **key**: when set with a `codec`, the storage key is deterministically encrypted (hides plaintext key names). |
-| `db`          | `AsyncStorage`                      | No       | —                | An IndexedDB instance (e.g. `new IdbStorage()`) exposed as `factory().db`. Using `db` without it throws a helpful error. |
+| `db`          | `AsyncStorage`                      | No       | —                | An IndexedDB instance (e.g. `new Idb()`) exposed as `factory().db`. Using `db` without it throws a helpful error. |
 
 ### Handler methods (`ls` / `ss` / `db`)
 
@@ -156,7 +156,7 @@ ls.set("x", { when: new Date(), ids: new Set([1n, 2n]) }); // round-trips exactl
 
 > Circular references are not supported (inherits `JSON.stringify` behavior — throws).
 
-### `buildCodec(password?)`
+### `codec(password?)`
 
 Builds a lightweight **obfuscation** codec (repeating-key XOR + custom-alphabet base64). Intended to keep plaintext out of devtools — **not strong encryption** (the key ships in the bundle). Use with `{ codeable: true, codec }`.
 
@@ -171,7 +171,7 @@ Builds a lightweight **obfuscation** codec (repeating-key XOR + custom-alphabet 
 | `encode(value)` | `string`         | Obfuscate a string.                                               |
 | `decode(value)` | `string \| null` | Reverse; returns `null` on key mismatch / corruption (no throw).  |
 
-### `IdbStorage(name?)`
+### `Idb(name?)`
 
 An **asynchronous** `Storage`-like backend over IndexedDB. No full in-memory mirror (constant memory; data is GC-friendly). Pass it to `factory({ db })`. Falls back to in-memory automatically if IndexedDB is unavailable or `open()` fails at runtime.
 
@@ -186,9 +186,9 @@ Methods (all return Promises): `get(key)`, `set(key, value)`, `remove(key)`, `cl
 Standalone helper (import it explicitly — not part of the core proxy, so it tree-shakes away when unused). Reads every entry of a handler **decrypted**, returns a `{ "namespace:key": value }` snapshot (namespace **preserved**), and stashes it under `"_$debug"`. Use it to inspect data written with `codeable`/`enckey`.
 
 ```ts
-import { factory, buildCodec, debug } from "@codejoo/storage";
+import { factory, codec, debug } from "@codejoo/storage";
 
-const { ls, db } = factory({ codeable: true, codec: buildCodec("pw"), enckey: true });
+const { ls, db } = factory({ codeable: true, codec: codec("pw"), enckey: true });
 debug(ls);        // sync → { "key": value, ... }
 await debug(db);  // async backend → Promise
 ```

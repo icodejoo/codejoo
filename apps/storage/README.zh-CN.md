@@ -29,12 +29,12 @@ ls.clear();
 ls.length;                        // 条目数
 ```
 
-使用 IndexedDB（异步、容量大）。`IdbStorage` **默认不打包**，需自行导入：
+使用 IndexedDB（异步、容量大）。`Idb` **默认不打包**，需自行导入：
 
 ```ts
-import { factory, IdbStorage } from "@codejoo/storage";
+import { factory, Idb } from "@codejoo/storage";
 
-const { db } = factory({ db: new IdbStorage() });
+const { db } = factory({ db: new Idb() });
 
 await db.set("user", { id: 1 });  // Promise<void>
 await db.get("user");             // Promise<{ id: 1 }>
@@ -65,7 +65,7 @@ await db.get("user");             // Promise<{ id: 1 }>
 | `force`       | `boolean`                           | 否   | `true`           | 容量不足时清理过期项后重试写入，否则记录日志并放弃。**仅同步后端生效。**                       |
 | `readonly`    | `boolean`                           | 否   | `false`          | 只写一次：仅当键为空（不存在/已过期）才写入，否则丢弃本次写入。                                |
 | `enckey`      | `boolean`                           | 否   | `false`          | 是否对**键**也加密：配置了 `codec` 时，存储键经 codec 确定性加密（隐藏明文键名）。            |
-| `db`          | `AsyncStorage`                      | 否   | —                | IndexedDB 实例（如 `new IdbStorage()`），暴露为 `factory().db`。未传却使用 `db` 会抛错提示。 |
+| `db`          | `AsyncStorage`                      | 否   | —                | IndexedDB 实例（如 `new Idb()`），暴露为 `factory().db`。未传却使用 `db` 会抛错提示。 |
 
 ### 处理器方法（`ls` / `ss` / `db`）
 
@@ -156,7 +156,7 @@ ls.set("x", { when: new Date(), ids: new Set([1n, 2n]) }); // 完整还原
 
 > 不支持循环引用（沿用 `JSON.stringify` 行为 —— 会抛错）。
 
-### `buildCodec(password?)`
+### `codec(password?)`
 
 构造一个轻量**混淆** codec（重复密钥 XOR + 自定义字母表 base64）。目的是避免明文直接暴露在 devtools —— **不是强加密**（key 随包发布）。配合 `{ codeable: true, codec }` 使用。
 
@@ -171,7 +171,7 @@ ls.set("x", { when: new Date(), ids: new Set([1n, 2n]) }); // 完整还原
 | `encode(value)` | `string`         | 混淆字符串。                                 |
 | `decode(value)` | `string \| null` | 还原；密钥不符/损坏时返回 `null`（不抛错）。 |
 
-### `IdbStorage(name?)`
+### `Idb(name?)`
 
 基于 IndexedDB 的**异步** `Storage` 风格后端。不维护全量内存镜像（内存恒定、利于 GC）。传给 `factory({ db })`。IndexedDB 不可用或运行时 `open()` 失败时自动回退内存。
 
@@ -186,9 +186,9 @@ ls.set("x", { when: new Date(), ids: new Set([1n, 2n]) }); // 完整还原
 独立辅助函数（**需显式导入**——不属于核心 proxy，未用到即被 tree-shake）。读出 handler 全部条目的**解密后**明文，返回 `{ "命名空间:键": 值 }` 快照（**保留命名空间**），并暂存到 `"_$debug"`。用于查看以 `codeable`/`enckey` 写入的数据。
 
 ```ts
-import { factory, buildCodec, debug } from "@codejoo/storage";
+import { factory, codec, debug } from "@codejoo/storage";
 
-const { ls, db } = factory({ codeable: true, codec: buildCodec("pw"), enckey: true });
+const { ls, db } = factory({ codeable: true, codec: codec("pw"), enckey: true });
 debug(ls);        // 同步 → { "key": value, ... }
 await debug(db);  // 异步后端 → Promise
 ```
