@@ -2,7 +2,7 @@
 // 运行方式：项目根目录 `pnpm dev`，浏览器打开 dev 服务的 /test/ 路径。
 // （通过 vite 即时转译源码，无需先 build；也可改为从 ../dist/esm/index.mjs 导入测试产物。）
 import {
-  buildStorage,
+  factory,
   buildCodec,
   fast,
   batchFast,
@@ -99,9 +99,9 @@ async function run() {
   localStorage.clear();
   sessionStorage.clear();
 
-  // ===== buildStorage / ls (同步 localStorage) =====
+  // ===== factory / ls (同步 localStorage) =====
   group("ls — 基础同步读写");
-  const { ls, ss } = buildStorage();
+  const { ls, ss } = factory();
 
   await test("set + get 字符串", () => {
     ls.set("k", "hello");
@@ -170,7 +170,7 @@ async function run() {
   // ===== sliding 滑动过期 =====
   group("sliding — 滑动续期");
   await test("每次读命中按 ttl 续期", async () => {
-    const { ls: s } = buildStorage({ sliding: true });
+    const { ls: s } = factory({ sliding: true });
     s.set("sl", "v", 80);
     await sleep(50);
     assertEq(s.get("sl"), "v"); // 命中续期
@@ -181,19 +181,30 @@ async function run() {
   // ===== namespace =====
   group("namespace — 命名空间隔离");
   await test("不同命名空间同名 key 互不干扰", () => {
-    const { ls: a } = buildStorage({ namespace: "appA" });
-    const { ls: b } = buildStorage({ namespace: "appB" });
+    const { ls: a } = factory({ namespace: "appA" });
+    const { ls: b } = factory({ namespace: "appB" });
     a.set("token", "A");
     b.set("token", "B");
     assertEq(a.get("token"), "A");
     assertEq(b.get("token"), "B");
     assert(localStorage.getItem("appA:token") != null, "底层 key 应带前缀");
   });
+  await test("setNamespace 原地切换前缀，已持有引用自动生效（切账号）", () => {
+    const store = factory({ namespace: "userA" });
+    store.ls.set("token", "TA");
+    assert(localStorage.getItem("userA:token") != null);
+    store.setNamespace("userB"); // 切到另一账号
+    assertEq(store.ls.get("token"), null, "新命名空间下读不到旧账号数据");
+    store.ls.set("token", "TB");
+    assert(localStorage.getItem("userB:token") != null, "写入应带新前缀");
+    assertEq(store.ls.get("token"), "TB");
+    assert(localStorage.getItem("userA:token") != null, "旧账号落盘数据仍保留（仅隔离不清除）");
+  });
 
   // ===== raw 裸存 =====
   group("raw — 裸存模式");
   await test("raw 直接存原始字符串（无 entity 信封）", () => {
-    const { ls: r } = buildStorage({ raw: true });
+    const { ls: r } = factory({ raw: true });
     r.set("raw", "plain");
     assertEq(localStorage.getItem("raw"), "plain", "底层应是原始值");
     assertEq(r.get("raw"), "plain");
@@ -202,7 +213,7 @@ async function run() {
   // ===== memoized 缓存 =====
   group("memoized — 读缓存");
   await test("memoized 命中缓存（绕过底层变更）", () => {
-    const { ls: m } = buildStorage({ memoized: true });
+    const { ls: m } = factory({ memoized: true });
     m.set("c", "cached");
     localStorage.setItem("c", JSON.stringify({ value: "changed" })); // 偷偷改底层
     assertEq(m.get("c"), "cached", "应返回内存缓存值，而非底层值");
@@ -211,7 +222,7 @@ async function run() {
   // ===== codec 编解码 =====
   group("codec — 混淆/编解码");
   await test("codeable + codec：底层被混淆，读出仍是原值", () => {
-    const { ls: c } = buildStorage({ codeable: true, codec: buildCodec("pw") });
+    const { ls: c } = factory({ codeable: true, codec: buildCodec("pw") });
     c.set("secret", "topsecret");
     const raw = localStorage.getItem("secret");
     assert(raw != null && !raw.includes("topsecret"), "底层不应包含明文");
@@ -226,9 +237,9 @@ async function run() {
     assertEq(buildCodec("wrong").decode(enc), null);
   });
   await test("codec key 变更：旧数据解不开 → 回退默认值", () => {
-    const { ls: c1 } = buildStorage({ codeable: true, codec: buildCodec("old") });
+    const { ls: c1 } = factory({ codeable: true, codec: buildCodec("old") });
     c1.set("mig", "v");
-    const { ls: c2 } = buildStorage({ codeable: true, codec: buildCodec("new") });
+    const { ls: c2 } = factory({ codeable: true, codec: buildCodec("new") });
     assertEq(c2.get("mig", "fallback"), "fallback");
   });
 
@@ -247,7 +258,7 @@ async function run() {
     assert(typeof back.big === "bigint");
   });
   await test("storage 配 JSONX 存取富类型", () => {
-    const { ls: j } = buildStorage({ serialize: JSONX.stringify, deserialize: JSONX.parse });
+    const { ls: j } = factory({ serialize: JSONX.stringify, deserialize: JSONX.parse });
     const v = { when: new Date(0), tags: new Set(["a"]) };
     j.set("rich", v);
     assertEq(j.get("rich"), v);
@@ -276,7 +287,7 @@ async function run() {
   // ===== readonly（只写一次） =====
   group("readonly — 只写一次");
   await test("非空时丢弃写入，空时才写", () => {
-    const { ls: r } = buildStorage({ readonly: true });
+    const { ls: r } = factory({ readonly: true });
     r.set("ro", "first");
     assertEq(r.get("ro"), "first");
     r.set("ro", "second"); // 已有值 → 丢弃
@@ -286,42 +297,11 @@ async function run() {
     assertEq(r.get("ro"), "third");
   });
   await test("已过期视为空，允许写入", async () => {
-    const { ls: r } = buildStorage({ readonly: true });
+    const { ls: r } = factory({ readonly: true });
     r.set("roe", "x", 30);
     await sleep(50); // 过期
     r.set("roe", "y");
     assertEq(r.get("roe"), "y");
-  });
-
-  // ===== 批量 batchGet / batchSet / batchRemove =====
-  group("批量 — batchGet / batchSet / batchRemove");
-  await test("batchSet 写入、batchGet 按序读取", () => {
-    ls.clear(); // 清两层（含共享 memo），避免跨用例残留
-    ls.batchSet({ a: 1, b: "two", c: [3] });
-    assertEq(ls.batchGet(["a", "b", "c", "missing"]), [1, "two", [3], null]);
-  });
-  await test("batchSet 支持 ttl（第二参）", async () => {
-    ls.clear();
-    ls.batchSet({ p: 1, q: 2 }, 30);
-    assertEq(ls.batchGet(["p", "q"]), [1, 2]);
-    await sleep(50);
-    assertEq(ls.batchGet(["p", "q"]), [null, null]);
-  });
-  await test("batchRemove 批量删除", () => {
-    ls.clear();
-    ls.batchSet({ a: 1, b: 2, c: 3 });
-    ls.batchRemove(["a", "c"]);
-    assertEq(ls.batchGet(["a", "b", "c"]), [null, 2, null]);
-  });
-  await test("db 批量（异步）", async () => {
-    const { db } = buildStorage({ db: new IdbStorage("codejoo-test-batch") });
-    await db.clear();
-    const p = db.batchSet({ a: 1, b: 2 });
-    assert(p instanceof Promise, "异步后端 batchSet 返回 Promise");
-    await p;
-    assertEq(await db.batchGet(["a", "b", "x"]), [1, 2, null]);
-    await db.batchRemove(["a"]);
-    assertEq(await db.batchGet(["a", "b"]), [null, 2]);
   });
 
   // ===== batchFast（批量绑定） =====
@@ -340,7 +320,7 @@ async function run() {
   // ===== enckey（键加密） =====
   group("enckey — 键加密");
   await test("enckey 加密存储键，get 仍可读", () => {
-    const { ls: e } = buildStorage({ codeable: true, codec: buildCodec("k1"), enckey: true });
+    const { ls: e } = factory({ codeable: true, codec: buildCodec("k1"), enckey: true });
     e.clear();
     e.set("secretKey", "v");
     assertEq(localStorage.getItem("secretKey"), null, "明文键不应存在");
@@ -351,14 +331,14 @@ async function run() {
   // ===== debug（解密快照，独立导入，保留命名空间） =====
   group("debug — 解密快照");
   await test("debug 返回保留命名空间的明文快照（加密场景）", () => {
-    const { ls: e } = buildStorage({ codeable: true, codec: buildCodec("k2"), enckey: true, namespace: "ns" });
+    const { ls: e } = factory({ codeable: true, codec: buildCodec("k2"), enckey: true, namespace: "ns" });
     e.clear();
     e.set("a", 1);
     e.set("b", { x: 2 });
     assertEq(debug(e), { "ns:a": 1, "ns:b": { x: 2 } }); // 键保留 ns 前缀
   });
   await test("debug 分别作用于 ls / ss / db", async () => {
-    const store = buildStorage({ db: new IdbStorage("codejoo-test-debug") });
+    const store = factory({ db: new IdbStorage("codejoo-test-debug") });
     store.ls.clear();
     store.ss.clear();
     await store.db.clear();
@@ -398,7 +378,7 @@ async function run() {
 
   // ===== db（异步 proxy，全特性） =====
   group("db — 异步 proxy");
-  const { db } = buildStorage({ db: new IdbStorage("codejoo-test-db2"), namespace: "x" });
+  const { db } = factory({ db: new IdbStorage("codejoo-test-db2"), namespace: "x" });
   await test("db set/get（返回 Promise）", async () => {
     await db.clear();
     const p = db.set("k", { v: 1 });
@@ -424,7 +404,7 @@ async function run() {
     assertEq(await db.length, 1);
   });
   await test("未传 db 实例时使用 db 抛错提示", async () => {
-    const { db: missing } = buildStorage();
+    const { db: missing } = factory();
     let threw = false;
     try {
       await missing.get("x");
@@ -432,6 +412,29 @@ async function run() {
       threw = true;
     }
     assert(threw, "应抛出『先传入 IdbStorage』错误");
+  });
+
+  // ===== destroy（资源回收） =====
+  group("destroy — 资源回收");
+  await test("proxy.destroy 清空 memo 缓存但保留落盘数据", () => {
+    const { ls: m } = factory({ memoized: true });
+    m.set("d", "v");
+    localStorage.setItem("d", JSON.stringify({ value: "changed" })); // 偷偷改底层
+    assertEq(m.get("d"), "v", "destroy 前命中缓存");
+    m.destroy();
+    assertEq(m.get("d"), "changed", "destroy 后缓存已清，读到底层值");
+  });
+  await test("factory.destroy 统一释放 ls/ss/db（返回 Promise）", async () => {
+    const store = factory({ db: new IdbStorage("codejoo-test-destroy") });
+    store.ls.set("k", "v");
+    await store.db.set("k", "dv");
+    const p = store.destroy();
+    assert(p instanceof Promise, "factory.destroy 返回 Promise");
+    await p;
+    // 落盘数据保留：localStorage 仍可读到，db 重新打开连接后仍可读
+    assertEq(store.ls.get("k"), "v");
+    assertEq(await store.db.get("k"), "dv");
+    await store.db.clear();
   });
 
   // 收尾

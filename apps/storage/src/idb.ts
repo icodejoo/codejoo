@@ -102,4 +102,21 @@ export class IdbStorage {
     const keys = await this.request<IDBValidKey[]>(db, "readonly", (s) => s.getAllKeys());
     return index < keys.length ? String(keys[index]) : null;
   }
+
+  /**
+   * 释放资源：关闭已打开的 IndexedDB 连接并丢弃句柄，断开内存兜底引用，便于 GC 回收。
+   * **不删除已落盘数据**（如需清空请用 clear）。关闭后再次调用任意方法会按需重新 open。
+   */
+  async destroy(): Promise<void> {
+    const opened = this.db;
+    this.db = undefined;
+    this.mem = undefined;
+    if (opened) {
+      try {
+        (await opened).close();
+      } catch {
+        // 连接 open 失败（已退回内存模式等），无需关闭
+      }
+    }
+  }
 }

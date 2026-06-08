@@ -30,17 +30,39 @@ function adapt(s: Storage): SyncStore {
  */
 function unimpl(): AsyncStorage {
   const fail = () => {
-    throw new Error(
-      "[storage] 使用 db 需先传入 IndexedDB 实例：`import { IdbStorage }` 后 `buildStorage({ db: new IdbStorage() })`",
-    );
+    throw new Error("[storage] 使用 db 需先传入 IndexedDB 实例：`import { IdbStorage }` 后 `factory({ db: new IdbStorage() })`");
   };
   return new Proxy({} as AsyncStorage, { get: () => fail });
 }
 
-export function buildStorage(baseOptions?: BaseStorageOptions) {
+export function factory(baseOptions?: BaseStorageOptions) {
+  const ls = proxy(supported.storage ? adapt(window.localStorage) : lsMemo, lsMemo, baseOptions);
+  const ss = proxy(supported.storage ? adapt(window.sessionStorage) : ssMemo, ssMemo, baseOptions);
+  const db = proxy(baseOptions?.db ?? unimpl(), dbMemo, baseOptions);
+
   return {
-    ls: proxy(supported.storage ? adapt(window.localStorage) : lsMemo, lsMemo, baseOptions),
-    ss: proxy(supported.storage ? adapt(window.sessionStorage) : ssMemo, ssMemo, baseOptions),
-    db: proxy(baseOptions?.db ?? unimpl(), dbMemo, baseOptions),
+    ls,
+    ss,
+    db,
+    /**
+     * 统一释放本实例占用的内存与连接：依次调用 ls/ss/db 各自的 destroy
+     * （清空 memo 读缓存、断开 db 的 IndexedDB 连接）。不删除已落盘数据。
+     * db 为异步后端，故整体返回 Promise，可 await 以确保连接已断开。
+     */
+    destroy(): Promise<void> {
+      ls.destroy();
+      ss.destroy();
+      return Promise.resolve(db.destroy());
+    },
+    /**
+     * 切换命名空间（如按 username 隔离账号，登入/登出时调用）：原地修改 ls/ss/db 三层前缀，
+     * 应用中已持有的同一实例引用会自动生效，无需重新获取。同时清空各层 memo 读缓存。
+     * 注意：仅做隔离，不清除上个命名空间的落盘数据；敏感数据（token 等）请在登出时显式清除。
+     */
+    setNamespace(username?: string): void {
+      ls.setNamespace(username);
+      ss.setNamespace(username);
+      db.setNamespace(username);
+    },
   };
 }

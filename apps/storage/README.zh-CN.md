@@ -16,9 +16,9 @@ pnpm add @codejoo/storage
 ## 快速开始
 
 ```ts
-import { buildStorage } from "@codejoo/storage";
+import { factory } from "@codejoo/storage";
 
-const { ls, ss } = buildStorage();
+const { ls, ss } = factory();
 
 ls.set("token", "abc");           // localStorage
 ls.get("token");                  // "abc"
@@ -32,9 +32,9 @@ ls.length;                        // 条目数
 使用 IndexedDB（异步、容量大）。`IdbStorage` **默认不打包**，需自行导入：
 
 ```ts
-import { buildStorage, IdbStorage } from "@codejoo/storage";
+import { factory, IdbStorage } from "@codejoo/storage";
 
-const { db } = buildStorage({ db: new IdbStorage() });
+const { db } = factory({ db: new IdbStorage() });
 
 await db.set("user", { id: 1 });  // Promise<void>
 await db.get("user");             // Promise<{ id: 1 }>
@@ -42,9 +42,9 @@ await db.get("user");             // Promise<{ id: 1 }>
 
 ## API
 
-### `buildStorage(options?)`
+### `factory(options?)`
 
-返回 `{ ls, ss, db }`，分别是对 `localStorage`、`sessionStorage` 和传入的 IndexedDB 实例的处理器。`ls`/`ss` 为**同步**，`db` 为**异步**（返回 Promise）。三者共享同一套选项行为。
+返回 `{ ls, ss, db, destroy, setNamespace }`，分别是对 `localStorage`、`sessionStorage` 和传入的 IndexedDB 实例的处理器。`ls`/`ss` 为**同步**，`db` 为**异步**（返回 Promise）。三者共享同一套选项行为。`destroy()` 一次性释放所有层（清空各层 memo 读缓存并断开 `db` 的 IndexedDB 连接），返回 `Promise`；**不删除已落盘数据**。`setNamespace(username?)` **原地**切换三层前缀（适合按账号隔离、登入/登出时调用）——已持有的引用自动生效；它只做隔离，**不会清除**上个命名空间的落盘数据。
 
 | 参数      | 类型                 | 必填 | 默认 | 说明                       |
 | --------- | -------------------- | ---- | ---- | -------------------------- |
@@ -65,7 +65,7 @@ await db.get("user");             // Promise<{ id: 1 }>
 | `force`       | `boolean`                           | 否   | `true`           | 容量不足时清理过期项后重试写入，否则记录日志并放弃。**仅同步后端生效。**                       |
 | `readonly`    | `boolean`                           | 否   | `false`          | 只写一次：仅当键为空（不存在/已过期）才写入，否则丢弃本次写入。                                |
 | `enckey`      | `boolean`                           | 否   | `false`          | 是否对**键**也加密：配置了 `codec` 时，存储键经 codec 确定性加密（隐藏明文键名）。            |
-| `db`          | `AsyncStorage`                      | 否   | —                | IndexedDB 实例（如 `new IdbStorage()`），暴露为 `buildStorage().db`。未传却使用 `db` 会抛错提示。 |
+| `db`          | `AsyncStorage`                      | 否   | —                | IndexedDB 实例（如 `new IdbStorage()`），暴露为 `factory().db`。未传却使用 `db` 会抛错提示。 |
 
 ### 处理器方法（`ls` / `ss` / `db`）
 
@@ -78,14 +78,13 @@ await db.get("user");             // Promise<{ id: 1 }>
 | `set(key, value, ttl?)`      | `R<void>`      | 写入；`ttl` 毫秒。                                    |
 | `set(key, value, memoized?)` | `R<void>`      | 写入；`boolean` 按次切换是否写缓存。                  |
 | `set(key, value, options?)`  | `R<void>`        | 写入；`StorageOptions`（ttl / expireAt / memoized）。 |
-| `batchGet<T>(keys)`          | `R<(T\|null)[]>` | 批量读取；返回与 `keys` 等长、按序对应的值（缺失/过期为 `null`）。 |
-| `batchSet(entries, options?)`| `R<void>`        | 批量写入；`entries` 为 `{键: 值}` 映射；`options` 同 `set` 第三参。 |
-| `batchRemove(keys)`          | `R<void>`        | 批量删除。                                            |
 | `remove(key)`                | `R<void>`        | 删除（缓存 + 后端）。                                 |
 | `clear()`                    | `R<void>`        | 清空全部。                                            |
+| `destroy()`                  | `R<void>`        | 释放资源：清空 memo 读缓存并断开可关闭后端（IndexedDB 连接）。**保留已落盘数据。** |
 | `key(index)`                 | `R<string\|null>`| 第 index 个逻辑键（已解密、去命名空间前缀）。         |
 | `length`                     | `R<number>`      | 条目数（getter）。                                    |
 | `namespace`                  | `string`         | 命名空间前缀（形如 `"ns:"`，无则为 `""`）。           |
+| `setNamespace(ns?)`          | `void`           | 原地切换前缀（如按 username 隔离账号）；清空 memo 读缓存，已持有的引用自动生效。 |
 
 #### `StorageOptions`（`set` 的按次选项）
 
@@ -102,7 +101,7 @@ await db.get("user");             // Promise<{ id: 1 }>
 
 | 参数     | 类型                      | 必填 | 默认 | 说明                            |
 | -------- | ------------------------- | ---- | ---- | ------------------------------- |
-| `target` | `ls` / `ss` / `db` 处理器 | 是   | —    | `buildStorage()` 返回的处理器。 |
+| `target` | `ls` / `ss` / `db` 处理器 | 是   | —    | `factory()` 返回的处理器。 |
 | `key`    | `string`                  | 是   | —    | 要绑定的键。                    |
 
 ```ts
@@ -151,7 +150,7 @@ user.get();
 | `JSONX.parse(text)`              | `any`    | 反序列化，还原富类型。 |
 
 ```ts
-const { ls } = buildStorage({ serialize: JSONX.stringify, deserialize: JSONX.parse });
+const { ls } = factory({ serialize: JSONX.stringify, deserialize: JSONX.parse });
 ls.set("x", { when: new Date(), ids: new Set([1n, 2n]) }); // 完整还原
 ```
 
@@ -174,22 +173,22 @@ ls.set("x", { when: new Date(), ids: new Set([1n, 2n]) }); // 完整还原
 
 ### `IdbStorage(name?)`
 
-基于 IndexedDB 的**异步** `Storage` 风格后端。不维护全量内存镜像（内存恒定、利于 GC）。传给 `buildStorage({ db })`。IndexedDB 不可用或运行时 `open()` 失败时自动回退内存。
+基于 IndexedDB 的**异步** `Storage` 风格后端。不维护全量内存镜像（内存恒定、利于 GC）。传给 `factory({ db })`。IndexedDB 不可用或运行时 `open()` 失败时自动回退内存。
 
 | 参数   | 类型     | 必填 | 默认                 | 说明                 |
 | ------ | -------- | ---- | -------------------- | -------------------- |
 | `name` | `string` | 否   | `"@codejoo/storage"` | IndexedDB 数据库名。 |
 
-方法（均返回 Promise）：`get(key)`、`set(key, value)`、`remove(key)`、`clear()`、`key(index)`、`length()`、`whenReady()`。
+方法（均返回 Promise）：`get(key)`、`set(key, value)`、`remove(key)`、`clear()`、`key(index)`、`length()`、`destroy()`（关闭连接；保留数据）。
 
 ### `debug(handler)`
 
 独立辅助函数（**需显式导入**——不属于核心 proxy，未用到即被 tree-shake）。读出 handler 全部条目的**解密后**明文，返回 `{ "命名空间:键": 值 }` 快照（**保留命名空间**），并暂存到 `"_$debug"`。用于查看以 `codeable`/`enckey` 写入的数据。
 
 ```ts
-import { buildStorage, buildCodec, debug } from "@codejoo/storage";
+import { factory, buildCodec, debug } from "@codejoo/storage";
 
-const { ls, db } = buildStorage({ codeable: true, codec: buildCodec("pw"), enckey: true });
+const { ls, db } = factory({ codeable: true, codec: buildCodec("pw"), enckey: true });
 debug(ls);        // 同步 → { "key": value, ... }
 await debug(db);  // 异步后端 → Promise
 ```

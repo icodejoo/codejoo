@@ -16,9 +16,9 @@ pnpm add @codejoo/storage
 ## Quick start
 
 ```ts
-import { buildStorage } from "@codejoo/storage";
+import { factory } from "@codejoo/storage";
 
-const { ls, ss } = buildStorage();
+const { ls, ss } = factory();
 
 ls.set("token", "abc");           // localStorage
 ls.get("token");                  // "abc"
@@ -32,9 +32,9 @@ ls.length;                        // number of entries
 With IndexedDB (async, large quota). `IdbStorage` is **not bundled by default** — import it yourself:
 
 ```ts
-import { buildStorage, IdbStorage } from "@codejoo/storage";
+import { factory, IdbStorage } from "@codejoo/storage";
 
-const { db } = buildStorage({ db: new IdbStorage() });
+const { db } = factory({ db: new IdbStorage() });
 
 await db.set("user", { id: 1 });  // Promise<void>
 await db.get("user");             // Promise<{ id: 1 }>
@@ -42,9 +42,9 @@ await db.get("user");             // Promise<{ id: 1 }>
 
 ## API
 
-### `buildStorage(options?)`
+### `factory(options?)`
 
-Returns `{ ls, ss, db }` over `localStorage`, `sessionStorage`, and the provided IndexedDB instance respectively. `ls`/`ss` are **synchronous**; `db` is **asynchronous** (returns Promises). All three share the same option behaviors.
+Returns `{ ls, ss, db, destroy, setNamespace }` over `localStorage`, `sessionStorage`, and the provided IndexedDB instance respectively. `ls`/`ss` are **synchronous**; `db` is **asynchronous** (returns Promises). All three share the same option behaviors. `destroy()` releases every layer at once (clears the memo caches and disconnects `db`'s IndexedDB connection) and returns a `Promise`; it does **not** delete persisted data. `setNamespace(username?)` switches the prefix of all three layers **in place** (great for per-account isolation on login/logout) — handles you already hold keep working; it only isolates, it does not erase the previous namespace's persisted data.
 
 | Param     | Type                 | Required | Default | Description                                  |
 | --------- | -------------------- | -------- | ------- | -------------------------------------------- |
@@ -65,7 +65,7 @@ Returns `{ ls, ss, db }` over `localStorage`, `sessionStorage`, and the provided
 | `force`       | `boolean`                           | No       | `true`           | On quota error, purge expired entries and retry the write; otherwise log & give up. **Sync backends only.**  |
 | `readonly`    | `boolean`                           | No       | `false`          | Write-once: only write when the key is empty (absent/expired); otherwise discard the write.                  |
 | `enckey`      | `boolean`                           | No       | `false`          | Also encrypt the **key**: when set with a `codec`, the storage key is deterministically encrypted (hides plaintext key names). |
-| `db`          | `AsyncStorage`                      | No       | —                | An IndexedDB instance (e.g. `new IdbStorage()`) exposed as `buildStorage().db`. Using `db` without it throws a helpful error. |
+| `db`          | `AsyncStorage`                      | No       | —                | An IndexedDB instance (e.g. `new IdbStorage()`) exposed as `factory().db`. Using `db` without it throws a helpful error. |
 
 ### Handler methods (`ls` / `ss` / `db`)
 
@@ -78,14 +78,13 @@ Returns `{ ls, ss, db }` over `localStorage`, `sessionStorage`, and the provided
 | `set(key, value, ttl?)`      | `R<void>`        | Write; `ttl` in ms.                                 |
 | `set(key, value, memoized?)` | `R<void>`        | Write; `boolean` toggles per-call memo mirroring.   |
 | `set(key, value, options?)`  | `R<void>`        | Write; `StorageOptions` (ttl / expireAt / memoized).|
-| `batchGet<T>(keys)`          | `R<(T\|null)[]>` | Batch read; values parallel to `keys` (missing/expired → `null`). |
-| `batchSet(entries, options?)`| `R<void>`        | Batch write; `entries` is a `{key: value}` map; `options` same as `set`'s 3rd arg. |
-| `batchRemove(keys)`          | `R<void>`        | Batch delete.                                       |
 | `remove(key)`                | `R<void>`        | Delete (cache + backend).                           |
 | `clear()`                    | `R<void>`        | Clear everything.                                   |
+| `destroy()`                  | `R<void>`        | Release resources: clear the memo cache and disconnect a closeable backend (IndexedDB). **Keeps persisted data.** |
 | `key(index)`                 | `R<string\|null>`| The `index`-th logical key (decrypted, namespace-stripped). |
 | `length`                     | `R<number>`      | Entry count (getter).                               |
 | `namespace`                  | `string`         | The namespace prefix (e.g. `"ns:"`, or `""`).       |
+| `setNamespace(ns?)`          | `void`           | Switch the prefix in place (e.g. per username); clears the memo cache. Held handles keep working. |
 
 #### `StorageOptions` (per-call `set` options)
 
@@ -102,7 +101,7 @@ Binds a handler and a key, returning `{ get, set, remove }` so you stop repeatin
 
 | Param    | Type                       | Required | Default | Description                      |
 | -------- | -------------------------- | -------- | ------- | -------------------------------- |
-| `target` | `ls` / `ss` / `db` handler | Yes      | —       | A handler from `buildStorage()`. |
+| `target` | `ls` / `ss` / `db` handler | Yes      | —       | A handler from `factory()`. |
 | `key`    | `string`                   | Yes      | —       | The key to bind.                 |
 
 ```ts
@@ -151,7 +150,7 @@ user.get();
 | `JSONX.parse(text)`              | `any`    | Deserialize, restoring rich types.   |
 
 ```ts
-const { ls } = buildStorage({ serialize: JSONX.stringify, deserialize: JSONX.parse });
+const { ls } = factory({ serialize: JSONX.stringify, deserialize: JSONX.parse });
 ls.set("x", { when: new Date(), ids: new Set([1n, 2n]) }); // round-trips exactly
 ```
 
@@ -174,22 +173,22 @@ Builds a lightweight **obfuscation** codec (repeating-key XOR + custom-alphabet 
 
 ### `IdbStorage(name?)`
 
-An **asynchronous** `Storage`-like backend over IndexedDB. No full in-memory mirror (constant memory; data is GC-friendly). Pass it to `buildStorage({ db })`. Falls back to in-memory automatically if IndexedDB is unavailable or `open()` fails at runtime.
+An **asynchronous** `Storage`-like backend over IndexedDB. No full in-memory mirror (constant memory; data is GC-friendly). Pass it to `factory({ db })`. Falls back to in-memory automatically if IndexedDB is unavailable or `open()` fails at runtime.
 
 | Param  | Type     | Required | Default              | Description              |
 | ------ | -------- | -------- | -------------------- | ------------------------ |
 | `name` | `string` | No       | `"@codejoo/storage"` | IndexedDB database name. |
 
-Methods (all return Promises): `get(key)`, `set(key, value)`, `remove(key)`, `clear()`, `key(index)`, `length()`, `whenReady()`.
+Methods (all return Promises): `get(key)`, `set(key, value)`, `remove(key)`, `clear()`, `key(index)`, `length()`, `destroy()` (close the connection; keeps data).
 
 ### `debug(handler)`
 
 Standalone helper (import it explicitly — not part of the core proxy, so it tree-shakes away when unused). Reads every entry of a handler **decrypted**, returns a `{ "namespace:key": value }` snapshot (namespace **preserved**), and stashes it under `"_$debug"`. Use it to inspect data written with `codeable`/`enckey`.
 
 ```ts
-import { buildStorage, buildCodec, debug } from "@codejoo/storage";
+import { factory, buildCodec, debug } from "@codejoo/storage";
 
-const { ls, db } = buildStorage({ codeable: true, codec: buildCodec("pw"), enckey: true });
+const { ls, db } = factory({ codeable: true, codec: buildCodec("pw"), enckey: true });
 debug(ls);        // sync → { "key": value, ... }
 await debug(db);  // async backend → Promise
 ```

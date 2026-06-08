@@ -19,7 +19,7 @@ A tiny ESM library: **one unified API over three backends**. Sync backends (`loc
 | `serialization.ts` | `JSONX` — JSON-compatible, round-trips Date/Map/Set/bigint via a `__jt__` tag. |
 | `fast.ts` | `fast`/`lazy`/`batchFast` — key-bound shortcut accessors. |
 | `debug.ts` | `debug(handler)` — standalone (tree-shakeable) decrypted snapshot. |
-| `core.ts` | `buildStorage(opts?)` → `{ ls, ss, db }`; adapts native Storage to the `get/set/remove` vocabulary; `unimpl()` placeholder for unprovided `db`. |
+| `core.ts` | `factory(opts?)` → `{ ls, ss, db, destroy }`; adapts native Storage to the `get/set/remove` vocabulary; `unimpl()` placeholder for unprovided `db`; `destroy()` releases all three layers (returns Promise; keeps persisted data). |
 | `helper.ts` | `supported` = `{ storage, indexedDB }` runtime feature flags (mutable; IdbStorage flips `indexedDB` on runtime failure). |
 
 ## Key invariants & gotchas (learned the hard way — keep these)

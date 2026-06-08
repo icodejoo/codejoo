@@ -19,7 +19,7 @@ export interface AsyncAccessor<V> {
 
 /**
  * @description 快速增删查，免去不停写 key 的痛苦，缩短调用路径。
- * 绑定一个 proxy 处理器（buildStorage 的 ls/ss/db）与某个 key，get/set/remove 转发到底层。
+ * 绑定一个 proxy 处理器（factory 的 ls/ss/db）与某个 key，get/set/remove 转发到底层。
  * 值类型在 `fast<T>(...)` 指定一次即可，后续 get/set 无需重复声明；
  * 同步/异步返回由 target 经重载自动区分（ls/ss 同步，db 返回 Promise）。
  * @param target proxy 处理器

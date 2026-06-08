@@ -13,7 +13,7 @@ const isPromise = (v: unknown): v is Promise<unknown> =>
  *
  * ```ts
  * import { debug } from "@codejoo/storage";
- * const { ls, db } = buildStorage({ codeable: true, codec, enckey: true });
+ * const { ls, db } = factory({ codeable: true, codec, enckey: true });
  * debug(ls);          // 同步：{ "ns:token": "...", ... }
  * await debug(db);    // 异步后端返回 Promise
  * ```

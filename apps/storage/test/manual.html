@@ -135,7 +135,7 @@
 
     <script type="module">
       import {
-        buildStorage,
+        factory,
         buildCodec,
         fast,
         lazy,
@@ -165,14 +165,14 @@
       const num = (id) => ($(id).value === "" ? undefined : Number($(id).value));
 
       // 基础 ls/ss
-      const { ls, ss } = buildStorage();
+      const { ls, ss } = factory();
       const layer = () => (document.querySelector('input[name="layer"]:checked').value === "ls" ? ls : ss);
 
       // db
-      const dbApi = buildStorage({ db: new IdbStorage("manual-playground-db") }).db;
+      const dbApi = factory({ db: new IdbStorage("manual-playground-db") }).db;
 
       // 选项 playground（可重建）
-      let optApi = buildStorage().ls;
+      let optApi = factory().ls;
 
       // fast/lazy
       let fastAcc = null;
@@ -204,7 +204,7 @@
           if ($("o-codeable").checked || $("o-enckey").checked) opts.codec = buildCodec(val("o-pw"));
           if ($("o-codeable").checked) opts.codeable = true;
           if ($("o-enckey").checked) opts.enckey = true;
-          optApi = buildStorage(opts).ls;
+          optApi = factory(opts).ls;
           log("已重建 storage，选项", opts, "dim");
         },
         "o-set": () => { optApi.set(val("o-key"), parseVal(val("o-val")), num("o-ttl")); log(`opt set ${val("o-key")}`, parseVal(val("o-val"))); },

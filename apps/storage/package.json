@@ -1,6 +1,22 @@
  {
   "name": "@codejoo/storage",
   "version": "0.0.1",
+  "description": "Unified, type-safe wrapper over localStorage / sessionStorage / IndexedDB with TTL, sliding expiry, namespaces, pluggable serialization, obfuscation codec and key-bound shortcuts.",
+  "keywords": [
+    "storage",
+    "localstorage",
+    "sessionstorage",
+    "indexeddb",
+    "idb",
+    "ttl",
+    "expire",
+    "cache",
+    "namespace",
+    "serialize",
+    "typescript",
+    "type-safe",
+    "browser"
+  ],
   "publishConfig": {
     "access": "public"
   },

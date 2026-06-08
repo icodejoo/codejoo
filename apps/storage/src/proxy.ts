@@ -38,12 +38,6 @@ export interface Handlers<S extends SyncStore | AsyncStorage> {
   get(key: string, defaultValue: boolean): Result<S, boolean>;
   get(key: string, defaultValue: bigint): Result<S, bigint>;
   get<T>(key: string, defaultValue: T): Result<S, T>;
-  /** 批量读取，返回与 keys 等长、按序对应的值数组（缺失/过期为 null） */
-  batchGet<T = unknown>(keys: string[]): Result<S, (T | null)[]>;
-  /** 批量写入，entries 为 {键: 值} 映射；options 同 set 第三参 */
-  batchSet(entries: Record<string, unknown>, options?: number | boolean | StorageOptions): Result<S, void>;
-  /** 批量删除 */
-  batchRemove(keys: string[]): Result<S, void>;
   set<T>(key: string, value: T, ttl?: number): Result<S, void>;
   set<T>(key: string, value: T, memoized?: boolean): Result<S, void>;
   set<T>(key: string, value: T, options?: StorageOptions): Result<S, void>;
@@ -53,7 +47,15 @@ export interface Handlers<S extends SyncStore | AsyncStorage> {
   key(index: number): Result<S, string | null>;
   /** 命名空间前缀（形如 "ns:"，无则为空串） */
   readonly namespace: string;
+  /** 切换命名空间（如按 username 隔离账号）：清空 memo 读缓存并原地改前缀，已持有的引用自动生效 */
+  setNamespace(namespace?: string): void;
   readonly length: Result<S, number>;
+  /**
+   * 释放资源：清空 memo 读缓存，并断开可关闭的后端（如 IdbStorage 的 IndexedDB 连接），
+   * 便于 GC 回收。**不删除已落盘数据**（localStorage/IndexedDB 内容保留）。
+   * 异步后端返回 Promise，可 await 以确保连接已断开。
+   */
+  destroy(): Result<S, void>;
 }
 
 /** 把后端（SyncStore / AsyncStorage）统一成「可同步可异步」的内部视图 */
@@ -68,7 +70,7 @@ interface AnyStore {
 
 /** 与后端无关的实例级配置 */
 function settings(opts?: BaseStorageOptions) {
-  const ns = opts?.namespace ? opts.namespace + ":" : "";
+  let ns = opts?.namespace ? opts.namespace + ":" : "";
   const serialize = opts?.serialize ?? JSON.stringify;
   const deserialize = opts?.deserialize ?? JSON.parse;
   const codeable = opts?.codeable ?? false;
@@ -96,7 +98,13 @@ function settings(opts?: BaseStorageOptions) {
     return opts!.codec!.decode(sk) ?? sk;
   };
   return {
-    ns,
+    get ns() {
+      return ns;
+    },
+    /** 原地切换命名空间前缀（空值回到无前缀）；fullKey 闭包读取此 ns，故已有引用自动生效 */
+    setNamespace(n?: string) {
+      ns = n ? n + ":" : "";
+    },
     isRaw: opts?.raw ?? false,
     sliding: opts?.sliding ?? false,
     force: opts?.force ?? true,
@@ -163,7 +171,8 @@ export function proxy<S extends SyncStore | AsyncStorage>(
   memo: MemoCache,
   opts?: BaseStorageOptions,
 ): Handlers<S> {
-  const { ns, isRaw, sliding, force, cache, readOnly, dump, load, fullKey, decKey } = settings(opts);
+  const cfg = settings(opts);
+  const { isRaw, sliding, force, cache, readOnly, dump, load, fullKey, decKey } = cfg;
   const st = storage as unknown as AnyStore;
   const isAsync = typeof st.length === "function";
 
@@ -292,40 +301,36 @@ export function proxy<S extends SyncStore | AsyncStorage>(
     return out(write());
   }
 
-  // 批量：复用单条 get/set；同步后端直接返回数组，异步后端 Promise.all 聚合
-  const rawGet = get as (key: string) => Maybe<unknown>;
-  const rawSet = set as (k: string, v: unknown, a?: number | boolean | StorageOptions) => Maybe<void>;
-
   return {
     get,
     set,
-    namespace: ns,
+    get namespace() {
+      return cfg.ns;
+    },
+    /** 切换命名空间（如按 username 隔离账号）：先清 memo 读缓存再改前缀，已持有的引用自动生效 */
+    setNamespace: (namespace?: string): void => {
+      memo.clear();
+      cfg.setNamespace(namespace);
+    },
     /** 第 index 个逻辑键（已解密、去命名空间前缀）；供调试/枚举 */
     key: (index: number): Result<S, string | null> =>
       out(
         chain(st.key(index), (sk) => {
           if (sk == null) return null;
           const fk = decKey(sk);
-          return ns && fk.startsWith(ns) ? fk.slice(ns.length) : fk;
+          return cfg.ns && fk.startsWith(cfg.ns) ? fk.slice(cfg.ns.length) : fk;
         }),
       ) as Result<S, string | null>,
-    batchGet: <T = unknown>(keys: string[]): Result<S, (T | null)[]> => {
-      // 注意：必须包一层箭头，否则 map 会把下标当作 get 的 defaultValue 传入
-      const arr = keys.map((k) => rawGet(k)) as Maybe<T | null>[];
-      return (isAsync ? Promise.all(arr) : arr) as Result<S, (T | null)[]>;
-    },
-    batchSet: (entries: Record<string, unknown>, arg?: number | boolean | StorageOptions): Result<S, void> => {
-      const ops = Object.entries(entries).map(([k, v]) => rawSet(k, v, arg));
-      return (isAsync ? Promise.all(ops).then(() => undefined) : undefined) as Result<S, void>;
-    },
-    batchRemove: (keys: string[]): Result<S, void> => {
-      const ops = keys.map((k) => del(fullKey(k)));
-      return (isAsync ? Promise.all(ops).then(() => undefined) : undefined) as Result<S, void>;
-    },
     remove: (key: string): Result<S, void> => out(del(fullKey(key))) as Result<S, void>,
     clear: (): Result<S, void> => {
       memo.clear();
       return out(st.clear()) as Result<S, void>;
+    },
+    /** 释放资源：清空 memo 读缓存，并断开可关闭的后端（IdbStorage）。不删除已落盘数据 */
+    destroy: (): Result<S, void> => {
+      memo.clear();
+      const close = (st as { destroy?: () => Maybe<void> }).destroy;
+      return out(close ? close.call(st) : undefined) as Result<S, void>;
     },
     get length(): Result<S, number> {
       // 注意：必须 st.length() 直接调用以保留 this；先取出再调用会丢失绑定（IdbStorage 内部用到 this）
