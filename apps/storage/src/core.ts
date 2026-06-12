@@ -16,6 +16,8 @@ function adapt(s: Storage): SyncStore {
     remove: (k) => s.removeItem(k),
     clear: () => s.clear(),
     key: (i) => s.key(i),
+    keys: () => Object.keys(s), // 原生 Storage 的键即自身可枚举属性；供 clear/keys/purge 快路径
+
     get length() {
       return s.length;
     },

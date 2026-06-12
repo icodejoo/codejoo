@@ -1,24 +1,25 @@
- {
+{
   "name": "@codejoo/storage",
-  "version": "0.0.3",
+  "version": "0.1.0",
   "description": "Unified, type-safe wrapper over localStorage / sessionStorage / IndexedDB with TTL, sliding expiry, namespaces, pluggable serialization, obfuscation codec and key-bound shortcuts.",
   "keywords": [
-    "storage",
-    "localstorage",
-    "sessionstorage",
-    "indexeddb",
-    "idb",
-    "ttl",
-    "expire",
+    "browser",
     "cache",
+    "expire",
+    "idb",
+    "indexeddb",
+    "localstorage",
     "namespace",
     "serialize",
-    "typescript",
+    "sessionstorage",
+    "storage",
+    "ttl",
     "type-safe",
-    "browser"
+    "typescript"
   ],
-  "publishConfig": {
-    "access": "public"
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/icodejoo/codejoo/tree/main/apps/storage"
   },
   "files": [
     "dist",
@@ -43,6 +44,9 @@
     },
     "./package.json": "./package.json"
   },
+  "publishConfig": {
+    "access": "public"
+  },
   "scripts": {
     "fmt": "vp fmt -c oxfmt.config.ts",
     "lint": "vp lint -c oxlint.config.ts",
@@ -63,9 +67,5 @@
     "terser": "catalog:",
     "vite-plus": "catalog:",
     "vitest": "catalog:"
-  },
-  "repository": {
-    "type": "git",
-    "url": "git+https://github.com/icodejoo/codejoo/tree/main/apps/storage"
   }
 }

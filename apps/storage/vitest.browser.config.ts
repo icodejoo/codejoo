@@ -1,5 +1,5 @@
-import { defineConfig } from "vitest/config"
-import { playwright } from "@vitest/browser-playwright"
+import { defineConfig } from "vitest/config";
+import { playwright } from "@vitest/browser-playwright";
 
 /**
  * Browser-mode 端到端测试配置 —— 在真实 Chromium 中跑真 RAF 行为。
@@ -23,4 +23,4 @@ export default defineConfig({
     // 真 RAF 测试涉及实际 wall-clock 等待，单个用例给宽松超时
     testTimeout: 10000,
   },
-})
+});

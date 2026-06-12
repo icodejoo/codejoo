@@ -13,6 +13,8 @@ export interface SyncStore {
   remove(key: string): void;
   clear(): void;
   key(index: number): string | null;
+  /** 可选：一次性返回全部存储键。提供时 clear/keys/purge 走快路径（免逐下标枚举） */
+  keys?(): string[];
   length: number;
 }
 
@@ -23,6 +25,12 @@ export interface AsyncStorage {
   remove(key: string): Promise<void>;
   clear(): Promise<void>;
   key(index: number): Promise<string | null>;
+  /** 可选：一次性返回全部存储键。提供时 clear/keys/purge 走快路径（Idb 单次 getAllKeys，免逐下标 O(n²)） */
+  keys?(): Promise<string[]>;
+  /** 可选批量原语：单事务内完成。提供时批量 get/set/remove 与 clear/purge 走快路径（免 N 次事务开销） */
+  getMany?(keys: readonly string[]): Promise<(string | null)[]>;
+  setMany?(entries: readonly (readonly [string, string])[]): Promise<void>;
+  removeMany?(keys: readonly string[]): Promise<void>;
   length(): Promise<number>;
 }
 
@@ -36,13 +44,15 @@ export interface Codec {
 export interface BaseStorageOptions {
   /** 是否同步存储到内存 */
   memoized?: boolean;
+  /** memo 命中/回填的对象返回深拷贝（structuredClone），隔离调用方修改对缓存的污染；默认 false（共享引用，零开销） */
+  cloned?: boolean;
   /** 自定义序列化：entity -> 字符串，取代默认 JSON.stringify */
   serialize?: (entity: StorageEntity) => string;
   /** 自定义反序列化：字符串 -> entity，需与 serialize 配对，取代默认 JSON.parse */
   deserialize?: (raw: string) => StorageEntity;
   /** 是否启用编解码：为 true 时才调用 codec；默认 false。便于按环境(开发/生产)开关 */
   codeable?: boolean;
-  /** 编解码器：对序列化后的字符串做混淆/加密/压缩等，encode/decode 须配对 */
+  /** 编解码器：encode/decode 须配对。对值生效需 codeable 为 true；enckey 键加密只要求传入 codec、不要求 codeable */
   codec?: Codec;
   /** 滑动过期：每次读命中后按原始 ttl 续期，适合登录态/会话类数据 */
   sliding?: boolean;
@@ -65,11 +75,14 @@ export interface BaseStorageOptions {
   db?: AsyncStorage;
 }
 
-export interface StorageOptions extends Omit<BaseStorageOptions, "db"> {
+/** set 的 per-call 选项。仅以下三项 per-call 生效；其余（codec/sliding/raw 等）为实例级配置，见 BaseStorageOptions */
+export interface StorageOptions {
   /** 存活时间：毫秒 */
   ttl?: number;
   /** 过期时间，时间戳|日期字符串|日期 */
   expireAt?: number | string | Date;
+  /** 本次写入是否同步存入 memo 读缓存（覆盖实例级 memoized） */
+  memoized?: boolean;
 }
 
 /** 实际存储对象 */

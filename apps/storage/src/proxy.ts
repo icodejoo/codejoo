@@ -1,20 +1,8 @@
-import type {
-  AsyncStorage,
-  BaseStorageOptions,
-  MemoCache,
-  StorageEntity,
-  StorageOptions,
-  SyncStore,
-} from "./interface";
-
-/** 把 expireAt（时间戳 | 日期字符串 | Date）归一化为毫秒时间戳，非法时返回 NaN */
-const ts = (v: number | string | Date): number =>
-  typeof v === "number" ? v : v instanceof Date ? v.getTime() : new Date(v).getTime();
+import type { AsyncStorage, BaseStorageOptions, MemoCache, StorageEntity, StorageOptions, SyncStore } from "./interface";
 
 // —— 可同步可异步的组合子：后端同步则全程同步，异步则自动串成 Promise —— //
 type Maybe<T> = T | Promise<T>;
-const isPromise = (v: unknown): v is Promise<unknown> =>
-  typeof (v as { then?: unknown } | null)?.then === "function";
+export const isPromise = (v: unknown): v is Promise<unknown> => typeof (v as { then?: unknown } | null)?.then === "function";
 function chain<A, B>(v: Maybe<A>, fn: (a: A) => Maybe<B>): Maybe<B> {
   return isPromise(v) ? v.then(fn) : fn(v as A);
 }
@@ -30,6 +18,11 @@ function attempt<T>(run: () => Maybe<T>, onErr: (e: unknown) => Maybe<T>): Maybe
 /** 后端为异步存储时，get/set 等返回 Promise，否则返回同步值 */
 export type Result<S, T> = S extends AsyncStorage ? Promise<T> : T;
 
+/** 批量 get 的逐位返回类型：第 i 位取默认值元组同位的类型，缺省位为 unknown（含 null） */
+export type MGet<K extends readonly string[], V extends readonly unknown[]> = {
+  [I in keyof K]: I extends keyof V ? V[I] : unknown;
+};
+
 /** proxy 返回的处理器形态（同步/异步由 S 决定），供 fast 等复用签名 */
 export interface Handlers<S extends SyncStore | AsyncStorage> {
   get<T>(key: string): Result<S, T | null>;
@@ -38,13 +31,22 @@ export interface Handlers<S extends SyncStore | AsyncStorage> {
   get(key: string, defaultValue: boolean): Result<S, boolean>;
   get(key: string, defaultValue: bigint): Result<S, bigint>;
   get<T>(key: string, defaultValue: T): Result<S, T>;
+  /** 批量读取：返回与 keys 等长的元组；defaults 逐位提供默认值并逐位联动类型（缺省位为 unknown|null） */
+  get<K extends readonly string[]>(keys: readonly [...K]): Result<S, MGet<K, []>>;
+  get<K extends readonly string[], V extends readonly unknown[]>(keys: readonly [...K], defaults: readonly [...V]): Result<S, MGet<K, V>>;
   set<T>(key: string, value: T, ttl?: number): Result<S, void>;
   set<T>(key: string, value: T, memoized?: boolean): Result<S, void>;
   set<T>(key: string, value: T, options?: StorageOptions): Result<S, void>;
-  remove(key: string): Result<S, void>;
+  /** 批量写入：values 与 keys 逐位对应；第三参（ttl/memoized/options）对全部键生效 */
+  set(keys: readonly string[], values: readonly unknown[], options?: number | boolean | StorageOptions): Result<S, void>;
+  remove(key: string | readonly string[]): Result<S, void>;
   clear(): Result<S, void>;
   /** 第 index 个逻辑键（已解密、去命名空间前缀） */
   key(index: number): Result<S, string | null>;
+  /** 本实例管辖范围内的全部逻辑键（已解密、去命名空间前缀） */
+  keys(): Result<S, string[]>;
+  /** 主动清理已过期条目（仅本实例管辖、本库写入的数据）。平时为惰性过期，长期不被读取的过期数据靠它回收配额 */
+  purge(): Result<S, void>;
   /** 命名空间前缀（形如 "ns:"，无则为空串） */
   readonly namespace: string;
   /** 切换命名空间（如按 username 隔离账号）：清空 memo 读缓存并原地改前缀，已持有的引用自动生效 */
@@ -65,100 +67,11 @@ interface AnyStore {
   remove(k: string): Maybe<void>;
   clear(): Maybe<void>;
   key(i: number): Maybe<string | null>;
+  keys?(): Maybe<string[]>;
+  getMany?(ks: readonly string[]): Promise<(string | null)[]>;
+  setMany?(es: readonly (readonly [string, string])[]): Promise<void>;
+  removeMany?(ks: readonly string[]): Promise<void>;
   length: number | (() => Promise<number>);
-}
-
-/** 与后端无关的实例级配置 */
-function settings(opts?: BaseStorageOptions) {
-  let ns = opts?.namespace ? opts.namespace + ":" : "";
-  const serialize = opts?.serialize ?? JSON.stringify;
-  const deserialize = opts?.deserialize ?? JSON.parse;
-  const codeable = opts?.codeable ?? false;
-  const dump = (e: StorageEntity): string => {
-    const s = serialize(e);
-    return codeable && opts?.codec ? opts.codec.encode(s) : s;
-  };
-  const load = (s: string): StorageEntity | null => {
-    try {
-      const text = codeable && opts?.codec ? opts.codec.decode(s) : s;
-      return text == null ? null : deserialize(text);
-    } catch {
-      return null;
-    }
-  };
-  // enckey：用同一 codec 对「ns+key」做确定性加密作为真实存储键（codec.encode 确定性，同键稳定）
-  const enckey = (opts?.enckey ?? false) && opts?.codec != null;
-  const fullKey = (k: string): string => {
-    const nk = ns + k;
-    return enckey ? opts!.codec!.encode(nk) : nk;
-  };
-  /** 把存储键还原为「ns+key」（供 debug 用）；解不开则原样返回 */
-  const decKey = (sk: string): string => {
-    if (!enckey) return sk;
-    return opts!.codec!.decode(sk) ?? sk;
-  };
-  return {
-    get ns() {
-      return ns;
-    },
-    /** 原地切换命名空间前缀（空值回到无前缀）；fullKey 闭包读取此 ns，故已有引用自动生效 */
-    setNamespace(n?: string) {
-      ns = n ? n + ":" : "";
-    },
-    isRaw: opts?.raw ?? false,
-    sliding: opts?.sliding ?? false,
-    force: opts?.force ?? true,
-    cache: opts?.memoized ?? false, // 实例级：是否启用 memo 读缓存
-    readOnly: opts?.readonly ?? false, // 只写一次：非空则丢弃
-    dump,
-    load,
-    fullKey,
-    decKey,
-  };
-}
-
-/** 解析 set 的 per-call 第三参（ttl / memoized / options），合并实例级默认 */
-function writeArgs(opts: BaseStorageOptions | undefined, arg?: number | boolean | StorageOptions) {
-  let ttl: number | undefined;
-  let memoized = opts?.memoized;
-  let expireAt: number | string | Date | undefined;
-  if (typeof arg === "number") ttl = arg;
-  else if (typeof arg === "boolean") memoized = arg;
-  else if (arg) {
-    if (arg.ttl != null) ttl = arg.ttl;
-    if (arg.memoized != null) memoized = arg.memoized;
-    if (arg.expireAt != null) expireAt = arg.expireAt;
-  }
-  return { ttl, memoized: memoized ?? false, expireAt };
-}
-
-/** 由 value + 写入选项构造 entity；返回 null 表示校验未过（已 warn），应放弃写入 */
-function buildEntity(
-  value: unknown,
-  ttl: number | undefined,
-  expireAt: number | string | Date | undefined,
-  sliding: boolean,
-  key: string,
-): StorageEntity | null {
-  const now = Date.now();
-  const entity: StorageEntity = { value, createdAt: now };
-  if (ttl != null) {
-    entity.ttl = ttl;
-    entity.expireAt = now + ttl;
-  }
-  if (expireAt != null) {
-    const abs = ts(expireAt);
-    if (Number.isNaN(abs)) {
-      console.warn(`[storage] expireAt 无法解析，已放弃写入 "${key}"`);
-      return null;
-    }
-    if (abs <= now && !sliding) {
-      console.warn(`[storage] expireAt 早于当前时间，已放弃写入 "${key}"`);
-      return null;
-    }
-    entity.expireAt = abs <= now && sliding && ttl != null ? now + ttl : abs;
-  }
-  return entity;
 }
 
 /**
@@ -166,18 +79,56 @@ function buildEntity(
  * 返回类型由泛型 S 决定：异步后端的 get/set 等返回 Promise，同步后端返回同步值。
  * memo 是按 memoized 开关的读缓存（非全量镜像）：开启时写入双写、读取缓存优先、删除双删。
  */
-export function proxy<S extends SyncStore | AsyncStorage>(
-  storage: S,
-  memo: MemoCache,
-  opts?: BaseStorageOptions,
-): Handlers<S> {
-  const cfg = settings(opts);
-  const { isRaw, sliding, force, cache, readOnly, dump, load, fullKey, decKey } = cfg;
+export function proxy<S extends SyncStore | AsyncStorage>(storage: S, memo: MemoCache, opts?: BaseStorageOptions): Handlers<S> {
   const st = storage as unknown as AnyStore;
   const isAsync = typeof st.length === "function";
+  const { sliding = false, raw: isRaw = false, force = true, memoized: cache = false, readonly: readOnly = false, cloned = false } = opts ?? {};
+  const serialize = opts?.serialize ?? JSON.stringify;
+  const deserialize = opts?.deserialize ?? JSON.parse;
+  const cdc = opts?.codec;
+  const codeable = (opts?.codeable ?? false) && cdc != null; // 值编解码开关
+  const enckey = (opts?.enckey ?? false) && cdc != null; // 键加密开关（不要求 codeable）
+  let ns = opts?.namespace ? opts.namespace + ":" : "";
 
-  /** 归一返回：异步后端把同步结果也包成 Promise，使类型与 await 行为一致 */
+  // 注：曾尝试 IndexedDB 非加密时 entity 对象直存（跳过 JSON、走结构化克隆），实测反而慢 10%+
+  // ——结构化克隆序列化器遍历对象图比 JSON.stringify 慢，单条字符串存取近似 memcpy。故保持 JSON 路径。
+  const dump = (e: StorageEntity): string => (codeable ? cdc!.encode(serialize(e)) : serialize(e));
+  const load = (s: string): StorageEntity | null => {
+    try {
+      const text = codeable ? cdc!.decode(s) : s;
+      return text == null ? null : deserialize(text);
+    } catch {
+      return null;
+    }
+  };
+  // enckey：用 codec 对「ns+key」做确定性加密作为真实存储键（同键稳定）。
+  // 结果按「ns+key」缓存——热路径同一逻辑键反复读写免重复编码（缓存键含 ns，切换命名空间无需失效）
+  const ekCache = enckey ? new Map<string, string>() : undefined;
+  const fullKey = (k: string): string => {
+    const nk = ns + k;
+    if (!ekCache) return nk;
+    let v = ekCache.get(nk);
+    if (v == null) {
+      if (ekCache.size >= 1024) ekCache.clear(); // 防动态键名场景无限增长；偶发重建成本可忽略
+      ekCache.set(nk, (v = cdc!.encode(nk)));
+    }
+    return v;
+  };
+  const decKey = (sk: string): string => (enckey ? (cdc!.decode(sk) ?? sk) : sk);
+  /** 该存储键是否归本实例管辖（命名空间匹配；enckey 时须能解开）。clear/purge 仅作用于管辖范围 */
+  const owns = (sk: string): boolean => (enckey ? (cdc!.decode(sk)?.startsWith(ns) ?? false) : sk.startsWith(ns));
+  /** 存储键 → 逻辑键（解密、去命名空间前缀） */
+  const logical = (sk: string): string => {
+    const fk = decKey(sk);
+    return ns && fk.startsWith(ns) ? fk.slice(ns.length) : fk;
+  };
+
+  /** 归一返回：异步后端把同步结果也包成 Promise，使类型与 await 行为一致；R 同时收口为对外的 Result 类型 */
   const out = <T>(v: Maybe<T>): Maybe<T> => (isAsync && !isPromise(v) ? Promise.resolve(v) : v);
+  const R = <T>(v: Maybe<T>): Result<S, T> => out(v) as Result<S, T>;
+
+  /** cloned：返回与 memo 共享的对象时给出深拷贝，隔离调用方修改对缓存的污染（原始值天然不可变，跳过） */
+  const dup = (v: unknown): unknown => (cloned && typeof v === "object" && v != null ? structuredClone(v) : v);
 
   /** 双删：memo + 持久层 */
   const del = (k: string): Maybe<void> => {
@@ -185,40 +136,67 @@ export function proxy<S extends SyncStore | AsyncStorage>(
     return st.remove(k);
   };
 
-  /** 清理已过期的持久层数据（仅同步后端；异步后端容量大，暂不清理） */
-  function purgeExpired(): void {
-    const now = Date.now();
-    const len = st.length as number;
-    const expired: string[] = [];
-    for (let i = 0; i < len; i++) {
-      const k = st.key(i) as string | null;
-      if (k == null) continue;
-      const s = st.get(k) as string | null;
-      if (s == null) continue;
-      const e = load(s);
-      if (e?.expireAt != null && now >= e.expireAt) expired.push(k);
+  /** 收集本实例管辖的全部存储键。后端提供 keys() 时走快路径（如 Idb 单次 getAllKeys，免逐下标 O(n²)） */
+  function ownKeys(): Maybe<string[]> {
+    if (typeof st.keys === "function") return chain(st.keys(), (ks) => ks.filter(owns));
+    if (!isAsync) {
+      const res: string[] = [];
+      for (let i = 0, len = st.length as number; i < len; i++) {
+        const k = st.key(i) as string | null;
+        if (k != null && owns(k)) res.push(k);
+      }
+      return res;
     }
-    for (const k of expired) del(k);
+    return (async () => {
+      const res: string[] = [];
+      for (let i = 0, len = await (st as { length(): Promise<number> }).length(); i < len; i++) {
+        const k = await st.key(i);
+        if (k != null && owns(k)) res.push(k);
+      }
+      return res;
+    })();
   }
 
-  /** 写入持久层，处理容量不足。同步 force 时清过期重试；异步暂只记日志后放弃 */
+  /**
+   * 清理已过期数据：仅本实例管辖、且 entity 带 createdAt（本库写入标志）的条目，
+   * 避免误删外部恰好形如 {expireAt} 的数据。容量不足重试与公开的 purge() 共用此入口。
+   */
+  function purgeExpired(): Maybe<void> {
+    const now = Date.now();
+    const dead = (s: string | null): boolean => {
+      const e = load(s ?? "");
+      return e?.expireAt != null && e.createdAt != null && now >= e.expireAt;
+    };
+    return chain(ownKeys(), (ks): Maybe<void> => {
+      if (!isAsync) {
+        for (const k of ks) if (dead(st.get(k) as string | null)) void del(k);
+        return;
+      }
+      // 批量快路径（后端提供 getMany+removeMany）：两次事务完成全量清理
+      if (typeof st.getMany === "function" && typeof st.removeMany === "function") {
+        return st.getMany(ks).then((ss) => {
+          const expired = ks.filter((_, i) => dead(ss[i]));
+          for (const k of expired) memo.remove(k);
+          return expired.length ? st.removeMany!(expired) : undefined;
+        });
+      }
+      return Promise.all(ks.map((k) => Promise.resolve(chain(st.get(k), (s) => (dead(s) ? del(k) : undefined))))).then(() => undefined);
+    });
+  }
+
+  /** 写入持久层；失败且 force 时清理过期数据重试一次（仅同步后端），仍失败记日志放弃 */
   function persist(k: string, str: string): Maybe<boolean> {
+    const fail = (err: unknown): boolean => {
+      console.error(`[storage] 写入失败 "${k}"，已放弃`, err);
+      return false;
+    };
     return attempt(
       () => chain(st.set(k, str), () => true),
       (err) => {
         if (!force) throw err;
-        if (isAsync) {
-          console.error(`[storage] 写入失败 "${k}"`, err);
-          return false;
-        }
-        purgeExpired();
-        return attempt(
-          () => chain(st.set(k, str), () => true),
-          (e2) => {
-            console.error(`[storage] 容量不足，清理后仍无法写入 "${k}"，已放弃`, e2);
-            return false;
-          },
-        );
+        if (isAsync) return fail(err);
+        void purgeExpired(); // 同步后端此调用同步完成
+        return attempt(() => chain(st.set(k, str), () => true), fail);
       },
     );
   }
@@ -226,61 +204,127 @@ export function proxy<S extends SyncStore | AsyncStorage>(
   /** entity 命中后的过期/续期处理，返回最终值 */
   function resolve(entity: StorageEntity, k: string, fromMemo: boolean, fallback: unknown): Maybe<unknown> {
     const now = Date.now();
-    if (entity.expireAt != null && now >= entity.expireAt) {
-      return chain(del(k), () => fallback); // 懒过期：双删
-    }
-    if (sliding && entity.ttl != null) {
-      entity.expireAt = now + entity.ttl; // 滑动续期，回写持久层 + 缓存
+    if (entity.expireAt != null && now >= entity.expireAt) return chain(del(k), () => fallback); // 懒过期：双删
+    const shared = fromMemo || cache; // 值对象与 memo 共享引用（cloned 开启时对这类返回做深拷贝）
+    if (sliding && entity.ttl != null && entity.expireAt != null && entity.expireAt - now <= entity.ttl * 0.9) {
+      entity.expireAt = now + entity.ttl; // 滑动续期回写；剩余寿命 >90% 时跳过（消除高频读写放大，最多提前 ttl 的 10% 过期）
       return chain(persist(k, dump(entity)), () => {
         if (cache) memo.set(k, entity);
-        return entity.value;
+        return shared ? dup(entity.value) : entity.value;
       });
     }
     if (!fromMemo && cache) memo.set(k, entity); // 读穿回填（仅开启缓存时）
-    return entity.value;
+    return shared ? dup(entity.value) : entity.value;
   }
 
-  function get<T>(key: string): Result<S, T | null>;
-  function get(key: string, defaultValue: number): Result<S, number>;
-  function get(key: string, defaultValue: string): Result<S, string>;
-  function get(key: string, defaultValue: boolean): Result<S, boolean>;
-  function get(key: string, defaultValue: bigint): Result<S, bigint>;
-  function get<T>(key: string, defaultValue: T): Result<S, T>;
-  function get(key: string, defaultValue?: unknown): Maybe<unknown> {
+  /** 后端取回的原始串 → 最终值（raw 直返并按需回填缓存；entity 解码 + 过期/续期处理） */
+  const hydrate = (s: string | null, k: string, fallback: unknown): Maybe<unknown> => {
+    if (s == null) return fallback;
+    if (isRaw) {
+      if (cache) memo.set(k, s);
+      return s;
+    }
+    const entity = load(s);
+    if (entity == null) return chain(del(k), () => fallback); // 解不开 → 清除，回退
+    return resolve(entity, k, false, fallback);
+  };
+
+  /** memo 命中检查：raw 接受任意非空值；entity 仅接受对象（raw 实例可能向共享 memo 写入字符串，误读会得 undefined） */
+  const fromMemo = (k: string, fallback: unknown): { hit: boolean; value?: Maybe<unknown> } => {
+    const m = memo.get(k);
+    if (isRaw) return m != null ? { hit: true, value: dup(m) } : { hit: false };
+    if (m != null && typeof m === "object") return { hit: true, value: resolve(m as StorageEntity, k, true, fallback) };
+    return { hit: false };
+  };
+
+  // 对外签名（含默认值拓宽/批量元组的重载）统一由 Handlers 接口声明，返回时一次断言，避免重复维护两份重载
+  function get(key: string | readonly string[], defaultValue?: unknown): Maybe<unknown> {
+    if (typeof key !== "string") {
+      const ds = defaultValue as readonly unknown[] | undefined;
+      // 批量快路径（后端提供 getMany）：memo 命中走缓存，未命中合并进单事务（免 N 次事务开销）
+      if (isAsync && typeof st.getMany === "function") {
+        const res = Array.from<Maybe<unknown>>({ length: key.length });
+        const miss: number[] = [];
+        for (let i = 0; i < key.length; i++) {
+          const m = fromMemo(fullKey(key[i]), ds?.[i] ?? null);
+          if (m.hit) res[i] = m.value;
+          else miss.push(i);
+        }
+        const all = (): Promise<unknown[]> => Promise.all(res.map((p) => Promise.resolve(p)));
+        if (!miss.length) return all();
+        return st.getMany(miss.map((i) => fullKey(key[i]))).then((ss) => {
+          miss.forEach((i, j) => (res[i] = hydrate(ss[j], fullKey(key[i]), ds?.[i] ?? null)));
+          return all();
+        });
+      }
+      // 慢路径：逐键复用单键逻辑。注意不可写成 key.map(get)——会把数组下标泄漏成默认值
+      const rs = key.map((k, i) => get(k, ds?.[i]));
+      return out(isAsync ? Promise.all(rs.map((p) => Promise.resolve(p))) : rs);
+    }
     const k = fullKey(key);
     const fallback = defaultValue ?? null;
-
-    if (isRaw) {
-      const m = memo.get(k);
-      if (m != null) return out(m);
-      return out(
-        chain(st.get(k), (s) => {
-          if (s == null) return fallback;
-          if (cache) memo.set(k, s);
-          return s;
-        }),
-      );
-    }
-
-    // 缓存优先
-    const cached = memo.get(k) as StorageEntity | null;
-    if (cached) return out(resolve(cached, k, true, fallback));
-
-    return out(
-      chain(st.get(k), (s) => {
-        if (s == null) return fallback;
-        const entity = load(s);
-        if (entity == null) return chain(del(k), () => fallback); // 解不开 → 清除，回退
-        return resolve(entity, k, false, fallback);
-      }),
-    );
+    const m = fromMemo(k, fallback);
+    if (m.hit) return out(m.value);
+    return out(chain(st.get(k), (s) => hydrate(s, k, fallback)));
   }
 
-  function set<T>(key: string, value: T, ttl?: number): Result<S, void>;
-  function set<T>(key: string, value: T, memoized?: boolean): Result<S, void>;
-  function set<T>(key: string, value: T, options?: StorageOptions): Result<S, void>;
-  function set(key: string, value: unknown, arg?: number | boolean | StorageOptions): Maybe<void> {
-    const { ttl, memoized, expireAt } = writeArgs(opts, arg);
+  /** set 第三参解析：数字=ttl / 布尔=memoized / 对象=选项，未指定的并入实例级默认 */
+  const parseArg = (arg?: number | boolean | StorageOptions) => {
+    const o = typeof arg === "object" && arg ? arg : undefined;
+    return {
+      ttl: typeof arg === "number" ? arg : o?.ttl,
+      memoized: typeof arg === "boolean" ? arg : (o?.memoized ?? cache),
+      expireAt: o?.expireAt,
+    };
+  };
+
+  /** 由 value + 写入选项构造 entity；null 表示校验未过（已 warn），放弃写入 */
+  const mkEntity = (value: unknown, ttl: number | undefined, expireAt: StorageOptions["expireAt"], key: string): StorageEntity | null => {
+    const now = Date.now();
+    const entity: StorageEntity = { value, createdAt: now };
+    if (ttl != null) entity.expireAt = now + (entity.ttl = ttl);
+    if (expireAt != null) {
+      const abs = new Date(expireAt).getTime(); // Date 构造原生接受时间戳/日期串/Date，非法为 NaN
+      // 无法解析，或已过期且无法按 sliding+ttl 从现在续期 → 放弃写入
+      if (Number.isNaN(abs) || (abs <= now && !(sliding && ttl != null))) {
+        console.warn(`[storage] expireAt 无法解析或早于当前时间，已放弃写入 "${key}"`);
+        return null;
+      }
+      entity.expireAt = abs <= now ? now + ttl! : abs;
+    }
+    return entity;
+  };
+
+  function set(key: string | readonly string[], value: unknown, arg?: number | boolean | StorageOptions): Maybe<void> {
+    if (typeof key !== "string") {
+      // 批量：values 逐位对应；第三参对全部键生效。values 短于 keys 时缺位键跳过（告警），不写入 undefined
+      const vs = (value ?? []) as readonly unknown[];
+      if (vs.length < key.length) console.warn(`[storage] 批量 set：values(${vs.length}) 短于 keys(${key.length})，缺位键已跳过`);
+      const n = Math.min(key.length, vs.length);
+      const { ttl, memoized, expireAt } = parseArg(arg);
+      // 批量快路径（后端提供 setMany）：单事务原子写入；失败整体放弃并记日志（与单键 async 失败语义一致）
+      if (isAsync && typeof st.setMany === "function" && !readOnly && !isRaw) {
+        const entries: [string, string][] = [];
+        const fill: [string, StorageEntity][] = [];
+        for (let i = 0; i < n; i++) {
+          const ent = mkEntity(vs[i], ttl, expireAt, key[i]);
+          if (!ent) continue;
+          const k = fullKey(key[i]);
+          entries.push([k, dump(ent)]);
+          if (memoized) fill.push([k, ent]);
+        }
+        return st.setMany(entries).then(
+          () => {
+            for (const [k, e] of fill) memo.set(k, e);
+          },
+          (err) => console.error(`[storage] 批量写入失败，已放弃`, err),
+        );
+      }
+      const rs: Maybe<void>[] = [];
+      for (let i = 0; i < n; i++) rs.push(set(key[i], vs[i], arg));
+      return out(isAsync ? Promise.all(rs.map((p) => Promise.resolve(p))).then(() => undefined) : undefined);
+    }
+    const { ttl, memoized, expireAt } = parseArg(arg);
     const k = fullKey(key);
 
     const write = (): Maybe<void> => {
@@ -289,8 +333,8 @@ export function proxy<S extends SyncStore | AsyncStorage>(
           if (ok && memoized) memo.set(k, value);
         });
       }
-      const entity = buildEntity(value, ttl, expireAt, sliding, key);
-      if (entity == null) return undefined;
+      const entity = mkEntity(value, ttl, expireAt, key);
+      if (!entity) return;
       return chain(persist(k, dump(entity)), (ok) => {
         if (ok && memoized) memo.set(k, entity);
       });
@@ -302,41 +346,52 @@ export function proxy<S extends SyncStore | AsyncStorage>(
   }
 
   return {
-    get,
-    set,
+    get: get as Handlers<S>["get"],
+    set: set as Handlers<S>["set"],
     get namespace() {
-      return cfg.ns;
+      return ns;
     },
-    /** 切换命名空间（如按 username 隔离账号）：先清 memo 读缓存再改前缀，已持有的引用自动生效 */
-    setNamespace: (namespace?: string): void => {
+    /** 切换命名空间：先清 memo 读缓存再原地改前缀（fullKey 等闭包读 ns，已持有引用自动生效） */
+    setNamespace(n?: string) {
       memo.clear();
-      cfg.setNamespace(namespace);
+      ns = n ? n + ":" : "";
     },
     /** 第 index 个逻辑键（已解密、去命名空间前缀）；供调试/枚举 */
-    key: (index: number): Result<S, string | null> =>
-      out(
-        chain(st.key(index), (sk) => {
-          if (sk == null) return null;
-          const fk = decKey(sk);
-          return cfg.ns && fk.startsWith(cfg.ns) ? fk.slice(cfg.ns.length) : fk;
-        }),
-      ) as Result<S, string | null>,
-    remove: (key: string): Result<S, void> => out(del(fullKey(key))) as Result<S, void>,
-    clear: (): Result<S, void> => {
+    key: (index: number) => R(chain(st.key(index), (sk) => (sk == null ? null : logical(sk)))),
+    keys: () => R(chain(ownKeys(), (ks) => ks.map(logical))),
+    purge: () => R(purgeExpired()),
+    remove: (key: string | readonly string[]) => {
+      if (typeof key === "string") return R(del(fullKey(key)));
+      const fks = key.map((k) => fullKey(k));
+      if (isAsync && typeof st.removeMany === "function") {
+        for (const k of fks) memo.remove(k);
+        return R(st.removeMany(fks)); // 批量快路径：单事务
+      }
+      if (isAsync) return R(Promise.all(fks.map((k) => Promise.resolve(del(k)))).then(() => undefined));
+      for (const k of fks) void del(k);
+      return R(undefined);
+    },
+    /** 清空：有命名空间或 enckey 时仅清本实例管辖的键（不波及同源其他应用/命名空间），否则整库清空 */
+    clear: () => {
       memo.clear();
-      return out(st.clear()) as Result<S, void>;
+      if (!ns && !enckey) return R(st.clear());
+      return R(
+        chain(ownKeys(), (ks): Maybe<void> => {
+          if (isAsync && typeof st.removeMany === "function") return st.removeMany(ks); // 批量快路径：单事务
+          if (isAsync) return Promise.all(ks.map((k) => Promise.resolve(st.remove(k)))).then(() => undefined);
+          for (const k of ks) void st.remove(k); // 同步分支：st.remove 实际返回 void
+        }),
+      );
     },
     /** 释放资源：清空 memo 读缓存，并断开可关闭的后端（Idb）。不删除已落盘数据 */
-    destroy: (): Result<S, void> => {
+    destroy: () => {
       memo.clear();
       const close = (st as { destroy?: () => Maybe<void> }).destroy;
-      return out(close ? close.call(st) : undefined) as Result<S, void>;
+      return R(close ? close.call(st) : undefined);
     },
     get length(): Result<S, number> {
       // 注意：必须 st.length() 直接调用以保留 this；先取出再调用会丢失绑定（Idb 内部用到 this）
-      return (
-        isAsync ? (st as { length(): Promise<number> }).length() : (st.length as number)
-      ) as Result<S, number>;
+      return (isAsync ? (st as { length(): Promise<number> }).length() : (st.length as number)) as Result<S, number>;
     },
   };
 }

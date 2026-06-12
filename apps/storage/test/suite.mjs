@@ -1,16 +1,10 @@
 // 完整浏览器测试用例：覆盖 @codejoo/storage 全部公开 API。
 // 运行方式：项目根目录 `pnpm dev`，浏览器打开 dev 服务的 /test/ 路径。
 // （通过 vite 即时转译源码，无需先 build；也可改为从 ../dist/esm/index.mjs 导入测试产物。）
-import {
-  factory,
-  codec,
-  fast,
-  batchFast,
-  lazy,
-  debug,
-  Idb,
-  JSONX,
-} from "../src/index.ts";
+import { factory, codec, codecAtob, codecBase64, crossTab, fast, batchFast, lazy, debug, Idb, JSONX } from "../src/index.ts";
+import { supported } from "../src/helper.ts";
+import { Memory } from "../src/memory.ts";
+import { proxy } from "../src/proxy.ts";
 
 // ───────────────────────── 迷你测试框架 ─────────────────────────
 const rows = [];
@@ -58,8 +52,7 @@ function assert(cond, msg) {
   if (!cond) throw new Error(msg || "assertion failed");
 }
 function assertEq(actual, expected, msg) {
-  if (!eq(actual, expected))
-    throw new Error(`${msg ? msg + ": " : ""}expected ${fmt(expected)}, got ${fmt(actual)}`);
+  if (!eq(actual, expected)) throw new Error(`${msg ? msg + ": " : ""}expected ${fmt(expected)}, got ${fmt(actual)}`);
 }
 
 let currentGroup = "";
@@ -82,10 +75,7 @@ function render() {
   const tbl = document.getElementById("results");
   tbl.innerHTML = rows
     .map((r) =>
-      r.group
-        ? `<tr><td class="group" colspan="2">▸ ${r.group}</td></tr>`
-        : `<tr><td class="name ${r.ok ? "pass" : "fail"}">${r.ok ? "✓" : "✗"} ${r.name}</td>` +
-          `<td class="err">${r.ok ? "" : r.err}</td></tr>`,
+      r.group ? `<tr><td class="group" colspan="2">▸ ${r.group}</td></tr>` : `<tr><td class="name ${r.ok ? "pass" : "fail"}">${r.ok ? "✓" : "✗"} ${r.name}</td>` + `<td class="err">${r.ok ? "" : r.err}</td></tr>`,
     )
     .join("");
   const sum = document.getElementById("summary");
@@ -177,6 +167,33 @@ async function run() {
     await sleep(50); // 距上次访问 50ms < 80ms ttl，仍在
     assertEq(s.get("sl"), "v");
   });
+  await test("续期有阈值：剩余寿命 >90% 时跳过回写（消除高频读写放大）", () => {
+    const { ls: s } = factory({ sliding: true });
+    s.set("sl2", "v", 10000);
+    const before = localStorage.getItem("sl2");
+    assertEq(s.get("sl2"), "v"); // 刚写入，剩余 ~100% → 不应回写
+    assertEq(localStorage.getItem("sl2"), before, "底层串应未变（未触发续期回写）");
+  });
+  await test("剩余寿命 <90% 时正常续期回写", async () => {
+    const { ls: s } = factory({ sliding: true });
+    s.set("sl3", "v", 100);
+    const before = JSON.parse(localStorage.getItem("sl3")).expireAt;
+    await sleep(30); // 已消耗 ~30%
+    assertEq(s.get("sl3"), "v");
+    const after = JSON.parse(localStorage.getItem("sl3")).expireAt;
+    assert(after > before, "expireAt 应已续期");
+  });
+  await test("sliding 但无 ttl 时，过去的 expireAt 拒绝写入（不落盘死条目）", () => {
+    const { ls: s } = factory({ sliding: true });
+    s.set("dead", "v", { expireAt: Date.now() - 1000 });
+    assertEq(s.get("dead"), null);
+    assertEq(localStorage.getItem("dead"), null, "不应落盘已过期条目");
+  });
+  await test("sliding + ttl 时，过去的 expireAt 改为从现在按 ttl 续期", () => {
+    const { ls: s } = factory({ sliding: true });
+    s.set("renew", "v", { expireAt: Date.now() - 1000, ttl: 500 });
+    assertEq(s.get("renew"), "v");
+  });
 
   // ===== namespace =====
   group("namespace — 命名空间隔离");
@@ -199,6 +216,47 @@ async function run() {
     assert(localStorage.getItem("userB:token") != null, "写入应带新前缀");
     assertEq(store.ls.get("token"), "TB");
     assert(localStorage.getItem("userA:token") != null, "旧账号落盘数据仍保留（仅隔离不清除）");
+  });
+
+  // ===== clear 作用域 =====
+  group("clear — 命名空间/enckey 作用域");
+  await test("namespace 实例 clear 只清自己的键，不波及他人", () => {
+    localStorage.clear();
+    localStorage.setItem("foreign", "keep"); // 模拟同源其他应用的数据
+    const { ls: a } = factory({ namespace: "nsA" });
+    const { ls: b } = factory({ namespace: "nsB" });
+    a.set("k", 1);
+    b.set("k", 2);
+    a.clear();
+    assertEq(a.get("k"), null, "本命名空间应被清空");
+    assertEq(b.get("k"), 2, "其他命名空间不受影响");
+    assertEq(localStorage.getItem("foreign"), "keep", "外部数据不受影响");
+  });
+  await test("enckey 实例 clear 只清能解开的键", () => {
+    localStorage.clear();
+    localStorage.setItem("foreign", "keep");
+    const { ls: e } = factory({ codeable: true, codec: codec("pw"), enckey: true });
+    e.set("k", 1);
+    e.clear();
+    assertEq(e.get("k"), null);
+    assertEq(localStorage.getItem("foreign"), "keep", "解不开的外部键应保留");
+  });
+  await test("无命名空间且未加密键时 clear 整库清空（保持旧语义）", () => {
+    localStorage.setItem("foreign", "x");
+    ls.clear();
+    assertEq(localStorage.length, 0);
+  });
+  await test("db 命名空间 clear 只清本命名空间（异步）", async () => {
+    const shared = new Idb("codejoo-test-nsclear");
+    const { db: p } = factory({ db: shared, namespace: "p" });
+    const { db: q } = factory({ db: shared, namespace: "q" });
+    await shared.clear();
+    await p.set("k", 1);
+    await q.set("k", 2);
+    await p.clear();
+    assertEq(await p.get("k"), null);
+    assertEq(await q.get("k"), 2, "其他命名空间不受影响");
+    await shared.clear();
   });
 
   // ===== raw 裸存 =====
@@ -231,6 +289,64 @@ async function run() {
   await test("codec encode/decode 往返", () => {
     const cdc = codec("k");
     assertEq(cdc.decode(cdc.encode("abc中文🎉")), "abc中文🎉");
+  });
+  await test("codec 全 BMP 码元 + 增补平面字符往返，输出恒为合法 UTF-16", () => {
+    const cdc = codec("k");
+    let s = "🎉😀𝕏"; // 增补平面（合法代理对）
+    for (let c = 0; c <= 0xffff; c++) if (c < 0xd800 || c > 0xdfff) s += String.fromCharCode(c);
+    const enc = cdc.encode(s); // 全码元扫一遍必然覆盖代理区转义路径
+    for (let i = 0; i < enc.length; i++) {
+      const u = enc.charCodeAt(i);
+      if (u >= 0xd800 && u <= 0xdbff) {
+        const lo = enc.charCodeAt(++i);
+        assert(lo >= 0xdc00 && lo <= 0xdfff, "高代理后必须跟低代理");
+      } else {
+        assert(u < 0xdc00 || u > 0xdfff, "不应出现孤立低代理");
+      }
+    }
+    assert(cdc.decode(enc) === s, "应逐码元精确还原");
+  });
+  await test("codec 长字符串往返", () => {
+    const cdc = codec("k");
+    const s = JSON.stringify({ list: Array.from({ length: 3000 }, (_, i) => `项目-${i}-数据`) });
+    assert(s.length > 8192 && cdc.decode(cdc.encode(s)) === s);
+  });
+  await test("codecBase64 输出无标准 base64 特征（无 + / = 字符）", () => {
+    const cdc = codecBase64("k");
+    const enc = cdc.encode(JSON.stringify({ a: "明文数据", b: [1, 2, 3] }));
+    assert(!/[+/=]/.test(enc), "不应包含 + / = 等 base64 特征字符");
+  });
+  await test("codecBase64 无 toBase64 时回退 atob/btoa，格式与原生一致、可互解", () => {
+    const plain = "兼容性数据 compat-😀";
+    const native = codecBase64("k").encode(plain); // 原生路径产物
+    const o1 = Uint8Array.prototype.toBase64;
+    const o2 = Uint8Array.fromBase64;
+    try {
+      delete Uint8Array.prototype.toBase64; // 模拟旧运行时（检测发生在 codecBase64() 构造时）
+      delete Uint8Array.fromBase64;
+      const fb = codecBase64("k");
+      assertEq(fb.encode(plain), native, "回退实现输出应与原生逐字符一致");
+      assertEq(fb.decode(native), plain, "回退实现应能解原生写入的数据");
+      assertEq(fb.decode(codecBase64("wrong").encode(plain)), null, "错口令仍应返回 null");
+    } finally {
+      Uint8Array.prototype.toBase64 = o1;
+      Uint8Array.fromBase64 = o2;
+    }
+    assertEq(codecBase64("k").decode(native), plain, "恢复后原生路径不受影响");
+  });
+  await test("codecBase64 与 codecAtob 同格式互解；三变体错口令均为 null", () => {
+    const s = "互解测试 interop-😀";
+    const a = codecBase64("k").encode(s);
+    const b = codecAtob("k").encode(s);
+    assertEq(a, b, "两变体输出应逐字符一致");
+    assertEq(codecAtob("k").decode(a), s);
+    assertEq(codecBase64("k").decode(b), s);
+    for (const make of [codec, codecBase64, codecAtob]) {
+      const enc = make("pw").encode(s);
+      assertEq(make("pw").decode(enc), s);
+      assertEq(make("other").decode(enc), null);
+      assert(!enc.includes("互解测试"), "不应包含明文");
+    }
   });
   await test("codec 错误口令解码 → null", () => {
     const enc = codec("right").encode("data");
@@ -320,8 +436,8 @@ async function run() {
   // ===== enckey（键加密） =====
   group("enckey — 键加密");
   await test("enckey 加密存储键，get 仍可读", () => {
+    localStorage.clear(); // enckey 的 clear 只清能解开的键，故此处直接整库清空保证计数断言
     const { ls: e } = factory({ codeable: true, codec: codec("k1"), enckey: true });
-    e.clear();
     e.set("secretKey", "v");
     assertEq(localStorage.getItem("secretKey"), null, "明文键不应存在");
     assertEq(e.get("secretKey"), "v", "通过加密键仍能读回");
@@ -331,8 +447,8 @@ async function run() {
   // ===== debug（解密快照，独立导入，保留命名空间） =====
   group("debug — 解密快照");
   await test("debug 返回保留命名空间的明文快照（加密场景）", () => {
+    localStorage.clear(); // debug 枚举整个底层，先清掉之前用例的残留
     const { ls: e } = factory({ codeable: true, codec: codec("k2"), enckey: true, namespace: "ns" });
-    e.clear();
     e.set("a", 1);
     e.set("b", { x: 2 });
     assertEq(debug(e), { "ns:a": 1, "ns:b": { x: 2 } }); // 键保留 ns 前缀
@@ -435,6 +551,145 @@ async function run() {
     assertEq(store.ls.get("k"), "v");
     assertEq(await store.db.get("k"), "dv");
     await store.db.clear();
+  });
+
+  // ===== 批量（数组 keys） =====
+  group("批量 — 数组 keys");
+  await test("ls 批量 set/get/remove，默认值逐位生效", () => {
+    ls.clear();
+    ls.set(["ba", "bb", "bc"], [1, "x", { z: 1 }]);
+    assertEq(ls.get(["ba", "bb", "bc"]), [1, "x", { z: 1 }]);
+    assertEq(ls.get(["ba", "missing"], [0, "dflt"]), [1, "dflt"]);
+    ls.remove(["ba", "bb"]);
+    assertEq(ls.get(["ba", "bb", "bc"]), [null, null, { z: 1 }]);
+  });
+  await test("批量 set：values 短于 keys 时缺位键跳过（不写入 undefined）", () => {
+    ls.clear();
+    ls.set(["k1", "k2", "k3"], [1, 2]);
+    assertEq(ls.get(["k1", "k2", "k3"]), [1, 2, null]);
+    assertEq(localStorage.getItem("k3"), null, "缺位键不应落盘");
+  });
+  await test("db 批量走单事务快路径（getMany/setMany/removeMany）", async () => {
+    const { db: bdb } = factory({ db: new Idb("codejoo-test-batch"), namespace: "bt" });
+    await bdb.clear();
+    await bdb.set(["x", "y", "z"], [10, "s", { a: 1 }], 60000);
+    assertEq(await bdb.get(["x", "y", "z", "none"], [0, "", {}, "d"]), [10, "s", { a: 1 }, "d"]);
+    await bdb.remove(["x", "y"]);
+    assertEq(await bdb.get(["x", "z"]), [null, { a: 1 }]);
+    await bdb.clear();
+    assertEq(await bdb.length, 0);
+  });
+  await test("db 批量 + memoized：缓存命中与事务未命中混合", async () => {
+    const { db: mdb } = factory({ db: new Idb("codejoo-test-batch2"), namespace: "bm", memoized: true });
+    await mdb.clear();
+    await mdb.set("hit", "cached"); // memoized → 写入 memo
+    await mdb.set("miss", "fromdb");
+    assertEq(await mdb.get(["hit", "miss", "none"], [0, 0, "d"]), ["cached", "fromdb", "d"]);
+    await mdb.clear();
+  });
+
+  // ===== keys / purge =====
+  group("keys / purge — 枚举与主动清理");
+  await test("keys() 仅返回本命名空间逻辑键，不混入外部数据", () => {
+    localStorage.clear();
+    localStorage.setItem("foreign", "1");
+    const { ls: a } = factory({ namespace: "ka" });
+    a.set(["k1", "k2"], [1, 2]);
+    assertEq(a.keys().sort(), ["k1", "k2"]);
+  });
+  await test("keys() enckey 场景返回解密后的逻辑键", () => {
+    localStorage.clear();
+    const { ls: e } = factory({ codeable: true, codec: codec("pw"), enckey: true, namespace: "ke" });
+    e.set("sec", 1);
+    assertEq(e.keys(), ["sec"]);
+  });
+  await test("purge() 主动回收过期但从未被读取的条目", async () => {
+    localStorage.clear();
+    const { ls: p } = factory({ namespace: "pg" });
+    p.set("dead", 1, 30);
+    p.set("alive", 2, 60000);
+    await sleep(50);
+    p.purge();
+    assert(localStorage.getItem("pg:dead") == null, "过期条目应被物理清除");
+    assert(localStorage.getItem("pg:alive") != null, "未过期条目应保留");
+  });
+  await test("db purge()（getMany+removeMany 两事务快路径）", async () => {
+    const { db: pdb } = factory({ db: new Idb("codejoo-test-purge"), namespace: "pp" });
+    await pdb.clear();
+    await pdb.set("dead", 1, 30);
+    await pdb.set("alive", 2, 60000);
+    await sleep(50);
+    await pdb.purge();
+    assertEq(await pdb.length, 1, "过期条目应已物理删除");
+    assertEq(await pdb.get("alive"), 2);
+    await pdb.clear();
+  });
+
+  // ===== cloned =====
+  group("cloned — memo 副本隔离");
+  await test("cloned: true 时修改返回值不污染缓存", () => {
+    const { ls: c } = factory({ memoized: true, cloned: true, namespace: "cl" });
+    c.set("o", { n: 1 });
+    c.get("o").n = 999;
+    assertEq(c.get("o").n, 1, "缓存不应被外部修改污染");
+  });
+  await test("默认共享引用（零开销路径行为不变）", () => {
+    const { ls: c } = factory({ memoized: true, namespace: "cl2" });
+    c.set("o", { n: 1 });
+    c.get("o").n = 999;
+    assertEq(c.get("o").n, 999);
+  });
+
+  // ===== raw 混用守卫 =====
+  group("raw 混用 — 共享 memo 守卫");
+  await test("非 raw 实例不把 raw 字符串误读为 entity（不再返回 undefined）", () => {
+    localStorage.clear();
+    const { ls: r } = factory({ raw: true });
+    const { ls: s } = factory();
+    r.set("mix", "rawstr", true); // memoized → 写入共享 memo
+    assert(s.get("mix") !== undefined, "不应静默返回 undefined");
+    assertEq(s.get("mix"), null, "应走后端并按损坏清除语义回退");
+  });
+
+  // ===== crossTab =====
+  group("crossTab — 跨标签同步插件");
+  await test("原生 storage 可用时为空操作", () => {
+    const stop = crossTab(ls);
+    assert(!ls.__crossTab, "不应挂载（无包装标记）");
+    stop();
+  });
+  await test("纯内存模式下经 BroadcastChannel 同步（隔离双实例模拟双标签）", async () => {
+    const orig = supported.storage;
+    supported.storage = false; // 激活条件：纯内存模式
+    const t1 = proxy(new Memory(), new Memory());
+    const t2 = proxy(new Memory(), new Memory());
+    const s1 = crossTab(t1, "test-ct");
+    const s2 = crossTab(t2, "test-ct");
+    supported.storage = orig;
+    try {
+      t1.set("k", { v: 1 }, 60000);
+      await sleep(60); // BroadcastChannel 异步派发
+      assertEq(t2.get("k"), { v: 1 }, "另一实例应收到 set 回放");
+      t1.remove("k");
+      await sleep(60);
+      assertEq(t2.get("k"), null, "remove 也应同步");
+    } finally {
+      s1();
+      s2();
+    }
+  });
+  await test("重复挂载幂等；stop 后卸载", async () => {
+    const orig = supported.storage;
+    supported.storage = false;
+    const t1 = proxy(new Memory(), new Memory());
+    const stop1 = crossTab(t1, "test-ct2");
+    const stop2 = crossTab(t1, "test-ct2"); // 第二次应为空操作
+    supported.storage = orig;
+    assert(t1.__crossTab === true, "首次挂载应生效");
+    stop2(); // 空操作的 stop 不应影响首次挂载
+    assert(t1.__crossTab === true, "幂等：第二次挂载的 stop 无副作用");
+    stop1();
+    assert(t1.__crossTab === false, "stop 后应卸载");
   });
 
   // 收尾

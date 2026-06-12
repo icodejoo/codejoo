@@ -16,9 +16,12 @@ export class Memory implements SyncStore {
   }
 
   get(key: string): any {
-    key = String(key);
     // 按键是否存在判断，避免把存进去的空串/0/false/null 等假值误返回成 null
     return this.store.has(key) ? this.store.get(key) : null;
+  }
+
+  keys(): string[] {
+    return [...this.store.keys()];
   }
 
   key(index: number): string | null {
@@ -31,10 +34,10 @@ export class Memory implements SyncStore {
   }
 
   remove(key: string): void {
-    this.store.delete(String(key));
+    this.store.delete(key);
   }
 
   set(key: string, value: any): void {
-    this.store.set(String(key), value);
+    this.store.set(key, value);
   }
 }

@@ -28,17 +28,13 @@ export interface AsyncAccessor<V> {
 export function fast<V = unknown>(target: Handlers<SyncStore>, key: string): SyncAccessor<V>;
 export function fast<V = unknown>(target: Handlers<AsyncStorage>, key: string): AsyncAccessor<V>;
 export function fast(target: Handlers<SyncStore | AsyncStorage>, key: string) {
-  function get(defaultValue?: unknown): unknown {
-    return defaultValue === undefined
-      ? (target.get as (k: string) => unknown)(key)
-      : (target.get as (k: string, d: unknown) => unknown)(key, defaultValue);
-  }
-  function set(value: unknown, options?: number | boolean | StorageOptions): unknown {
-    return (
-      target.set as (k: string, v: unknown, o?: number | boolean | StorageOptions) => unknown
-    )(key, value, options);
-  }
-  return { get, set, remove: () => target.remove(key) };
+  // 内部按宽松签名转发即可（底层 get 对 undefined 默认值与不传同义），对外类型由重载约束
+  const t = target as { get(k: string, d?: unknown): unknown; set(k: string, v: unknown, o?: unknown): unknown };
+  return {
+    get: (defaultValue?: unknown) => t.get(key, defaultValue),
+    set: (value: unknown, options?: number | boolean | StorageOptions) => t.set(key, value, options),
+    remove: () => target.remove(key),
+  };
 }
 
 /**
@@ -55,11 +51,7 @@ export function lazy<V = unknown>(target: Handlers<SyncStore>, key: string): () 
 export function lazy<V = unknown>(target: Handlers<AsyncStorage>, key: string): () => AsyncAccessor<V>;
 export function lazy(target: Handlers<SyncStore | AsyncStorage>, key: string): () => unknown {
   let acc: unknown;
-  return () =>
-    (acc ??= (fast as (t: Handlers<SyncStore>, k: string) => unknown)(
-      target as Handlers<SyncStore>,
-      key,
-    ));
+  return () => (acc ??= fast(target as Handlers<SyncStore>, key));
 }
 
 /**
@@ -70,16 +62,10 @@ export function lazy(target: Handlers<SyncStore | AsyncStorage>, key: string): (
  * ```
  * 值类型 V 对所有 key 统一；省略时为 unknown。键名通过 const 泛型保留为字面量。
  */
-export function batchFast<V = unknown, const K extends readonly string[] = readonly string[]>(
-  target: Handlers<SyncStore>,
-  keys: K,
-): { [P in K[number]]: SyncAccessor<V> };
-export function batchFast<V = unknown, const K extends readonly string[] = readonly string[]>(
-  target: Handlers<AsyncStorage>,
-  keys: K,
-): { [P in K[number]]: AsyncAccessor<V> };
+export function batchFast<V = unknown, const K extends readonly string[] = readonly string[]>(target: Handlers<SyncStore>, keys: K): { [P in K[number]]: SyncAccessor<V> };
+export function batchFast<V = unknown, const K extends readonly string[] = readonly string[]>(target: Handlers<AsyncStorage>, keys: K): { [P in K[number]]: AsyncAccessor<V> };
 export function batchFast(target: Handlers<SyncStore | AsyncStorage>, keys: readonly string[]) {
   const acc: Record<string, unknown> = {};
-  for (const k of keys) acc[k] = (fast as (t: Handlers<SyncStore>, key: string) => unknown)(target as Handlers<SyncStore>, k);
+  for (const k of keys) acc[k] = fast(target as Handlers<SyncStore>, k);
   return acc;
 }

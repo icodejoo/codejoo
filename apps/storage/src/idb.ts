@@ -23,7 +23,19 @@ export class Idb {
     return new Promise((resolve, reject) => {
       const req = indexedDB.open(this.name, 1);
       req.onupgradeneeded = () => req.result.createObjectStore(STORE);
-      req.onsuccess = () => resolve(req.result);
+      req.onsuccess = () => {
+        const db = req.result;
+        // 连接被外部关闭（其他标签页版本升级、浏览器存储驱逐）时丢弃缓存句柄，
+        // 否则后续 transaction 永远抛 InvalidStateError；置空后下次操作自动重新 open
+        db.onversionchange = () => {
+          db.close();
+          this.db = undefined;
+        };
+        db.onclose = () => {
+          this.db = undefined;
+        };
+        resolve(db);
+      };
       req.onerror = () => reject(req.error);
     });
   }
@@ -42,65 +54,132 @@ export class Idb {
     }
   }
 
-  private request<T>(
-    db: IDBDatabase,
-    mode: IDBTransactionMode,
-    op: (s: IDBObjectStore) => IDBRequest<T>,
-  ): Promise<T> {
+  /** 统一入口：IDB 可用则在事务里执行 fn，否则走内存兜底 mem。fn 用 any 因 IDBRequest<T> 含 this 类型而不变型 */
+  private async op<T>(mode: IDBTransactionMode, fn: (s: IDBObjectStore) => IDBRequest<any>, mem: () => T): Promise<T> {
+    const db = await this.database();
+    if (!db) return mem();
     return new Promise<T>((resolve, reject) => {
-      const req = op(db.transaction(STORE, mode).objectStore(STORE));
-      req.onsuccess = () => resolve(req.result);
+      const req = fn(db.transaction(STORE, mode).objectStore(STORE));
+      req.onsuccess = () => resolve(req.result as T);
       req.onerror = () => reject(req.error);
     });
   }
 
   async get(key: string): Promise<string | null> {
-    key = String(key);
-    const db = await this.database();
-    if (!db) return this.mem!.get(key);
-    const v = await this.request<string | undefined>(db, "readonly", (s) => s.get(key));
+    const v = await this.op<string | undefined>(
+      "readonly",
+      (s) => s.get(key),
+      () => this.mem!.get(key),
+    );
     return v ?? null;
   }
 
   async set(key: string, value: string): Promise<void> {
-    key = String(key);
-    const db = await this.database();
-    if (!db) {
-      this.mem!.set(key, value);
-      return;
-    }
-    await this.request(db, "readwrite", (s) => s.put(value, key));
+    await this.op(
+      "readwrite",
+      (s) => s.put(value, key),
+      () => this.mem!.set(key, value),
+    );
   }
 
   async remove(key: string): Promise<void> {
-    key = String(key);
-    const db = await this.database();
-    if (!db) {
-      this.mem!.remove(key);
-      return;
-    }
-    await this.request(db, "readwrite", (s) => s.delete(key));
+    await this.op(
+      "readwrite",
+      (s) => s.delete(key),
+      () => this.mem!.remove(key),
+    );
   }
 
   async clear(): Promise<void> {
-    const db = await this.database();
-    if (!db) return this.mem!.clear();
-    await this.request(db, "readwrite", (s) => s.clear());
+    await this.op(
+      "readwrite",
+      (s) => s.clear(),
+      () => this.mem!.clear(),
+    );
   }
 
-  async length(): Promise<number> {
+  length(): Promise<number> {
+    return this.op(
+      "readonly",
+      (s) => s.count(),
+      () => this.mem!.length,
+    );
+  }
+
+  /** 批量读：单事务完成（proxy 批量 get / purge 据此走快路径，免 N 次事务开销） */
+  async getMany(keys: readonly string[]): Promise<(string | null)[]> {
     const db = await this.database();
-    if (!db) return this.mem!.length;
-    return this.request<number>(db, "readonly", (s) => s.count());
+    if (!db) return keys.map((k) => this.mem!.get(k) as string | null);
+    return new Promise((resolve, reject) => {
+      const s = db.transaction(STORE, "readonly").objectStore(STORE);
+      const out = Array.from<string | null>({ length: keys.length });
+      let left = keys.length;
+      if (!left) return resolve(out);
+      keys.forEach((k, i) => {
+        const r = s.get(k);
+        r.onsuccess = () => {
+          out[i] = (r.result as string | undefined) ?? null;
+          if (--left === 0) resolve(out);
+        };
+        r.onerror = () => reject(r.error);
+      });
+    });
+  }
+
+  /** 批量写：单事务原子完成 */
+  async setMany(entries: readonly (readonly [string, string])[]): Promise<void> {
+    const db = await this.database();
+    if (!db) {
+      for (const [k, v] of entries) this.mem!.set(k, v);
+      return;
+    }
+    return new Promise((resolve, reject) => {
+      const tx = db.transaction(STORE, "readwrite");
+      const s = tx.objectStore(STORE);
+      for (const [k, v] of entries) s.put(v, k);
+      tx.oncomplete = () => resolve();
+      tx.onerror = () => reject(tx.error);
+      tx.onabort = () => reject(tx.error);
+    });
+  }
+
+  /** 批量删：单事务原子完成 */
+  async removeMany(keys: readonly string[]): Promise<void> {
+    const db = await this.database();
+    if (!db) {
+      for (const k of keys) this.mem!.remove(k);
+      return;
+    }
+    return new Promise((resolve, reject) => {
+      const tx = db.transaction(STORE, "readwrite");
+      const s = tx.objectStore(STORE);
+      for (const k of keys) s.delete(k);
+      tx.oncomplete = () => resolve();
+      tx.onerror = () => reject(tx.error);
+      tx.onabort = () => reject(tx.error);
+    });
+  }
+
+  /** 一次事务返回全部键（proxy 的 clear/keys/purge 据此走快路径，免逐下标 O(n²)） */
+  async keys(): Promise<string[]> {
+    const ks = await this.op<IDBValidKey[] | string[]>(
+      "readonly",
+      (s) => s.getAllKeys(),
+      () => this.mem!.keys(),
+    );
+    return ks.map(String);
   }
 
   async key(index: number): Promise<string | null> {
-    const db = await this.database();
-    if (!db) return this.mem!.key(index);
     index = Math.trunc(index) || 0;
     if (index < 0) return null;
-    const keys = await this.request<IDBValidKey[]>(db, "readonly", (s) => s.getAllKeys());
-    return index < keys.length ? String(keys[index]) : null;
+    // 只取前 index+1 个键，避免为拿一个键拉回全量键集；内存兜底直接按下标取
+    const keys = await this.op<IDBValidKey[] | string | null>(
+      "readonly",
+      (s) => s.getAllKeys(null, index + 1),
+      () => this.mem!.key(index),
+    );
+    return Array.isArray(keys) ? (index < keys.length ? String(keys[index]) : null) : keys;
   }
 
   /**
