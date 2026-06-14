@@ -1,0 +1,100 @@
+/* 圆形数码倒计时（createRingRender）样式。
+   颜色 / 线宽优先用 CSS 变量控制；createRingRender 的 colors/widths 选项会以内联变量覆盖（优先级更高）。
+   逐帧变化的「档位色」由 JS 切换 .rg-zone-* class（仍解析到下面的变量），回调返回值则内联 style.color 兜底。 */
+
+.rg-root {
+  display: block;
+  width: 100%;
+  height: 100%;
+  /* 背景由调用方决定（之前的暗色圆底已移除，避免每实例一次渐变填充的合成开销） */
+
+  --rg-normal: #ff6a5a;
+  --rg-green: #37d67a;
+  --rg-yellow: #ffcf3a;
+  --rg-red: #ff3b30;
+  --rg-off: #3a2730;
+  --rg-track: rgba(150, 140, 148, 0.22);
+
+  --rg-w-arcA: 2.4;
+  --rg-w-arcB: 1.3;
+  --rg-w-inner: 2.8;
+
+  /* 发光强度（drop-shadow 模糊半径）。单层滤镜：每个点亮元素 1 个 drop-shadow 而非 2 个，
+     GPU 光栅化成本减半；调大更亮、调小更省，设 glow:false 则整圈无滤镜（多实例最省）。 */
+  --rg-glow: 1.8px;
+}
+
+/* 档位 → 颜色（class 由 JS 每帧切换；变量可被 root 内联覆盖） */
+.rg-zone-normal {
+  color: var(--rg-normal);
+}
+.rg-zone-green {
+  color: var(--rg-green);
+}
+.rg-zone-yellow {
+  color: var(--rg-yellow);
+}
+.rg-zone-red {
+  color: var(--rg-red);
+}
+.rg-zone-off {
+  color: var(--rg-off);
+}
+
+/* 外圈刻度：fill 跟随 color（来自档位 class） */
+.rg-tick {
+  fill: currentColor;
+  transition: color 0.25s ease;
+}
+
+/* 七段：未点亮段保留低透明残影（88:88），点亮段全显。颜色来自数码区容器的档位 class */
+.rg-seg {
+  fill: currentColor;
+  opacity: 0.1;
+  transition:
+    opacity 0.12s ease,
+    color 0.25s ease;
+}
+.rg-seg.rg-on {
+  opacity: 1;
+}
+
+/* 冒号 / 分隔符 / 文字模式数码管 */
+.rg-sep,
+.rg-dtext {
+  fill: currentColor;
+  font-family: ui-monospace, "Cascadia Mono", Consolas, monospace;
+  font-weight: 700;
+}
+
+/* 最内圈：灰底 + 彩色排空段 */
+.rg-track {
+  fill: none;
+  stroke: var(--rg-track);
+  stroke-width: var(--rg-w-inner);
+}
+.rg-fill {
+  fill: none;
+  stroke: currentColor;
+  stroke-width: var(--rg-w-inner);
+}
+
+/* 外2圈 / 外3圈 */
+.rg-arc {
+  fill: none;
+  stroke: currentColor;
+}
+.rg-arcA {
+  stroke-width: var(--rg-w-arcA);
+}
+.rg-arcB {
+  stroke-width: var(--rg-w-arcB);
+}
+
+/* 发光：单层 drop-shadow（光色取 color）。刻度/七段仅点亮时发光（门控）；彩色弧 + 内圈高亮常亮发光。 */
+.rg-glow.rg-on,
+.rg-sep.rg-glow,
+.rg-dtext.rg-glow,
+.rg-aglow {
+  filter: drop-shadow(0 0 var(--rg-glow));
+}

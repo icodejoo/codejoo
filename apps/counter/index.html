@@ -3,76 +3,1021 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>@codejoo/ticker — Demo</title>
+    <title>@codejoo/counter — src 全量 API 手动测试台</title>
+    <link rel="stylesheet" href="./src/plugins/card.css" />
+    <link rel="stylesheet" href="./src/plugins/ring.css" />
     <style>
+      :root {
+        color-scheme: light dark;
+        --cd-duration: 400ms;
+      }
+      * {
+        box-sizing: border-box;
+      }
       body {
-        font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-        margin: 24px;
-        color: #222;
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+        margin: 0;
+        padding: 20px 20px 80px;
+        color: #1d1d1f;
+        background: #f5f5f7;
+        line-height: 1.5;
       }
-      h1 { font-size: 20px; }
-      h2 { font-size: 16px; margin-top: 28px; }
-      .row { display: flex; gap: 12px; flex-wrap: wrap; align-items: center; margin: 8px 0; }
-      .stage {
-        position: relative;
-        height: 120px;
-        border: 1px solid #ddd;
-        border-radius: 6px;
-        background: #fafafa;
-        overflow: hidden;
+      h1 {
+        font-size: 20px;
+        margin: 0 0 4px;
       }
-      #box {
-        position: absolute; left: 0; top: 8px;
-        width: 60px; height: 60px;
-        background: #06f; border-radius: 8px;
+      h2 {
+        font-size: 15px;
+        margin: 0 0 10px;
+        color: #06c;
+        display: flex;
+        align-items: center;
+        gap: 8px;
+      }
+      h2 .tag {
+        font-size: 11px;
+        color: #999;
+        font-weight: 400;
+        font-family: ui-monospace, monospace;
+      }
+      .sub {
+        color: #888;
+        font-size: 12px;
+        margin: 0 0 16px;
+      }
+      .grid {
+        display: grid;
+        grid-template-columns: 1fr 380px;
+        gap: 16px;
+        align-items: start;
+      }
+      section {
+        background: #fff;
+        border: 1px solid #e2e2e6;
+        border-radius: 10px;
+        padding: 14px 16px;
+        margin-bottom: 14px;
+      }
+      .row {
+        display: flex;
+        gap: 8px;
+        flex-wrap: wrap;
+        align-items: center;
+        margin: 7px 0;
+      }
+      .lbl {
+        min-width: 86px;
+        color: #555;
+        font-size: 12px;
       }
       button {
-        padding: 6px 12px; border: 1px solid #ccc; background: #fff;
-        border-radius: 4px; cursor: pointer; font-size: 13px;
+        padding: 6px 11px;
+        border: 1px solid #c7c7cc;
+        background: #fff;
+        border-radius: 6px;
+        cursor: pointer;
+        font-size: 12.5px;
+        transition: 0.1s;
       }
-      button:hover { background: #f0f0f0; }
-      .num {
-        display: inline-block; min-width: 160px; padding: 4px 10px;
-        background: #111; color: #0f6; font-family: ui-monospace, monospace;
+      button:hover {
+        background: #06c;
+        color: #fff;
+        border-color: #06c;
+      }
+      button.go {
+        border-color: #34c759;
+        color: #248a3d;
+        font-weight: 600;
+      }
+      button.danger {
+        border-color: #ff3b30;
+        color: #d70015;
+      }
+      input,
+      select {
+        padding: 5px 8px;
+        border: 1px solid #c7c7cc;
+        border-radius: 6px;
+        font-size: 12.5px;
+        background: #fff;
+        color: inherit;
+      }
+      input[type="number"] {
+        width: 92px;
+      }
+      input[type="text"] {
+        width: 150px;
+      }
+      code {
+        background: #f0f0f3;
+        padding: 1px 5px;
         border-radius: 4px;
+        font-size: 12px;
+      }
+      .num {
+        display: inline-block;
+        min-width: 130px;
+        padding: 4px 10px;
+        background: #111;
+        color: #30d158;
+        font-family: ui-monospace, monospace;
+        border-radius: 5px;
+        font-size: 14px;
+        text-align: center;
+      }
+      .panel {
+        display: inline-flex;
+        flex-direction: column;
+        gap: 6px;
+        padding: 10px 14px;
+        background: #fafafa;
+        border: 1px solid #e3e5e8;
+        border-radius: 8px;
+        min-width: 130px;
+      }
+      .panel b {
+        font-size: 11px;
+        color: #888;
+        font-weight: 500;
+      }
+      .timer {
+        font-size: 30px;
+        font-weight: 700;
+        font-family: ui-monospace, Consolas, monospace;
+        line-height: 1.25;
+        min-height: 38px;
+      }
+      .timer .cd-root {
+        --cd-bg: #1b1e24;
+        --cd-color: #fff;
+        gap: 3px;
+      }
+      .scroll {
+        height: 150px;
+        overflow: auto;
+        border: 1px dashed #c7c7cc;
+        border-radius: 8px;
+        padding: 8px;
+        margin-top: 8px;
+        background: #fafafa;
+      }
+      .spacer {
+        height: 170px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        color: #aaa;
+        font-size: 12px;
+      }
+      #log {
+        background: #0d0d12;
+        color: #c7f59b;
+        font-family: ui-monospace, monospace;
+        font-size: 12px;
+        border-radius: 8px;
+        padding: 10px;
+        height: 78vh;
+        overflow-y: auto;
+        white-space: pre-wrap;
+        word-break: break-all;
+      }
+      #log .t {
+        color: #5a6b7a;
+      }
+      #log .ev {
+        color: #ffd60a;
+      }
+      #log .ret {
+        color: #6fd2ff;
+      }
+      #log .err {
+        color: #ff6b6b;
+      }
+      .pill {
+        padding: 2px 8px;
+        border-radius: 99px;
+        background: #eef;
+        font-size: 11px;
+        color: #339;
+      }
+      .hr {
+        height: 1px;
+        background: #eee;
+        margin: 6px 0;
       }
     </style>
   </head>
   <body>
-    <h1>@codejoo/ticker — Live Demo</h1>
+    <h1>@codejoo/counter — <code>src</code> 全量 API 手动测试台</h1>
+    <p class="sub">
+      直接从 <code>./src/*</code> 源码导入（vite 转译）。每个 API 都有按钮手动触发，配合实时渲染与右侧日志肉眼验证。 用 <code>npx vite</code> 打开根路径 <code>/</code>。<span class="pill"
+        >驱动: <b id="drv">stopped</b></span
+      >
+    </p>
 
-    <h2>1. countUp / countDown</h2>
-    <div class="row">
-      <span>countUp:</span><span class="num" id="cu">₱0.00</span>
-      <button id="cuStart">start</button>
-      <button id="cuUpdate">update→999999</button>
-    </div>
-    <div class="row">
-      <span>countDown:</span><span class="num" id="cd">00:01:00</span>
-      <button id="cdStart">start (60s)</button>
+    <div class="grid">
+      <div>
+        <!-- ============ 0. core ============ -->
+        <section>
+          <h2>0. core <span class="tag">start / stop / use / GT</span></h2>
+          <div class="row">
+            <button class="go" id="cStart">GT.start()</button>
+            <button class="danger" id="cStop">GT.stop()</button>
+            <button id="cUse">GT.use(自定义插件·跑 5 帧打印)</button>
+            <button id="cShow">查看 GT.up / GT.down / 已挂载</button>
+            <button class="danger" id="cDestroy">GT.destroy()</button>
+          </div>
+          <p class="sub" style="margin: 4px 0 0">注：countup/countdown 已 <code>use(register())</code> 注册；任务加入时核心自动 start，全空闲自动 stop。</p>
+        </section>
+
+        <!-- ============ 1. countup ============ -->
+        <section>
+          <h2>1. count-up <span class="tag">countup / add / remove / clear / group / defaults</span></h2>
+          <div class="row">
+            <span class="lbl">渲染目标</span>
+            <span class="num" id="cuT">0</span>
+            <span class="num" id="cuM" title="el-less 重载的可视镜像（独立元素，避免与上面互相干扰）">0</span>
+            <div class="panel">
+              <b>render 目标</b>
+              <div class="timer" id="cuR"></div>
+            </div>
+          </div>
+          <p class="sub" style="margin: 0 0 4px">左格 cuT = 带 el 的调用；中格 cuM = el-less 重载的可视镜像（按所选 label 分组，clear(label) 可停）。</p>
+          <div class="row">
+            <span class="lbl">参数</span>
+            from <input type="number" id="cuFrom" value="0" /> to <input type="number" id="cuTo" value="123456" /> duration <input type="number" id="cuDur" value="2500" /> fps
+            <input type="number" id="cuFps" value="60" />
+          </div>
+          <div class="row">
+            <span class="lbl"></span>
+            label <input type="text" id="cuLabel" value="" placeholder="(default)" />
+            <label><input type="checkbox" id="cuLazy" /> lazy</label>
+            easing
+            <select id="cuEase">
+              <option>linear</option>
+              <option>easeInQuad</option>
+              <option>easeOutQuad</option>
+              <option>easeInOutQuad</option>
+              <option>easeOutCubic</option>
+              <option>easeInOutCubic</option>
+              <option selected>easeCountup</option>
+              <option value="asym">asymmetricS(0.3)</option>
+            </select>
+            fmt
+            <select id="cuFmt">
+              <option value="plain">千分位</option>
+              <option value="px">₱+千分位</option>
+              <option value="fix2">.toFixed(2)</option>
+            </select>
+          </div>
+          <div class="row">
+            <span class="lbl">render</span>
+            <select id="cuRender">
+              <option value="text">文本(默认 countupRender)</option>
+              <option value="odo-min">odometer minimal</option>
+              <option value="odo-full">odometer full</option>
+            </select>
+            <span class="tag">文本→渲染目标左格；odometer→右格</span>
+          </div>
+          <div class="row">
+            <span class="lbl">调用</span>
+            <button class="go" id="cu_obj">countup({...full})</button>
+            <button id="cu_to">countup(to)</button>
+            <button id="cu_to_label">countup(to, label)</button>
+            <button id="cu_to_opt">countup(to, {duration})</button>
+            <button id="cu_from_to_label">countup(from, to, label)</button>
+            <button id="cu_from_to_opt">countup(from, to, {duration})</button>
+          </div>
+          <div class="row">
+            <span class="lbl">同元素</span>
+            <button id="cu_retarget">在渲染目标上再 countup(改目标)→重定</button>
+          </div>
+          <div class="row">
+            <span class="lbl">管理</span>
+            <button id="cu_remove">remove(最近 id)</button>
+            <button id="cu_pause">pause(最近)</button>
+            <button id="cu_resume">resume(最近)</button>
+            <button id="cu_clear_label">clear(label)</button>
+            <button class="danger" id="cu_clear">clear()</button>
+            <button id="cu_group">group(label,{duration})</button>
+            <button id="cu_defaults">defaults（打印）</button>
+          </div>
+        </section>
+
+        <!-- ============ 2. countdown ============ -->
+        <section>
+          <h2>2. count-down <span class="tag">countdown / add / remove / clear / group / defaults</span></h2>
+          <div class="row">
+            <span class="lbl">渲染目标</span>
+            <span class="num" id="cdT">--:--:--</span>
+            <div class="panel">
+              <b>卡片 render</b>
+              <div class="timer" id="cdR"></div>
+            </div>
+          </div>
+          <div class="row">
+            <span class="lbl">截止</span>
+            <select id="cdKind">
+              <option value="ms">时长 ms</option>
+              <option value="unit">时长+单位</option>
+              <option value="date">Date 对象</option>
+              <option value="str">日期字符串</option>
+            </select>
+            值 <input type="text" id="cdVal" value="60000" />
+            单位
+            <select id="cdUnit">
+              <option>second</option>
+              <option>minute</option>
+              <option>hour</option>
+              <option>day</option>
+              <option>week</option>
+              <option>month</option>
+              <option>year</option>
+              <option>quarter</option>
+              <option>ms</option>
+            </select>
+          </div>
+          <div class="row">
+            <span class="lbl"></span>
+            fmt <input type="text" id="cdFmt" value="HH:mm:ss" />
+            <label><input type="checkbox" id="cdShowDays" checked /> showDays</label>
+            <label><input type="checkbox" id="cdShowMs" /> showMilliseconds</label>
+            timeOffset <input type="number" id="cdOff" value="0" />
+          </div>
+          <div class="row">
+            <span class="lbl"></span>
+            label <input type="text" id="cdLabel" value="" placeholder="(default)" />
+            <label><input type="checkbox" id="cdLazy" /> lazy</label>
+            render
+            <select id="cdRender">
+              <option value="text">文本(默认)</option>
+              <option value="flip">卡片 flip</option>
+              <option value="slide">卡片 slide</option>
+              <option value="calendar">卡片 calendar</option>
+              <option value="func">自定义函数 render</option>
+            </select>
+          </div>
+          <div class="row">
+            <span class="lbl">钩子</span>
+            <label><input type="checkbox" id="cdHooks" checked /> 打印 onStart/onUpdate/onDone/onDestroy</label>
+          </div>
+          <div class="row">
+            <span class="lbl">调用</span>
+            <button class="go" id="cd_go">countdown(值, 渲染目标, {options})</button>
+            <button id="cd_label">countdown(值, 目标, label)</button>
+          </div>
+          <div class="row">
+            <span class="lbl">管理</span>
+            <button id="cd_remove">remove(最近 id)</button>
+            <button id="cd_pause">pause(最近)</button>
+            <button id="cd_resume">resume(最近)</button>
+            <button id="cd_clear_label">clear(label)</button>
+            <button class="danger" id="cd_clear">clear()</button>
+            <button id="cd_group">group(label,{fmt})</button>
+            <button id="cd_defaults">defaults（打印）</button>
+          </div>
+        </section>
+
+        <!-- ============ 3. lazy ============ -->
+        <section>
+          <h2>3. lazy <span class="tag">IntersectionObserver · 进入视口才开始</span></h2>
+          <div class="row">
+            <button class="go" id="lazyMake">创建 lazy countup + countdown</button>
+            <button class="danger" id="lazyClear">clear("lazy")</button>
+            <label><input type="checkbox" id="lazyCustomOb" /> 用自定义 observer（rootMargin:200px，提前触发）</label>
+          </div>
+          <p class="sub" style="margin: 2px 0">创建后它们不动；<b>向下滚动整个页面</b>，下面的计数器进入视口才开始（countdown 从可见那刻起算 30s）。</p>
+          <div style="height: 78vh; margin-top: 8px; border: 1px dashed #ccc; border-radius: 8px; display: flex; align-items: center; justify-content: center; color: #aaa">↓↓↓ 向下滚动页面 ↓↓↓</div>
+          <div class="row"><span class="lbl">lazy countup</span><span class="num" id="lazyCu">—</span></div>
+          <div class="row"><span class="lbl">lazy countdown</span><span class="num" id="lazyCd">—</span></div>
+        </section>
+
+        <!-- ============ 4. count-down/helper ============ -->
+        <section>
+          <h2>4. count-down/helper <span class="tag">解析 / 格式化 / resolve* / isElement</span></h2>
+          <div class="row">
+            <span class="lbl">输入</span>
+            模板 <input type="text" id="hTpl" value="DD天 HH:mm:ss.sss" /> ms <input type="number" id="hMs" value="90061500" />
+            <label><input type="checkbox" id="hDays" checked /> showDays</label>
+            <label><input type="checkbox" id="hMsFlag" checked /> showMs</label>
+          </div>
+          <div class="row">
+            <button id="h_fmt">buildHighPerfFormatter(模板)(ms)</button>
+            <button id="h_parser">createCountdownParser(showDays)(ms)</button>
+            <button id="h_buildfmt">buildCountdownFormatter(parser, fn)(ms)</button>
+            <button id="h_render">countdownRender(目标, ms, fmt)</button>
+          </div>
+          <div class="row">
+            <span class="lbl">日期解析</span>
+            值 <input type="text" id="hDate" value="2026-12-31 23:59:59" />
+            单位
+            <select id="hUnit">
+              <option>ms</option>
+              <option selected>second</option>
+              <option>minute</option>
+              <option>hour</option>
+              <option>day</option>
+              <option>week</option>
+              <option>month</option>
+              <option>year</option>
+              <option>quarter</option>
+            </select>
+            offset <input type="number" id="hOff" value="0" />
+            <button id="h_dateparser">buildDateParser(单位)(值, offset)</button>
+          </div>
+          <div class="row">
+            <button id="h_resolveFmt">resolveFormatter</button>
+            <button id="h_resolveParser">resolveParser</button>
+            <button id="h_resolveDate">resolveDateParser</button>
+            <button id="h_resolveConfig">resolveConfig(defaults,{},{})</button>
+            <button id="h_isEl">isElement("#cuT" / 元素 / 123)</button>
+          </div>
+          <div class="row">
+            <span class="lbl">▶ 实时</span>
+            <button class="go" id="h_runcd">用上面 fmt + parser 跑 10s 倒计时</button>
+            <span class="num" id="hCd">--</span>
+          </div>
+        </section>
+
+        <!-- ============ 5. count-up/helper + helper.ts ============ -->
+        <section>
+          <h2>5. count-up/helper + helper.ts <span class="tag">ease / easeAsymmetricS / buildCountupFormatter / $ / lazyStart</span></h2>
+          <div class="row">
+            <span class="lbl">缓动取值</span>
+            t <input type="number" id="eT" value="0.5" step="0.1" />
+            <button id="e_ease">打印 ease.*(t)</button>
+            skew <input type="number" id="eSkew" value="0.3" step="0.1" />
+            <button id="e_asym">easeAsymmetricS(skew)(t)</button>
+          </div>
+          <div class="row">
+            <span class="lbl">数值格式化</span>
+            value <input type="number" id="bcfVal" value="1234567" /> prefix <input type="text" id="bcfPre" value="₱" style="width: 60px" /> suffix <input type="text" id="bcfSuf" value=" 元" style="width: 60px" />
+            <button id="b_fmt">buildCountupFormatter(NF, {prefix,suffix})(value)</button>
+          </div>
+          <div class="row">
+            <span class="lbl">helper.ts</span>
+            选择器 <input type="text" id="dollarSel" value="#cuT" />
+            <button id="h_dollar">$(选择器) / $(元素)</button>
+            <button id="h_lazystart">lazyStart(临时可见元素, cb) → 观察 + cancel</button>
+          </div>
+          <div class="row">
+            <span class="lbl">▶ 实时</span>
+            <button class="go" id="e_runcu">用 easeAsymmetricS(skew) 跑 countup(0→9999)</button>
+            <span class="num" id="eCu">0</span>
+          </div>
+        </section>
+
+        <!-- ============ 6. 渲染插件 ============ -->
+        <section>
+          <h2>6. 渲染插件 <span class="tag">createCardRender / createOdometerRender / createRingRender</span></h2>
+
+          <div class="row">
+            <span class="lbl">card</span>
+            effect
+            <select id="plCardEffect">
+              <option>flip</option>
+              <option>slide</option>
+              <option>calendar</option>
+            </select>
+            axis
+            <select id="plCardAxis">
+              <option>x</option>
+              <option>y</option>
+            </select>
+            dir
+            <select id="plCardDir">
+              <option>down</option>
+              <option>up</option>
+            </select>
+            <button class="go" id="plCardRun">countdown 卡片(1h)</button>
+            <div class="panel" style="margin-left: 8px">
+              <b>card</b>
+              <div class="timer" id="plCard"></div>
+            </div>
+          </div>
+
+          <div class="hr"></div>
+          <div class="row">
+            <span class="lbl">odometer</span>
+            strip
+            <select id="plOdoStrip">
+              <option>minimal</option>
+              <option>full</option>
+            </select>
+            rollWindow <input type="number" id="plOdoRoll" value="0.2" step="0.1" style="width: 62px" />
+            <label><input type="checkbox" id="plOdoLZ" /> leadingZeros</label>
+            from <input type="number" id="plOdoFrom" value="0" /> to <input type="number" id="plOdoTo" value="1234567" />
+            <button class="go" id="plOdoRun">countup 里程表</button>
+            <div class="panel" style="margin-left: 8px">
+              <b>odometer</b>
+              <div class="timer" id="plOdo"></div>
+            </div>
+          </div>
+
+          <div class="hr"></div>
+          <div class="row">
+            <span class="lbl">ring</span>
+            时长 <input type="number" id="plRingDur" value="65" style="width: 56px" />s digit
+            <select id="plRingDigit">
+              <option>segment</option>
+              <option>text</option>
+            </select>
+            redAt <input type="number" id="plRingRed" value="3" style="width: 46px" /> yellowAt <input type="number" id="plRingYellow" value="10" style="width: 46px" />
+          </div>
+          <div class="row">
+            <span class="lbl"></span>
+            <label><input type="checkbox" id="plRingGlow" /> glow</label>
+            <label><input type="checkbox" id="plRingCW" checked /> clockwise</label>
+            <label><input type="checkbox" id="plRingTicks" checked /> ticks</label>
+            <label><input type="checkbox" id="plRingArcA" checked /> arcA</label>
+            <label><input type="checkbox" id="plRingArcB" checked /> arcB</label>
+            <label><input type="checkbox" id="plRingInner" checked /> inner</label>
+            <label><input type="checkbox" id="plRingRainbow" /> 彩虹分钟</label>
+            <button class="go" id="plRingRun">▶ 跑 ring</button>
+            <button class="danger" id="plRingStop">停</button>
+          </div>
+          <div class="row">
+            <span class="lbl"></span>
+            <div id="plRing" style="width: 170px; height: 170px"></div>
+          </div>
+          <p class="sub" style="margin: 2px 0">ring 是填满宿主的圆形 SVG（此处 170×170 方形容器）。各部件可 false 隐藏；详尽玩法见 <a href="/ring-demo.html">/ring-demo.html</a>。</p>
+        </section>
+      </div>
+
+      <!-- ============ LOG ============ -->
+      <section style="position: sticky; top: 16px">
+        <h2>日志 <button id="logClear" style="margin-left: auto">clear</button></h2>
+        <div id="log"></div>
+      </section>
     </div>
 
-    <h2>2. tween / animate</h2>
-    <div class="stage">
-      <div id="box"></div>
-    </div>
-    <div class="row">
-      <button id="tweenTo">to(left:300)</button>
-      <button id="tweenFromTo">fromTo(x:0→300)</button>
-      <button id="tweenYoyo">yoyo + repeat:3</button>
-      <button id="animate">animate +=100</button>
-      <button id="reset">reset</button>
-    </div>
+    <script type="module">
+      import { start, stop, use, GT } from "./src/core/index.ts";
+      import countup, { add as cuAdd, remove as cuRemove, clear as cuClear, group as cuGroup, register as cuRegister, defaults as cuDefaults, countupRender } from "./src/count-up/count-up.ts";
+      import { ease, easeAsymmetricS, buildCountupFormatter } from "./src/count-up/helper.ts";
+      import countdown, { remove as cdRemove, clear as cdClear, group as cdGroup, register as cdRegister, defaults as cdDefaults } from "./src/count-down/count-down.ts";
+      import {
+        isElement,
+        buildHighPerfFormatter,
+        createCountdownParser,
+        buildCountdownFormatter,
+        countdownRender,
+        buildDateParser,
+        resolveFormatter,
+        resolveParser,
+        resolveDateParser,
+        resolveConfig,
+      } from "./src/count-down/helper.ts";
+      import { createCardRender } from "./src/plugins/card.ts";
+      import { createOdometerRender } from "./src/plugins/odometer.ts";
+      import { createRingRender } from "./src/plugins/ring.ts";
+      import { $, lazyStart, createLazyObserver } from "./src/helper.ts";
 
-    <h2>3. setTimeout / setInterval / pause / resume</h2>
-    <div class="row">
-      <button id="setInt">setInterval(1s)</button>
-      <button id="pause">pause</button>
-      <button id="resume">resume</button>
-      <button id="stop">stop</button>
-      <span id="intLog" class="num">0</span>
-    </div>
+      Object.assign(window, { GT, countup, countdown, createCardRender, createOdometerRender, ease });
 
-    <script type="module" src="/src/demo.ts"></script>
+      use(cuRegister());
+      use(cdRegister());
+
+      // ---------- 日志 ----------
+      const logEl = document.getElementById("log");
+      const pad = (n) => String(n).padStart(2, "0");
+      function log(msg, cls = "") {
+        const d = new Date();
+        const t = `${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}.${String(d.getMilliseconds()).padStart(3, "0")}`;
+        const line = document.createElement("div");
+        line.innerHTML = `<span class="t">${t}</span> <span class="${cls}">${msg}</span>`;
+        logEl.appendChild(line);
+        logEl.scrollTop = logEl.scrollHeight;
+      }
+      const ret = (label, v) => log(`${label} → <span class="ret">${typeof v === "object" ? JSON.stringify(v) : v}</span>`);
+      document.getElementById("logClear").onclick = () => (logEl.innerHTML = "");
+      const drv = document.getElementById("drv");
+      const setDrv = (s) => (drv.textContent = s);
+      const num = (id) => Number(document.getElementById(id).value);
+      const str = (id) => document.getElementById(id).value;
+      const chk = (id) => document.getElementById(id).checked;
+      const jfn = (k, v) => (typeof v === "function" ? "[fn]" : v);
+
+      // ====================================================================
+      //  0. core
+      // ====================================================================
+      document.getElementById("cStart").onclick = () => {
+        start();
+        setDrv("running");
+        log("GT.start()", "ev");
+      };
+      document.getElementById("cStop").onclick = () => {
+        stop();
+        setDrv("stopped");
+        log("GT.stop()", "ev");
+      };
+      document.getElementById("cUse").onclick = () => {
+        let n = 0;
+        const name = "probe-" + Date.now();
+        use({
+          name,
+          install: (now, dt) => {
+            log(`[${name}] frame#${n} now=${now.toFixed(1)} dt=${dt.toFixed(1)}`, "ev");
+            return ++n < 5;
+          },
+          api: { probe: true },
+        });
+        start();
+        setDrv("running");
+        log(`GT.use({name:"${name}"})：跑 5 帧后该插件返回 false`, "ev");
+      };
+      document.getElementById("cDestroy").onclick = () => {
+        GT.destroy();
+        setDrv("stopped");
+        log("GT.destroy() → 已清空任务、卸载 up/down（再用 countup/countdown 自动重建）", "err");
+      };
+      document.getElementById("cShow").onclick = () => {
+        ret("GT.up === countup", GT.up === countup);
+        ret("GT.down === countdown", GT.down === countdown);
+        ret(`GT.${"probe" in GT ? "probe(已挂载示例 api)" : ""}`, GT.probe ? JSON.stringify(GT.probe) : "(无)");
+      };
+
+      // ====================================================================
+      //  1. count-up
+      // ====================================================================
+      const cuT = document.getElementById("cuT");
+      const cuR = document.getElementById("cuR");
+      const odoMin = createOdometerRender({ strip: "minimal" });
+      const odoFull = createOdometerRender({ strip: "full" });
+      let lastCuId = -1;
+
+      function easingOf(sel) {
+        return sel === "asym" ? easeAsymmetricS(0.3) : ease[sel];
+      }
+      function fmtOf(sel) {
+        if (sel === "px") return buildCountupFormatter(new Intl.NumberFormat("en-US"), { prefix: "₱" });
+        if (sel === "fix2") return (v) => v.toFixed(2);
+        return buildCountupFormatter(new Intl.NumberFormat("en-US"));
+      }
+      function cuBaseOpts() {
+        const renderSel = str("cuRender");
+        const onText = renderSel === "text";
+        return {
+          duration: num("cuDur"),
+          fps: num("cuFps"),
+          easing: easingOf(str("cuEase")),
+          fmt: fmtOf(str("cuFmt")),
+          lazy: chk("cuLazy"),
+          el: onText ? cuT : cuR,
+          render: renderSel === "odo-min" ? odoMin : renderSel === "odo-full" ? odoFull : countupRender,
+          onDone: (v) => log(`[countup] onDone(${v})`, "ev"),
+        };
+      }
+      const cuLabel = () => str("cuLabel") || undefined;
+      function runCu(fn) {
+        start();
+        setDrv("running");
+        lastCuId = fn();
+        ret("countup 返回 id", lastCuId);
+      }
+      // el-less 重载（无 el）本身不渲染 DOM：用相同参数在独立元素 cuM 上跑一个等价任务，便于肉眼观察。
+      // 用独立元素 + 跟踪上一个镜像并先 remove，避免"按元素重定"把镜像锁死在旧分组，
+      // 从而保证镜像进入目标 label 分组、clear(label) 能停住它。
+      const cuM = document.getElementById("cuM");
+      let mirror = null; // { id, label }
+      function mirrorCu(from, to, label) {
+        if (mirror) cuRemove(mirror.id, mirror.label); // 先移除旧镜像，让新镜像落到目标分组
+        const mid = countup({ el: cuM, from, to, label, duration: num("cuDur"), fps: num("cuFps"), easing: easingOf(str("cuEase")), fmt: fmtOf(str("cuFmt")), render: countupRender, lazy: false });
+        mirror = { id: mid, label };
+        log(`↑ el-less 重载无 DOM 渲染；中格 cuM 为同参数可视镜像（label=${label ?? "default"}），clear(${label ?? "()"}) 可停`, "ev");
+      }
+
+      document.getElementById("cu_obj").onclick = () => runCu(() => countup({ ...cuBaseOpts(), from: num("cuFrom"), to: num("cuTo"), label: cuLabel() }));
+      document.getElementById("cu_to").onclick = () => {
+        runCu(() => countup(num("cuTo")));
+        mirrorCu(0, num("cuTo"));
+      };
+      document.getElementById("cu_to_label").onclick = () => {
+        const lb = str("cuLabel") || "g";
+        runCu(() => countup(num("cuTo"), lb));
+        mirrorCu(0, num("cuTo"), lb);
+      };
+      document.getElementById("cu_to_opt").onclick = () => runCu(() => countup(num("cuTo"), { ...cuBaseOpts() }));
+      document.getElementById("cu_from_to_label").onclick = () => {
+        const lb = str("cuLabel") || "g";
+        runCu(() => countup(num("cuFrom"), num("cuTo"), lb));
+        mirrorCu(num("cuFrom"), num("cuTo"), lb);
+      };
+      document.getElementById("cu_from_to_opt").onclick = () => runCu(() => countup(num("cuFrom"), num("cuTo"), { ...cuBaseOpts() }));
+      document.getElementById("cu_retarget").onclick = () => runCu(() => countup({ ...cuBaseOpts(), to: num("cuTo") }));
+      document.getElementById("cu_remove").onclick = () => {
+        cuRemove(lastCuId, cuLabel());
+        log(`countup.remove(${lastCuId}${cuLabel() ? ', "' + cuLabel() + '"' : ""})`, "ev");
+      };
+      document.getElementById("cu_pause").onclick = () => {
+        countup.pause(lastCuId, cuLabel());
+        log(`countup.pause(${lastCuId})`, "ev");
+      };
+      document.getElementById("cu_resume").onclick = () => {
+        countup.resume(lastCuId, cuLabel());
+        log(`countup.resume(${lastCuId})`, "ev");
+      };
+      document.getElementById("cu_clear_label").onclick = () => {
+        const lb = str("cuLabel") || "g";
+        cuClear(lb);
+        if (mirror && (mirror.label ?? "default") === lb) mirror = null;
+        log(`countup.clear("${lb}")`, "ev");
+      };
+      document.getElementById("cu_clear").onclick = () => {
+        cuClear();
+        if (mirror && (mirror.label ?? "default") === "default") mirror = null;
+        log("countup.clear()", "err");
+      };
+      document.getElementById("cu_group").onclick = () => {
+        cuGroup(str("cuLabel") || "g", { duration: num("cuDur") });
+        log(`countup.group("${str("cuLabel") || "g"}", {duration:${num("cuDur")}})`, "ev");
+      };
+      document.getElementById("cu_defaults").onclick = () => log(`countup.defaults = ${JSON.stringify(cuDefaults, jfn)}`, "ret");
+
+      // ====================================================================
+      //  2. count-down
+      // ====================================================================
+      const cdT = document.getElementById("cdT");
+      const cdR = document.getElementById("cdR");
+      let lastCdId = -1;
+      const cardFlip = createCardRender({ effect: "flip" });
+      const cardSlide = createCardRender({ effect: "slide" });
+      const cardCal = createCardRender({ effect: "calendar" });
+
+      function deadlineArg() {
+        const k = str("cdKind"),
+          v = str("cdVal");
+        if (k === "ms") return Number(v);
+        if (k === "unit") return Number(v);
+        if (k === "date") return new Date(Date.now() + Number(v));
+        return v; // str
+      }
+      function cdRenderOf(sel) {
+        if (sel === "flip") return cardFlip;
+        if (sel === "slide") return cardSlide;
+        if (sel === "calendar") return cardCal;
+        if (sel === "func")
+          return (el, ms, value, ctx) => {
+            el.textContent = "⏳ " + ctx.fmt(ms);
+            el.style.color = ((ms / 1000) | 0) % 2 ? "#ff9f0a" : "#30d158";
+          };
+        return undefined; // 默认 countdownRender
+      }
+      function cdOpts() {
+        const renderSel = str("cdRender");
+        const onCard = renderSel === "flip" || renderSel === "slide" || renderSel === "calendar";
+        const o = {
+          fmt: str("cdFmt"),
+          showDays: chk("cdShowDays"),
+          showMilliseconds: chk("cdShowMs"),
+          timeOffset: num("cdOff"),
+          lazy: chk("cdLazy"),
+        };
+        // 仅在选了自定义 render 时传入；否则不带 render 键，沿用默认 countdownRender
+        const r = cdRenderOf(renderSel);
+        if (r) o.render = r;
+        if (str("cdKind") === "unit") o.dateParser = str("cdUnit");
+        if (chk("cdHooks"))
+          Object.assign(o, {
+            onStart: (r) => log(`[countdown] onStart(${r})`, "ev"),
+            onUpdate: (r) => {},
+            onDone: (r) => log(`[countdown] onDone(${r})`, "ev"),
+            onDestroy: (r) => log(`[countdown] onDestroy(${r})`, "ev"),
+          });
+        return { o, target: onCard ? cdR : cdT };
+      }
+      document.getElementById("cd_go").onclick = () => {
+        const { o, target } = cdOpts();
+        start();
+        setDrv("running");
+        lastCdId = countdown(deadlineArg(), target, { ...o, label: str("cdLabel") || undefined });
+        ret("countdown 返回 id", lastCdId);
+      };
+      document.getElementById("cd_label").onclick = () => {
+        const { target } = cdOpts();
+        start();
+        setDrv("running");
+        lastCdId = countdown(deadlineArg(), target, str("cdLabel") || "news");
+        ret(`countdown(.., "${str("cdLabel") || "news"}") id`, lastCdId);
+      };
+      document.getElementById("cd_remove").onclick = () => {
+        cdRemove(lastCdId, str("cdLabel") || undefined);
+        log(`countdown.remove(${lastCdId})`, "ev");
+      };
+      document.getElementById("cd_pause").onclick = () => {
+        countdown.pause(lastCdId, str("cdLabel") || undefined);
+        log(`countdown.pause(${lastCdId})`, "ev");
+      };
+      document.getElementById("cd_resume").onclick = () => {
+        countdown.resume(lastCdId, str("cdLabel") || undefined);
+        log(`countdown.resume(${lastCdId})`, "ev");
+      };
+      document.getElementById("cd_clear_label").onclick = () => {
+        cdClear(str("cdLabel") || "news");
+        log(`countdown.clear("${str("cdLabel") || "news"}")`, "ev");
+      };
+      document.getElementById("cd_clear").onclick = () => {
+        cdClear();
+        log("countdown.clear()", "err");
+      };
+      document.getElementById("cd_group").onclick = () => {
+        cdGroup(str("cdLabel") || "news", { fmt: str("cdFmt") });
+        log(`countdown.group("${str("cdLabel") || "news"}", {fmt:"${str("cdFmt")}"})`, "ev");
+      };
+      document.getElementById("cd_defaults").onclick = () => log(`countdown.defaults = ${JSON.stringify(cdDefaults, jfn)}`, "ret");
+
+      // ====================================================================
+      //  3. lazy
+      // ====================================================================
+      const lazyCu = document.getElementById("lazyCu");
+      const lazyCd = document.getElementById("lazyCd");
+      let customOb = null;
+      document.getElementById("lazyMake").onclick = () => {
+        cuClear("lazy");
+        cdClear("lazy");
+        start();
+        setDrv("running");
+        // 自定义 observer：复用 createLazyObserver（同一实例可供多任务复用），rootMargin 提前触发
+        const ob = chk("lazyCustomOb") ? (customOb ??= createLazyObserver({ rootMargin: "200px" })) : undefined;
+        countup({ el: lazyCu, from: 0, to: 100000, duration: 6000, label: "lazy", lazy: true, observer: ob, fmt: (v) => Math.round(v).toLocaleString("en-US"), onDone: () => log("[lazy] countup 完成", "ev") });
+        countdown(30000, lazyCd, { label: "lazy", lazy: true, observer: ob, fmt: "mm:ss", onStart: () => log("[lazy] countdown 进入视口→开始", "ev") });
+        log(`创建 lazy countup + countdown（label="lazy"，observer=${ob ? "自定义 rootMargin:200px" : "默认单例"}）。向下滚动整页进入视口才开始。`, "ev");
+      };
+      document.getElementById("lazyClear").onclick = () => {
+        cuClear("lazy");
+        cdClear("lazy");
+        lazyCu.textContent = "—";
+        lazyCd.textContent = "—";
+        log('clear("lazy")', "err");
+      };
+
+      // ====================================================================
+      //  4. count-down/helper
+      // ====================================================================
+      const hOut = document.createElement("span"); // 临时渲染目标
+      document.getElementById("h_fmt").onclick = () => {
+        const f = buildHighPerfFormatter(str("hTpl"), { showDays: chk("hDays"), showMs: chk("hMsFlag") });
+        ret(`buildHighPerfFormatter("${str("hTpl")}")(${num("hMs")})`, f(num("hMs")));
+      };
+      document.getElementById("h_parser").onclick = () => {
+        const p = createCountdownParser(chk("hDays"));
+        ret(`createCountdownParser(${chk("hDays")})(${num("hMs")})`, "[" + [...p(num("hMs"))] + "]");
+      };
+      document.getElementById("h_buildfmt").onclick = () => {
+        const f = buildCountdownFormatter(createCountdownParser(chk("hDays")), (d, h, m, s, ms) => `${d}天 ${pad(h)}:${pad(m)}:${pad(s)}.${ms}`);
+        ret(`buildCountdownFormatter(parser, fn)(${num("hMs")})`, f(num("hMs")));
+      };
+      document.getElementById("h_render").onclick = () => {
+        const _f = buildHighPerfFormatter(str("hTpl"), { showDays: chk("hDays"), showMs: chk("hMsFlag") });
+        countdownRender(cdT, num("hMs"), [0, 0, 0, 0, 0], { fmt: _f });
+        log(`countdownRender(渲染目标, ${num("hMs")}, value, {fmt}) → 已写入 count-down 文本目标：“${cdT.textContent}”`, "ev");
+      };
+      document.getElementById("h_dateparser").onclick = () => {
+        try {
+          const p = buildDateParser(str("hUnit"));
+          const r = p(isNaN(Number(str("hDate"))) ? str("hDate") : Number(str("hDate")), num("hOff"));
+          ret(`buildDateParser("${str("hUnit")}")("${str("hDate")}", ${num("hOff")})`, r + `（${new Date(r).toLocaleString()}）`);
+        } catch (e) {
+          log("buildDateParser 抛错：" + e.message, "err");
+        }
+      };
+      document.getElementById("h_resolveFmt").onclick = () => {
+        const f = resolveFormatter(str("hTpl"), chk("hDays"), chk("hMsFlag"));
+        ret(`resolveFormatter("${str("hTpl")}", ${chk("hDays")}, ${chk("hMsFlag")})(${num("hMs")})`, f(num("hMs")));
+        const fn = (ms) => "X";
+        ret("resolveFormatter(fn,..) === fn", resolveFormatter(fn, true, true) === fn);
+      };
+      document.getElementById("h_resolveParser").onclick = () => {
+        const p = resolveParser(undefined, chk("hDays"));
+        ret(`resolveParser(undefined, ${chk("hDays")})(${num("hMs")})`, "[" + [...p(num("hMs"))] + "]");
+        const fn = (ms) => [0, 0, 0, 0, 0];
+        ret("resolveParser(fn,..) === fn", resolveParser(fn, true) === fn);
+      };
+      document.getElementById("h_resolveDate").onclick = () => {
+        const p = resolveDateParser(str("hUnit"));
+        const r = p(Number(str("cdVal")) || 5, num("hOff"));
+        ret(`resolveDateParser("${str("hUnit")}")(${Number(str("cdVal")) || 5})`, r);
+        const fn = (v) => 123;
+        ret("resolveDateParser(fn) === fn", resolveDateParser(fn) === fn);
+      };
+      document.getElementById("h_resolveConfig").onclick = () => {
+        const merged = resolveConfig(cdDefaults, { fmt: "mm:ss" }, { showDays: false });
+        log(`resolveConfig(defaults, {fmt:"mm:ss"}, {showDays:false}) = ${JSON.stringify(merged, jfn)}`, "ret");
+      };
+      document.getElementById("h_isEl").onclick = () => {
+        ret('isElement("#cuT")', isElement("#cuT"));
+        ret("isElement(<div>)", isElement(document.createElement("div")));
+        ret("isElement(123)", isElement(123));
+      };
+      document.getElementById("h_runcd").onclick = () => {
+        start();
+        setDrv("running");
+        const f = buildHighPerfFormatter(str("hTpl"), { showDays: chk("hDays"), showMs: chk("hMsFlag") });
+        countdown(10000, document.getElementById("hCd"), { fmt: f, parser: createCountdownParser(chk("hDays")), showDays: chk("hDays"), showMilliseconds: chk("hMsFlag"), lazy: false });
+        log(`用 buildHighPerfFormatter("${str("hTpl")}") 跑 10s 倒计时 → hCd`, "ev");
+      };
+
+      // ====================================================================
+      //  5. count-up/helper + helper.ts
+      // ====================================================================
+      document.getElementById("e_ease").onclick = () => {
+        const t = num("eT");
+        const keys = ["linear", "easeInQuad", "easeOutQuad", "easeInOutQuad", "easeOutCubic", "easeInOutCubic", "easeCountup"];
+        log(`ease.*(${t}) = ${keys.map((k) => `${k}:${ease[k](t).toFixed(3)}`).join("  ")}`, "ret");
+      };
+      document.getElementById("e_asym").onclick = () => {
+        const f = easeAsymmetricS(num("eSkew"));
+        ret(`easeAsymmetricS(${num("eSkew")})(${num("eT")})`, f(num("eT")).toFixed(4));
+      };
+      document.getElementById("b_fmt").onclick = () => {
+        const f = buildCountupFormatter(new Intl.NumberFormat("en-US"), { prefix: str("bcfPre"), suffix: str("bcfSuf") });
+        ret(`buildCountupFormatter(NF,{prefix,suffix})(${num("bcfVal")})`, f(num("bcfVal")));
+      };
+      document.getElementById("h_dollar").onclick = () => {
+        try {
+          const e = $(str("dollarSel"));
+          ret(`$("${str("dollarSel")}")`, e.tagName + (e.id ? "#" + e.id : ""));
+        } catch (err) {
+          log("$ 抛错：" + err.message, "err");
+        }
+        const d = document.createElement("div");
+        ret("$(同一元素) === 该元素", $(d) === d);
+      };
+      document.getElementById("h_lazystart").onclick = () => {
+        const e = document.createElement("div");
+        e.style.cssText = "position:fixed;top:4px;right:4px;width:20px;height:20px;background:#06f;z-index:9";
+        document.body.appendChild(e);
+        log("lazyStart：右上角放一个蓝点并观察，进入视口即触发 onEnter（约 1s 后移除）", "ev");
+        const cancel = lazyStart(e, () => {
+          log("lazyStart → onEnter 触发（元素可见）✓", "ev");
+        });
+        ret("lazyStart 返回值类型", typeof cancel);
+        setTimeout(() => {
+          cancel();
+          e.remove();
+        }, 1000);
+      };
+      document.getElementById("e_runcu").onclick = () => {
+        start();
+        setDrv("running");
+        const f = buildCountupFormatter(new Intl.NumberFormat("en-US"), { prefix: str("bcfPre"), suffix: str("bcfSuf") });
+        countup({ el: document.getElementById("eCu"), from: 0, to: 9999, duration: 2500, easing: easeAsymmetricS(num("eSkew")), fmt: f, render: countupRender, lazy: false });
+        log(`用 easeAsymmetricS(${num("eSkew")}) 跑 countup(0→9999) → eCu`, "ev");
+      };
+
+      // ====================================================================
+      //  6. 渲染插件
+      // ====================================================================
+      const RING_HUES = ["#ff6a5a", "#ffa23a", "#ffcf3a", "#37d67a", "#3ac8ff", "#7a7aff", "#c86bff"];
+      document.getElementById("plCardRun").onclick = () => {
+        start();
+        setDrv("running");
+        countdown(3600000, document.getElementById("plCard"), {
+          fmt: "HH:mm:ss",
+          render: createCardRender({ effect: str("plCardEffect"), axis: str("plCardAxis"), direction: str("plCardDir") }),
+          lazy: false,
+          label: "pl-card",
+        });
+        log(`plugins: createCardRender({effect:"${str("plCardEffect")}",axis:"${str("plCardAxis")}",direction:"${str("plCardDir")}"})`, "ev");
+      };
+      document.getElementById("plOdoRun").onclick = () => {
+        start();
+        setDrv("running");
+        countup({
+          el: document.getElementById("plOdo"),
+          from: num("plOdoFrom"),
+          to: num("plOdoTo"),
+          duration: 2500,
+          lazy: false,
+          label: "pl-odo",
+          render: createOdometerRender({ strip: str("plOdoStrip"), rollWindow: num("plOdoRoll"), leadingZeros: chk("plOdoLZ") }),
+        });
+        log(`plugins: createOdometerRender({strip:"${str("plOdoStrip")}",rollWindow:${num("plOdoRoll")},leadingZeros:${chk("plOdoLZ")}})`, "ev");
+      };
+      document.getElementById("plRingRun").onclick = () => {
+        cdClear("pl-ring");
+        start();
+        setDrv("running");
+        const opts = {
+          glow: chk("plRingGlow"),
+          clockwise: chk("plRingCW"),
+          redAt: num("plRingRed"),
+          yellowAt: num("plRingYellow"),
+          ticks: chk("plRingTicks") ? {} : false,
+          arcA: chk("plRingArcA") ? {} : false,
+          arcB: chk("plRingArcB") ? {} : false,
+          inner: chk("plRingInner") ? (chk("plRingRainbow") ? { colorAt: ({ index }) => RING_HUES[index % RING_HUES.length] } : {}) : false,
+          digit: { mode: str("plRingDigit") },
+        };
+        countdown(num("plRingDur") * 1000, document.getElementById("plRing"), { fmt: "mm:ss", showDays: false, lazy: false, label: "pl-ring", render: createRingRender(opts) });
+        log(`plugins: createRingRender(${JSON.stringify(opts, jfn)})`, "ev");
+      };
+      document.getElementById("plRingStop").onclick = () => {
+        cdClear("pl-ring");
+        log('countdown.clear("pl-ring")', "err");
+      };
+
+      log("页面就绪。已 use(countup/countdown 插件)。逐个区块点击按钮手动验证各 API。", "ev");
+    </script>
   </body>
 </html>

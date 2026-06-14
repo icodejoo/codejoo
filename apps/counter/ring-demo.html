@@ -1,0 +1,218 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>@codejoo/counter — createRingRender 体验</title>
+    <link rel="stylesheet" href="./src/plugins/ring.css" />
+    <style>
+      :root {
+        color-scheme: dark;
+      }
+      * {
+        box-sizing: border-box;
+      }
+      body {
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+        margin: 0;
+        min-height: 100vh;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 22px;
+        padding: 32px 20px 60px;
+        color: #e7e7ea;
+        background: radial-gradient(circle at 50% 0%, #1a1320 0%, #0a0709 70%);
+      }
+      h1 {
+        font-size: 19px;
+        margin: 0;
+        font-weight: 600;
+        letter-spacing: 0.3px;
+      }
+      .sub {
+        color: #9a8f96;
+        font-size: 12.5px;
+        margin: -12px 0 0;
+      }
+      /* ring 是填满宿主的圆形 SVG —— 必须给定方形尺寸 */
+      .stage {
+        width: 300px;
+        height: 300px;
+      }
+      .panel {
+        background: #17121a;
+        border: 1px solid #2c2330;
+        border-radius: 12px;
+        padding: 16px 20px;
+        display: flex;
+        flex-direction: column;
+        gap: 12px;
+        min-width: 320px;
+      }
+      .row {
+        display: flex;
+        gap: 10px;
+        flex-wrap: wrap;
+        align-items: center;
+        font-size: 13px;
+      }
+      .lbl {
+        min-width: 76px;
+        color: #b3a6ad;
+      }
+      input[type="number"] {
+        width: 80px;
+      }
+      input[type="text"] {
+        width: 96px;
+      }
+      input,
+      select {
+        padding: 5px 8px;
+        border: 1px solid #3a2f40;
+        border-radius: 6px;
+        font-size: 13px;
+        background: #221a28;
+        color: inherit;
+      }
+      label.ck {
+        display: inline-flex;
+        align-items: center;
+        gap: 5px;
+        color: #c9bfc6;
+        cursor: pointer;
+      }
+      button {
+        padding: 8px 16px;
+        border: 1px solid #4a3a52;
+        background: #2a2030;
+        color: #f0e8f2;
+        border-radius: 8px;
+        cursor: pointer;
+        font-size: 13.5px;
+        font-weight: 600;
+        transition: 0.12s;
+      }
+      button:hover {
+        background: #ff6a5a;
+        border-color: #ff6a5a;
+        color: #1a1014;
+      }
+      .hint {
+        color: #7d7480;
+        font-size: 11.5px;
+      }
+      a {
+        color: #ff8a7a;
+      }
+    </style>
+  </head>
+  <body>
+    <h1>createRingRender — 圆形数码倒计时</h1>
+    <p class="sub">外圈 60 刻度 = 当前分钟剩余秒，每秒灭一格；最后一分钟按秒变 绿 → 黄 → 红。</p>
+
+    <div class="stage" id="stage"></div>
+
+    <div class="panel">
+      <div class="row">
+        <span class="lbl">时长</span>
+        <input type="number" id="dur" value="65" /> 秒
+        <span class="hint">（设 65 秒可看到「跨分钟 → 最后一分钟变色」）</span>
+      </div>
+      <div class="row">
+        <span class="lbl">格式</span>
+        <select id="fmt">
+          <option value="mm:ss" selected>mm:ss</option>
+          <option value="ss">ss</option>
+          <option value="HH:mm:ss">HH:mm:ss</option>
+        </select>
+        <span class="lbl">redAt</span><input type="number" id="redAt" value="3" /> <span class="lbl" style="min-width: 48px">yellowAt</span><input type="number" id="yellowAt" value="10" />
+      </div>
+      <div class="row">
+        <span class="lbl">开关</span>
+        <label class="ck"><input type="checkbox" id="digits" checked /> 数码区</label>
+        <label class="ck"><input type="checkbox" id="arc" checked /> 装饰弧</label>
+        <label class="ck"><input type="checkbox" id="glow" checked /> 发光</label>
+        <label class="ck"><input type="checkbox" id="clockwise" checked /> 顺时针</label>
+      </div>
+      <div class="row">
+        <span class="lbl">数码区</span>
+        <select id="digitMode">
+          <option value="segment" selected>七段 segment</option>
+          <option value="text">文字 text</option>
+        </select>
+        <label class="ck"><input type="checkbox" id="rainbowMin" /> 彩虹分钟（inner.colorAt）</label>
+      </div>
+      <div class="row" style="justify-content: center; margin-top: 4px">
+        <button id="start">▶ 开始 / 重新开始</button>
+        <button id="stop">■ 停止</button>
+      </div>
+      <p class="hint" style="margin: 0">提示：把时长设成 8 秒可快速看完整个 绿→黄→红 收尾。完整 API 测试台见 <a href="/">/</a>。</p>
+    </div>
+
+    <script type="module">
+      import { use } from "./src/core/index.ts";
+      import countdown, { register, clear } from "./src/count-down/count-down.ts";
+      import { createRingRender } from "./src/plugins/ring.ts";
+
+      use(register());
+
+      const stage = document.getElementById("stage");
+      const num = (id) => Number(document.getElementById(id).value);
+      const str = (id) => document.getElementById(id).value;
+      const chk = (id) => document.getElementById(id).checked;
+      const LABEL = "ring-demo";
+
+      const qp = new URLSearchParams(location.search);
+      // 一组柔和的逐分钟色（彩虹分钟演示 inner.colorAt）
+      const MIN_HUES = ["#ff6a5a", "#ffa23a", "#ffcf3a", "#37d67a", "#3ac8ff", "#7a7aff", "#c86bff"];
+      function ringOpts() {
+        const showArc = chk("arc");
+        const rainbow = qp.has("rainbow") ? qp.get("rainbow") !== "0" : chk("rainbowMin");
+        const mode = qp.get("digitmode") || str("digitMode"); // 截图自检用
+        return {
+          redAt: num("redAt"),
+          yellowAt: num("yellowAt"),
+          glow: chk("glow"),
+          clockwise: qp.has("cw") ? qp.get("cw") !== "0" : chk("clockwise"), // ?cw=0 强制逆时针（截图自检用）
+          digit: chk("digits") ? { mode } : false,
+          arcA: showArc ? {} : false,
+          arcB: showArc ? {} : false,
+          inner: rainbow ? { colorAt: ({ index }) => MIN_HUES[index % MIN_HUES.length] } : {},
+        };
+      }
+
+      function startRing() {
+        clear(LABEL); // 停掉上一轮，重置容器
+        countdown(num("dur") * 1000, stage, {
+          fmt: str("fmt"),
+          render: createRingRender(ringOpts()),
+          label: LABEL,
+          lazy: false,
+          showDays: false,
+          onDone: () => console.log("[ring-demo] done"),
+        });
+      }
+
+      document.getElementById("start").onclick = startRing;
+      document.getElementById("stop").onclick = () => clear(LABEL);
+
+      // 截图自检用：?static=N（剩余 N 秒）确定性单帧；可选 ?total=T 指定初始总秒数（看排空中间态）
+      const staticSec = qp.get("static");
+      if (staticSec != null) {
+        const remaining = Number(staticSec) * 1000;
+        const total = (qp.has("total") ? Number(qp.get("total")) : Number(staticSec)) * 1000;
+        const pad = (n) => String(n).padStart(2, "0");
+        const mmss = (ms) => `${pad(Math.floor(ms / 60000))}:${pad(Math.floor((ms % 60000) / 1000))}`;
+        const value = [0, 0, 0, 0, 0];
+        const ctxAt = (ms) => ({ el: stage, id: 0, deadline: 0, remaining: ms, value, active: true, paused: false, fmt: mmss, parser: () => value });
+        const r = createRingRender(ringOpts());
+        r(stage, total, value, ctxAt(total)); // 首帧锚定 total
+        r(stage, remaining, value, ctxAt(remaining)); // 再画剩余
+      } else {
+        startRing(); // 进页面就跑一轮
+      }
+    </script>
+  </body>
+</html>

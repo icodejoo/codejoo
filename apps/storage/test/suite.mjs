@@ -1,7 +1,8 @@
 // 完整浏览器测试用例：覆盖 @codejoo/storage 全部公开 API。
 // 运行方式：项目根目录 `pnpm dev`，浏览器打开 dev 服务的 /test/ 路径。
 // （通过 vite 即时转译源码，无需先 build；也可改为从 ../dist/esm/index.mjs 导入测试产物。）
-import { factory, codec, codecAtob, codecBase64, crossTab, fast, batchFast, lazy, debug, Idb, JSONX } from "../src/index.ts";
+import { factory, codec, codecAtob, codecBase64, crossTab, fast, batchFast, lazy, Idb, JSONX } from "../src/index.ts";
+import { debug } from "../src/debug.ts"; // debug 经子路径单独导出，不在主入口
 import { supported } from "../src/helper.ts";
 import { Memory } from "../src/memory.ts";
 import { proxy } from "../src/proxy.ts";

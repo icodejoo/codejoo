@@ -1,0 +1,157 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <title>@codejoo/counter — 压测</title>
+    <style>
+      body {
+        font-family: -apple-system, "Segoe UI", Roboto, sans-serif;
+        margin: 0;
+        padding: 8px;
+        background: #f5f6f8;
+      }
+      #bar {
+        position: sticky;
+        top: 0;
+        background: #fff;
+        padding: 8px;
+        border-bottom: 1px solid #ddd;
+        display: flex;
+        gap: 6px;
+        flex-wrap: wrap;
+        align-items: center;
+        z-index: 9;
+      }
+      #bar button,
+      #bar select {
+        font-size: 13px;
+        padding: 4px 8px;
+      }
+      #hud {
+        font:
+          13px/1.5 ui-monospace,
+          monospace;
+        background: #111;
+        color: #0f6;
+        padding: 6px 10px;
+        border-radius: 4px;
+        white-space: pre;
+        margin-left: auto;
+      }
+      #grid {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 6px;
+        padding-top: 8px;
+      }
+      .timer {
+        font-size: 18px;
+      }
+      .timer .cd-root {
+        --cd-bg: #1b1e24;
+        --cd-color: #fff;
+        --cd-gap: 2px;
+        --cd-radius: 4px;
+      }
+      /* 关闭 will-change 的实验：用属性选择器整体覆盖 */
+      body.no-wc .cd-odometer-num,
+      body.no-wc .cd-flip > span,
+      body.no-wc .cd-slide > span {
+        will-change: auto !important;
+      }
+    </style>
+  </head>
+  <body>
+    <div id="bar">
+      数量<select id="count">
+        <option>50</option>
+        <option selected>100</option>
+        <option>200</option>
+      </select>
+      内容<select id="kind">
+        <option value="mix">混合(倒计时+计数)</option>
+        <option value="flip">全 flip 卡片</option>
+        <option value="slide">全 slide 卡片</option>
+        <option value="calendar">全 calendar 卡片</option>
+        <option value="odo-min">全 odometer(minimal)</option>
+        <option value="odo-full">全 odometer(full)</option>
+      </select>
+      <label><input type="checkbox" id="perpetual" checked /> 计数持续滚动</label>
+      <label><input type="checkbox" id="nowc" /> 关闭 will-change</label>
+      <button id="apply">应用/重建</button>
+      <div id="hud">…</div>
+    </div>
+    <div id="grid"></div>
+    <script type="module">
+      import { counter, countdown, countup, createCardRender, createOdometerRender } from "/src/index.ts";
+      import "/src/plugins/card.css";
+      counter.use(countdown.install());
+      counter.use(countup.install());
+
+      const grid = document.getElementById("grid");
+      const timers = [];
+      function rand(n) {
+        return (Math.random() * n) | 0;
+      }
+
+      function build() {
+        countdown.clear(); // 清掉上一批倒计时，否则它们仍在后台 tick、污染测量
+        countup.clear();
+        for (let g = 0; g < 64; g++) countup.clear("g" + g);
+        timers.forEach((t) => clearInterval(t));
+        timers.length = 0;
+        grid.textContent = "";
+        document.body.classList.toggle("no-wc", document.getElementById("nowc").checked);
+
+        const n = +document.getElementById("count").value;
+        const kind = document.getElementById("kind").value;
+        const perpetual = document.getElementById("perpetual").checked;
+
+        for (let i = 0; i < n; i++) {
+          const el = document.createElement("div");
+          el.className = "timer";
+          grid.appendChild(el);
+          const isDown = kind === "flip" || kind === "slide" || kind === "calendar" || (kind === "mix" && Math.random() < 0.5);
+          if (isDown) {
+            const eff = kind === "mix" ? ["flip", "slide", "calendar"][rand(3)] : kind;
+            countdown(10000 + rand(80000), el, { formatter: "mm:ss", render: createCardRender({ effect: eff }) });
+          } else {
+            const strip = kind === "odo-full" ? "full" : kind === "odo-min" ? "minimal" : Math.random() < 0.5 ? "minimal" : "full";
+            const label = "g" + i;
+            const odo = createOdometerRender({ strip });
+            const roll = () => countup({ to: 1000 + rand(9_000_000), el, label, duration: 2000 + rand(2000), render: odo });
+            roll();
+            if (perpetual) timers.push(setInterval(roll, 2400 + rand(2000)));
+          }
+        }
+      }
+      document.getElementById("apply").addEventListener("click", build);
+
+      const hud = document.getElementById("hud");
+      let last = performance.now(),
+        frames = 0,
+        acc = 0,
+        slow = 0,
+        maxF = 0;
+      function loop(now) {
+        const dt = now - last;
+        last = now;
+        frames++;
+        acc += dt;
+        if (dt > 18) slow++;
+        if (dt > maxF) maxF = dt;
+        if (acc >= 500) {
+          const heap = performance.memory ? (performance.memory.usedJSHeapSize / 1048576).toFixed(1) + "M" : "n/a";
+          hud.textContent = `FPS ${Math.round((frames / acc) * 1000)}  最慢 ${maxF.toFixed(0)}ms  慢帧 ${((slow / frames) * 100).toFixed(0)}%  节点 ${document.querySelectorAll("*").length}  堆 ${heap}`;
+          frames = 0;
+          acc = 0;
+          slow = 0;
+          maxF = 0;
+        }
+        requestAnimationFrame(loop);
+      }
+      requestAnimationFrame(loop);
+      build();
+    </script>
+  </body>
+</html>

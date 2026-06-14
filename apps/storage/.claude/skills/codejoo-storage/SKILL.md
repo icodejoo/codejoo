@@ -18,7 +18,7 @@ A tiny ESM library: **one unified API over three backends**. Sync backends (`loc
 | `codec.ts` | Three variants. `codec(password?)` (default) — branch-free 10-bit XOR over UTF-16 code units: k ≤ 0x3FF only perturbs the low 10 bits so surrogates stay valid by construction (high 6 bits untouched) — no escape logic; 1 MAGIC^k header unit is the validity tag (wrong-pw deterministic null; foreign false-accept 1/65536, deserialize is the second net). Output = input + 1 unit; via `utf-16le` TextDecoder (`ignoreBOM` REQUIRED). Also `codecBase64` (native toBase64, atob/btoa polyfill fallback, rotated base64url) and `codecAtob` (always-polyfill, same format as codecBase64). **Obfuscation, not encryption.** decode→null is load-bearing (`load()` stale-clean + enckey `owns()`). |
 | `serialization.ts` | `JSONX` — JSON-compatible, round-trips Date/Map/Set/bigint via a `__jt__` tag. |
 | `fast.ts` | `fast`/`lazy`/`batchFast` — key-bound shortcut accessors. |
-| `debug.ts` | `debug(handler)` — standalone (tree-shakeable) decrypted snapshot. |
+| `debug.ts` | `debug(handler)` — decrypted snapshot. NOT exported from index.ts: shipped via the `"./debug"` subpath (`@codejoo/storage/debug`) so single-file bundles exclude it; it's a separate pack entry in vite.config's unbundle target (would otherwise be unreachable and not emitted). |
 | `core.ts` | `factory(opts?)` → `{ ls, ss, db, destroy }`; adapts native Storage to the `get/set/remove` vocabulary; `unimpl()` placeholder for unprovided `db`; `destroy()` releases all three layers (returns Promise; keeps persisted data). |
 | `helper.ts` | `supported` = `{ storage, indexedDB }` runtime feature flags (mutable; Idb flips `indexedDB` on runtime failure). |
 

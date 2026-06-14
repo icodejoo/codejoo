@@ -202,10 +202,11 @@ const stop = crossTab(ls);
 
 ### `debug(handler)`
 
-独立辅助函数（**需显式导入**——不属于核心 proxy，未用到即被 tree-shake）。读出 handler 全部条目的**解密后**明文，返回 `{ "命名空间:键": 值 }` 快照（**保留命名空间**），并暂存到 `"_$debug"`。用于查看以 `codeable`/`enckey` 写入的数据。
+独立辅助函数，经**独立子路径**（`@codejoo/storage/debug`）发布——不在主入口中，单文件产物（`dist/index.mjs` / `index.min.js`）物理上不含它。读出 handler 全部条目的**解密后**明文，返回 `{ "命名空间:键": 值 }` 快照（**保留命名空间**），并暂存到 `"_$debug"`。用于查看以 `codeable`/`enckey` 写入的数据。
 
 ```ts
-import { factory, codec, debug } from "@codejoo/storage";
+import { factory, codec } from "@codejoo/storage";
+import { debug } from "@codejoo/storage/debug";
 
 const { ls, db } = factory({ codeable: true, codec: codec("pw"), enckey: true });
 debug(ls); // 同步 → { "key": value, ... }

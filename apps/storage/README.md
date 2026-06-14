@@ -202,10 +202,11 @@ const stop = crossTab(ls);
 
 ### `debug(handler)`
 
-Standalone helper (import it explicitly — not part of the core proxy, so it tree-shakes away when unused). Reads every entry of a handler **decrypted**, returns a `{ "namespace:key": value }` snapshot (namespace **preserved**), and stashes it under `"_$debug"`. Use it to inspect data written with `codeable`/`enckey`.
+Standalone helper shipped as a **separate subpath** (`@codejoo/storage/debug`) — it is not part of the main entry, so the single-file bundles (`dist/index.mjs` / `index.min.js`) physically exclude it. Reads every entry of a handler **decrypted**, returns a `{ "namespace:key": value }` snapshot (namespace **preserved**), and stashes it under `"_$debug"`. Use it to inspect data written with `codeable`/`enckey`.
 
 ```ts
-import { factory, codec, debug } from "@codejoo/storage";
+import { factory, codec } from "@codejoo/storage";
+import { debug } from "@codejoo/storage/debug";
 
 const { ls, db } = factory({ codeable: true, codec: codec("pw"), enckey: true });
 debug(ls); // sync → { "key": value, ... }

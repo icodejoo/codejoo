@@ -1,0 +1,339 @@
+/**
+ * @codejoo/counter — 倒计时卡片渲染默认样式
+ *
+ * 命名：每个元素带「公共类 + 效果类」，所有选择器均为单层（无后代嵌套），便于覆盖。
+ *   根   ul.cd-root.cd-<effect>-root
+ *   格   li.cd-cell.cd-<effect>-cell        分隔符 li.cd-sep
+ *   面   span.cd-num.cd-now.cd-<effect>-num.cd-<effect>-now   （next 同理）
+ *   动画态 在两个面上加 .cd-flipping
+ * 自定义前缀时复制本文件整体替换 cd-，并在 createCardRender({ prefix }) 传入同前缀。
+ *
+ * 可调 CSS 变量（设在 .cd-root 或其任意祖先上，会继承下来）：
+ *   通用
+ *     --cd-duration      单次翻页/动画时长，默认 500ms（默认值集中在 .cd-root 的 --_cd-duration 别名）
+ *     --cd-gap           数字格间距，默认 .1em
+ *     --cd-radius        卡片圆角，默认 .1em
+ *     --cd-perspective   3D 透视距离（flip 与 calendar），默认 2.5em，越小越立体
+ *     --cd-cell-width    单格宽，默认 1ch
+ *     --cd-cell-height   单格高，默认 1.25em
+ *     --cd-font-weight   数字字重，默认 inherit
+ *   配色
+ *     --cd-color         数字颜色，默认 #fff
+ *     --cd-bg            卡片面背景，默认 #333
+ *     --cd-bg-now/-next  当前面/翻入面背景，默认回退 --cd-bg
+ *     --cd-sep-color     分隔符颜色，默认 inherit
+ *   特效专属
+ *     --cd-easing        flip/slide 缓动，默认 ease（calendar 固定 linear）
+ *     --cd-divider-color/-width  calendar 中缝线颜色/粗细，默认 rgba(0,0,0,.5)/1px
+ *     calendar 折叠深度感用 filter:brightness（GPU 合成），变暗程度写在 cd-fold-dim/-bright 关键帧（默认 .4）
+ *
+ *   方向用修饰类区分（不用 CSS 变量——含 var() 的 transform 无法走 GPU 合成）：
+ *     flip 默认绕 X 轴上下翻(rotateX)；axis:"y" → 根加 .cd-flip-y（绕 Y 轴左右翻 rotateY）
+ *     slide 默认向下；direction:"up" → 根加 .cd-slide-up（向上）
+ */
+
+/* ============================== 公共 ============================== */
+.cd-root {
+  /* 内部别名：公共变量 --cd-duration 若已设（含祖先继承）则用之，否则回退 500ms（默认值只此一处）。
+     各处动画引用 var(--_cd-duration)；--_cd-duration 为内部变量，请勿直接设置。 */
+  --_cd-duration: var(--cd-duration, 500ms);
+  display: inline-flex;
+  gap: var(--cd-gap, 0.1em);
+  margin: 0;
+  padding: 0;
+}
+.cd-cell {
+  position: relative;
+  display: inline-block;
+  width: var(--cd-cell-width, 1ch);
+  height: var(--cd-cell-height, 1.25em);
+  list-style: none;
+  font-variant: tabular-nums;
+}
+.cd-sep {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  list-style: none;
+  font-variant: tabular-nums;
+  color: var(--cd-sep-color, inherit);
+}
+.cd-num {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  display: block;
+}
+.cd-num::before,
+.cd-num::after {
+  color: var(--cd-color, #fff);
+  font-weight: var(--cd-font-weight, inherit);
+}
+.cd-now::before,
+.cd-now::after {
+  background: var(--cd-bg-now, var(--cd-bg, #333));
+}
+.cd-next::before,
+.cd-next::after {
+  background: var(--cd-bg-next, var(--cd-bg, #333));
+}
+
+/* ============================== flip（双面 3D 折叠）============================== */
+/* now=正面、next=背面，两面绕轴各转 180°，perspective 在 cell 上、backface-visibility 隐藏背面。
+   transform 必须用字面量关键帧（含 var() 的 transform 无法走 GPU 合成，会退主线程逐帧重绘；
+   早期版本正是栽在 rotate3d(var(...)) 上才丢帧，纯字面量 3D 实测满 60fps）。
+   默认绕 X 轴（上下翻）；.cd-flip-y 绕 Y 轴（左右翻）。 */
+.cd-flip-cell {
+  perspective: var(--cd-perspective, 2.5em);
+}
+.cd-flip-num {
+  backface-visibility: hidden;
+}
+/* 仅翻转期间提升为合成层（否则 3D 旋转动画未被 Chrome 自动合成，退主线程逐帧重绘 → ~30fps）；
+   动画结束移除 cd-flipping 即释放该层，无常驻内存开销 */
+.cd-flip-num.cd-flipping {
+  will-change: transform;
+}
+.cd-flip-num::before {
+  content: attr(data-digit);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  height: 100%;
+  border-radius: var(--cd-radius, 0.1em);
+}
+/* 静止：now 正面朝前(0)，next 背面预翻 180°（朝后，被 backface 隐藏） */
+.cd-flip-next {
+  transform: rotateX(180deg);
+}
+/* 旧值正面绕走 0→-180（过 90° 后被 backface 隐藏），新值背面绕入 180→0 */
+.cd-flip-now.cd-flipping {
+  animation: cd-fold-out var(--_cd-duration) var(--cd-easing, ease) forwards;
+}
+.cd-flip-next.cd-flipping {
+  animation: cd-fold-in var(--_cd-duration) var(--cd-easing, ease) forwards;
+}
+/* 横向翻：createCardRender({ effect:"flip", axis:"y" }) → 根加 .cd-flip-y */
+.cd-flip-y .cd-flip-next {
+  transform: rotateY(180deg);
+}
+.cd-flip-y .cd-flip-now.cd-flipping {
+  animation-name: cd-fold-out-y;
+}
+.cd-flip-y .cd-flip-next.cd-flipping {
+  animation-name: cd-fold-in-y;
+}
+@keyframes cd-fold-out {
+  0% {
+    transform: rotateX(0);
+  }
+  100% {
+    transform: rotateX(-180deg);
+  }
+}
+@keyframes cd-fold-in {
+  0% {
+    transform: rotateX(180deg);
+  }
+  100% {
+    transform: rotateX(0);
+  }
+}
+@keyframes cd-fold-out-y {
+  0% {
+    transform: rotateY(0);
+  }
+  100% {
+    transform: rotateY(-180deg);
+  }
+}
+@keyframes cd-fold-in-y {
+  0% {
+    transform: rotateY(180deg);
+  }
+  100% {
+    transform: rotateY(0);
+  }
+}
+
+/* ============================== slide ============================== */
+/* 位移值必须是字面量（同上原因）。方向用修饰类 .cd-slide-up 区分，默认向下（新值自上方进入）。 */
+.cd-slide-cell {
+  overflow: hidden;
+  border-radius: var(--cd-radius, 0.1em);
+}
+.cd-slide-num::before {
+  content: attr(data-digit);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  height: 100%;
+}
+.cd-slide-num.cd-flipping {
+  transition: transform var(--_cd-duration) var(--cd-easing, ease);
+}
+/* 默认：向下（新值在上方 -100% 处，整体下移） */
+.cd-slide-next {
+  top: -100%;
+}
+.cd-slide-num.cd-flipping {
+  transform: translateY(100%);
+}
+/* 向上：createCardRender({ effect:"slide", direction:"up" }) → 根加 .cd-slide-up */
+.cd-slide-up .cd-slide-next {
+  top: 100%;
+}
+.cd-slide-up .cd-slide-num.cd-flipping {
+  transform: translateY(-100%);
+}
+
+/* ============================== calendar ============================== */
+.cd-calendar-num {
+  perspective: var(--cd-perspective, 2.5em);
+}
+.cd-calendar-num::before,
+.cd-calendar-num::after {
+  content: attr(data-digit);
+  position: absolute;
+  left: 0;
+  width: 100%;
+  height: 50%;
+  text-align: center;
+  overflow: hidden;
+  transform-style: preserve-3d;
+  box-sizing: border-box;
+}
+.cd-calendar-num::before {
+  top: 0;
+  line-height: 1.308em;
+  border-radius: var(--cd-radius, 0.1em) var(--cd-radius, 0.1em) 0 0;
+  border-bottom: var(--cd-divider-width, 1px) solid var(--cd-divider-color, rgba(0, 0, 0, 0.5));
+  transform-origin: bottom;
+}
+.cd-calendar-num::after {
+  bottom: 0;
+  line-height: 0.058em;
+  border-radius: 0 0 var(--cd-radius, 0.1em) var(--cd-radius, 0.1em);
+  border-top: var(--cd-divider-width, 1px) solid var(--cd-divider-color, rgba(0, 0, 0, 0.5));
+  transform-origin: top;
+}
+/* calendar 动画固定 linear：折叠与变暗必须同步。
+   深度感用 filter:brightness（GPU 合成）替代 box-shadow（每帧主线程重绘）：折出的面变暗、折入的面变亮。
+   亮度值为字面量(含 var() 的 filter 同样无法走合成器)；要改变暗深度请直接改 cd-fold-dim/-bright 关键帧。 */
+.cd-calendar-next.cd-flipping {
+  z-index: 0;
+  animation: cd-zin var(--_cd-duration) linear forwards;
+}
+.cd-calendar-next.cd-flipping::before {
+  animation: cd-fold-bright var(--_cd-duration) linear forwards; /* 新值上半：由暗转亮 */
+}
+.cd-calendar-next.cd-flipping::after {
+  animation:
+    cd-foldin var(--_cd-duration) linear forwards,
+    cd-fold-bright var(--_cd-duration) linear forwards; /* 新值下半：折入 + 转亮 */
+}
+.cd-calendar-now.cd-flipping {
+  z-index: 1;
+  animation: cd-zout var(--_cd-duration) linear forwards;
+}
+.cd-calendar-now.cd-flipping::before {
+  animation:
+    cd-foldout var(--_cd-duration) linear forwards,
+    cd-fold-dim var(--_cd-duration) linear forwards; /* 旧值上半：折出 + 变暗 */
+}
+.cd-calendar-now.cd-flipping::after {
+  animation: cd-fold-dim var(--_cd-duration) linear forwards; /* 旧值下半：变暗 */
+}
+
+@keyframes cd-zin {
+  0% {
+    z-index: 0;
+  }
+  100% {
+    z-index: 1;
+  }
+}
+@keyframes cd-zout {
+  0% {
+    z-index: 1;
+  }
+  100% {
+    z-index: 0;
+  }
+}
+@keyframes cd-foldin {
+  0% {
+    transform: rotateX(180deg);
+  }
+  100% {
+    transform: rotateX(0);
+  }
+}
+@keyframes cd-foldout {
+  0% {
+    transform: rotateX(0);
+  }
+  100% {
+    transform: rotateX(-180deg);
+  }
+}
+/* 折叠变暗/转亮（filter:brightness 走 GPU 合成；0.4 是变暗深度，要调改这里的字面量） */
+@keyframes cd-fold-dim {
+  0% {
+    filter: brightness(1);
+  }
+  100% {
+    filter: brightness(0.4);
+  }
+}
+@keyframes cd-fold-bright {
+  0% {
+    filter: brightness(0.4);
+  }
+  100% {
+    filter: brightness(1);
+  }
+}
+
+/* ====================== odometer：滚动数字（count-up 高频递增）====================== */
+/* 每位是一条纵向长条（minimal 2 格 / full 11 格），由 createOdometerRender 按数值连续平移；
+   位移在 JS 中以 var(--cd-cell-height) 为单位计算，故无需 transition。
+   注意：不要在此加 will-change:transform——多实例时每条长条都被永久提升为合成层（实测百例约
+   800 层），合成器每帧 Commit 同步整棵层树 → 反而掉到 ~28fps；去掉后 Chrome 自行处理逐帧
+   transform，百例满 ~59fps。flip 那种"仅翻转期间"的瞬时 will-change 才安全（数量少、用完即放）。 */
+.cd-odometer-cell {
+  overflow: hidden;
+  border-radius: var(--cd-radius, 0.1em);
+}
+.cd-odometer-num {
+  height: auto;
+  display: flex;
+  flex-direction: column;
+}
+.cd-odometer-num > span {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: var(--cd-cell-height, 1.25em);
+  font-weight: var(--cd-font-weight, inherit);
+  color: var(--cd-color, #fff);
+  background: var(--cd-bg, #333);
+}
+/* 前导零位/分隔符隐藏（odometer 默认隐藏前导 0，仅切换 class，不增删 DOM） */
+.cd-hidden {
+  display: none;
+}
+
+/* 无障碍：尊重"减少动态效果" */
+@media (prefers-reduced-motion: reduce) {
+  .cd-num,
+  .cd-num::before,
+  .cd-num::after {
+    transition-duration: 1ms !important;
+    animation-duration: 1ms !important;
+  }
+}

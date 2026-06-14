@@ -38,6 +38,11 @@
       "import": "./dist/esm/index.mjs",
       "default": "./dist/esm/index.mjs"
     },
+    "./debug": {
+      "types": "./dist/esm/debug.d.mts",
+      "import": "./dist/esm/debug.mjs",
+      "default": "./dist/esm/debug.mjs"
+    },
     "./min": {
       "types": "./dist/index.d.mts",
       "default": "./dist/index.min.js"

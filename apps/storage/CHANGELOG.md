@@ -11,6 +11,7 @@
 - **`StorageOptions`（per-call set 选项）收窄**为 `{ ttl, expireAt, memoized }` 三项——此前类型上允许但实际被忽略的 `codeable`/`sliding`/`raw` 等不再出现在类型里。
 - **构建 target 提升至 es2022**（移除全部降级 helper）；`tsconfig` lib 提升至 ESNext。
 - 批量 `set` 的 `values` 短于 `keys` 时，缺位键**跳过并告警**（此前会写入 `value: undefined`）。
+- **`debug` 移出主入口**：改为子路径导入 `import { debug } from "@codejoo/storage/debug"`——单文件产物（`dist/index.mjs` / `index.min.js`）不再包含 debug 代码。
 
 ### Added
 

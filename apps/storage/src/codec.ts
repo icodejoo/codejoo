@@ -100,7 +100,3 @@ export function codec(password?: string): Codec {
     },
   };
 }
-
-console.log(codec().encode("hello world"));
-console.log(codec().encode("你好世界"));
-console.log(codec().decode(codec().encode("你好世界")));

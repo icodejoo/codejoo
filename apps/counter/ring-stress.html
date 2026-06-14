@@ -1,0 +1,151 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>ring 压测 — 100 实例 FPS/内存</title>
+    <link rel="stylesheet" href="./src/plugins/ring.css" />
+    <style>
+      * {
+        box-sizing: border-box;
+      }
+      body {
+        margin: 0;
+        background: #0a0709;
+        color: #ccc;
+        font-family: ui-monospace, Consolas, monospace;
+      }
+      #bar {
+        position: fixed;
+        top: 0;
+        left: 0;
+        right: 0;
+        padding: 6px 10px;
+        background: #15100f;
+        border-bottom: 1px solid #2c2330;
+        font-size: 12px;
+        z-index: 9;
+        display: flex;
+        gap: 16px;
+        align-items: center;
+      }
+      #fps {
+        color: #37d67a;
+        font-weight: 700;
+      }
+      #grid {
+        display: grid;
+        grid-template-columns: repeat(10, 1fr);
+        gap: 4px;
+        padding: 40px 8px 8px;
+      }
+      .cell {
+        width: 100%;
+        aspect-ratio: 1;
+      }
+    </style>
+  </head>
+  <body>
+    <div id="bar">
+      <span>ring 压测</span>
+      <span>实例 <b id="count">0</b></span>
+      <span>模式 <b id="mode">-</b></span>
+      <span>FPS <b id="fps">-</b></span>
+      <span id="hint">每帧自测 FPS（rAF 采样）。CDP 脚本同时采 DrawFrame/内存。</span>
+    </div>
+    <div id="grid"></div>
+
+    <script type="module">
+      import { use, start, stop } from "./src/core/index.ts";
+      import countdown, { register, clear } from "./src/count-down/count-down.ts";
+      import { createRingRender } from "./src/plugins/ring.ts";
+
+      use(register());
+      const grid = document.getElementById("grid");
+      const qp = new URLSearchParams(location.search);
+      const N = Number(qp.get("n") || 100);
+      const MS = qp.get("ms") === "1"; // 默认每秒（真实用法）；?ms=1 开毫秒模式 = 每帧重绘的最坏负载
+      const GLOW = qp.get("glow") === "1"; // 默认关（新默认值）；?glow=1 开发光对比 GPU 成本
+
+      // 让 100 个实例各不相同：旋向/段数/数码模式/配色/发光/阈值/前缀都按 index 变化
+      const HUES = ["#ff6a5a", "#ff8a3a", "#ffcf3a", "#9be15d", "#37d67a", "#3ac8ff", "#6b8aff", "#c86bff", "#ff5ab0", "#ff3b30"];
+      const renders = [];
+      const insts = []; // { r, cell } 供同步微基准（绕开本机合成器瓶颈，纯测插件 JS 开销）
+
+      function optsFor(i) {
+        return {
+          clockwise: i % 2 === 0,
+          glow: GLOW, // 默认关；?glow=1 全开做 GPU 对比
+          redAt: 3 + (i % 3),
+          yellowAt: 10 + (i % 5),
+          colors: { normal: HUES[i % HUES.length] },
+          arcA: { segments: 3 + (i % 3), span: 50 + (i % 4) * 6 },
+          arcB: { segments: 3 + (i % 3), span: 50 + (i % 4) * 6 },
+          digit: i % 5 === 0 ? { mode: "text" } : { mode: "segment" },
+          inner: i % 4 === 0 ? { colorAt: ({ index }) => HUES[index % HUES.length] } : {},
+        };
+      }
+
+      function mount(n = N, ms = MS) {
+        for (let i = 0; i < n; i++) {
+          const cell = document.createElement("div");
+          cell.className = "cell";
+          grid.appendChild(cell);
+          const r = createRingRender(optsFor(i));
+          renders.push(r);
+          insts.push({ r, cell });
+          // 时长各异且较长（2~7min），整场不归零；ms 模式每帧重绘 = 最坏负载
+          countdown(120000 + (i % 300) * 1000, cell, { render: r, showMilliseconds: ms, lazy: false, fmt: "mm:ss", label: "stress" });
+        }
+        document.getElementById("count").textContent = grid.childElementCount;
+        document.getElementById("mode").textContent = ms ? "ms(每帧)" : "每秒";
+      }
+
+      // 拆除：停任务 + 释放渲染器引用 + 移除 DOM（供泄漏检测）
+      function teardown() {
+        clear("stress");
+        renders.forEach((r) => r.destroy());
+        renders.length = 0;
+        insts.length = 0;
+        grid.textContent = "";
+        document.getElementById("count").textContent = 0;
+      }
+
+      // 同步微基准：直接连续调用所有实例的 render（文本随帧变化以触发数码管/内圈更新），
+      // 测纯 JS 渲染开销（不受本机合成器/GPU 限制）。返回 ms/帧 与 µs/实例。
+      const pad = (n) => String(n).padStart(2, "0");
+      const mmss = (ms) => `${pad(Math.floor(ms / 60000))}:${pad(Math.floor((ms % 60000) / 1000))}`;
+      function bench(rounds = 600, step = 1000) {
+        // step=1000：每轮跨一整秒 → 每次都真重绘（最坏）；step=16：模拟 60fps 毫秒任务 → 命中整秒跳帧
+        const value = [0, 0, 0, 0, 0];
+        const ctx = { el: null, id: 0, deadline: 0, remaining: 0, value, active: true, paused: false, fmt: (ms) => mmss(ms), parser: () => value };
+        const t0 = performance.now();
+        for (let f = 0; f < rounds; f++) {
+          const rem = 305000 - f * step; // 由 5min 递减，跨分钟、跨秒，触发各路径
+          for (let i = 0; i < insts.length; i++) insts[i].r(insts[i].cell, rem, value, ctx);
+        }
+        const dt = performance.now() - t0;
+        const calls = rounds * insts.length;
+        return { rounds, instances: insts.length, totalMs: +dt.toFixed(1), msPerFrame: +(dt / rounds).toFixed(3), usPerRender: +((dt * 1000) / calls).toFixed(2), projFpsCeiling: Math.round(1000 / (dt / rounds)) };
+      }
+
+      // rAF FPS 自测（页面上肉眼可见）
+      let frames = 0,
+        t0 = performance.now();
+      function loop(t) {
+        frames++;
+        if (t - t0 >= 500) {
+          document.getElementById("fps").textContent = Math.round((frames * 1000) / (t - t0));
+          frames = 0;
+          t0 = t;
+        }
+        requestAnimationFrame(loop);
+      }
+      requestAnimationFrame(loop);
+
+      // 供 CDP 脚本调用
+      Object.assign(window, { __mount: mount, __teardown: teardown, __bench: bench, __start: start, __stop: stop, __count: () => grid.childElementCount });
+      mount();
+    </script>
+  </body>
+</html>

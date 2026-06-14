@@ -22,8 +22,9 @@ export default defineConfig({
       outExtensions: () => ({ js: ".min.js" }),
     },
     {
-      // 解包（每个源模块单独成文件）的 ESM 产物，便于下游按模块 tree-shake
-      entry: "src/index.ts",
+      // 解包（每个源模块单独成文件）的 ESM 产物，便于下游按模块 tree-shake。
+      // debug 不在主入口（防止进 bundle），需作为独立 entry 才会被产出，经 "./debug" 子路径导出
+      entry: ["src/index.ts", "src/debug.ts"],
       format: "esm",
       platform: "browser",
       target: "es2022",
