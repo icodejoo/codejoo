@@ -4,6 +4,12 @@ import { lazyStart } from "./helper";
 /** 分组的默认标签；该分组常驻（清空也不删除），其余分组空了即删 */
 export const defaultLabel = "default";
 
+/** 若渲染器带 destroy（如 card/odometer/ring 插件），在任务移除时调用它释放该元素的内部引用 */
+export function destroyRender(el: Element | undefined, render: unknown): void {
+  const destroy = (render as { destroy?: (el?: Element) => void } | undefined)?.destroy;
+  if (el && typeof destroy === "function") destroy(el);
+}
+
 /**
  * 统一「立即开始 / 进入视口才开始」的接线（count-up / count-down 共用）。
  * - active 或无 el：立即 start()，返回 undefined（无需 cancel）。

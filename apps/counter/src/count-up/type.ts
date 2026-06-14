@@ -67,6 +67,8 @@ export interface ICountupBaseOptions {
   observer?: IntersectionObserver;
   /** 懒任务超时回收(ms)，>0 时若元素在该时长内仍未进入视口则自动 remove；默认 0=不回收 */
   lazyTimeout?: number;
+  /** 动画到达目标时是否自动销毁该任务（出队 + 调用渲染器 destroy + 清引用），默认 true；false 则保留实例停在末值 */
+  autoKill?: boolean;
 }
 
 export interface ICountupGroupOptions extends ICountupBaseOptions {}
@@ -104,6 +106,8 @@ export interface ICountupTask extends Required<Omit<ICountupTaskOptions, "el">>,
   resuming: boolean;
   /** lazy 观察的取消函数（移除/清空时断开 observer，未进入视口前避免泄漏） */
   cancel?: () => void;
+  /** 已到达目标并保留（autoKill:false）：tick 跳过，不再重绘/重触 onDone */
+  done?: boolean;
   /** 复用的上下文（最后一个参数传给 fmt/render/on*） */
   ctx: ICountupRenderContext;
 }

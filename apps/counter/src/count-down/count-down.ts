@@ -4,7 +4,7 @@ import { countdownRender, resolveConfig, resolveDateParser, resolveFormatter, re
 import { start, use } from "../core";
 import type { IPlugin } from "../core/types";
 import { $ } from "../helper";
-import { createGroupStore, defaultLabel, scheduleStart } from "../groups";
+import { createGroupStore, defaultLabel, destroyRender, scheduleStart } from "../groups";
 
 const MS_SECOND = 1000;
 
@@ -18,6 +18,7 @@ export const defaults: Required<Omit<ICountdownOptions, "parser" | "observer">> 
   render: countdownRender,
   lazy: true,
   lazyTimeout: 0,
+  autoKill: true,
 };
 
 /** 释放所有任务（断开 observer、触发 onDestroy、清空队列）并允许重新自举注册——供 counter.destroy() 调用 */
@@ -43,10 +44,12 @@ function ensureRegistered() {
 const store = createGroupStore<ICountdownTask, ICountdownOptions>({
   onRemove: (t) => {
     t.cancel?.();
+    destroyRender(t.el, t.render); // 释放渲染器(如插件)对该元素的内部引用
     if (t.el) elTask.delete(t.el);
   },
   onClearEach: (t) => {
     t.cancel?.();
+    destroyRender(t.el, t.render);
     if (t.el) elTask.delete(t.el);
     // 未激活的 lazy 任务尚未锚定 deadline，剩余时间未知 → 传 0
     const remaining = t.active ? t.deadline - Date.now() : 0;
@@ -68,7 +71,7 @@ function add(deadline: TCountdownDeadline, el: string | Element, options?: strin
   const lbl = (isLabel ? options : options?.label) ?? defaultLabel;
   const g = group(isLabel ? options : options?.label);
 
-  const { timeOffset, dateParser, fmt, parser, showDays, showMilliseconds, render, label, lazy, observer, lazyTimeout, ...hooks } = resolveConfig(defaults, g.config, isLabel ? undefined : options);
+  const { timeOffset, dateParser, fmt, parser, showDays, showMilliseconds, render, label, lazy, observer, lazyTimeout, autoKill, ...hooks } = resolveConfig(defaults, g.config, isLabel ? undefined : options);
 
   const elRef = $(el);
   // 同元素已有倒计时 → 先移除旧任务，避免两个倒计时争抢同一元素（与 count-up 的"一元素一计数器"一致）
@@ -106,6 +109,7 @@ function add(deadline: TCountdownDeadline, el: string | Element, options?: strin
     fmt: fmtFn,
     parser: parserFn,
     render,
+    autoKill,
     ctx,
     ...hooks,
   };
@@ -159,18 +163,18 @@ export function tick(): boolean {
   let busy = false;
   groups.forEach((g, label) => {
     g.queue.forEach((task, id) => {
-      if (!task.active || task.paused) return; // 未激活 / 暂停：跳过且不计 busy
+      if (!task.active || task.paused || task.done) return; // 未激活 / 暂停 / 已归零保留：跳过且不计 busy
       const remaining = task.deadline - now;
       const ctx = task.ctx;
       ctx.remaining = remaining;
       if (remaining <= 0) {
         ctx.remaining = 0;
         ctx.value = task.parser(0, ctx);
-        task.render(task.el, 0, ctx.value, ctx);
-        if (task.el) elTask.delete(task.el);
+        task.render(task.el, 0, ctx.value, ctx); // 末帧落定（0）
         task.onDone?.(0, ctx);
-        g.queue.delete(id);
-        if (g.queue.size === 0 && label !== defaultLabel) groups.delete(label);
+        // autoKill（默认）：出队并经 onRemove 释放（清元素索引 + 调用渲染器 destroy）；否则保留实例停在 0
+        if (task.autoKill) remove(id, label);
+        else task.done = true;
         return;
       }
       busy = true;

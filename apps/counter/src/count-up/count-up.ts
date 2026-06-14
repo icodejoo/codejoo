@@ -1,7 +1,7 @@
 import type { IPlugin } from "../core/types";
 import { start, use } from "../core";
 import { $ } from "../helper";
-import { createGroupStore, defaultLabel, scheduleStart } from "../groups";
+import { createGroupStore, defaultLabel, destroyRender, scheduleStart } from "../groups";
 import { buildCountupFormatter, ease } from "./helper";
 import type { ICountupBaseOptions, ICountupRenderContext, ICountupTask, ICountupFullOptions } from "./type";
 
@@ -37,6 +37,7 @@ export const defaults: Required<Omit<ICountupBaseOptions, "observer">> = {
   render: countupRender,
   lazy: true,
   lazyTimeout: 0,
+  autoKill: true,
 };
 
 /** 释放所有任务（断开 observer、清空队列）并允许重新自举注册——供 counter.destroy() 调用 */
@@ -49,6 +50,7 @@ function disposeAll() {
 const store = createGroupStore<ICountupTask, ICountupBaseOptions>({
   onRemove: (t) => {
     t.cancel?.();
+    destroyRender(t.el, t.render); // 释放渲染器(如插件)对该元素的内部引用
     if (t.el) {
       lastValue.set(t.el, t.value);
       elTask.delete(t.el);
@@ -85,9 +87,9 @@ export function resume(id: number, label = defaultLabel) {
 export function tick(elapsed: number, dt: number): boolean {
   lastElapsed = elapsed;
   let busy = false;
-  groups.forEach((g, label) => {
+  groups.forEach((g) => {
     g.queue.forEach((task, id) => {
-      if (!task.active || task.paused) return; // 未激活 / 暂停：跳过且不计 busy
+      if (!task.active || task.paused || task.done) return; // 未激活 / 暂停 / 已完成保留：跳过且不计 busy
       if (task.resuming) {
         // 把暂停期间流逝的时间平移进 startAt，进度从暂停点无缝继续
         task.startAt += elapsed - task.pausedElapsed;
@@ -117,13 +119,13 @@ export function tick(elapsed: number, dt: number): boolean {
       } else {
         task.value = task.to;
         task.ctx.value = task.value;
-        if (task.el) {
-          lastValue.set(task.el, task.value); // 记录末值，供结束后续接
-          elTask.delete(task.el);
-        }
-        g.queue.delete(id);
-        if (g.queue.size === 0 && label !== defaultLabel) groups.delete(label);
+        if (task.el) task.render(task.el, task.value, task.ctx); // 末值先落定
         task.onDone?.(task.value, task.ctx);
+        // autoKill（默认）：出队并经 onRemove 释放（记录末值 + 清元素索引 + 调用渲染器 destroy）；
+        // 否则保留实例停在末值，标记 done 跳过后续帧（可手动 remove 或同元素重定目标）
+        if (task.autoKill) remove(id, task.label);
+        else task.done = true;
+        return;
       }
       if (task.el) {
         // 不预格式化：传原始 value，渲染器需要字符串时自行 ctx.fmt(value)
@@ -169,8 +171,10 @@ function addTask(options: ICountupFullOptions): number {
       existing.onDone = options.onDone;
       existing.onPause = options.onPause;
       existing.onResume = options.onResume;
+      existing.autoKill = merged.autoKill;
       existing.startAt = -1; // 重新计时
       existing.accum = 0;
+      existing.done = false; // 复活保留的已完成实例
       existing.paused = false;
       existing.resuming = false;
       existing.ctx.paused = false;

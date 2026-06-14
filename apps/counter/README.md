@@ -76,13 +76,13 @@ Each render plugin is runtime-standalone (it depends on count-down only via type
 `countup(from, to, label)`, `countup(from, to, opts)`, `countup({ el, from, to, ...opts })`.
 Options: `duration` (ms, default 1000), `easing` `(t)=>t`, `fps` (0 = every frame), `fmt`
 `(value, ctx)=>string`, `render`, `lazy` (default true), `observer`, `lazyTimeout`, `label`,
-and hooks `onStart/onUpdate/onDone/onPause/onResume`. Returns a numeric task id.
+`autoKill` (default true — drop the task & call the render's destroy on finish), and hooks `onStart/onUpdate/onDone/onPause/onResume`. Returns a numeric task id.
 Management: `countup.remove(id, label?)`, `.pause`, `.resume`, `.clear(label?)`, `.group(label, config)`, `.defaults`.
 
 **`countdown(deadline, el, opts | label)`** — `deadline` is a ms duration / `Date` / date-string
 (use `dateParser` for unit durations). Options: `fmt` (template like `HH:mm:ss` / `DD HH:mm:ss.sss`,
 or a function), `showDays`, `showMilliseconds`, `timeOffset`, `dateParser`, `render`, `lazy`,
-`observer`, `lazyTimeout`, `label`, hooks `onStart/onUpdate/onDone/onDestroy/onPause/onResume`.
+`autoKill`, `observer`, `lazyTimeout`, `label`, hooks `onStart/onUpdate/onDone/onDestroy/onPause/onResume`.
 Same management methods as count-up.
 
 **core** — `import { counter, createLazyObserver } from "@codejoo/counter"`. `counter` exposes

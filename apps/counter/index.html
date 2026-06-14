@@ -252,6 +252,7 @@
             <span class="lbl"></span>
             label <input type="text" id="cuLabel" value="" placeholder="(default)" />
             <label><input type="checkbox" id="cuLazy" /> lazy</label>
+            <label><input type="checkbox" id="cuAutoKill" checked /> autoKill</label>
             easing
             <select id="cuEase">
               <option>linear</option>
@@ -348,6 +349,7 @@
             <span class="lbl"></span>
             label <input type="text" id="cdLabel" value="" placeholder="(default)" />
             <label><input type="checkbox" id="cdLazy" /> lazy</label>
+            <label><input type="checkbox" id="cdAutoKill" checked /> autoKill</label>
             render
             <select id="cdRender">
               <option value="text">文本(默认)</option>
@@ -663,6 +665,7 @@
           easing: easingOf(str("cuEase")),
           fmt: fmtOf(str("cuFmt")),
           lazy: chk("cuLazy"),
+          autoKill: chk("cuAutoKill"),
           el: onText ? cuT : cuR,
           render: renderSel === "odo-min" ? odoMin : renderSel === "odo-full" ? odoFull : countupRender,
           onDone: (v) => log(`[countup] onDone(${v})`, "ev"),
@@ -772,6 +775,7 @@
           showMilliseconds: chk("cdShowMs"),
           timeOffset: num("cdOff"),
           lazy: chk("cdLazy"),
+          autoKill: chk("cdAutoKill"),
         };
         // 仅在选了自定义 render 时传入；否则不带 render 键，沿用默认 countdownRender
         const r = cdRenderOf(renderSel);

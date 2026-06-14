@@ -139,6 +139,38 @@ describe("countdown", () => {
     expect(onDone).toHaveBeenCalledTimes(1);
   });
 
+  it("autoKill:false keeps the task at zero; onDone once, no re-render", () => {
+    const el = document.createElement("div");
+    const onDone = vi.fn();
+    const render = vi.fn();
+    countdown(2000, el, { autoKill: false, onDone, render });
+    countdownTick();
+    vi.setSystemTime(Date.now() + 2000);
+    expect(countdownTick()).toBe(false); // 归零但保留，不计 busy
+    expect(onDone).toHaveBeenCalledTimes(1);
+    const calls = render.mock.calls.length;
+    vi.setSystemTime(Date.now() + 1000);
+    countdownTick(); // done → 跳过
+    expect(onDone).toHaveBeenCalledTimes(1);
+    expect(render.mock.calls.length).toBe(calls);
+  });
+
+  it("calls the render's destroy() on auto-kill and on manual remove", () => {
+    const el = document.createElement("div");
+    const destroy = vi.fn();
+    countdown(1000, el, { render: Object.assign(vi.fn(), { destroy }) });
+    countdownTick();
+    vi.setSystemTime(Date.now() + 1000);
+    countdownTick(); // 归零 → autoKill 出队 → destroy(el)
+    expect(destroy).toHaveBeenCalledWith(el);
+
+    const el2 = document.createElement("div");
+    const destroy2 = vi.fn();
+    const id2 = countdown(5000, el2, { render: Object.assign(vi.fn(), { destroy: destroy2 }) });
+    countdown.remove(id2); // 手动终止某个任务 → 同样 destroy
+    expect(destroy2).toHaveBeenCalledWith(el2);
+  });
+
   it("skips re-render within the same second", () => {
     const el = document.createElement("div");
     const render = vi.fn();
@@ -203,6 +235,33 @@ describe("countup", () => {
     expect(onDone).toHaveBeenCalledTimes(1);
     countupTick(1100, 100);
     expect(onDone).toHaveBeenCalledTimes(1);
+  });
+
+  it("autoKill:false keeps the task at target; onDone once, no re-tick", () => {
+    const el = document.createElement("div");
+    const onDone = vi.fn();
+    countup({ to: 100, el, onDone, autoKill: false, ...linear });
+    countupTick(0, 0);
+    expect(countupTick(1000, 1000)).toBe(false); // 到达目标但保留，不计 busy
+    expect(el.textContent).toBe("100");
+    expect(onDone).toHaveBeenCalledTimes(1);
+    countupTick(1100, 100); // done → 跳过
+    expect(onDone).toHaveBeenCalledTimes(1);
+  });
+
+  it("calls the render's destroy() on auto-kill and on manual remove", () => {
+    const el = document.createElement("div");
+    const destroy = vi.fn();
+    countup({ to: 10, el, ...linear, render: Object.assign(vi.fn(), { destroy }) });
+    countupTick(0, 0);
+    countupTick(1000, 1000); // 完成 → autoKill 出队 → destroy(el)
+    expect(destroy).toHaveBeenCalledWith(el);
+
+    const el2 = document.createElement("div");
+    const destroy2 = vi.fn();
+    const id2 = countup({ to: 10, el: el2, ...linear, render: Object.assign(vi.fn(), { destroy: destroy2 }) });
+    countup.remove(id2); // 手动终止某个任务 → 同样 destroy
+    expect(destroy2).toHaveBeenCalledWith(el2);
   });
 
   it("throttles updates by fps without phase drift", () => {

@@ -84,6 +84,8 @@ export interface ICountdownOptions {
   observer?: IntersectionObserver;
   /** 懒任务超时回收(ms)，>0 时若元素在该时长内仍未进入视口则自动 remove；默认 0=不回收 */
   lazyTimeout?: number;
+  /** 倒计时归零时是否自动销毁该任务（出队 + 调用渲染器 destroy + 清引用），默认 true；false 则保留实例停在 0 */
+  autoKill?: boolean;
 }
 
 export interface ICountdownGroup {
@@ -122,6 +124,10 @@ export interface ICountdownTask extends IHooks {
   parser: TCountdownParser;
   /** 渲染函数 */
   render: TCountdownRender;
+  /** 归零时是否自动销毁，默认 true */
+  autoKill: boolean;
+  /** 已归零并保留（autoKill:false）：tick 跳过，不再重绘/重触 onDone */
+  done?: boolean;
   /** 复用的上下文（最后一个参数传给 fmt/parser/render/on*） */
   ctx: ICountdownContext;
 }
