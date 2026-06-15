@@ -1,14 +1,17 @@
 import type { PluginLogger, Primitive } from './types';
 
-declare const process: { env: { NODE_ENV?: string } };
-
 /**
  * 编译期常量：
  *   - Vite / Rollup / esbuild / Webpack 等都会把 `process.env.NODE_ENV` 替换成字面量，
- *     生产构建中本常量折叠成 `false`，配合 `if (__DEV__) {...}` 整块被 DCE 掉。
- *   - 未走打包（直接 Node 运行测试）时退化成运行时判断，结果一致。
+ *     生产构建中本常量折叠成 `false`，配合 `if (__DEV__) {...}` 整块被 DCE 掉
+ *     (本仓库 min 构建在 vite.config.ts 里显式 `define` 注入 production)。
+ *   - 浏览器环境若未注入 `process`，`typeof` 守卫保证退化为 `false` 而非 ReferenceError；
+ *     直接 Node 运行测试时退化成运行时判断，结果一致。
  */
-export const __DEV__: boolean = process.env.NODE_ENV !== 'production';
+export const __DEV__: boolean =
+    typeof process !== 'undefined' &&
+    !!process.env &&
+    process.env.NODE_ENV !== 'production';
 
 /** Project-wide log namespace used for tagging. */
 export const NS = '[http-plugins]';
@@ -67,64 +70,64 @@ export function asArray<X>(x: X | X[] | undefined): X[] {
 }
 
 
-export class Type {
-    private static readonly toString = Object.prototype.toString;
+/* 类型守卫改为独立具名函数 —— 静态方法类是单一打包单元，bundler 无法摇掉未用方法；
+ * 拆成独立 `export function` 后未引用者会被 tree-shaking 干净移除。
+ * 仅 `isObject` / `isPrimitive` 当前被使用，其余按需保留供插件作者使用。 */
 
-    private static stringify(val: unknown): string {
-        return this.toString.call(val).slice(8, -1).toLowerCase();
-    }
+const _toString = Object.prototype.toString;
+function _stringify(val: unknown): string {
+    return _toString.call(val).slice(8, -1).toLowerCase();
+}
 
-    // 判断是否为普通对象 (非 null, 非数组)
-    static isObject(val: unknown): val is Record<string, any> {
-        return this.stringify(val) === 'object';
-    }
+/** 普通对象 (非 null, 非数组) */
+export function isObject(val: unknown): val is Record<string, any> {
+    return _stringify(val) === 'object';
+}
 
-    static isArray(val: unknown): val is any[] {
-        return Array.isArray(val);
-    }
+export function isArray(val: unknown): val is any[] {
+    return Array.isArray(val);
+}
 
-    static isString(val: unknown): val is string {
-        return typeof val === 'string';
-    }
+export function isString(val: unknown): val is string {
+    return typeof val === 'string';
+}
 
-    static isNumber(val: unknown): val is number {
-        return typeof val === 'number';
-    }
+export function isNumber(val: unknown): val is number {
+    return typeof val === 'number';
+}
 
-    static isFunction(val: unknown): val is Function {
-        return typeof val === 'function';
-    }
+export function isFunction(val: unknown): val is Function {
+    return typeof val === 'function';
+}
 
-    static isDate(val: unknown): val is Date {
-        return val instanceof Date;
-    }
+export function isDate(val: unknown): val is Date {
+    return val instanceof Date;
+}
 
-    static isNull(val: unknown): val is null {
-        return val === null;
-    }
+export function isNull(val: unknown): val is null {
+    return val === null;
+}
 
-    static isUndefined(val: unknown): val is undefined {
-        return val === undefined;
-    }
+export function isUndefined(val: unknown): val is undefined {
+    return val === undefined;
+}
 
-    // 针对 Map/Set 的判断
-    static isMap(val: unknown): val is Map<any, any> {
-        return val instanceof Map;
-    }
+export function isMap(val: unknown): val is Map<any, any> {
+    return val instanceof Map;
+}
 
-    static isSet(val: unknown): val is Set<any> {
-        return val instanceof Set;
-    }
+export function isSet(val: unknown): val is Set<any> {
+    return val instanceof Set;
+}
 
-    static isPrimitive(val: unknown): val is Primitive {
-        if (val === null) return true;
-        const type = typeof val;
-        return type !== 'object' && type !== 'function';
-    }
+export function isPrimitive(val: unknown): val is Primitive {
+    if (val === null) return true;
+    const type = typeof val;
+    return type !== 'object' && type !== 'function';
+}
 
-    static falsy(val: unknown) {
-        return val === void 0 || val === null || Number.isNaN(val)
-    }
+export function falsy(val: unknown): boolean {
+    return val === void 0 || val === null || Number.isNaN(val);
 }
 
 

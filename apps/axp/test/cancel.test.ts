@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from 'vitest';
-import cancel, { cancelAll } from './cancel';
+import cancel, { cancelAll } from '../src/plugins/cancel';
 
 
 function makeMockCtx() {

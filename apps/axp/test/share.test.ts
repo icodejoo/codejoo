@@ -8,7 +8,7 @@ import {
     $race,
     $retry,
     type ISharedOptions,
-} from './share';
+} from '../src/plugins/share';
 
 
 // ───────────────────────────────────────────────────────────────────────────

@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { $shouldMock, $resolveMock, $rewriteUrl, type IMockOptions } from './mock';
+import { $shouldMock, $resolveMock, $rewriteUrl, type IMockOptions } from '../src/plugins/mock';
 
 
 describe('$shouldMock — runWhen 守卫', () => {

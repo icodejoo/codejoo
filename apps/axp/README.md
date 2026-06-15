@@ -633,10 +633,38 @@ Replace the sink via `{ debug: true, logger: myLogger }` (any object with
 
 ### Bundled plugins
 
-| Plugin | Description |
+All are exported from the package entry and ship their own request-config type
+augmentation (so `config.cache`, `config.retry`, … are typed once imported):
+
+| Plugin | Factory | Description |
+|---|---|---|
+| build-key | [`buildKey`](./src/plugins/build-key.ts) | Computes a per-request `config.key` (64-bit dual-lane FNV) used by cache / share as the dedup dimension |
+| cache | [`cache`](./src/plugins/cache.ts) | In-TTL response cache via adapter wrap; `removeCache` / `clearCache` for invalidation |
+| share | [`share`](./src/plugins/share.ts) | Concurrent-request strategies keyed by `config.key`: `start` / `end` / `race` / `retry` / `none` |
+| retry | [`retry`](./src/plugins/retry.ts) | Failure retry with optional "successful-but-business-failed" predicate |
+| cancel | [`cancel`](./src/plugins/cancel.ts) | Auto-injects an `AbortController` per request; `cancelAll(ax)` aborts all in-flight |
+| loading | [`loading`](./src/plugins/loading.ts) | Global request-count loading toggle (`fn(true)` on 0→1, `fn(false)` on 1→0) |
+| mock | [`mock`](./src/plugins/mock.ts) | Rewrites matched requests to a `mockUrl` (enable via `import.meta.env.DEV`) |
+| envs | [`envs`](./src/plugins/envs.ts) | Install-time multi-environment defaults merge (zero runtime cost) |
+| filter-request | [`filterRequest`](./src/plugins/filter-request.ts) (alias `normalizeRequest`) | Strips empty `params` / `data` fields before send |
+| replace-path-vars | [`replacePathVars`](./src/plugins/replace-path-vars.ts) | Substitutes `{id}` / `:id` / `[id]` path variables from `params` / `data` |
+| normalize-response | [`normalizeResponse`](./src/plugins/normalize-response.ts) | Strict envelope policy: rejects with an `ApiError` (carrying `ApiResponse`) when `successful === false` |
+
+#### Response shapes are resolved by the dispatch, not a plugin
+
+The three return forms in the table at the top of this README are implemented in
+`Core`'s dispatch from the backend envelope `response.data = { code, data, message }`:
+
+| Call | Returns |
 |---|---|
-| [`normalize`](./src/plugins/normalize.ts) | Promotes `response.data.data` to `response.data` (envelope unwrap) |
-| [`normalizeStrict`](./src/plugins/http-normalize-plugin.ts) | Wraps the body in `ApiResponse`, rejects when `successful === false` |
+| `await get(path)(payload)` | unwrapped `response.data.data` (or the body as-is for non-envelope APIs) |
+| `await get(path)(payload, { raw: true })` | the envelope `{ code, data, message }` |
+| `await get(path)(payload, { wrap: true })` | `ApiResponse<R>` |
+
+`normalizeResponse` is an **optional** strict layer on top — it only enforces the
+business-success policy (throwing on failure); it does not own response shaping.
+The success criterion lives in `ApiResponse.isSuccessful(status, code)` — reassign
+it if your backend uses a different success code.
 
 ---
 

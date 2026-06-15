@@ -31,18 +31,22 @@
     "check": "vp fmt -c oxfmt.config.ts --check && vp lint -c oxlint.config.ts",
     "build": "vp pack",
     "dev": "vp pack --watch",
-    "test": "vp test"
+    "test": "vp test",
+    "e2e:dev": "node e2e/dev.mjs",
+    "e2e:server": "node e2e/server/mock-server.mjs",
+    "e2e:playground": "vp dev e2e/playground --port 5180 --strictPort",
+    "e2e": "node e2e/run.mjs"
   },
   "devDependencies": {
+    "@codejoo/openapi2lang": "^1.0.6",
     "@types/node": "catalog:",
     "@typescript/native-preview": "catalog:",
+    "axios": "catalog:",
+    "playwright": "catalog:",
     "vite-plus": "catalog:",
     "vitest": "catalog:"
   },
   "peerDependencies": {
-    "axios": "^1.15.2"
-  },
-  "dependencies": {
-    "@codejoo/openapi2lang": "^1.0.6"
+    "axios": "catalog:"
   }
 }

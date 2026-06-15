@@ -1,0 +1,45 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>http-plugins · e2e playground</title>
+    <style>
+      :root { color-scheme: dark; }
+      * { box-sizing: border-box; }
+      body {
+        margin: 0; font: 14px/1.5 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+        background: #0b1020; color: #e6e9f0; padding: 16px 20px 64px;
+      }
+      h1 { font-size: 18px; margin: 0 0 4px; }
+      .sub { color: #8b93a7; margin: 0 0 16px; font-size: 12px; }
+      .bar { position: sticky; top: 0; background: #0b1020; padding: 8px 0; z-index: 10; border-bottom: 1px solid #232a40; margin-bottom: 12px; }
+      .pill { display: inline-block; padding: 2px 8px; border-radius: 4px; font-weight: 600; }
+      .on  { background: #2563eb; color: #fff; }
+      .off { background: #313a55; color: #9aa3bd; }
+      .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(380px, 1fr)); gap: 12px; }
+      .card { background: #121a30; border: 1px solid #232a40; border-radius: 8px; padding: 12px; }
+      .card h2 { font-size: 14px; margin: 0 0 8px; color: #93c5fd; }
+      .desc { color: #8b93a7; font-size: 12px; margin: -4px 0 8px; }
+      button {
+        font: inherit; background: #1e293f; color: #e6e9f0; border: 1px solid #38415c;
+        border-radius: 6px; padding: 5px 10px; margin: 0 6px 6px 0; cursor: pointer;
+      }
+      button:hover { background: #283455; }
+      pre { background: #0a0f1f; border: 1px solid #232a40; border-radius: 6px; padding: 8px;
+            margin: 4px 0 0; max-height: 220px; overflow: auto; white-space: pre-wrap; word-break: break-word; }
+      .ok  { border-left: 3px solid #22c55e; }
+      .err { border-left: 3px solid #ef4444; }
+    </style>
+  </head>
+  <body>
+    <h1>http-plugins · e2e playground</h1>
+    <p class="sub">手动启动：① <code>npm run e2e:server</code>（mock 后端 :4570）② <code>npm run e2e:dev</code>（本页 :5180）。逐张卡片点按钮观察结果；同一套 UI 也被 Playwright 自动驱动。</p>
+    <div class="bar">
+      loading 指示器：<span class="pill off" id="loading-indicator" data-testid="loading-indicator">off</span>
+      &nbsp;|&nbsp; mock 后端：<span data-testid="mock-base">http://localhost:4570</span>
+    </div>
+    <div class="grid" id="app"></div>
+    <script type="module" src="./main.ts"></script>
+  </body>
+</html>

@@ -1,9 +1,11 @@
-import axios, {
-  AxiosHeaders,
+import axios, { AxiosHeaders } from 'axios';
+import type {
   AxiosInstance,
   AxiosRequestConfig,
+  AxiosResponse,
 } from 'axios';
 import { asArray } from './helper';
+import ApiResponse from './objects/ApiResponse';
 import { PluginManager } from './plugin';
 import type {
   CoreOptions,
@@ -113,25 +115,50 @@ export default class Core<T = unknown> {
         payload?: unknown,
         config?: IHttpOptions,
       ) {
-        return self.axios.request({
+        const merged = {
           url: path,
           method,
           [field]: payload,
           ...methodConfig,
           ...config,
-        });
+        } as IHttpOptions;
+        // dispatch 在此真正兑现三种返回形态(raw / wrap / 解包)，
+        // 而非把整个 AxiosResponse 直接漏给调用方(旧实现的类型谎言)。
+        return self.axios.request(merged).then((res) => shapeResponse(res, merged));
       };
     } as unknown as HttpPrototype<T>[HttpMethodLower];
   }
 
+  /* prototype 上的 verb 方法与实例状态无关(method/field 由闭包捕获，
+   * 体内只用 this/self)，因此全进程只需装配一次，模块级 flag 守卫避免
+   * 每次 new 都重跑循环。 */
   #build() {
+    if (PROTO_BUILT) return;
     const bodyMethods: HttpMethodLower[] = ['delete', 'post', 'put', 'patch'];
     const methods: HttpMethodLower[] = ['get', 'head', 'options', ...bodyMethods];
     const proto = Core.prototype as unknown as Record<HttpMethodLower, unknown>;
     for (const m of methods) {
       proto[m] ||= this.#buildMethod(m, bodyMethods.includes(m) ? 'data' : 'params');
     }
+    PROTO_BUILT = true;
   }
+}
+
+let PROTO_BUILT = false;
+
+/** 把 AxiosResponse 映射成 dispatch 声明的三种形态之一：
+ *   - `raw`  → 后端信封 `{ code, data, message }`(即 `response.data`)
+ *   - `wrap` → `ApiResponse<R>`
+ *   - 默认   → 解包后的业务数据 `R`；非信封式响应(无 code 字段)原样返回，
+ *             保证"薄 axios 包装"与第三方接口仍可用。 */
+function shapeResponse(res: AxiosResponse, config: IHttpOptions): unknown {
+  if ((config as { raw?: boolean }).raw) return res.data;
+  if ((config as { wrap?: boolean }).wrap) return ApiResponse.fromResponse(res);
+  const body = res.data;
+  if (body && typeof body === 'object' && 'code' in body && 'data' in body) {
+    return (body as { data: unknown }).data;
+  }
+  return body;
 }
 
 /** Clone `axios.defaults` so the returned object is safe to hand to

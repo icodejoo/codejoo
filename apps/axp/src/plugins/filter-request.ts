@@ -1,6 +1,6 @@
 
 import type { Falsy, MaybeFun, Plugin } from '../types';
-import { Type, __DEV__ } from '../helper';
+import { isObject, __DEV__ } from '../helper';
 import type { AxiosRequestConfig } from 'axios';
 
 
@@ -36,13 +36,13 @@ export default function filterRequest({ enable = true, predicate, ignoreKeys, ig
                         // dev 分支：收集丢弃条目并打印（生产构建时整块被 DCE）
                         const droppedParams: TDroppedKV[] = [];
                         const droppedData: TDroppedKV[] = [];
-                        if (Type.isObject(config.params)) config.params = $filter(config.params, opts, droppedParams);
-                        if (Type.isObject(config.data)) config.data = $filter(config.data, opts, droppedData);
+                        if (isObject(config.params)) config.params = $filter(config.params, opts, droppedParams);
+                        if (isObject(config.data)) config.data = $filter(config.data, opts, droppedData);
                         if (droppedParams.length) ctx.logger.log(`${config.method?.toUpperCase()} ${config.url} dropped from params:`, Object.fromEntries(droppedParams));
                         if (droppedData.length) ctx.logger.log(`${config.method?.toUpperCase()} ${config.url} dropped from data:`, Object.fromEntries(droppedData));
                     } else {
-                        if (Type.isObject(config.params)) config.params = $filter(config.params, opts);
-                        if (Type.isObject(config.data)) config.data = $filter(config.data, opts);
+                        if (isObject(config.params)) config.params = $filter(config.params, opts);
+                        if (isObject(config.data)) config.data = $filter(config.data, opts);
                     }
                     delete config.filter;
                     return config;

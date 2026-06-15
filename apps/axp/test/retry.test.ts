@@ -1,6 +1,6 @@
 import { describe, it, expect, vi } from 'vitest';
 import type { AxiosRequestConfig, AxiosResponse } from 'axios';
-import { $resolveMax, $resolveException, type IRetryOptions } from './retry';
+import { $resolveMax, $resolveException, type IRetryOptions } from '../src/plugins/retry';
 
 
 describe('$resolveMax', () => {
@@ -62,7 +62,7 @@ function makeMockCtx() {
 
 describe('retry 集成 — onRejected 路径', () => {
     it('max=2：第 1、2 次失败后重试，第 3 次失败彻底 reject', async () => {
-        const { default: retry } = await import('./retry');
+        const { default: retry } = await import('../src/plugins/retry');
         const { ctx, handlers, requestFn } = makeMockCtx();
         retry({ max: 2 }).install(ctx);
         const onRejected = handlers[0].rejected!;
@@ -87,7 +87,7 @@ describe('retry 集成 — onRejected 路径', () => {
     });
 
     it('max=0 → 不重试，直接 reject', async () => {
-        const { default: retry } = await import('./retry');
+        const { default: retry } = await import('../src/plugins/retry');
         const { ctx, handlers, requestFn } = makeMockCtx();
         retry({ max: 0 }).install(ctx);
         const onRejected = handlers[0].rejected!;
@@ -96,7 +96,7 @@ describe('retry 集成 — onRejected 路径', () => {
     });
 
     it('error 没有 config → 直接 reject（防御性）', async () => {
-        const { default: retry } = await import('./retry');
+        const { default: retry } = await import('../src/plugins/retry');
         const { ctx, handlers, requestFn } = makeMockCtx();
         retry({ max: 5 }).install(ctx);
         const onRejected = handlers[0].rejected!;
@@ -105,7 +105,7 @@ describe('retry 集成 — onRejected 路径', () => {
     });
 
     it('请求级 retry: 0 强制禁用（覆盖插件级 max=5）', async () => {
-        const { default: retry } = await import('./retry');
+        const { default: retry } = await import('../src/plugins/retry');
         const { ctx, handlers, requestFn } = makeMockCtx();
         retry({ max: 5 }).install(ctx);
         const onRejected = handlers[0].rejected!;
@@ -117,7 +117,7 @@ describe('retry 集成 — onRejected 路径', () => {
 
 describe('retry 集成 — isExceptionRequest 路径', () => {
     it('成功响应被判为业务异常时也触发重试', async () => {
-        const { default: retry } = await import('./retry');
+        const { default: retry } = await import('../src/plugins/retry');
         const { ctx, handlers, requestFn } = makeMockCtx();
         const isException = vi.fn((r: AxiosResponse) => r.data?.code !== 0);
         retry({ max: 2, isExceptionRequest: isException }).install(ctx);
@@ -132,7 +132,7 @@ describe('retry 集成 — isExceptionRequest 路径', () => {
     });
 
     it('正常成功响应不触发重试', async () => {
-        const { default: retry } = await import('./retry');
+        const { default: retry } = await import('../src/plugins/retry');
         const { ctx, handlers, requestFn } = makeMockCtx();
         retry({ max: 2, isExceptionRequest: (r) => r.data?.code !== 0 }).install(ctx);
         const onFulfilled = handlers[0].fulfilled!;

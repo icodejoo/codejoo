@@ -1,5 +1,5 @@
 import type { Plugin } from '../types';
-import { Type, __DEV__ } from '../helper';
+import { isObject, isPrimitive, __DEV__ } from '../helper';
 
 export interface PathVariableOptions {
     /**
@@ -44,14 +44,14 @@ export default function replacePathVars(
                             }
                         }
 
-                        //try remove from data
-                        if (value !== null && data) {
-                            if (Type.isObject(data) && key in data) {
+                        //fall back to data ONLY when params didn't supply the value
+                        if (value === null && data) {
+                            if (isObject(data) && key in data) {
                                 value = data[key];
                                 if (removeKey) {
                                     delete data[key]
                                 }
-                            } else if (Type.isPrimitive(data)) {
+                            } else if (isPrimitive(data)) {
                                 value = data;
                                 if (removeKey) {
                                     delete config.data
@@ -70,4 +70,5 @@ export default function replacePathVars(
     };
 }
 
-replacePathVars.name = name
+// 见 normalize-response：严格模式 ESM 下 fn.name 须用 defineProperty 重定义
+Object.defineProperty(replacePathVars, 'name', { value: name })

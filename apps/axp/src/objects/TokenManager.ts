@@ -1,8 +1,5 @@
-import { InternalAxiosRequestConfig } from "axios";
-import { AxiosInstance } from "axios";
-
 export interface ITokenManager {
-  /** 是否可以刷新token，调用方需在登录成功后，将改字段重置为true */
+  /** 是否可以刷新token，调用方需在登录成功后，将该字段重置为true */
   canRefresh: boolean;
   get accessToken(): string | undefined;
   get refreshToken(): string | undefined;
@@ -10,7 +7,13 @@ export interface ITokenManager {
   clear(): void;
 }
 
+/** SSR / 非浏览器环境下 localStorage 不存在 —— 统一经此安全访问，避免 ReferenceError。 */
+const storage: Pick<Storage, "getItem" | "setItem" | "removeItem"> | null =
+  typeof localStorage !== "undefined" ? localStorage : null;
+
 export default class TokenManager implements ITokenManager {
+  /** 存储“裸” token(不含 Bearer 前缀)；持久化的也是裸值，读取时按需加前缀，
+   *  避免旧实现“存入已带 Bearer 的值 → 重新加载再次加前缀 → Bearer Bearer”的问题。 */
   #accessToken?: string;
   #refreshToken?: string;
 
@@ -20,18 +23,18 @@ export default class TokenManager implements ITokenManager {
   canRefresh = true;
 
   constructor() {
-    this.accessToken = localStorage.getItem(TokenManager.#key1) || undefined;
-    this.refreshToken = localStorage.getItem(TokenManager.#key2) || undefined;
+    this.#accessToken = storage?.getItem(TokenManager.#key1) || undefined;
+    this.#refreshToken = storage?.getItem(TokenManager.#key2) || undefined;
   }
 
+  /** 直接可用于 `Authorization` 头：裸 token 存在时返回 `Bearer <token>`。 */
   get accessToken(): string | undefined {
-    return this.#accessToken;
+    return this.#accessToken ? `Bearer ${this.#accessToken}` : undefined;
   }
 
   set accessToken(value: string | undefined | null) {
-    value = value ? `Bearer ${value}` : undefined;
-    this.#accessToken = value;
-    // this.#cache(this.#accessToken, TokenManager.#key1);
+    this.#accessToken = value || undefined;
+    TokenManager.#cache(this.#accessToken, TokenManager.#key1);
   }
 
   get refreshToken(): string | undefined {
@@ -40,7 +43,7 @@ export default class TokenManager implements ITokenManager {
 
   set refreshToken(value: string | undefined | null) {
     this.#refreshToken = value || undefined;
-    // this.#cache(this.#refreshToken, TokenManager.#key2);
+    TokenManager.#cache(this.#refreshToken, TokenManager.#key2);
   }
 
   set(accessToken?: string, refreshToken?: string) {
@@ -51,15 +54,16 @@ export default class TokenManager implements ITokenManager {
   clear(): void {
     this.#accessToken = undefined;
     this.#refreshToken = undefined;
-    localStorage.removeItem(TokenManager.#key1);
-    localStorage.removeItem(TokenManager.#key2);
+    storage?.removeItem(TokenManager.#key1);
+    storage?.removeItem(TokenManager.#key2);
   }
 
-  #cache(value: string | undefined | null, key: string) {
+  static #cache(value: string | undefined | null, key: string) {
+    if (!storage) return;
     if (value) {
-      localStorage.setItem(key, value);
+      storage.setItem(key, value);
     } else {
-      localStorage.removeItem(key);
+      storage.removeItem(key);
     }
   }
 }

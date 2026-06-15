@@ -1,6 +1,6 @@
 import { describe, it, expect, vi } from 'vitest';
 import type { AxiosAdapter, AxiosRequestConfig } from 'axios';
-import { $resolveLoading, $wrap, type ILoadingOptions, type TLoadingFunc } from './loading';
+import { $resolveLoading, $wrap, type ILoadingOptions, type TLoadingFunc } from '../src/plugins/loading';
 
 
 // ───────────────────────────────────────────────────────────────────────────

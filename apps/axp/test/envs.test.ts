@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from 'vitest';
-import envs from './envs';
+import envs from '../src/plugins/envs';
 
 
 function makeMockCtx() {

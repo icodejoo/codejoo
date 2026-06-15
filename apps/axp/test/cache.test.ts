@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import type { AxiosAdapter, AxiosRequestConfig, AxiosResponse } from 'axios';
-import cache, { $resolveCache, $resolveKey, clearCache, removeCache } from './cache';
+import cache, { $resolveCache, $resolveKey, clearCache, removeCache } from '../src/plugins/cache';
 
 
 function makeMockCtx() {
