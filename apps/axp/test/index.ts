@@ -3,8 +3,8 @@ import { create, normalizeRequest, normalizeResponse } from '../src';
 
 
 
-const githubApi = create<model.PathRefs>(axios.create({ baseURL: "https://api.github.com", adapter: 'fetch' }));
-const internalApi = create<model.PathRefs>(axios.create({ baseURL: "https://api.internal.example.com", adapter: 'fetch' }));
+const githubApi = create<model.MethodRefs>(axios.create({ baseURL: "https://api.github.com", adapter: 'fetch' }));
+const internalApi = create<model.MethodRefs>(axios.create({ baseURL: "https://api.internal.example.com", adapter: 'fetch' }));
 
 
 githubApi.use(normalizeRequest())

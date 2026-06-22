@@ -287,7 +287,48 @@ function emitPaths(meta: MegaSchemaResult, cfg: TsLangConfig): string {
     out += "    }\n";
   }
   out += "  }\n";
+
+  out += "\n";
+  out += emitMethodRefs(meta, allPaths, cfg);
+
   out += "}\n";
+  return out;
+}
+
+/**
+ * method-major 索引接口 `MethodRefs` —— `PathRefs` 的「方法优先」预展开版本：
+ *   { [method]: { [path]: [response, request] } }
+ *
+ * 这是静态产物（codegen 直接写出字面结构），不是 `type X = Indexed<PathRefs>` 的
+ * 类型层反转：消费者（如 axp 的 `Core<T>`）按 `T[method][path]` 做 O(1) 字面查表，
+ * 零条件类型计算，对 tsserver / IDE 内存友好。`PathRefs` 仍按 path-major 原样保留
+ * （openapi 自己的 `OpenApi`/`Request` 继续消费它）。
+ */
+const METHOD_ORDER: readonly string[] = ["get", "post", "put", "delete", "patch", "options", "head"];
+
+function emitMethodRefs(meta: MegaSchemaResult, allPaths: string[], cfg: TsLangConfig): string {
+  const present = [...new Set(meta.ops.map((o) => o.method))];
+  const methods: string[] = [
+    ...METHOD_ORDER.filter((m) => present.includes(m)),
+    ...present.filter((m) => !METHOD_ORDER.includes(m)).sort(),
+  ];
+
+  let out = "  interface MethodRefs {\n";
+  for (const m of methods) {
+    out += `    ${m}: {\n`;
+    for (const p of allPaths) {
+      const op = meta.ops.find((o) => o.path === p && o.method === m);
+      if (!op) continue;
+      const reqInfo = meta.reqInfoOf.get(opKey(p, m))!;
+      const resExpr = renderResponse(meta.responseRefOf.get(opKey(p, m))!, cfg);
+      const reqExpr = renderReq(reqInfo, cfg);
+      const jsdoc = renderJsDoc(op, "      ");
+      if (jsdoc) out += `${jsdoc}\n`;
+      out += `      '${p}': [response: ${resExpr}, request: ${reqExpr}]\n`;
+    }
+    out += "    }\n";
+  }
+  out += "  }\n";
   return out;
 }
 

@@ -3,7 +3,7 @@
 [中文](./README.zh-CN.md) | English
 
 A typed, **plugin-based** HTTP client on top of `axios`. Wrap an axios instance,
-bind your OpenAPI-derived schema (`model.PathRefs`) for end-to-end inference of
+bind your OpenAPI-derived schema (`model.MethodRefs`) for end-to-end inference of
 path / payload / response, and compose single-purpose plugins whose side-effects
 are auto-tracked and reverted on eject.
 
@@ -17,7 +17,9 @@ npm i @codejoo/axp   # peer dep: axios
 import axios from 'axios';
 import { create, cache, retry, share, buildKey } from '@codejoo/axp';
 
-const api = create<model.PathRefs>(axios.create({ baseURL: '/api' }), { debug: false });
+// model.MethodRefs is the method-major schema emitted by codegen (statically
+// pre-expanded — no type-level inversion). model.PathRefs stays path-major.
+const api = create<model.MethodRefs>(axios.create({ baseURL: '/api' }), { debug: false });
 
 // build-key feeds cache/share with a dedup key; install in the order you want them to run
 api.use([buildKey(), cache({ expires: 30_000 }), share(), retry({ max: 2 })]);

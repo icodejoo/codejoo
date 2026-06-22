@@ -168,12 +168,14 @@ export interface HttpInternalRequestConfig extends InternalAxiosRequestConfig {
  *  with PathRef-driven inference baked in. Everything below this line is a
  *  private implementation detail of that single export.
  *
- *  Schema shape (`model.PathRefs`):
- *      { [path]: { [method]: [response: R, request: [payload: P] | []] } }
+ *  Schema shape (`model.MethodRefs`, the **method-major** index emitted by
+ *  codegen — a static, pre-expanded product, not a TS-level inversion):
+ *      { [method]: { [path]: [response: R, request: [payload: P] | []] } }
+ *  (`model.PathRefs` stays path-major for openapi's own `Request`/`OpenApi`.)
  *
  *  IDE-perf choices:
- *    • `_Refs<T>` is a one-shot cached alias so deeper helpers don't redo the
- *      `T extends model.PathRefs` check on every reference.
+ *    • No type-level inversion — `T[Mt][P]` is a direct O(1) literal-key access
+ *      on the already-method-major schema (codegen did the inversion once).
  *    • `[X] extends [Y]` non-distributive guards prevent fan-out on unions.
  *    • Literal `P` is captured once on the wrap and reused across all three
  *      `HttpDispatch` overloads — payload/response inference runs once per
@@ -194,35 +196,28 @@ export type HttpPrototype<T> = {
 
 /* ─── private helpers (not exported) ──────────────────────────────────────── */
 
-/* Method-major inversion of `model.PathRefs`. Computed once per `T`, cached by
- * the compiler — turns the path-major schema
- *     { '/pet': { post: [...], put: [...] }, ... }
- * into
- *     { post: { '/pet': [...] }, put: { '/pet': [...] }, ... }
- * so every per-call lookup degrades to a literal-key access on a small object,
- * not a mapped+conditional fan-out across all `keyof T` (≈ 1000 paths). */
-type _Indexed<T> = [T] extends [model.PathRefs]
-  ? {
-    [Mt in HttpMethodLower]: {
-      [K in keyof T as Mt extends keyof T[K] ? K & string : never]: T[K][Mt &
-      keyof T[K]];
-    };
-  }
-  : never;
+/* `T` is the **method-major** schema (`model.MethodRefs`): `{ [method]: { [path]:
+ * [response, request] } }`. Codegen already emitted this index statically, so
+ * every per-call lookup is a direct literal-key access `T[Mt][P]` — no mapped /
+ * conditional fan-out across ~1000 paths at type-check time. */
 
-/** Strict path: only keys present in the pre-filtered table (no `(string & {})`).
- *  Unlisted URLs are a compile error — extend `model.PathRefs` via a local
+/** Strict path: only keys present under that method (no `(string & {})`).
+ *  Unlisted URLs are a compile error — extend `model.MethodRefs` via a local
  *  `.d.ts` declaration merge during integration (see README). When `T` is not a
- *  `PathRefs` subtype (e.g. `Core<unknown>`) the constraint relaxes to `string`. */
-type LoosePath<T, Mt extends HttpMethodLower> = [_Indexed<T>] extends [never]
-  ? string
-  : keyof _Indexed<T>[Mt];
+ *  `MethodRefs` subtype (e.g. `Core<unknown>`) the constraint relaxes to `string`. */
+type LoosePath<T, Mt extends HttpMethodLower> = [T] extends [model.MethodRefs]
+  ? Mt extends keyof T
+    ? keyof T[Mt]
+    : never
+  : string;
 
 /** `[response, request]` tuple for a path/method, or `never`. O(1) literal lookup. */
-type EntryFor<T, Mt extends HttpMethodLower, P> = [_Indexed<T>] extends [never]
-  ? never
-  : P extends keyof _Indexed<T>[Mt]
-  ? _Indexed<T>[Mt][P]
+type EntryFor<T, Mt extends HttpMethodLower, P> = [T] extends [model.MethodRefs]
+  ? Mt extends keyof T
+    ? P extends keyof T[Mt]
+      ? T[Mt][P]
+      : never
+    : never
   : never;
 
 type ResponseFor<T, Mt extends HttpMethodLower, P> =

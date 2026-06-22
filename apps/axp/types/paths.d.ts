@@ -150,4 +150,34 @@ declare namespace model {
       delete: [response: unknown, request: [payload: model.req.DeleteUser]]
     }
   }
+
+  interface MethodRefs {
+    get: {
+      '/pet/findByStatus': [response: Array<model.Pet>, request: [payload: model.req.FindPetsByStatus]]
+      '/pet/findByTags': [response: Array<model.Pet>, request: [payload: model.req.FindPetsByTags]]
+      '/pet/{petId}': [response: model.Pet, request: [payload: model.req.GetPetById]]
+      '/store/inventory': [response: Record<string, number>, request: []]
+      '/store/order/{orderId}': [response: model.Order, request: [payload: model.req.GetOrderById]]
+      '/user/login': [response: string, request: [payload: model.req.LoginUser]]
+      '/user/logout': [response: unknown, request: []]
+      '/user/{username}': [response: model.User, request: [payload: model.req.GetUserByName]]
+    }
+    post: {
+      '/pet': [response: model.Pet, request: [payload: model.req.AddPet]]
+      '/pet/{petId}': [response: model.Pet, request: [payload: model.req.UpdatePetWithForm]]
+      '/pet/{petId}/uploadImage': [response: model.ApiResponse, request: [payload: model.req.UploadFile]]
+      '/store/order': [response: model.Order, request: [payload: model.req.PlaceOrder]]
+      '/user': [response: model.User, request: [payload: model.req.CreateUser]]
+      '/user/createWithList': [response: model.User, request: [payload: model.req.CreateUsersWithListInput]]
+    }
+    put: {
+      '/pet': [response: model.Pet, request: [payload: model.req.UpdatePet]]
+      '/user/{username}': [response: unknown, request: [payload: model.req.UpdateUser]]
+    }
+    delete: {
+      '/pet/{petId}': [response: unknown, request: [payload: model.req.DeletePet]]
+      '/store/order/{orderId}': [response: unknown, request: [payload: model.req.DeleteOrder]]
+      '/user/{username}': [response: unknown, request: [payload: model.req.DeleteUser]]
+    }
+  }
 }
