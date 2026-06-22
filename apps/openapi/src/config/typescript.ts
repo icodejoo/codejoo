@@ -26,6 +26,8 @@ export function configureTypescript(input: ConfigureTsInput = {}): TsLangConfig 
       pathsFile: input.base?.pathsFile ?? "paths.d.ts",
       rootNamespace: input.base?.rootNamespace ?? "model",
       requestNamespace: input.base?.requestNamespace ?? "req",
+      emitPathRefs: input.base?.emitPathRefs ?? true,
+      emitMethodRefs: input.base?.emitMethodRefs ?? true,
     },
     primary: { ...DEFAULT_TS_PRIMARY, ...input.primary },
     others: { ...DEFAULT_TS_OTHERS, ...input.others },
@@ -44,7 +46,7 @@ const DEFAULT_TS_PRIMARY: TsPrimaryOptions = {
   "nice-property-names": false, // [quicktype 默认 false]
   "explicit-unions": false, // [quicktype 默认 false]
   "prefer-unions": true, // [quicktype 默认 false]  字符串字面量联合替代 enum
-  "prefer-types": true, // [quicktype 默认 false]  type 别名替代 interface
+  "prefer-types": false, // [quicktype 默认 false]  false=interface（对 tsserver 远优于 type 别名：按名惰性解析+缓存，hover/报错更小更快）；true=type 别名
   "prefer-const-values": false, // [quicktype 默认 false]
   readonly: false, // [quicktype 默认 false]
   converters: "top-level", // [quicktype 默认 'top-level']
@@ -72,12 +74,17 @@ export interface TsBase extends CommonBase {
   responseFile: string;
   /** 合成的 op 请求类型 → declare namespace model.req */
   requestFile: string;
-  /** Paths 联合 + PathRefs 索引 → declare namespace model */
+  /** Paths 联合 + PathRefs / MethodRefs 索引 → declare namespace model */
   pathsFile: string;
   /** declare namespace 根名 */
   rootNamespace: string;
   /** request 子命名空间名（最终路径：model.req.<X>） */
   requestNamespace: string;
+  /** 产出 path-major `PathRefs`（openapi2lang 自己的 `Request`/`OpenApi` 消费）。默认 true。 */
+  emitPathRefs: boolean;
+  /** 产出 method-major `MethodRefs`（axp `Core<T>` 消费）。默认 true。
+   *  只用其一时可关掉另一个，省去消费方解析整份索引的开销。JSDoc 只挂在二者中实际产出的「优先 PathRefs」一份上。 */
+  emitMethodRefs: boolean;
   inferenceFlags: InferenceFlags;
 }
 

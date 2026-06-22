@@ -256,6 +256,12 @@ function isEnumLike(b: TsBlock): boolean {
 function emitPaths(meta: MegaSchemaResult, cfg: TsLangConfig): string {
   const ns = cfg.base.rootNamespace;
   const allPaths = [...new Set(meta.ops.map((o) => o.path))].sort();
+  const wantPath = cfg.base.emitPathRefs;
+  const wantMethod = cfg.base.emitMethodRefs;
+  // JSDoc 只挂一处（避免 PathRefs / MethodRefs 重复一份注释徒增解析体积）：
+  // 优先放在 PathRefs；若不产 PathRefs，则放到 MethodRefs，保证文档始终存在且只存一份。
+  const docOnPath = wantPath;
+  const docOnMethod = wantMethod && !wantPath;
 
   let out = cfg.base.fileHeader;
   out += `declare namespace ${ns} {\n`;
@@ -268,7 +274,19 @@ function emitPaths(meta: MegaSchemaResult, cfg: TsLangConfig): string {
     out += "\n\n";
   }
 
-  out += "  interface PathRefs {\n";
+  const blocks: string[] = [];
+  if (wantPath) blocks.push(renderPathRefs(meta, allPaths, cfg, docOnPath));
+  if (wantMethod) blocks.push(renderMethodRefs(meta, allPaths, cfg, docOnMethod));
+  out += blocks.join("\n");
+
+  out += "}\n";
+  return out;
+}
+
+/** path-major 索引 `PathRefs`：`{ [path]: { [method]: [response, request] } }`。
+ *  openapi2lang 自己的 `OpenApi`/`Request` 消费它。 */
+function renderPathRefs(meta: MegaSchemaResult, allPaths: string[], cfg: TsLangConfig, withJsDoc: boolean): string {
+  let out = "  interface PathRefs {\n";
   for (const p of allPaths) {
     const opsOfPath = meta.ops.filter((o) => o.path === p);
     if (opsOfPath.length === 0) {
@@ -280,33 +298,29 @@ function emitPaths(meta: MegaSchemaResult, cfg: TsLangConfig): string {
       const reqInfo = meta.reqInfoOf.get(opKey(op.path, op.method))!;
       const resExpr = renderResponse(meta.responseRefOf.get(opKey(op.path, op.method))!, cfg);
       const reqExpr = renderReq(reqInfo, cfg);
-      const jsdoc = renderJsDoc(op, "      ");
-      if (jsdoc) out += `${jsdoc}\n`;
+      if (withJsDoc) {
+        const jsdoc = renderJsDoc(op, "      ");
+        if (jsdoc) out += `${jsdoc}\n`;
+      }
       out += `      ${op.method}: [response: ${resExpr}, request: ${reqExpr}]\n`;
     }
     out += "    }\n";
   }
   out += "  }\n";
-
-  out += "\n";
-  out += emitMethodRefs(meta, allPaths, cfg);
-
-  out += "}\n";
   return out;
 }
 
 /**
- * method-major 索引接口 `MethodRefs` —— `PathRefs` 的「方法优先」预展开版本：
+ * method-major 索引 `MethodRefs` —— `PathRefs` 的「方法优先」预展开版本：
  *   { [method]: { [path]: [response, request] } }
  *
  * 这是静态产物（codegen 直接写出字面结构），不是 `type X = Indexed<PathRefs>` 的
  * 类型层反转：消费者（如 axp 的 `Core<T>`）按 `T[method][path]` 做 O(1) 字面查表，
- * 零条件类型计算，对 tsserver / IDE 内存友好。`PathRefs` 仍按 path-major 原样保留
- * （openapi 自己的 `OpenApi`/`Request` 继续消费它）。
+ * 零条件类型计算，对 tsserver / IDE 内存友好。
  */
 const METHOD_ORDER: readonly string[] = ["get", "post", "put", "delete", "patch", "options", "head"];
 
-function emitMethodRefs(meta: MegaSchemaResult, allPaths: string[], cfg: TsLangConfig): string {
+function renderMethodRefs(meta: MegaSchemaResult, allPaths: string[], cfg: TsLangConfig, withJsDoc: boolean): string {
   const present = [...new Set(meta.ops.map((o) => o.method))];
   const methods: string[] = [
     ...METHOD_ORDER.filter((m) => present.includes(m)),
@@ -322,8 +336,10 @@ function emitMethodRefs(meta: MegaSchemaResult, allPaths: string[], cfg: TsLangC
       const reqInfo = meta.reqInfoOf.get(opKey(p, m))!;
       const resExpr = renderResponse(meta.responseRefOf.get(opKey(p, m))!, cfg);
       const reqExpr = renderReq(reqInfo, cfg);
-      const jsdoc = renderJsDoc(op, "      ");
-      if (jsdoc) out += `${jsdoc}\n`;
+      if (withJsDoc) {
+        const jsdoc = renderJsDoc(op, "      ");
+        if (jsdoc) out += `${jsdoc}\n`;
+      }
       out += `      '${p}': [response: ${resExpr}, request: ${reqExpr}]\n`;
     }
     out += "    }\n";
