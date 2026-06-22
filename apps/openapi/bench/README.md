@@ -14,6 +14,7 @@ node bench/tsserver.mjs   # 真实 tsserver 进程 WorkingSet（Windows，依赖
 ```
 
 `generate.mjs` 参数（`generate(outDir, opts)`）：
+
 - `wrap`: `'global'`（ambient `declare namespace model`）| `'module'`（`export` + 命名空间导入）
 - `decl`: `'interface'` | `'type'`（Tier 1 杠杆）
 - `index`: `'both'` | `'methodOnly'`（只产 MethodRefs）| `'pathOnly'`
@@ -22,19 +23,20 @@ node bench/tsserver.mjs   # 真实 tsserver 进程 WorkingSet（Windows，依赖
 
 ## 已测结论（240 路径 / 340 模型量级）
 
-| 形态 | checker 堆内存 | 相对 |
-|---|---|---|
-| global + interface（当前默认） | 46.3 MB | 基准 |
-| global + type（Tier1 之前） | 47.2 MB | +1.8% |
-| **module + interface** | 43.1 MB | **−7%** |
-| **global + iface, methodOnly 索引** | 43.0 MB | **−7%** |
-| global + iface, 去 Paths 联合 | 46.2 MB | −0.2%（可忽略） |
-| global + iface, methodOnly + 去联合 | 42.7 MB | −7.7% |
+| 形态                                | checker 堆内存 | 相对            |
+| ----------------------------------- | -------------- | --------------- |
+| global + interface（当前默认）      | 46.3 MB        | 基准            |
+| global + type（Tier1 之前）         | 47.2 MB        | +1.8%           |
+| **module + interface**              | 43.1 MB        | **−7%**         |
+| **global + iface, methodOnly 索引** | 43.0 MB        | **−7%**         |
+| global + iface, 去 Paths 联合       | 46.2 MB        | −0.2%（可忽略） |
+| global + iface, methodOnly + 去联合 | 42.7 MB        | −7.7%           |
 
 **tsserver 进程 WorkingSet**：global ≈ module ≈ 129 MB（**无可测差异**——tsserver 按 tsconfig
 构建整个 program，全局/模块都加载，差异被 node 基线淹没）。
 
 ### 要点
+
 - **最划算的杠杆是「只产一个索引」**：axp 只用 `MethodRefs`、openapi2lang 的 `Request` 只用
   `PathRefs`，没有单个消费者同时需要两者。设 `emitPathRefs:false`（或反之）省 ~7% 内存 + ~700 符号。
 - `module` 开关在 batch checker 省 ~7%，但 **tsserver 总 RSS 不变**；其价值在解耦 / 补全卫生 /

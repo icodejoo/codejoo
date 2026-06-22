@@ -357,10 +357,7 @@ const METHOD_ORDER: readonly string[] = ["get", "post", "put", "delete", "patch"
 
 function renderMethodRefs(meta: MegaSchemaResult, allPaths: string[], cfg: TsLangConfig, withJsDoc: boolean): string {
   const present = [...new Set(meta.ops.map((o) => o.method))];
-  const methods: string[] = [
-    ...METHOD_ORDER.filter((m) => present.includes(m)),
-    ...present.filter((m) => !METHOD_ORDER.includes(m)).sort(),
-  ];
+  const methods: string[] = [...METHOD_ORDER.filter((m) => present.includes(m)), ...present.filter((m) => !METHOD_ORDER.includes(m)).sort()];
 
   let out = "  interface MethodRefs {\n";
   for (const m of methods) {
@@ -410,7 +407,10 @@ function emitPathsModule(meta: MegaSchemaResult, cfg: TsLangConfig): string {
 
 /** 把 namespace 缩进的渲染块降一级缩进并给首个声明行加 `export`（模块形态用）。 */
 function dedentExport(block: string): string {
-  const lines = block.replace(/\n+$/, "").split("\n").map((l) => (l.startsWith("  ") ? l.slice(2) : l));
+  const lines = block
+    .replace(/\n+$/, "")
+    .split("\n")
+    .map((l) => (l.startsWith("  ") ? l.slice(2) : l));
   for (let i = 0; i < lines.length; i++) {
     const t = lines[i].trim();
     if (t.startsWith("interface ") || t.startsWith("type ")) {

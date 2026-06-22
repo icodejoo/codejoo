@@ -31,17 +31,37 @@ export function generate(outDir, opts = {}) {
   let pathRefs = "";
   for (const o of ops) pathRefs += `  '${o.p}': {\n    ${o.m}: ${entry(o)}\n  }\n`;
   let methodRefs = "";
-  for (const m of METHODS) { methodRefs += `  ${m}: {\n`; for (const o of ops) if (o.m === m) methodRefs += `    '${o.p}': ${entry(o)}\n`; methodRefs += `  }\n`; }
+  for (const m of METHODS) {
+    methodRefs += `  ${m}: {\n`;
+    for (const o of ops) if (o.m === m) methodRefs += `    '${o.p}': ${entry(o)}\n`;
+    methodRefs += `  }\n`;
+  }
   const unionTxt = ops.map((o) => `  | '${o.p}'`).join("\n");
 
-  const indent = (t, pad = "  ") => t.split("\n").map((l) => (l ? pad + l : l)).join("\n");
+  const indent = (t, pad = "  ") =>
+    t
+      .split("\n")
+      .map((l) => (l ? pad + l : l))
+      .join("\n");
 
   if (mod) {
     let resF = "";
-    for (let k = 0; k < c.res; k++) resF += "export " + decl("Res" + k, resBody(k, (n) => n)); // 同模块裸引用
+    for (let k = 0; k < c.res; k++)
+      resF +=
+        "export " +
+        decl(
+          "Res" + k,
+          resBody(k, (n) => n),
+        ); // 同模块裸引用
     writeFileSync(`${outDir}/response.d.ts`, resF);
     let reqF = `import type * as model from './response'\n\n`;
-    for (let k = 0; k < c.req; k++) reqF += "export " + decl("Req" + k, reqBody(k, (n) => "model." + n));
+    for (let k = 0; k < c.req; k++)
+      reqF +=
+        "export " +
+        decl(
+          "Req" + k,
+          reqBody(k, (n) => "model." + n),
+        );
     writeFileSync(`${outDir}/request.d.ts`, reqF);
     let p = `import type * as model from './response'\nimport type * as req from './request'\n\n`;
     if (c.union) p += `export type Paths =\n${unionTxt}\n\n`;
@@ -50,11 +70,25 @@ export function generate(outDir, opts = {}) {
     writeFileSync(`${outDir}/paths.d.ts`, p);
   } else {
     let resF = "declare namespace model {\n";
-    for (let k = 0; k < c.res; k++) resF += indent(decl("Res" + k, resBody(k, (n) => "model." + n))) + "\n";
+    for (let k = 0; k < c.res; k++)
+      resF +=
+        indent(
+          decl(
+            "Res" + k,
+            resBody(k, (n) => "model." + n),
+          ),
+        ) + "\n";
     resF += "}\n";
     writeFileSync(`${outDir}/response.d.ts`, resF.replace(/\n\n}/, "\n}"));
     let reqF = "declare namespace model.req {\n";
-    for (let k = 0; k < c.req; k++) reqF += indent(decl("Req" + k, reqBody(k, (n) => "model." + n))) + "\n";
+    for (let k = 0; k < c.req; k++)
+      reqF +=
+        indent(
+          decl(
+            "Req" + k,
+            reqBody(k, (n) => "model." + n),
+          ),
+        ) + "\n";
     reqF += "}\n";
     writeFileSync(`${outDir}/request.d.ts`, reqF.replace(/\n\n}/, "\n}"));
     let inner = "";
@@ -77,5 +111,8 @@ export function generate(outDir, opts = {}) {
   writeFileSync(`${outDir}/consumer.ts`, cons);
 
   for (let f = 0; f < c.filler; f++) writeFileSync(`${outDir}/filler${f}.ts`, `export const v${f} = ${f}\nexport function fn${f}(a: number) { return a + ${f} }\n`);
-  writeFileSync(`${outDir}/tsconfig.json`, JSON.stringify({ compilerOptions: { noEmit: true, strict: true, skipLibCheck: true, moduleResolution: "bundler", module: "esnext", target: "es2022", types: [], lib: ["es2022"] }, include: ["**/*.ts"] }, null, 2));
+  writeFileSync(
+    `${outDir}/tsconfig.json`,
+    JSON.stringify({ compilerOptions: { noEmit: true, strict: true, skipLibCheck: true, moduleResolution: "bundler", module: "esnext", target: "es2022", types: [], lib: ["es2022"] }, include: ["**/*.ts"] }, null, 2),
+  );
 }

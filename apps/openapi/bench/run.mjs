@@ -37,7 +37,12 @@ function parse(out) {
   const r = {};
   for (const m of METRICS) {
     const l = lines.find((x) => x.trim().startsWith(m + ":"));
-    r[m] = l ? l.slice(l.indexOf(":") + 1).trim().split(/\s+/)[0] : "-";
+    r[m] = l
+      ? l
+          .slice(l.indexOf(":") + 1)
+          .trim()
+          .split(/\s+/)[0]
+      : "-";
   }
   return r;
 }
