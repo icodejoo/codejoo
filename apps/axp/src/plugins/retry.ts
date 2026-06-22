@@ -6,6 +6,9 @@ import type { AxiosRequestConfig, AxiosResponse } from 'axios';
 
 const name = 'retry'
 
+/** 重试计数字段：可枚举字符串键，故能熬过 `ctx.axios.request` 的 `mergeConfig` re-merge。 */
+const COUNT_KEY = '__retryCount'
+
 /**
  * 失败重试插件：请求失败后最多重试 N 次，全部失败再抛出最后一次的异常。
  *
@@ -13,8 +16,12 @@ const name = 'retry'
  *     若提供 `isExceptionRequest`，则在 `onFulfilled` 阶段也按其结果决定是否重试
  *     （把"业务上认定为失败的成功响应"也纳入重试逻辑）
  *   - **次数来源优先级**：`config.retry` 数字 > `config.retry.max` > 插件级 `defaults.max` > 0
- *   - **每次重试通过 `ctx.axios.request(config)` 重新走完整链路**——
- *     其他拦截器（如 share/loading）会再跑一遍；count 用 WeakMap 按 config 对象记
+ *   - **每次重试通过 `ctx.axios.request(config)` 重新走完整链路**——请求/响应拦截器会
+ *     再跑一遍；count 用 WeakMap 按 config 对象记。
+ *   - **注意（B2 方案 A）**：cache / share / loading / mock 等 adapter 类插件在首发时已
+ *     "解析即弃"地 `delete config.xxx`，且其私有标量存于不跨 `mergeConfig` re-merge 的位置，
+ *     故**重试请求不会重新触发这些 adapter 插件**（loading 不重复计数、不重新查/写缓存等）。
+ *     如需重试期间维持 loading，请把 retry 装在 loading 之内或改用 share 的 retry 策略。
  *   - **最大次数后**：清理计数并 reject 最后一次的 error，链路下游正常 catch
  *
  * @example
@@ -31,17 +38,19 @@ export default function retry({ enable = true, max = 0, isExceptionRequest }: IR
             if (__DEV__) ctx.logger.log(`${name} enabled:${enable} max:${max}`);
             if (!enable) return;
 
-            const counts = new WeakMap<object, number>();
-
             const attempt = (config: AxiosRequestConfig, err: any): Promise<any> => {
                 const m = $resolveMax(config, defaults);
                 if (m <= 0) return Promise.reject(err);
-                const c = (counts.get(config) ?? 0) + 1;
+                // 计数必须熬过 `ctx.axios.request` 的 `mergeConfig` re-merge —— 该 re-merge 只保留
+                // 可枚举字符串键（Symbol/WeakMap/非枚举键全失效）。旧版用 WeakMap<config> 记数，
+                // 因每次重发 config 是新对象而永不累加，持久失败时无限重试（仅在真实 axios 下暴露）。
+                const bag = config as Record<string, number>;
+                const c = (bag[COUNT_KEY] ?? 0) + 1;
                 if (c > m) {
-                    counts.delete(config);
+                    delete bag[COUNT_KEY];
                     return Promise.reject(err);
                 }
-                counts.set(config, c);
+                bag[COUNT_KEY] = c;
                 if (__DEV__) ctx.logger.log(`${name} retry ${c}/${m} ${(config.method ?? '').toUpperCase()} ${config.url}`);
                 return ctx.axios.request(config);
             };
@@ -51,7 +60,7 @@ export default function retry({ enable = true, max = 0, isExceptionRequest }: IR
                     const config = response.config;
                     const exc = $resolveException(config, defaults);
                     if (exc && exc(response)) return attempt(config, response);
-                    counts.delete(config);
+                    delete (config as Record<string, number>)[COUNT_KEY];
                     return response;
                 },
                 async (error: any) => {

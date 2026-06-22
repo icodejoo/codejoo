@@ -1,5 +1,6 @@
 import { describe, it, expect, vi } from 'vitest';
 import cancel, { cancelAll } from '../src/plugins/cancel';
+import { getInternal } from '../src/bag';
 
 
 function makeMockCtx() {
@@ -29,7 +30,9 @@ describe('cancel — request interceptor 注入 AbortController', () => {
         const config: any = { url: '/x' };
         reqHandlers[0](config);
         expect(config.signal).toBeInstanceOf(AbortSignal);
-        expect(config._cancelCtrl).toBeInstanceOf(AbortController);
+        // controller 收进私有 bag（Symbol 键），不再以可枚举 config._cancelCtrl 暴露
+        expect(config._cancelCtrl).toBeUndefined();
+        expect(getInternal(config, 'cancelCtrl')).toBeInstanceOf(AbortController);
     });
 
     it('config.signal 已存在 → 不覆盖（尊重用户）', () => {
@@ -39,7 +42,7 @@ describe('cancel — request interceptor 注入 AbortController', () => {
         const config: any = { url: '/x', signal: userCtrl.signal };
         reqHandlers[0](config);
         expect(config.signal).toBe(userCtrl.signal);
-        expect(config._cancelCtrl).toBeUndefined();
+        expect(getInternal(config, 'cancelCtrl')).toBeUndefined();
     });
 
     it('config.cancelToken 已存在 → 不覆盖', () => {
@@ -48,7 +51,7 @@ describe('cancel — request interceptor 注入 AbortController', () => {
         const config: any = { url: '/x', cancelToken: { reason: undefined } };
         reqHandlers[0](config);
         expect(config.signal).toBeUndefined();
-        expect(config._cancelCtrl).toBeUndefined();
+        expect(getInternal(config, 'cancelCtrl')).toBeUndefined();
     });
 });
 

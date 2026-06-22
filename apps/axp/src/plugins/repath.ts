@@ -1,7 +1,7 @@
 import type { Plugin } from '../types';
 import { isObject, isPrimitive, __DEV__ } from '../helper';
 
-export interface PathVariableOptions {
+export interface IRepathOptions {
     /**
      * 是否启用插件
      */
@@ -16,18 +16,19 @@ export interface PathVariableOptions {
     removeKey?: boolean
 }
 
-const name = 'replace-path-vars'
+const name = 'repath'
 
-/** 
- * 将路径变量替换成真实值
+/**
+ * 将路径变量替换成真实值（`{id}` / `:id` / `[id]` ← params / data）
  */
-export default function replacePathVars(
-    { enable = true, removeKey = true, pattern = /{([^}]+)}|\[([^\]]+)]|:([^\s]+)/g }: PathVariableOptions = {},
+export default function repath(
+    { enable = true, removeKey = true, pattern = /{([^}]+)}|\[([^\]]+)]|:([^/\s]+)/g }: IRepathOptions = {},
 ): Plugin {
     return {
         name: name,
         install(ctx) {
             if (__DEV__) ctx.logger.log(`${name} enabled:${enable}`)
+            if (!enable) return;  // enable:false → 整个插件不安装拦截器（与 cache/share/filter 等一致）
             ctx.request(
                 function $normalize(config) {
                     const { params, data } = config
@@ -71,4 +72,4 @@ export default function replacePathVars(
 }
 
 // 见 normalize-response：严格模式 ESM 下 fn.name 须用 defineProperty 重定义
-Object.defineProperty(replacePathVars, 'name', { value: name })
+Object.defineProperty(repath, 'name', { value: name })

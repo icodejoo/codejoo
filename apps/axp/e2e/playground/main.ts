@@ -5,8 +5,8 @@
  * 覆盖清单（100% 公开导出）：
  *   create / Core(get,post,put,delete,patch,head,options, raw/wrap/plain, use,eject,plugins,extends)
  *   buildKey,$key · cache,removeCache,clearCache · cancel,cancelAll · envs
- *   filterRequest(=normalizeRequest) · loading · mock · normalizeResponse
- *   replacePathVars · retry · share · ApiResponse,ApiError · TokenManager
+ *   normalizeRequest · loading · mock · normalizeResponse
+ *   repath · retry · share · ApiResponse,ApiError · TokenManager
  */
 import axios from 'axios';
 import {
@@ -16,23 +16,38 @@ import {
   cache, removeCache, clearCache,
   cancel, cancelAll,
   envs,
-  filterRequest, normalizeRequest,
+  normalizeRequest,
   loading,
   mock,
   normalizeResponse,
-  replacePathVars,
+  repath,
   retry,
   share,
+  auth,
   type Plugin,
+  type ITokenManager,
 } from '../../src/index.ts';
 
 const BASE = 'http://localhost:4570';
 const mkApi = (opts?: any) => create(axios.create({ baseURL: BASE }), opts);
+const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
 // 无插件的裸 axios，用于重置 / 读取服务端命中计数（断言用）
 const raw = axios.create({ baseURL: BASE });
 const resetHits = () => raw.post('/api/hits/reset');
 const readHits = async (id: string) => (await raw.get('/api/hits', { params: { id } })).data.data.hits as number;
+
+/** 内存 TokenManager（不落 localStorage，便于反复点测；accessToken getter 加 Bearer） */
+function makeMemTM(token?: string): ITokenManager {
+  let access = token, refresh: string | undefined;
+  return {
+    canRefresh: true,
+    get accessToken() { return access ? `Bearer ${access}` : undefined; },
+    get refreshToken() { return refresh; },
+    set(a?: string, r?: string) { access = a; refresh = r; },
+    clear() { access = undefined; refresh = undefined; },
+  };
+}
 
 function setIndicator(v: boolean) {
   const el = document.querySelector('[data-testid="loading-indicator"]')!;
@@ -259,7 +274,7 @@ const features: Feature[] = [
     ],
   },
   {
-    id: 'mock', title: 'mock', desc: '把命中请求重写到 mockUrl',
+    id: 'mock', title: 'mock', desc: '命中请求重写到 mockUrl；未命中由 mock server 服务端转发真实上游',
     actions: [
       {
         id: 'mock-run', label: 'mock:true → /mock', run: () => {
@@ -268,8 +283,10 @@ const features: Feature[] = [
         },
       },
       {
-        id: 'mock-fallback', label: 'mock 不存在 → 回落真实(默认)', run: () => {
-          const a = mkApi(); a.use(mock({ enable: true, mockUrl: BASE + '/mock-404' }));
+        id: 'mock-fallback', label: 'mock 未命中 → mock server 转发真实(服务端)', run: () => {
+          // mockUrl 指向网关 /gw：插件只负责重写 URL，mock 未命中时由「mock server」转发真实上游
+          // （区别于 axios 客户端回落）。echo 回显里带 _gw=1 即证明经服务端转发。
+          const a = mkApi(); a.use(mock({ enable: true, mockUrl: BASE + '/gw' }));
           return a.get('/api/echo')({ via: 'fallback' }, { mock: true } as any);
         },
       },
@@ -291,23 +308,23 @@ const features: Feature[] = [
     ],
   },
   {
-    id: 'filter', title: 'filterRequest (= normalizeRequest)', desc: '剥离 params/data 中的空字段',
+    id: 'filter', title: 'normalizeRequest', desc: '剥离 params/data 中的空字段',
     actions: [
       {
         id: 'filter-run', label: '过滤空字段', run: async () => {
-          const a = mkApi(); a.use(filterRequest());
+          const a = mkApi(); a.use(normalizeRequest());
           const r: any = await a.get('/api/echo')({ a: 1, b: '', c: null, d: '  ', e: 0 }, { filter: true } as any);
-          return { aliasIsSame: filterRequest === normalizeRequest, query: r.query };
+          return { query: r.query };
         },
       },
     ],
   },
   {
-    id: 'pathvars', title: 'replacePathVars', desc: '{id} / :pid / [x] 路径变量替换',
+    id: 'pathvars', title: 'repath', desc: '{id} / :pid / [x] 路径变量替换',
     actions: [
       {
         id: 'pathvars-run', label: '替换 {id}/:pid', run: async () => {
-          const a = mkApi(); a.use(replacePathVars());
+          const a = mkApi(); a.use(repath());
           const r: any = await a.get('/users/{id}/posts/:pid')({ id: 7, pid: 9 });
           return { path: r.path };
         },
@@ -349,4 +366,206 @@ const features: Feature[] = [
   },
 ];
 
-render(features);
+// ─── 集成测试（高并发 / 乱序 / 夹错 / auth 刷新）：每个用例内置 pass 断言 ───────────
+const integrationFeatures: Feature[] = [
+  {
+    id: 'int-share', title: '集成 · share「start」高并发去重', desc: '30 个并发同 key（带延迟）→ 真实网络只发 1 次，全部同一结果',
+    actions: [{
+      id: 'int-share-start', label: '跑 30 并发', run: async () => {
+        await resetHits();
+        const a = mkApi(); a.use([buildKey(), share({ policy: 'start' })]);
+        const res = await Promise.all(
+          Array.from({ length: 30 }, () => a.get('/api/hit')({ id: 'intShare', delay: 80 }, { key: true, share: 'start' } as any)),
+        );
+        const serverHits = await readHits('intShare');
+        const allSame = new Set((res as any[]).map((r) => JSON.stringify(r))).size === 1;
+        return { pass: serverHits === 1 && allSame, serverHits, allSame, sample: (res as any[])[0] };
+      },
+    }],
+  },
+  {
+    id: 'int-race', title: '集成 · share「race」乱序夹错', desc: '3 并发各自发；前两次 500、第三次成功 → 全部拿到成功',
+    actions: [{
+      id: 'int-race-run', label: '跑 race', run: async () => {
+        await resetHits();
+        const a = mkApi(); a.use([buildKey(), share({ policy: 'race' })]);
+        const res = await Promise.all(
+          Array.from({ length: 3 }, () => a.get('/api/hit')({ id: 'intRace', fail: 2, delay: 30 }, { key: true, share: 'race' } as any)),
+        );
+        const serverHits = await readHits('intRace');
+        const allWin = (res as any[]).every((r) => r && r.id === 'intRace');
+        return { pass: serverHits === 3 && allWin, serverHits, results: res };
+      },
+    }],
+  },
+  {
+    id: 'int-retry', title: '集成 · retry 恢复 / 耗尽', desc: 'fail=2+retry:3 自动恢复；强制 500 时耗尽后 reject（验证无限重试 bug 已修）',
+    actions: [
+      {
+        id: 'int-retry-recover', label: '恢复', run: async () => {
+          await resetHits();
+          const a = mkApi(); a.use(retry({ max: 3 }));
+          const r: any = await a.get('/api/hit')({ id: 'intRetryOK', fail: 2, delay: 10 }, { retry: 3 } as any);
+          const serverHits = await readHits('intRetryOK');
+          return { pass: serverHits === 3 && r.hits === 3, serverHits, result: r };
+        },
+      },
+      {
+        id: 'int-retry-exhaust', label: '耗尽（强制 500）', run: async () => {
+          await resetHits();
+          const a = mkApi(); a.use(retry({ max: 2 }));
+          try {
+            await a.get('/api/hit')({ id: 'intRetryFail', status: 500, delay: 5 }, { retry: 2 } as any);
+            return { pass: false, note: '应当 reject 却成功了' };
+          } catch (e: any) {
+            const serverHits = await readHits('intRetryFail');
+            return { pass: serverHits === 3, serverHits, status: e?.response?.status ?? e?.status };  // 首发+2重试=3，且不无限循环
+          }
+        },
+      },
+    ],
+  },
+  {
+    id: 'int-crosstalk', title: '集成 · 20 并发乱序夹错「无串扰」', desc: '偶数 200 / 奇数 400，随机延迟乱序完成 → 每个结果都对应自己的 idx',
+    actions: [{
+      id: 'int-crosstalk-run', label: '跑 20 并发', run: async () => {
+        const a = mkApi();
+        const out = await Promise.all(Array.from({ length: 20 }, (_, i) => {
+          const params: any = { idx: i, delay: ((i * 7) % 13) + 1 };
+          if (i % 2 === 1) params.status = 400;
+          return a.get('/api/echo')(params)
+            .then((d: any) => ({ i, ok: true, idx: Number(d.query.idx) }))
+            .catch((e: any) => ({ i, ok: false, idx: Number(e?.response?.data?.data?.query?.idx) }));
+        }));
+        const mismatches = out.filter((r) => !(r.idx === r.i && r.ok === (r.i % 2 === 0)));
+        return { pass: mismatches.length === 0, count: out.length, mismatches };
+      },
+    }],
+  },
+  {
+    id: 'int-loading', title: '集成 · loading 并发计数', desc: '8 个并发慢请求 → 只 show 一次、hide 一次（看顶部指示器）',
+    actions: [{
+      id: 'int-loading-run', label: '跑 8 并发', run: async () => {
+        const toggles: boolean[] = [];
+        const a = mkApi(); a.use(loading({ loading: (v) => { toggles.push(v); setIndicator(v); } }));
+        await Promise.all(Array.from({ length: 8 }, (_, i) => a.get('/api/hit')({ id: 'intLoad' + i, delay: 200 }, { loading: true } as any)));
+        const trues = toggles.filter((v) => v).length, falses = toggles.filter((v) => !v).length;
+        return { pass: trues === 1 && falses === 1 && toggles[0] === true && toggles.at(-1) === false, toggles };
+      },
+    }],
+  },
+  {
+    id: 'int-auth', title: '集成 · auth 并发单飞刷新', desc: '20 个并发受保护请求（持过期 token）→ onRefresh 仅触发 1 次，全部用新 token 恢复',
+    actions: [{
+      id: 'int-auth-run', label: '跑 20 并发', run: async () => {
+        await resetHits();
+        const a = mkApi(); const tm = makeMemTM('stale-token');  // 过期 token
+        let refreshCalls = 0;
+        a.use(auth({
+          tokenManager: tm, urlPattern: ['/api/secure'],
+          onRefresh: async (TM) => { refreshCalls++; const r: any = await a.post('/api/refresh')(undefined, { protected: false } as any); TM.set(r.token); return true; },
+          onAccessExpired: () => { },
+        }));
+        const res = await Promise.all(Array.from({ length: 20 }, () => a.get('/api/secure')({ id: 'intAuth', delay: 20 } as any)));
+        const allOk = (res as any[]).every((r) => r.user === 'u');
+        return { pass: refreshCalls === 1 && allOk, refreshCalls, allOk, secureHits: await readHits('intAuth'), token: tm.accessToken };
+      },
+    }],
+  },
+  {
+    id: 'int-auth-fail', title: '集成 · auth 刷新失败', desc: 'onRefresh 返回 false → 全部 reject + onAccessExpired + tm 清空',
+    actions: [{
+      id: 'int-auth-fail-run', label: '跑', run: async () => {
+        await resetHits();
+        const a = mkApi(); const tm = makeMemTM('stale-token');
+        let refreshCalls = 0, expired = 0;
+        a.use(auth({
+          tokenManager: tm, urlPattern: ['/api/secure'],
+          onRefresh: async () => { refreshCalls++; return false; },
+          onAccessExpired: () => { expired++; },
+        }));
+        const settled = await Promise.allSettled(Array.from({ length: 10 }, () => a.get('/api/secure')({ id: 'intAuthFail', delay: 10 } as any)));
+        const allRejected = settled.every((s) => s.status === 'rejected');
+        return { pass: allRejected && refreshCalls === 1 && expired > 0 && tm.accessToken === undefined, allRejected, refreshCalls, expired, token: tm.accessToken };
+      },
+    }],
+  },
+  {
+    id: 'int-auth-burst', title: '集成 · auth 时间线（a/b/c/d/e：慢成功 / 慢失败 / 刷新中新发起）', desc: '“慢”=响应在刷新成功之后才回来。trigger 触发刷新；刷新中发起 during1/2(请求侧挂起)；slowOK/slowFail 的 401 都晚于刷新完成才回来→走重放(token 不一致)，一个成功一个仍失败→过期。看每项 @ms 与 refreshDoneAt 对比',
+    actions: [{
+      id: 'int-auth-burst-run', label: '跑', run: async () => {
+        await resetHits();
+        const a = mkApi(); const tm = makeMemTM('stale');
+        let refreshCalls = 0, refreshDoneAt = 0;
+        const t0 = performance.now();
+        const order: string[] = [];
+        a.use(auth({
+          tokenManager: tm, urlPattern: ['/api/secure', '/api/secure-dead'],
+          onRefresh: async (TM) => {
+            refreshCalls++;
+            await sleep(50);                                                  // 刷新窗口
+            const r: any = await a.post('/api/refresh')(undefined, { protected: false } as any);
+            TM.set(r.token);
+            refreshDoneAt = Math.round(performance.now() - t0);               // 标记刷新完成时刻
+            return true;
+          },
+          onAccessExpired: () => { },
+        }));
+        const tag = (name: string, p: Promise<any>) => {
+          const stamp = (ok: boolean, extra: any = {}) => {
+            const at = Math.round(performance.now() - t0);
+            order.push(`${ok ? '✓' : '✗'}${name}@${at}ms`);
+            return { name, ok, at, ...extra };
+          };
+          return p.then(() => stamp(true), (e: any) => stamp(false, { status: e?.response?.status ?? e?.status }));
+        };
+
+        // 阶段1（刷新前发起）：trigger 触发刷新；slowOK/slowFail 给大延迟 → 它们的 401 在刷新完成之后才回来
+        const trigger = tag('trigger', a.get('/api/secure')({ id: 'a', delay: 5 } as any));        // 401→触发刷新→重放→成功
+        const slowOK = tag('slowOK', a.get('/api/secure')({ id: 'sok', delay: 130 } as any));      // 慢成功：401 晚到→token 不一致→重放→200
+        const slowFail = tag('slowFail', a.get('/api/secure-dead')({ id: 'sf', delay: 130 } as any)); // 慢失败：401 晚到→重放→仍 401→过期
+        // 阶段2（刷新进行中发起）：受保护 during1/2 被请求侧挂起，刷新成功后带新 token 才发出；
+        // 非鉴权 pubDuring 同期发起但不挂起、直接放行（应早于 refreshDoneAt 返回）
+        const during = sleep(25).then(() => Promise.all([
+          tag('during1', a.get('/api/secure')({ id: 'd', delay: 10 } as any)),
+          tag('during2', a.get('/api/secure')({ id: 'e', delay: 10 } as any)),
+        ]));
+        const pubDuring = sleep(30).then(() => tag('pubDuring', a.get('/api/echo')({ k: 1, delay: 5 }, { protected: false } as any)));
+
+        const flat = await Promise.all([trigger, slowOK, slowFail, during, pubDuring]);
+        const res = [flat[0], flat[1], flat[2], ...(flat[3] as any[]), flat[4]];
+        const at = (n: string) => res.find((r) => r.name === n)!.at;
+        const ok = res.filter((r) => r.ok).map((r) => r.name).sort();
+        const failed = res.filter((r) => !r.ok).map((r) => r.name).sort();
+        const sameSet = (x: string[], y: string[]) => JSON.stringify(x) === JSON.stringify([...y].sort());
+        const pass = refreshCalls === 1                                          // 单飞刷一次；晚到的 401 走重放不再刷新
+          && sameSet(ok, ['trigger', 'slowOK', 'during1', 'during2', 'pubDuring'])// 慢成功 + 刷新中挂起的 + 触发者 + 非鉴权 都成功
+          && sameSet(failed, ['slowFail'])                                       // 慢失败：重放后仍 401 → 过期
+          && at('slowOK') > refreshDoneAt && at('slowFail') > refreshDoneAt      // “慢”=响应晚于刷新完成
+          && at('pubDuring') < refreshDoneAt;                                    // 非鉴权在刷新中不被挂起、提前返回
+        return { pass, refreshCalls, refreshDoneAt, ok, failed, completionOrder: order };
+      },
+    }],
+  },
+  {
+    id: 'int-auth-bounded', title: '集成 · auth 极端有界收敛（带当前 token 的 401）', desc: '刷新后 token 仍被拒(always 401) → 每请求至多「刷一次 + 重放一次」后过期；有界、不死循环（refreshCalls≤请求数；浏览器并发连接上限会让它>1，单飞由其它卡演示）',
+    actions: [{
+      id: 'int-auth-bounded-run', label: '跑', run: async () => {
+        await resetHits();
+        const a = mkApi(); const tm = makeMemTM('srv-token');  // 已持「当前」token（carried===cur 场景）
+        let refreshCalls = 0, expired = 0;
+        a.use(auth({
+          tokenManager: tm, urlPattern: ['/api/secure-dead'],
+          onRefresh: async (TM) => { refreshCalls++; await sleep(40); const r: any = await a.post('/api/refresh')(undefined, { protected: false } as any); TM.set(r.token); return true; },
+          onAccessExpired: () => { expired++; },
+        }));
+        const settled = await Promise.allSettled(Array.from({ length: 10 }, () => a.get('/api/secure-dead')({ id: 'dead', delay: 10 } as any)));
+        const allRejected = settled.every((s) => s.status === 'rejected');
+        // 有界收敛：每请求至多一次刷新（refreshCalls≤10），全部干净过期，绝不无限循环
+        return { pass: allRejected && expired === 10 && refreshCalls >= 1 && refreshCalls <= 10, refreshCalls, allRejected, expired };
+      },
+    }],
+  },
+];
+
+render([...features, ...integrationFeatures]);

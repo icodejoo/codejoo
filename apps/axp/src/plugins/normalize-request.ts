@@ -4,7 +4,7 @@ import { isObject, __DEV__ } from '../helper';
 import type { AxiosRequestConfig } from 'axios';
 
 
-const name = 'filter-request'
+const name = 'normalize-request'
 
 /**
  * 在请求发出前过滤掉 params / data 中的"空字段"，避免无意义的 key/value
@@ -22,9 +22,9 @@ const name = 'filter-request'
  *
  * @returns 过滤 params / data，按需配合 build-key 等插件使用
  */
-export default function filterRequest({ enable = true, predicate, ignoreKeys, ignoreValues }: IFilterRequestOptions = {}): Plugin {
+export default function normalizeRequest({ enable = true, predicate, ignoreKeys, ignoreValues }: INormalizeRequestOptions = {}): Plugin {
     // 插件级默认（请求级未指定时回退到此）
-    const defaults: IFilterRequestOptions = { predicate, ignoreKeys, ignoreValues };
+    const defaults: INormalizeRequestOptions = { predicate, ignoreKeys, ignoreValues };
     return {
         name,
         install(ctx) {
@@ -72,11 +72,11 @@ function isEnabled(f: unknown): boolean {
  */
 export function $resolveOptions(
     config: AxiosRequestConfig,
-    defaults: IFilterRequestOptions,
-): Required<Pick<IFilterRequestOptions, 'predicate'>> & Pick<IFilterRequestOptions, 'ignoreKeys' | 'ignoreValues'> {
+    defaults: INormalizeRequestOptions,
+): Required<Pick<INormalizeRequestOptions, 'predicate'>> & Pick<INormalizeRequestOptions, 'ignoreKeys' | 'ignoreValues'> {
     let f = config.filter;
     if (typeof f === 'function') f = f(config);
-    const override: IFilterRequestOptions = (f && typeof f === 'object') ? f : {};
+    const override: INormalizeRequestOptions = (f && typeof f === 'object') ? f : {};
     return {
         predicate: override.predicate ?? defaults.predicate ?? defaultPredicate,
         ignoreKeys: override.ignoreKeys ?? defaults.ignoreKeys,
@@ -87,7 +87,7 @@ export function $resolveOptions(
 
 /**
  * 对一层对象做条目级过滤（不递归——HTTP 序列化场景下嵌套结构由 build-key 等
- * 后续插件按需再处理；filter-request 只负责剥离顶层无意义字段）。
+ * 后续插件按需再处理；normalize-request 只负责剥离顶层无意义字段）。
  *
  *   - key 命中 ignoreKeys → 保留
  *   - value 命中 ignoreValues → 保留
@@ -148,7 +148,7 @@ function matchesValue(target: any, list: any[]): boolean {
 
 export type TPredicate = (kv: [key: string, value: any]) => boolean;
 
-export interface IFilterRequestOptions {
+export interface INormalizeRequestOptions {
     /** 插件级总开关；默认 `true` */
     enable?: boolean;
     /** 自定义"是否丢弃"判断；返回 `true` 表示该条目被丢弃 */
@@ -162,9 +162,9 @@ export interface IFilterRequestOptions {
 
 declare module 'axios' {
     interface AxiosRequestConfig {
-        filter?: MaybeFun<IFilterRequestOptions | boolean | Falsy>;
+        filter?: MaybeFun<INormalizeRequestOptions | boolean | Falsy>;
     }
     interface InternalAxiosRequestConfig {
-        // filter?: IFilterRequestOptions | boolean | Falsy;
+        // filter?: INormalizeRequestOptions | boolean | Falsy;
     }
 }

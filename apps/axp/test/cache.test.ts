@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import type { AxiosAdapter, AxiosRequestConfig, AxiosResponse } from 'axios';
-import cache, { $resolveCache, $resolveKey, clearCache, removeCache } from '../src/plugins/cache';
+import cache, { $resolveCache, $resolveKey, $resolveCloneFn, $shallowClone, clearCache, removeCache } from '../src/plugins/cache';
 
 
 function makeMockCtx() {
@@ -142,6 +142,95 @@ describe('cache 集成 — adapter 包装', () => {
         originalAdapter.mockResolvedValueOnce(mockResp('x'));
         await wrapped(config);
         expect(config.cache).toBeUndefined();
+    });
+});
+
+
+describe('$resolveCloneFn / $shallowClone — 拷贝策略解析', () => {
+    it('缺省 / true（resolved.clone undefined） → null（共享引用）', () => {
+        expect($resolveCloneFn(undefined)).toBeNull();
+    });
+    it("'shallow' → 浅拷贝函数（仅顶层）", () => {
+        const fn = $resolveCloneFn('shallow')!;
+        const src = { a: 1, nested: { b: 2 } };
+        const out = fn(src);
+        expect(out).not.toBe(src);          // 顶层是新对象
+        expect(out).toEqual(src);
+        expect(out.nested).toBe(src.nested); // 嵌套仍共享
+    });
+    it("'deep' → structuredClone 深拷贝（完整隔离）", () => {
+        const fn = $resolveCloneFn('deep')!;
+        const src = { a: 1, nested: { b: 2 } };
+        const out = fn(src);
+        expect(out).not.toBe(src);
+        expect(out.nested).not.toBe(src.nested);
+        expect(out).toEqual(src);
+    });
+    it('function → 原样作为自定义拷贝', () => {
+        const custom = (d: any) => ({ ...d, tagged: true });
+        const fn = $resolveCloneFn(custom)!;
+        expect(fn).toBe(custom);
+    });
+    it('$shallowClone：数组复制顶层、原始值原样返回', () => {
+        const arr = [1, 2, 3];
+        expect($shallowClone(arr)).not.toBe(arr);
+        expect($shallowClone(arr)).toEqual(arr);
+        expect($shallowClone(42)).toBe(42);
+        expect($shallowClone('s')).toBe('s');
+    });
+});
+
+
+describe('cache 集成 — clone 策略', () => {
+    const mkAdapter = (data: any) => vi.fn().mockResolvedValue(mockResp(data));
+
+    it('默认 / cache:true → 命中返回共享引用，就地改会污染后续命中', async () => {
+        const { ctx, ax } = makeMockCtx();
+        ax.defaults.adapter = mkAdapter({ list: [1] });
+        cache().install(ctx);
+        const wrapped = ax.defaults.adapter as AxiosAdapter;
+        const r1 = await wrapped({ url: '/x', cache: true, key: 'k' } as any);
+        (r1.data as any).list.push(2);                 // 调用方就地改
+        const r2 = await wrapped({ url: '/x', cache: true, key: 'k' } as any);
+        expect((r2.data as any).list).toEqual([1, 2]); // 共享引用 → 命中被污染
+        expect(r2.data).toBe(r1.data);
+    });
+
+    it("clone:'shallow' → 顶层隔离，嵌套仍共享", async () => {
+        const { ctx, ax } = makeMockCtx();
+        ax.defaults.adapter = mkAdapter({ a: 1, nested: { b: 2 } });
+        cache().install(ctx);
+        const wrapped = ax.defaults.adapter as AxiosAdapter;
+        const cfg = (): any => ({ url: '/x', cache: { clone: 'shallow' }, key: 'k' });
+        const r1 = await wrapped(cfg());
+        const r2 = await wrapped(cfg());
+        expect(r2.data).not.toBe(r1.data);             // 顶层各自独立
+        (r1.data as any).a = 999;                       // 改顶层不影响缓存
+        const r3 = await wrapped(cfg());
+        expect((r3.data as any).a).toBe(1);
+    });
+
+    it("clone:'deep' → 完整隔离，就地改任意层都不污染缓存", async () => {
+        const { ctx, ax } = makeMockCtx();
+        ax.defaults.adapter = mkAdapter({ nested: { b: 2 } });
+        cache().install(ctx);
+        const wrapped = ax.defaults.adapter as AxiosAdapter;
+        const cfg = (): any => ({ url: '/x', cache: { clone: 'deep' }, key: 'k' });
+        const r1 = await wrapped(cfg());
+        (r1.data as any).nested.b = 999;                // 改嵌套
+        const r2 = await wrapped(cfg());
+        expect((r2.data as any).nested.b).toBe(2);      // 缓存原件未被污染
+    });
+
+    it('clone:function → 调用自定义拷贝', async () => {
+        const { ctx, ax } = makeMockCtx();
+        ax.defaults.adapter = mkAdapter({ a: 1 });
+        cache().install(ctx);
+        const wrapped = ax.defaults.adapter as AxiosAdapter;
+        const custom = vi.fn((d: any) => ({ ...d, cloned: true }));
+        const r = await wrapped({ url: '/x', cache: { clone: custom }, key: 'k' } as any);
+        expect(custom).toHaveBeenCalledTimes(1);
+        expect((r.data as any).cloned).toBe(true);
     });
 });
 

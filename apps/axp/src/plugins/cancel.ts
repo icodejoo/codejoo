@@ -1,6 +1,7 @@
 
 import type { Plugin } from '../types';
 import { __DEV__ } from '../helper';
+import { setInternal, getInternal, delInternal } from '../bag';
 import type { AxiosInstance } from 'axios';
 
 
@@ -38,17 +39,19 @@ export default function cancel({ enable = true }: ICancelOptions = {}): Plugin {
                     if (config.signal || config.cancelToken) return config;  // 用户自带，尊重
                     const ctrl = new AbortController();
                     config.signal = ctrl.signal;
-                    (config as any)._cancelCtrl = ctrl;
+                    // 内部 controller 收进私有 bag（Symbol 键），不以可枚举字段污染 config
+                    setInternal(config, 'cancelCtrl', ctrl);
                     set.add(ctrl);
                     return config;
                 },
             );
 
             const release = (config: any) => {
-                const ctrl = config?._cancelCtrl as AbortController | undefined;
+                if (!config) return;
+                const ctrl = getInternal<AbortController>(config, 'cancelCtrl');
                 if (!ctrl) return;
                 set.delete(ctrl);
-                delete config._cancelCtrl;
+                delInternal(config, 'cancelCtrl');
             };
 
             ctx.response(

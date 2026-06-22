@@ -79,16 +79,16 @@ const cases = [
 
   // ── mock ──
   { action: 'mock-run', result: 'mock-result', exports: ['mock'], check: (j) => ok(j.mocked === true && j.path.includes('/mock'), 'mock rewrite') },
-  { action: 'mock-fallback', result: 'mock-result', exports: ['mock (fallback)'], check: (j) => { eq(j.path, '/api/echo', 'fell back to real'); eq(j.query.via, 'fallback', 'real request'); ok(!j.mocked, 'not from mock'); } },
+  { action: 'mock-fallback', result: 'mock-result', exports: ['mock (server forward)'], check: (j) => { eq(j.path, '/api/echo', 'reached real route'); eq(j.query.via, 'fallback', 'real request'); eq(j.query._gw, '1', 'forwarded by mock server (not axios)'); ok(!j.mocked, 'not from mock'); } },
 
   // ── envs ──
   { action: 'envs-run', result: 'envs-result', exports: ['envs'], check: (j) => { eq(j.baseURL, MOCK, 'baseURL unchanged'); eq(j.xEnv, 'prod', 'env header merged'); } },
 
-  // ── filterRequest / normalizeRequest ──
-  { action: 'filter-run', result: 'filter-result', exports: ['filterRequest', 'normalizeRequest'], check: (j) => { ok(j.aliasIsSame === true, 'alias'); eq(j.query.a, '1', 'keep a'); eq(j.query.e, '0', 'keep 0'); ok(!('b' in j.query) && !('c' in j.query) && !('d' in j.query), 'drop empties'); } },
+  // ── normalizeRequest ──
+  { action: 'filter-run', result: 'filter-result', exports: ['normalizeRequest'], check: (j) => { eq(j.query.a, '1', 'keep a'); eq(j.query.e, '0', 'keep 0'); ok(!('b' in j.query) && !('c' in j.query) && !('d' in j.query), 'drop empties'); } },
 
-  // ── replacePathVars ──
-  { action: 'pathvars-run', result: 'pathvars-result', exports: ['replacePathVars'], check: (j) => eq(j.path, '/users/7/posts/9', 'path vars substituted') },
+  // ── repath ──
+  { action: 'pathvars-run', result: 'pathvars-result', exports: ['repath'], check: (j) => eq(j.path, '/users/7/posts/9', 'path vars substituted') },
 
   // ── normalizeResponse ──
   { action: 'normalize-ok', result: 'normalize-result', exports: ['normalizeResponse (ok)'], check: (j) => eq(j.query.ok, '1', 'success passes through') },
@@ -100,6 +100,18 @@ const cases = [
 
   // ── ApiResponse / ApiError ──
   { action: 'apiresponse-run', result: 'apiresponse-result', exports: ['ApiResponse'], check: (j) => { ok(j.okSuccessful === true, 'ok successful'); ok(j.nullSuccessful === true, 'null body no crash'); ok(j.errIsError === true, 'ApiError is Error'); ok(j.isCoreCtor === true, 'Core ctor'); } },
+
+  // ── 集成（高并发 / 乱序 / 夹错 / auth 刷新）──
+  { action: 'int-share-start', result: 'int-share-result', exports: ['integration: share start dedup'], check: (j) => { ok(j.pass === true, 'share dedup'); eq(j.serverHits, 1, 'one network hit'); } },
+  { action: 'int-race-run', result: 'int-race-result', exports: ['integration: race'], check: (j) => { ok(j.pass === true, 'race'); eq(j.serverHits, 3, 'race each sends') } },
+  { action: 'int-retry-recover', result: 'int-retry-result', exports: ['integration: retry recover'], check: (j) => { ok(j.pass === true, 'retry recover'); eq(j.serverHits, 3, '3 hits'); } },
+  { action: 'int-retry-exhaust', result: 'int-retry-result', exports: ['integration: retry exhaust (no infinite loop)'], check: (j) => { ok(j.pass === true, 'exhaust rejects'); eq(j.serverHits, 3, '1+2 then stop'); } },
+  { action: 'int-crosstalk-run', result: 'int-crosstalk-result', exports: ['integration: no crosstalk'], check: (j) => { ok(j.pass === true, 'no crosstalk'); eq(j.count, 20, '20 concurrent'); } },
+  { action: 'int-loading-run', result: 'int-loading-result', exports: ['integration: loading concurrency'], check: (j) => { ok(j.pass === true, 'loading once'); eq(j.toggles, [true, false], 'one show one hide'); } },
+  { action: 'int-auth-run', result: 'int-auth-result', exports: ['integration: auth single-flight'], check: (j) => { ok(j.pass === true, 'auth recovers'); eq(j.refreshCalls, 1, 'single-flight refresh'); } },
+  { action: 'int-auth-fail-run', result: 'int-auth-fail-result', exports: ['integration: auth refresh fail'], check: (j) => { ok(j.pass === true, 'all reject'); ok(j.allRejected === true, 'no replay'); } },
+  { action: 'int-auth-burst-run', result: 'int-auth-burst-result', exports: ['integration: auth timeline (slow-ok/slow-fail/during-refresh)'], check: (j) => { ok(j.pass === true, 'timeline'); eq(j.refreshCalls, 1, 'single-flight'); ok(j.failed.includes('slowFail'), 'slow failure present'); } },
+  { action: 'int-auth-bounded-run', result: 'int-auth-bounded-result', exports: ['integration: auth bounded convergence'], check: (j) => { ok(j.pass === true, 'bounded'); ok(j.refreshCalls >= 1 && j.refreshCalls <= 10, '≤1 refresh/request (no infinite loop)'); ok(j.expired === 10, 'all converge to expire'); } },
 ];
 
 async function runCase(page, c) {

@@ -29,6 +29,10 @@ const hits = Object.create(null);
 /** 按 id 记录失败计数，用于 ?fail=N 的递减 */
 const fails = Object.create(null);
 
+/** 鉴权：当前服务端有效 token（演示 auth 刷新）。客户端持过期/空 token → 401 → 刷新换取它 */
+const AUTH_TOKEN = 'srv-token';
+let refreshCount = 0;
+
 const json = (res, status, body) => {
   res.writeHead(status, {
     'content-type': 'application/json; charset=utf-8',
@@ -74,7 +78,30 @@ const server = http.createServer(async (req, res) => {
   if (path === '/api/hits/reset' && req.method === 'POST') {
     for (const k in hits) delete hits[k];
     for (const k in fails) delete fails[k];
+    refreshCount = 0;
     return finish(200, envelope({ reset: true }));
+  }
+
+  // 受保护资源：Authorization 必须为 `Bearer ${AUTH_TOKEN}`，否则 401（演示 auth 刷新）
+  if (path === '/api/secure') {
+    hits[id] = (hits[id] || 0) + 1;
+    const auth = req.headers['authorization'];
+    if (auth === `Bearer ${AUTH_TOKEN}`) {
+      return finish(200, envelope({ user: 'u', token: AUTH_TOKEN, hits: hits[id] }));
+    }
+    return finish(401, envelope(null, '401', 'unauthorized'));
+  }
+
+  // 始终拒绝的受保护资源（演示"刷新后 token 仍被拒"的有界收敛：刷一次+重放后过期，不死循环）
+  if (path === '/api/secure-dead') {
+    hits[id] = (hits[id] || 0) + 1;
+    return finish(401, envelope(null, '401', 'always unauthorized'));
+  }
+
+  // 刷新令牌：颁发当前有效 token（客户端据此恢复）
+  if (path === '/api/refresh' && req.method === 'POST') {
+    refreshCount++;
+    return finish(200, envelope({ token: AUTH_TOKEN, refreshCount }));
   }
 
   // 只读当前计数（不增加），供断言
@@ -100,6 +127,22 @@ const server = http.createServer(async (req, res) => {
   // 不存在的 mock 路由（演示 mock.fallback：404 → 回落真实接口）。必须先于 /mock 判定。
   if (path.startsWith('/mock-404')) {
     return finish(404, envelope(null, '4040', 'mock route not found'));
+  }
+
+  // 网关：mock 未命中时由「服务端」转发到真实上游（mock-or-passthrough），
+  // 区别于客户端(axios)回落 —— 更贴近真实 mock 服务的工作方式。
+  // `/gw/<realpath>` → 服务端 loopback 转发到 `<realpath>`，并在 query 上打 `_gw=1` 作为转发标记。
+  if (path.startsWith('/gw/')) {
+    const realPath = path.slice(3); // 去掉 '/gw'
+    const fwd = new URL(`http://127.0.0.1:${PORT}${realPath}`);
+    for (const [k, v] of q) fwd.searchParams.set(k, v);
+    fwd.searchParams.set('_gw', '1'); // 转发标记，证明经由 mock server 转发（非客户端回落）
+    const init = { method: req.method, headers: { 'content-type': 'application/json' } };
+    if (req.method !== 'GET' && req.method !== 'HEAD') init.body = JSON.stringify(await readBody(req));
+    const upstream = await fetch(fwd, init);
+    const text = await upstream.text();
+    if (delay > 0) await new Promise((r) => setTimeout(r, delay));
+    return json(res, upstream.status, text ? JSON.parse(text) : {});
   }
 
   // mock 插件重写后的目标

@@ -56,8 +56,8 @@ ALL E2E PASSED ✅
 | loading | `loading`(全局计数 0→1 / 1→0 触发) |
 | mock | `mock`(URL 重写到 mockUrl;mock 不存在时默认回落真实接口) |
 | envs | `envs`(安装期规则合并) |
-| filterRequest | `filterRequest` · `normalizeRequest`(别名,空字段过滤) |
-| replacePathVars | `replacePathVars`(`{id}`/`:pid` 替换) |
+| normalizeRequest | `normalizeRequest`(空字段过滤) |
+| repath | `repath`(`{id}`/`:pid` 替换) |
 | normalizeResponse | `normalizeResponse` · `ApiError`(业务失败以 ApiError reject) |
 | TokenManager | `TokenManager`(set/get/clear,Bearer 前缀) |
 | ApiResponse | `ApiResponse`(fromResponse 防 null + 成功判定) |

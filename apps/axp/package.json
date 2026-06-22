@@ -1,7 +1,6 @@
 {
-  "name": "http-plugins",
-  "private": true,
-  "version": "0.0.0",
+  "name": "@codejoo/axp",
+  "version": "0.0.1",
   "type": "module",
   "main": "./dist/index.mjs",
   "module": "./dist/index.mjs",
@@ -35,7 +34,8 @@
     "e2e:dev": "node e2e/dev.mjs",
     "e2e:server": "node e2e/server/mock-server.mjs",
     "e2e:playground": "vp dev e2e/playground --port 5180 --strictPort",
-    "e2e": "node e2e/run.mjs"
+    "e2e": "node e2e/run.mjs",
+    "e2e:int": "node e2e/integration.mjs"
   },
   "devDependencies": {
     "@codejoo/openapi2lang": "^1.0.6",
@@ -48,5 +48,14 @@
   },
   "peerDependencies": {
     "axios": "catalog:"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/icodejoo/graphics-icon.git",
+    "directory": "packages/exports"
+  },
+  "homepage": "https://github.com/icodejoo/graphics-icon/tree/main/packages/exports",
+  "publishConfig": {
+    "access": "public"
   }
 }
