@@ -28,6 +28,7 @@ export function configureTypescript(input: ConfigureTsInput = {}): TsLangConfig 
       requestNamespace: input.base?.requestNamespace ?? "req",
       emitPathRefs: input.base?.emitPathRefs ?? true,
       emitMethodRefs: input.base?.emitMethodRefs ?? true,
+      module: input.base?.module ?? false,
     },
     primary: { ...DEFAULT_TS_PRIMARY, ...input.primary },
     others: { ...DEFAULT_TS_OTHERS, ...input.others },
@@ -85,6 +86,19 @@ export interface TsBase extends CommonBase {
   /** 产出 method-major `MethodRefs`（axp `Core<T>` 消费）。默认 true。
    *  只用其一时可关掉另一个，省去消费方解析整份索引的开销。JSDoc 只挂在二者中实际产出的「优先 PathRefs」一份上。 */
   emitMethodRefs: boolean;
+  /**
+   * 产物形态。默认 `false`：全局 ambient `declare namespace model { ... }`（向后兼容，消费侧
+   * 直接用全局 `model.MethodRefs` 等，无需 import）。
+   *
+   * `true`：ES module `export`（无 `declare namespace` 包裹）。消费侧需 `import type`：
+   *   `import type { MethodRefs } from './paths'`。文件间用命名空间导入互引
+   *   （`import type * as model from './response'`、`import type * as req from './request'`），
+   *   故 `model.X` / `req.X` 引用形态不变。对 tsserver 更友好：类型按需加载、不进全局作用域、
+   *   增量失效面收窄（详见 SKILL 的 Tier 3 说明）。
+   *
+   * 注意：`true` 时不再有全局 `model`，依赖全局 `model.*` 的消费方（如当前 axp 的名义守卫）需自行适配。
+   */
+  module: boolean;
   inferenceFlags: InferenceFlags;
 }
 

@@ -56,31 +56,35 @@ function splitAndWrap(quicktypeOutput: string, meta: MegaSchemaResult, cfg: TsLa
   const needsPrefix = new Set<string>();
   for (const n of allTypeNames) if (!reqNames.has(n)) needsPrefix.add(n);
 
-  // ref-alias / ref-alias-extends / body-alias 在 model.req 末尾手写类型声明。
+  // ref-alias / ref-alias-extends / body-alias 手写类型声明（全局放 model.req 末尾；模块作 export）。
   // schema 阶段这类 op 不写入 mega-schema（避免与底层 ref dedupe 撞名）；其内联 enum 已在
   // schema 阶段被 EnumLifter 提升为顶层 ref，emitter 此处直接走通用 ref 渲染即可。
+  const mod = cfg.base.module;
+  const raDecl = mod ? "export " : ""; // 模块：导出；全局：namespace 内裸声明
+  const raI = mod ? "" : "  "; // 顶层缩进（全局 namespace 内 +2）
+  const raPI = mod ? "  " : "    "; // extends 体内属性缩进
   const refAliasLines: string[] = [];
   for (const op of meta.ops) {
     const info = meta.reqInfoOf.get(opKey(op.path, op.method));
     if (!info) continue;
     if (info.kind !== "ref-alias" && info.kind !== "ref-alias-extends" && info.kind !== "body-alias") continue;
 
-    const jsdoc = renderJsDoc(op, "  ");
+    const jsdoc = renderJsDoc(op, raI);
     if (jsdoc) refAliasLines.push(jsdoc);
 
     if (info.kind === "ref-alias") {
-      refAliasLines.push(`  interface ${info.name} extends ${ns}.${info.refName} {}`);
+      refAliasLines.push(`${raI}${raDecl}interface ${info.name} extends ${ns}.${info.refName} {}`);
     } else if (info.kind === "ref-alias-extends" && info.extendsProps?.length) {
-      refAliasLines.push(`  interface ${info.name} extends ${ns}.${info.refName} {`);
+      refAliasLines.push(`${raI}${raDecl}interface ${info.name} extends ${ns}.${info.refName} {`);
       for (const prop of info.extendsProps) {
         const opt = prop.required ? "" : "?";
         const desc = typeof prop.schema?.description === "string" ? prop.schema.description : undefined;
-        if (desc) refAliasLines.push(...renderPropJsDoc(desc, "    "));
-        refAliasLines.push(`    ${prop.name}${opt}: ${schemaToTsType(prop.schema, ns)}`);
+        if (desc) refAliasLines.push(...renderPropJsDoc(desc, raPI));
+        refAliasLines.push(`${raPI}${prop.name}${opt}: ${schemaToTsType(prop.schema, ns)}`);
       }
-      refAliasLines.push(`  }`);
+      refAliasLines.push(`${raI}}`);
     } else if (info.kind === "body-alias" && info.bodySchema) {
-      refAliasLines.push(`  type ${info.name} = ${schemaToTsType(info.bodySchema, ns)}`);
+      refAliasLines.push(`${raI}${raDecl}type ${info.name} = ${schemaToTsType(info.bodySchema, ns)}`);
     }
   }
   const refAliasText = refAliasLines.length ? `\n\n${refAliasLines.join("\n")}` : "";
@@ -88,6 +92,19 @@ function splitAndWrap(quicktypeOutput: string, meta: MegaSchemaResult, cfg: TsLa
   // 后处理 #2：enum-like block 提到顶部
   const resOrdered = sortEnumsFirst(resBlocks);
   const reqOrdered = sortEnumsFirst(reqBlocks);
+
+  if (mod) {
+    // ES module：导出声明 + 命名空间导入互引。response 无依赖；request 用 `import * as model`
+    // 引用 response（`model.X` 引用形态由 rewriteRefs 维持不变，model 此时是 import 别名）。
+    const responseText = resOrdered.map((b) => ensureExport(b.text)).join("\n\n");
+    const requestText = reqOrdered.map((b) => ensureExport(rewriteRefs(b.text, needsPrefix, ns))).join("\n\n");
+    const reqNeedsModel = needsPrefix.size > 0 || refAliasLines.length > 0;
+    const reqImport = reqNeedsModel ? `import type * as ${ns} from "${baseNoExt(cfg.base.responseFile)}"\n\n` : "";
+    return {
+      responseFile: `${cfg.base.fileHeader}${responseText}\n`,
+      requestFile: `${cfg.base.fileHeader}${reqImport}${requestText}${refAliasText}\n`,
+    };
+  }
 
   const responseText = resOrdered.map((b) => indentBlock(stripBlockExport(b.text))).join("\n\n");
   const requestText = reqOrdered.map((b) => indentBlock(rewriteRefs(stripBlockExport(b.text), needsPrefix, ns))).join("\n\n");
@@ -98,6 +115,23 @@ function splitAndWrap(quicktypeOutput: string, meta: MegaSchemaResult, cfg: TsLa
     responseFile: `${cfg.base.fileHeader}declare namespace ${ns} {\n${responseText}\n}\n`,
     requestFile: `${cfg.base.fileHeader}declare namespace ${requestNs} {\n${requestText}${refAliasText}\n}\n`,
   };
+}
+
+/** 给声明块顶部声明行确保单个 `export` 前缀（块可能以 JSDoc 注释开头）。模块模式用。 */
+function ensureExport(text: string): string {
+  const lines = text.split("\n");
+  for (let i = 0; i < lines.length; i++) {
+    const t = lines[i].trim();
+    if (!t || t.startsWith("//") || t.startsWith("/*") || t.startsWith("*")) continue;
+    lines[i] = lines[i].replace(/^(\s*)(?:export\s+|declare\s+)*/, "$1export ");
+    break;
+  }
+  return lines.join("\n");
+}
+
+/** 文件名 → 去扩展名的相对 import 路径（`response.d.ts` → `./response`）。 */
+function baseNoExt(file: string): string {
+  return "./" + file.replace(/\.d\.ts$|\.ts$/, "");
 }
 
 function parseBlocks(quicktypeOutput: string): TsBlock[] {
@@ -254,6 +288,7 @@ function isEnumLike(b: TsBlock): boolean {
 // ============================================================================
 
 function emitPaths(meta: MegaSchemaResult, cfg: TsLangConfig): string {
+  if (cfg.base.module) return emitPathsModule(meta, cfg);
   const ns = cfg.base.rootNamespace;
   const allPaths = [...new Set(meta.ops.map((o) => o.path))].sort();
   const wantPath = cfg.base.emitPathRefs;
@@ -348,6 +383,44 @@ function renderMethodRefs(meta: MegaSchemaResult, allPaths: string[], cfg: TsLan
   return out;
 }
 
+/** 模块形态的 paths：`export type Paths` + `export interface PathRefs/MethodRefs`，
+ *  并按引用情况补 `import type * as model from './response'` / `* as req from './request'`。 */
+function emitPathsModule(meta: MegaSchemaResult, cfg: TsLangConfig): string {
+  const ns = cfg.base.rootNamespace;
+  const reqAlias = cfg.base.requestNamespace;
+  const allPaths = [...new Set(meta.ops.map((o) => o.path))].sort();
+  const wantPath = cfg.base.emitPathRefs;
+  const wantMethod = cfg.base.emitMethodRefs;
+  const docOnPath = wantPath;
+  const docOnMethod = wantMethod && !wantPath;
+
+  let body = "";
+  if (allPaths.length === 0) body += "export type Paths = never\n";
+  else body += "export type Paths =\n" + allPaths.map((p) => `  | '${p}'`).join("\n") + "\n";
+  if (wantPath) body += "\n" + dedentExport(renderPathRefs(meta, allPaths, cfg, docOnPath));
+  if (wantMethod) body += "\n" + dedentExport(renderMethodRefs(meta, allPaths, cfg, docOnMethod));
+
+  const imports: string[] = [];
+  if (body.includes(`${ns}.`)) imports.push(`import type * as ${ns} from "${baseNoExt(cfg.base.responseFile)}"`);
+  if (body.includes(`${reqAlias}.`)) imports.push(`import type * as ${reqAlias} from "${baseNoExt(cfg.base.requestFile)}"`);
+  const importText = imports.length ? imports.join("\n") + "\n\n" : "";
+
+  return `${cfg.base.fileHeader}${importText}${body}`;
+}
+
+/** 把 namespace 缩进的渲染块降一级缩进并给首个声明行加 `export`（模块形态用）。 */
+function dedentExport(block: string): string {
+  const lines = block.replace(/\n+$/, "").split("\n").map((l) => (l.startsWith("  ") ? l.slice(2) : l));
+  for (let i = 0; i < lines.length; i++) {
+    const t = lines[i].trim();
+    if (t.startsWith("interface ") || t.startsWith("type ")) {
+      lines[i] = "export " + lines[i];
+      break;
+    }
+  }
+  return lines.join("\n") + "\n";
+}
+
 function renderResponse(ref: ResponseRef, cfg: TsLangConfig): string {
   const ns = cfg.base.rootNamespace;
   switch (ref.kind) {
@@ -378,7 +451,8 @@ function renderResponse(ref: ResponseRef, cfg: TsLangConfig): string {
  */
 function renderReq(info: ReqInfo, cfg: TsLangConfig): string {
   if (info.kind === "empty") return "[]";
-  const reqNs = `${cfg.base.rootNamespace}.${cfg.base.requestNamespace}`;
+  // 全局：`model.req.X`；模块：`req.X`（req = `import type * as req from './request'` 的别名）
+  const reqNs = cfg.base.module ? cfg.base.requestNamespace : `${cfg.base.rootNamespace}.${cfg.base.requestNamespace}`;
   return `[payload: ${reqNs}.${info.name}]`;
 }
 
