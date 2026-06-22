@@ -28,6 +28,25 @@ const pets = await api.get('/pet/findByStatus')({ status: 'available' });   // �
 await api.post('/pet')({ name: 'lassie', photoUrls: [] });                  // → model.Pet
 ```
 
+## Schema typing (`model.MethodRefs`)
+
+Codegen (`@codejoo/openapi2lang`) emits two views of your spec into the global `model` namespace:
+
+- **`model.PathRefs`** — path-major `{ [path]: { [method]: [response, request] } }`. Consumed by openapi2lang's own `Request`/`OpenApi` helpers.
+- **`model.MethodRefs`** — method-major `{ [method]: { [path]: [response, request] } }`, **statically pre-expanded** by codegen (not a `type X = Invert<PathRefs>` computation). `Core<T>` consumes this: each call is a direct `T[method][path]` literal lookup — no type-level inversion, IDE-friendly even at ~1000 paths.
+
+`create<model.MethodRefs>()` makes unlisted method/path combinations a **compile error**. To add ad-hoc routes during integration, declaration-merge into `MethodRefs` (method-major — note the nesting) in a local `.d.ts`:
+
+```ts
+declare namespace model {
+  interface MethodRefs {
+    get: { '/internal/ping': [response: { ok: boolean }, request: []] };
+  }
+}
+```
+
+`create()` (no generic) relaxes paths to `string` for untyped/dynamic use.
+
 ## Response shapes (chosen per call)
 
 | call | returns |

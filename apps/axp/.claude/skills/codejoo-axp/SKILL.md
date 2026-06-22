@@ -16,7 +16,7 @@ caller's (no priority field).
 | --- | --- |
 | `core.ts` | `Core<T>` + `create<T>()`. Builds verb methods once (`PROTO_BUILT` module flag). `dispatch` → `shapeResponse` resolves **raw / wrap / unwrap**. `extends()` clones axios defaults (structural shallow + targeted deep). |
 | `plugin.ts` | `PluginManager`. Per-plugin `InternalRecord` tracks every interceptor/transform/adapter/cleanup so `eject` reverts all of it. `#refresh` = full teardown+reinstall on every `use`/`eject` (reverse-order teardown). Normalizes `defaults.adapter` to a function at construction. |
-| `types.ts` | Plugin system types (`Plugin`, `PluginContext`, `PluginRecord`, `CoreOptions`) + the `HttpPrototype<T>` schema-inference machinery (method-major `_Indexed<T>`, three dispatch overloads). |
+| `types.ts` | Plugin system types (`Plugin`, `PluginContext`, `PluginRecord`, `CoreOptions`) + the `HttpPrototype<T>` schema-inference machinery (consumes method-major `model.MethodRefs` via direct `T[Mt][P]` lookup; three dispatch overloads). |
 | `helper.ts` | `__DEV__`, `NS`, loggers (`tagged`/NOOP/CONSOLE), `asArray`, type guards. |
 | `bag.ts` | **B2** Symbol-keyed private bag (`setInternal/getInternal/delInternal`). Invisible to for-in/JSON/serialization. **Does NOT survive mergeConfig re-merge** — single-request scope only. |
 | `objects/ApiResponse.ts` | `ApiResponse` (`successful` via static `isSuccessful` hook) + `fromResponse` (null-safe) + `ApiError extends Error`. |
@@ -38,6 +38,7 @@ caller's (no priority field).
 - **Ordering = `use()` order.** Request interceptors LIFO, response FIFO, transformers append-order, adapter last-wins. Documented, not enforced.
 - **`fn.name` reassign needs `Object.defineProperty`** under strict-mode ESM (plain `fn.name =` throws). Used by `normalize-response`, `repath`, `auth` so `eject(factory)` works after minify.
 - **`build-key` tests are relational** (`a===b` / `a!==b`), never literal hashes — preserve invariants (key-order-independent objects, ordered arrays, empty-container equivalence, separator anti-collision), not specific digests. Double-lane FNV-1a → ~64-bit.
+- **Schema is `model.MethodRefs` (method-major), consumed directly — no `_Indexed`.** `@codejoo/openapi2lang` emits TWO views: `model.PathRefs` (path-major, for openapi2lang's own `Request`/`OpenApi`) and `model.MethodRefs` (method-major `{ [method]: { [path]: [resp, req] } }`, **statically pre-expanded** by the emitter — `emitMethodRefs` in openapi's `typescript-emitter.ts`, NOT a TS-level `Invert<PathRefs>`). `Core<T>`'s `LoosePath`/`EntryFor` do `T[Mt][P]` literal lookups — O(1), no mapped/conditional fan-out. There used to be a `_Indexed<T>` type that inverted PathRefs at type-check time; it's gone — don't reintroduce it. Local route extension declaration-merges into `MethodRefs` (method-major nesting), not PathRefs. axp ships a hand-maintained fixture `types/paths.d.ts` containing both interfaces; regenerate via openapi's generate flow when the spec changes.
 
 ## Build & test (the real acceptance gate)
 
