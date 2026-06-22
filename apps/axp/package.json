@@ -2,6 +2,33 @@
   "name": "@codejoo/axp",
   "version": "0.0.1",
   "type": "module",
+  "keywords": [
+    "axios",
+    "axios-plugin",
+    "axios-plugins",
+    "http",
+    "http-client",
+    "plugin",
+    "interceptor",
+    "adapter",
+    "cache",
+    "retry",
+    "dedupe",
+    "request-dedup",
+    "share",
+    "auth",
+    "token-refresh",
+    "cancel",
+    "abort",
+    "loading",
+    "mock",
+    "typescript",
+    "type-safe",
+    "openapi"
+  ],
+  "description": "Typed, plugin-based HTTP client built on axios — cache, retry, request dedup/share, auth token-refresh, cancel, loading, mock, path-var substitution, and more, with end-to-end OpenAPI type inference.",
+  "license": "MIT",
+  "author": "Carlos Joo",
   "main": "./dist/index.mjs",
   "module": "./dist/index.mjs",
   "types": "./dist/index.d.mts",
@@ -22,7 +49,8 @@
     "dist",
     "src",
     "README.md",
-    "README.zh-CN.md"
+    "README.zh-CN.md",
+    "LICENSE"
   ],
   "scripts": {
     "fmt": "vp fmt -c oxfmt.config.ts",
@@ -51,10 +79,11 @@
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/icodejoo/graphics-icon.git",
-    "directory": "packages/exports"
+    "url": "git+https://github.com/gapkukb/codejoo.git",
+    "directory": "apps/axp"
   },
-  "homepage": "https://github.com/icodejoo/graphics-icon/tree/main/packages/exports",
+  "homepage": "https://github.com/gapkukb/codejoo/tree/main/apps/axp",
+  "bugs": "https://github.com/gapkukb/codejoo/issues",
   "publishConfig": {
     "access": "public"
   }
