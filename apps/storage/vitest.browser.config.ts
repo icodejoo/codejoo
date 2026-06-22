@@ -2,17 +2,15 @@ import { defineConfig } from "vitest/config";
 import { playwright } from "@vitest/browser-playwright";
 
 /**
- * Browser-mode 端到端测试配置 —— 在真实 Chromium 中跑真 RAF 行为。
+ * 集成测试配置 —— 在真实 Chromium（Playwright）中跑全部用例。
  *
- * 与 `vitest.config.ts`（jsdom）互补：单元测试走 jsdom（快、覆盖逻辑分支），
- * E2E 走真实浏览器（验证 RAF 调度、performance.now()、textContent 同步等
- * 与 jsdom 行为不一致的浏览器原生 API）。
- *
- * 用法：`pnpm test:browser`（见 package.json）
+ * 测试位于 `test/*.browser.test.ts`，使用真实 localStorage / sessionStorage /
+ * IndexedDB / BroadcastChannel（非 jsdom 模拟），覆盖同步后端、异步 IDB 事务、
+ * 跨标签同步等真实浏览器行为。用法：`pnpm test`（见 package.json）。
  */
 export default defineConfig({
   test: {
-    include: ["src/**/*.browser.test.ts"],
+    include: ["test/**/*.browser.test.ts"],
     browser: {
       enabled: true,
       provider: playwright(),

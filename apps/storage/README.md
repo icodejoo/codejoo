@@ -52,21 +52,22 @@ Returns `{ ls, ss, db, destroy, setNamespace }` over `localStorage`, `sessionSto
 
 #### `BaseStorageOptions`
 
-| Option        | Type                                | Required | Default          | Description                                                                                                                                                                    |
-| ------------- | ----------------------------------- | -------- | ---------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `memoized`    | `boolean`                           | No       | `false`          | Enable in-memory read cache: writes mirror to cache, reads hit cache first, deletes are dual. Opt-in (not a full mirror), so memory grows only with use.                       |
-| `cloned`      | `boolean`                           | No       | `false`          | Return a deep copy (`structuredClone`) for objects shared with the memo cache, isolating caller mutations. Default shares references (zero cost).                              |
-| `serialize`   | `(entity: StorageEntity) => string` | No       | `JSON.stringify` | Custom entity → string serializer.                                                                                                                                             |
-| `deserialize` | `(raw: string) => StorageEntity`    | No       | `JSON.parse`     | Custom string → entity deserializer (must pair with `serialize`).                                                                                                              |
-| `codeable`    | `boolean`                           | No       | `false`          | Whether to invoke `codec`. Lets you toggle encoding per environment (dev/prod).                                                                                                |
-| `codec`       | `Codec`                             | No       | —                | Encode/decode the serialized string (obfuscation / compression). Takes effect only when `codeable` is true.                                                                    |
-| `sliding`     | `boolean`                           | No       | `false`          | Sliding expiry: renew by original `ttl` on each read hit (good for sessions/auth). The write-back is skipped while >90% of the ttl remains, so hot reads don't amplify writes. |
-| `namespace`   | `string`                            | No       | `""`             | Key prefix (`namespace:key`) to isolate apps/modules sharing the same origin.                                                                                                  |
-| `raw`         | `boolean`                           | No       | `false`          | Store the raw value directly, skipping the entity envelope (no ttl/codec). For interop with external data.                                                                     |
-| `force`       | `boolean`                           | No       | `true`           | On quota error, purge expired entries and retry the write; otherwise log & give up. **Sync backends only.**                                                                    |
-| `readonly`    | `boolean`                           | No       | `false`          | Write-once: only write when the key is empty (absent/expired); otherwise discard the write.                                                                                    |
-| `enckey`      | `boolean`                           | No       | `false`          | Also encrypt the **key**: when set with a `codec`, the storage key is deterministically encrypted (hides plaintext key names).                                                 |
-| `db`          | `AsyncStorage`                      | No       | —                | An IndexedDB instance (e.g. `new Idb()`) exposed as `factory().db`. Using `db` without it throws a helpful error.                                                              |
+| Option        | Type                                                         | Required | Default          | Description                                                                                                                                                                                                                                                                                    |
+| ------------- | ------------------------------------------------------------ | -------- | ---------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `memoized`    | `boolean`                                                    | No       | `false`          | Enable in-memory read cache: writes mirror to cache, reads hit cache first, deletes are dual. Opt-in (not a full mirror), so memory grows only with use.                                                                                                                                       |
+| `cloned`      | `boolean`                                                    | No       | `false`          | Return a deep copy (`structuredClone`) for objects shared with the memo cache, isolating caller mutations. Default shares references (zero cost).                                                                                                                                              |
+| `serialize`   | `(entity: StorageEntity) => string`                          | No       | `JSON.stringify` | Custom entity → string serializer.                                                                                                                                                                                                                                                             |
+| `deserialize` | `(raw: string) => StorageEntity`                             | No       | `JSON.parse`     | Custom string → entity deserializer (must pair with `serialize`).                                                                                                                                                                                                                              |
+| `codeable`    | `boolean`                                                    | No       | `false`          | Whether to invoke `codec`. Lets you toggle encoding per environment (dev/prod).                                                                                                                                                                                                                |
+| `codec`       | `Codec`                                                      | No       | —                | Encode/decode the serialized string (obfuscation / compression). Takes effect only when `codeable` is true.                                                                                                                                                                                    |
+| `sliding`     | `boolean`                                                    | No       | `false`          | Sliding expiry: renew by original `ttl` on each read hit (good for sessions/auth). The write-back is skipped while >90% of the ttl remains, so hot reads don't amplify writes.                                                                                                                 |
+| `namespace`   | `string`                                                     | No       | `""`             | Key prefix (`namespace:key`) to isolate apps/modules sharing the same origin.                                                                                                                                                                                                                  |
+| `raw`         | `boolean`                                                    | No       | `false`          | Store the raw value directly, skipping the entity envelope (no ttl/codec). For interop with external data.                                                                                                                                                                                     |
+| `force`       | `boolean`                                                    | No       | `true`           | On quota error, purge expired entries and retry the write; otherwise log & give up. **Sync backends only.**                                                                                                                                                                                    |
+| `readonly`    | `boolean`                                                    | No       | `false`          | Write-once: only write when the key is empty (absent/expired); otherwise discard the write.                                                                                                                                                                                                    |
+| `enckey`      | `boolean`                                                    | No       | `false`          | Also obfuscate the **key**: when set with a `codec`, the storage key is deterministically run through the codec (hides plaintext key names). This only obfuscates key names via the codec — **not a security measure** — and requires a `codec`, else it warns and degrades to plaintext keys. |
+| `onError`     | `(info: { op: "set"; key: string; error: unknown }) => void` | No       | —                | Write-failure callback (quota exceeded, `force` retry still failing). When provided it replaces the default `console.error`, so the caller can observe failures (`set` returns `void`, so failures are otherwise invisible). Called once per failing key in a batch `set`.                     |
+| `db`          | `AsyncStorage`                                               | No       | —                | An IndexedDB instance (e.g. `new Idb()`) exposed as `factory().db`. Using `db` without it throws a helpful error.                                                                                                                                                                              |
 
 ### Handler methods (`ls` / `ss` / `db`)
 
@@ -76,19 +77,18 @@ Returns `{ ls, ss, db, destroy, setNamespace }` over `localStorage`, `sessionSto
 | ----------------------------- | ----------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `get<T>(key)`                 | `R<T \| null>`    | Read; missing → `null`.                                                                                                                                                                                 |
 | `get(key, defaultValue)`      | `R<T>`            | Read; missing/expired/undecodable → `defaultValue`.                                                                                                                                                     |
-| `set(key, value, ttl?)`       | `R<void>`         | Write; `ttl` in ms.                                                                                                                                                                                     |
-| `set(key, value, memoized?)`  | `R<void>`         | Write; `boolean` toggles per-call memo mirroring.                                                                                                                                                       |
-| `set(key, value, options?)`   | `R<void>`         | Write; `StorageOptions` (ttl / expireAt / memoized).                                                                                                                                                    |
+| `set(key, value, ttl?)`       | `R<void>`         | Write; `ttl` in ms. Invalid `ttl` (`0` / negative / `NaN` / `Infinity`) is warned and ignored — the value is still persisted (never written-then-immediately-deleted nor made never-expiring).          |
+| `set(key, value, options?)`   | `R<void>`         | Write; `StorageOptions` (ttl / expireAt / memoized). Opt-in memo is now only via the object form (`set(k, v, { memoized: true })`).                                                                     |
 | `remove(key)`                 | `R<void>`         | Delete (cache + backend).                                                                                                                                                                               |
 | `get(keys, defaults?)`        | `R<tuple>`        | **Batch read**: pass an array of keys; returns a same-length tuple. `defaults` map positionally and drive per-slot types (`get(["a","b"],[1,false])` → `[number, boolean]`; `as const` keeps literals). |
 | `set(keys, values, options?)` | `R<void>`         | **Batch write**: positional pairs; the 3rd arg applies to every key. If `values` is shorter, missing slots are skipped (warned).                                                                        |
-| `remove(keys)`                | `R<void>`         | **Batch delete.** On `db`, batch get/set/remove run in a **single IndexedDB transaction** (~4× faster than looping; needs the backend's `getMany/setMany/removeMany`, which `Idb` provides).            |
+| `remove(keys)`                | `R<void>`         | **Batch delete.** Batch `get`/`set`/`remove` are implemented by iterating the key array and reusing the single-key logic per key (on the async backend, one transaction per key).                       |
 | `keys()`                      | `R<string[]>`     | All logical keys owned by this instance (decrypted, namespace-stripped).                                                                                                                                |
 | `purge()`                     | `R<void>`         | Proactively delete expired entries (owned, written by this lib). Expiry is otherwise lazy — entries never read again stay until `purge()`/quota pressure.                                               |
 | `clear()`                     | `R<void>`         | With `namespace` or `enckey`: removes only this instance's keys (other namespaces / foreign data untouched). Otherwise clears the whole backend.                                                        |
 | `destroy()`                   | `R<void>`         | Release resources: clear the memo cache and disconnect a closeable backend (IndexedDB). **Keeps persisted data.**                                                                                       |
 | `key(index)`                  | `R<string\|null>` | The `index`-th logical key (decrypted, namespace-stripped).                                                                                                                                             |
-| `length`                      | `R<number>`       | Entry count (getter).                                                                                                                                                                                   |
+| `length`                      | `R<number>`       | Entry count (getter). With `namespace` or `enckey` it counts only the keys this instance owns (consistent with `keys()`/`clear()`); otherwise it returns the backend's global entry count.              |
 | `namespace`                   | `string`          | The namespace prefix (e.g. `"ns:"`, or `""`).                                                                                                                                                           |
 | `setNamespace(ns?)`           | `void`            | Switch the prefix in place (e.g. per username); clears the memo cache. Held handles keep working.                                                                                                       |
 
@@ -96,11 +96,11 @@ Returns `{ ls, ss, db, destroy, setNamespace }` over `localStorage`, `sessionSto
 
 Only these three apply per call (everything else — codec, sliding, raw… — is instance-level, see `BaseStorageOptions`):
 
-| Option     | Type                       | Required | Default | Description                                                                                                                                        |
-| ---------- | -------------------------- | -------- | ------- | -------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `ttl`      | `number`                   | No       | —       | Time-to-live in ms (relative). Sets `expireAt = now + ttl`.                                                                                        |
-| `expireAt` | `number \| string \| Date` | No       | —       | Absolute expiry (timestamp / date string / `Date`). If in the past (and not renewable via `sliding` + `ttl`), the write is skipped with a warning. |
-| `memoized` | `boolean`                  | No       | —       | Mirror this write into the memo read cache (overrides the instance-level `memoized`).                                                              |
+| Option     | Type                       | Required | Default | Description                                                                                                                                                                     |
+| ---------- | -------------------------- | -------- | ------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `ttl`      | `number`                   | No       | —       | Time-to-live in ms (relative). Sets `expireAt = now + ttl`. An invalid value (`0` / negative / `NaN` / `Infinity`) is warned and ignored, so the value persists with no expiry. |
+| `expireAt` | `number \| string \| Date` | No       | —       | Absolute expiry (timestamp / date string / `Date`). If in the past (and not renewable via `sliding` + `ttl`), the write is skipped with a warning.                              |
+| `memoized` | `boolean`                  | No       | —       | Mirror this write into the memo read cache (overrides the instance-level `memoized`).                                                                                           |
 
 ### `fast(target, key)`
 
@@ -188,7 +188,7 @@ An **asynchronous** `Storage`-like backend over IndexedDB. No full in-memory mir
 | ------ | -------- | -------- | -------------------- | ------------------------ |
 | `name` | `string` | No       | `"@codejoo/storage"` | IndexedDB database name. |
 
-Methods (all return Promises): `get(key)`, `set(key, value)`, `remove(key)`, `clear()`, `key(index)`, `keys()`, `length()`, `destroy()` (close the connection; keeps data), plus single-transaction batch primitives `getMany(keys)` / `setMany(entries)` / `removeMany(keys)` that power the handler's batch fast paths.
+Methods (all return Promises): `get(key)`, `set(key, value)`, `remove(key)`, `clear()`, `key(index)`, `keys()`, `length()`, `destroy()` (close the connection; keeps data). Handler-level batch ops loop over these single-key methods (one transaction per key) — there is no bulk `getMany`/`setMany`/`removeMany` primitive.
 
 ### `crossTab(handler, channel?)`
 
@@ -202,7 +202,7 @@ const stop = crossTab(ls);
 
 ### `debug(handler)`
 
-Standalone helper shipped as a **separate subpath** (`@codejoo/storage/debug`) — it is not part of the main entry, so the single-file bundles (`dist/index.mjs` / `index.min.js`) physically exclude it. Reads every entry of a handler **decrypted**, returns a `{ "namespace:key": value }` snapshot (namespace **preserved**), and stashes it under `"_$debug"`. Use it to inspect data written with `codeable`/`enckey`.
+Standalone helper shipped as a **separate subpath** (`@codejoo/storage/debug`) — it is not part of the main entry, so the single-file bundles (`dist/index.mjs` / `index.min.js`) physically exclude it. Reads every entry of a handler **decrypted** and returns a `{ "namespace:key": value }` snapshot (namespace **preserved**). It is a **pure read with no side effects** — it does not write the snapshot back to storage, so it never pollutes `keys()`/`length`. Use it to inspect data written with `codeable`/`enckey`.
 
 ```ts
 import { factory, codec } from "@codejoo/storage";
@@ -217,7 +217,15 @@ await debug(db); // async backend → Promise
 
 - **Sync vs async** is driven by the backend type via generics: `ls.get(k)` returns a value, `db.get(k)` returns a `Promise`. One proxy implementation serves both.
 - **`db` features**: `ttl` / `expireAt` / `codec` / `namespace` / `sliding` / `memoized` all apply to `db` too (just `await` it). `force` quota-purge currently applies to sync backends only.
+- **Memo is isolated per `factory()` instance**: each `factory()` call gets its own in-memory read cache; separate instances do not share memo (no cross-instance reads).
 - **Tree-shaking**: the package points `import` at `dist/esm/` (one file per module). With `sideEffects: false`, unused modules/exports are dropped by the bundler.
+
+## Differences from native localStorage
+
+- **Values are wrapped in an entity envelope** (`{ value, createdAt, ... }`) by default, not stored as bare strings. Reading a key with the native `localStorage.getItem` (bypassing this library) yields the JSON envelope, not your raw value (except in `raw` mode).
+- **`set` does not throw on quota** (native throws `QuotaExceededError`). When storage is full it only logs / invokes `onError` and gives up the write — use `onError` if you need to observe write failures.
+- **`length` and `clear()` are namespace-scoped**: with `namespace`/`enckey` they cover only the keys this instance owns, unlike native's global semantics.
+- **Expiry is lazy**: expired entries are not read and not eagerly deleted; they are reclaimed by `purge()` or under quota pressure.
 
 ## Build outputs
 
@@ -229,13 +237,13 @@ await debug(db); // async backend → Promise
 
 ## Testing
 
-A standalone browser test page lives in [`test/`](./test/). Run the dev server and open it:
-
 ```sh
-pnpm dev          # then open the printed URL + /test/
+pnpm test
 ```
 
-It loads the source directly (Vite transforms TS) and renders pass/fail for every API.
+runs the full integration suite (`test/*.browser.test.ts`) in a **real Chromium** via Playwright (vitest browser mode), against real `localStorage` / `sessionStorage` / `IndexedDB` / `BroadcastChannel` — not a jsdom simulation. This covers sync backends, async IDB transactions, and cross-tab sync as they behave in an actual browser.
+
+An interactive playground remains at [`test/manual.html`](./test/manual.html): run `pnpm dev` and open `/test/manual.html`.
 
 ## License
 

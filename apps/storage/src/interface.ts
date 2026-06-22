@@ -27,10 +27,6 @@ export interface AsyncStorage {
   key(index: number): Promise<string | null>;
   /** 可选：一次性返回全部存储键。提供时 clear/keys/purge 走快路径（Idb 单次 getAllKeys，免逐下标 O(n²)） */
   keys?(): Promise<string[]>;
-  /** 可选批量原语：单事务内完成。提供时批量 get/set/remove 与 clear/purge 走快路径（免 N 次事务开销） */
-  getMany?(keys: readonly string[]): Promise<(string | null)[]>;
-  setMany?(entries: readonly (readonly [string, string])[]): Promise<void>;
-  removeMany?(keys: readonly string[]): Promise<void>;
   length(): Promise<number>;
 }
 
@@ -67,10 +63,15 @@ export interface BaseStorageOptions {
   /** 是否对键也加密：默认 false。为 true 且配置了 codec 时，存储键经 codec 确定性加密（隐藏明文键名） */
   enckey?: boolean;
   /**
+   * 写入失败回调（配额超限、force 重试仍失败等）。提供时取代默认的 console.error，
+   * 使调用方可感知失败（set 返回 void，失败本不可见）。批量 set 下每个失败键各回调一次。
+   */
+  onError?: (info: { op: "set"; key: string; error: unknown }) => void;
+  /**
    * 额外的 IndexedDB 持久层实例（**异步** API，不常驻内存镜像，容量更大），暴露为 factory().db。
    * 需自行 `import { Idb }` 构造后传入：`db: new Idb()`（不内置，按需引入便于 tree-shaking）。
    * IndexedDB 不可用时其内部自动退回内存；未传实例时使用 db 会抛错提示先传入。
-   * 注意：db 为异步存储，不经同步 proxy，故 ttl/codec/namespace 等选项暂不作用于 db。
+   * db 与 ls/ss 走同一套 proxy，故 ttl/expireAt/sliding/codec/namespace/memoized 等选项对 db 同样生效（仅返回 Promise）。
    */
   db?: AsyncStorage;
 }

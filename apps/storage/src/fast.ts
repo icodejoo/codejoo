@@ -5,7 +5,7 @@ import type { Handlers } from "./proxy";
 export interface SyncAccessor<V> {
   get(): V | null;
   get(defaultValue: V): V;
-  set(value: V, options?: number | boolean | StorageOptions): void;
+  set(value: V, options?: number | StorageOptions): void;
   remove(): void;
 }
 
@@ -13,7 +13,7 @@ export interface SyncAccessor<V> {
 export interface AsyncAccessor<V> {
   get(): Promise<V | null>;
   get(defaultValue: V): Promise<V>;
-  set(value: V, options?: number | boolean | StorageOptions): Promise<void>;
+  set(value: V, options?: number | StorageOptions): Promise<void>;
   remove(): Promise<void>;
 }
 
@@ -32,7 +32,7 @@ export function fast(target: Handlers<SyncStore | AsyncStorage>, key: string) {
   const t = target as { get(k: string, d?: unknown): unknown; set(k: string, v: unknown, o?: unknown): unknown };
   return {
     get: (defaultValue?: unknown) => t.get(key, defaultValue),
-    set: (value: unknown, options?: number | boolean | StorageOptions) => t.set(key, value, options),
+    set: (value: unknown, options?: number | StorageOptions) => t.set(key, value, options),
     remove: () => target.remove(key),
   };
 }

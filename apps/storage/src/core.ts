@@ -3,11 +3,6 @@ import { supported } from "./helper";
 import { Memory } from "./memory";
 import { proxy } from "./proxy";
 
-// 每层独立的内存缓存（单标签页，无跨标签）
-const lsMemo = new Memory();
-const ssMemo = new Memory();
-const dbMemo = new Memory();
-
 /** 把原生 Storage（getItem/setItem/...）适配成内部统一的 get/set/remove 词汇 */
 function adapt(s: Storage): SyncStore {
   return {
@@ -32,12 +27,16 @@ function adapt(s: Storage): SyncStore {
  */
 function unimpl(): AsyncStorage {
   const fail = () => {
-    throw new Error("[storage] 使用 db 需先传入 IndexedDB 实例：`import { Idb }` 后 `factory({ db: new Idb() })`");
+    throw new Error("[storage] using `db` requires an IndexedDB instance: `import { Idb }` then `factory({ db: new Idb() })`");
   };
   return new Proxy({} as AsyncStorage, { get: () => fail });
 }
 
 export function factory(baseOptions?: BaseStorageOptions) {
+  // 每层独立的内存读缓存，且按 factory 实例隔离（不同实例不共享 memo，避免跨实例串读）
+  const lsMemo = new Memory();
+  const ssMemo = new Memory();
+  const dbMemo = new Memory();
   const ls = proxy(supported.storage ? adapt(window.localStorage) : lsMemo, lsMemo, baseOptions);
   const ss = proxy(supported.storage ? adapt(window.sessionStorage) : ssMemo, ssMemo, baseOptions);
   const db = proxy(baseOptions?.db ?? unimpl(), dbMemo, baseOptions);

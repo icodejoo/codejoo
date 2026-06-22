@@ -28,25 +28,28 @@ A tiny ESM library: **one unified API over three backends**. Sync backends (`loc
 - **`Result<S,T>` = `S extends AsyncStorage ? Promise<T> : T`.** Sync vs async is driven by generics; the proxy detects async at runtime via `typeof st.length === "function"`.
 - **`st.length()` must be called bound** (`(st as {length()}).length()`), never `const l = st.length; l()` — IdbStorage uses `this`.
 - **`keys.map(get)` leaks the array index as `get`’s `defaultValue`** — always `keys.map(k => get(k))`.
-- **`memo` is shared module-level** (`lsMemo/ssMemo/dbMemo` in core.ts) across all `buildStorage()` instances. Tests must isolate via `handler.clear()` (clears memo+backend), not raw `localStorage.clear()` — but note `clear()` is **scoped**: with `namespace`/`enckey` it removes only keys the instance owns (`owns()` in settings); count-based assertions (`localStorage.length`) need a raw `localStorage.clear()` first.
+- **`memo` is per-`factory()` instance** (`lsMemo/ssMemo/dbMemo` created inside `factory()` in core.ts): each `factory()` call gets its own `ls/ss/db` read caches and separate instances do not share memo (no cross-instance reads). Tests must isolate via `handler.clear()` (clears memo+backend), not raw `localStorage.clear()` — but note `clear()` is **scoped**: with `namespace`/`enckey` it removes only keys the instance owns (`owns()`); count-based assertions (`localStorage.length`) need a raw `localStorage.clear()` first. Also note `length` is scoped the same way: with `namespace`/`enckey` it counts only owned keys, otherwise the backend's global count.
 - **`clear()`/quota-purge are scoped by `owns()`** (namespace prefix; enckey-decodable). `purgeExpired` additionally requires `createdAt` in the entity so foreign JSON that happens to have an `expireAt` field is never deleted.
 - **`memoized` gates memo writes** (opt-in cache; not a full mirror). Reads still check memo first (cheap if empty).
 - **`enckey`** encrypts the storage key via `codec.encode` (deterministic, so the same logical key → same storage key). `fullKey`/`decKey` are the single chokepoints.
 - **`sliding`** renews `expireAt = now + entity.ttl` on read hit — **requires a `ttl` to have been set**, else there’s nothing to renew. The write-back is **skipped while >90% of the ttl remains** (anti write-amplification); tests asserting renewal must first consume >10% of the ttl.
 - **`Idb` self-heals closed connections**: `open()` hooks `onclose`/`onversionchange` to drop the cached handle so the next op re-opens. Don't cache `req.result` elsewhere without those hooks.
-- **`debug` is a separate import** (not on the handler) to keep core small/tree-shakeable. It enumerates via `handler.length`+`handler.key(i)`, reads via `handler.get`, preserves namespace, and stashes the snapshot under `"_$debug"`.
+- **`debug` is a separate import** (not on the handler) to keep core small/tree-shakeable. It enumerates via `handler.keys()` (owned keys only), reads via `handler.get`, preserves namespace, and returns a `{ "namespace:key": value }` snapshot. It is a **pure read with no side effects** — it does **not** write the snapshot back to `"_$debug"` (a legacy `DEBUG_KEY` constant is kept only to skip stale leftover data), so it never pollutes `keys()`/`length`.
+- **`onError` makes write failures observable**: `persist()` calls `opts.onError({ op:"set", key, error })` when provided, else `console.error`. `set` returns `void`, so without `onError` quota/force-retry failures are silent (no throw — unlike native localStorage). Batch `set` calls it once per failing key.
+- **Invalid `ttl` is warned and ignored**: `mkEntity` drops a `ttl` that is `≤0` / `NaN` / `Infinity` (would otherwise expire-on-write or serialize away into never-expiring) — the value still persists, just without expiry.
+- **Runtime warnings/errors are in English** (`[storage] ...`).
 
 ## Build & test
 
 - `pnpm build` → `vp pack` (vite-plus/tsdown) + `scripts/post-minify.mjs`. Outputs: `dist/index.mjs` (bundle), `dist/index.min.js` (min), `dist/esm/*.mjs` (per-module, tree-shakeable; the package `import` target).
 - `vite.config.ts` has 3 pack entries (bundle+dts, min, unbundled `dist/esm`), all `target: "es2022"` — don't lower it: class fields/async would get downleveled and pull `@oxc-project/runtime` helpers into `dist/esm` (~1KB+ of pure bloat). `package.json` `sideEffects: false`.
 - Type-check: `./node_modules/.bin/tsc --noEmit -p tsconfig.json` (project uses `erasableSyntaxOnly` — no enums/param-properties/namespaces).
-- **Tests are browser-based**, not vitest-by-default: `test/index.html` (auto suite, `test/suite.mjs`) + `test/manual.html` (interactive). Run `pnpm dev`, open `/test/` (auto) or `/test/manual.html`. The suite imports `../src/index.ts` (Vite transforms TS, no build needed).
-- To verify headlessly: start `pnpm dev` (background), then drive with Playwright (`apps/*/node_modules/.bin` has it) — navigate to `http://localhost:<port>/test/`, wait for `#summary` to leave "Running", read pass/fail. **Always add a test for new features and run it** — the suite has caught several real bugs (unimpl throwing on property read, `st.get` vs `getItem`, length `this`-loss, mget index leak).
+- **Tests run in a real browser via vitest browser-mode**: `pnpm test` (config `vitest.browser.config.ts`) runs `test/*.browser.test.ts` in headless **Chromium** (Playwright) against real `localStorage` / `sessionStorage` / `IndexedDB` / `BroadcastChannel` — not jsdom. Current suites: `sync.browser.test.ts`, `idb.browser.test.ts`, `codec.browser.test.ts`, `plugins.browser.test.ts`, `apichanges.browser.test.ts`. The old `test/index.html` + `test/suite.mjs` browser page is gone. **Always add a test for new features and run it** — the suite has caught several real bugs (unimpl throwing on property read, `st.get` vs `getItem`, length `this`-loss, mget index leak).
+- `test/manual.html` is an interactive playground (kept): `pnpm dev`, open `/test/manual.html`.
 
 ## Adding an option (pattern)
 
 1. Add to `BaseStorageOptions` (instance) or `StorageOptions` (per-call) in `interface.ts`.
 2. Resolve it in `settings()` (instance) or `writeArgs()` (per-call) in `proxy.ts`.
 3. Apply in `get`/`set`/`resolve`/`buildEntity` as appropriate (mind sync+async via `chain`/`out`).
-4. Add a test group in `test/suite.mjs`; document a row in both READMEs (EN + zh-CN).
+4. Add a test in the relevant `test/*.browser.test.ts` suite; document a row in both READMEs (EN + zh-CN).

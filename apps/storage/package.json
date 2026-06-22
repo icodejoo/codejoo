@@ -1,21 +1,29 @@
 {
   "name": "@codejoo/storage",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Unified, type-safe wrapper over localStorage / sessionStorage / IndexedDB with TTL, sliding expiry, namespaces, pluggable serialization, obfuscation codec and key-bound shortcuts.",
   "keywords": [
     "browser",
     "cache",
+    "cross-tab",
+    "encryption",
     "expire",
     "idb",
     "indexeddb",
+    "key-value",
     "localstorage",
+    "memoize",
     "namespace",
+    "obfuscation",
     "serialize",
     "sessionstorage",
+    "sliding-expiration",
     "storage",
+    "tree-shakeable",
     "ttl",
     "type-safe",
-    "typescript"
+    "typescript",
+    "web-storage"
   ],
   "repository": {
     "type": "git",
@@ -59,8 +67,8 @@
     "build": "vp pack && node scripts/post-minify.mjs",
     "dev": "vp dev",
     "dev:lib": "vp pack --watch",
-    "test": "vp test",
-    "test:browser": "vp test -c vitest.browser.config.ts"
+    "test": "vp test -c vitest.browser.config.ts",
+    "prepublishOnly": "pnpm build"
   },
   "devDependencies": {
     "@types/node": "catalog:",

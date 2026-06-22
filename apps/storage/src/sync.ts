@@ -4,7 +4,7 @@ import { supported } from "./helper";
 
 /** 插件内部的宽松方法签名（处理器方法均为闭包实现、不依赖 this，可安全取引用与替换） */
 interface Wrapped {
-  set(key: string, value: unknown, options?: number | boolean | StorageOptions): unknown;
+  set(key: string, value: unknown, options?: number | StorageOptions): unknown;
   remove(key: string | readonly string[]): unknown;
   clear(): unknown;
   /** 幂等标记：已挂载过则再次调用为空操作 */
@@ -42,7 +42,7 @@ export function crossTab(handler: Handlers<SyncStore>, channel = "@codejoo/stora
     try {
       bc.postMessage(msg);
     } catch (err) {
-      console.warn("[storage] crossTab 广播失败（值不可结构化克隆？），本地写入不受影响", err);
+      console.warn("[storage] crossTab broadcast failed (value not structured-cloneable?); local write is unaffected", err);
     }
   };
 

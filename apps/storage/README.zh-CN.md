@@ -52,21 +52,22 @@ await db.get("user"); // Promise<{ id: 1 }>
 
 #### `BaseStorageOptions`
 
-| 选项          | 类型                                | 必填 | 默认             | 说明                                                                                                            |
-| ------------- | ----------------------------------- | ---- | ---------------- | --------------------------------------------------------------------------------------------------------------- |
-| `memoized`    | `boolean`                           | 否   | `false`          | 启用内存读缓存：写入双写、读取缓存优先、删除双删。按需开启（非全量镜像），内存随使用增长。                      |
-| `cloned`      | `boolean`                           | 否   | `false`          | 与 memo 缓存共享的对象按深拷贝（`structuredClone`）返回，隔离调用方修改对缓存的污染；默认共享引用（零开销）。   |
-| `serialize`   | `(entity: StorageEntity) => string` | 否   | `JSON.stringify` | 自定义 entity → 字符串序列化。                                                                                  |
-| `deserialize` | `(raw: string) => StorageEntity`    | 否   | `JSON.parse`     | 自定义字符串 → entity 反序列化（需与 `serialize` 配对）。                                                       |
-| `codeable`    | `boolean`                           | 否   | `false`          | 是否调用 `codec`。便于按环境（开发/生产）开关编解码。                                                           |
-| `codec`       | `Codec`                             | 否   | —                | 对序列化字符串做编解码（混淆/压缩）。仅 `codeable` 为 true 时生效。                                             |
-| `sliding`     | `boolean`                           | 否   | `false`          | 滑动过期：每次读命中按原始 `ttl` 续期（适合会话/登录态）。剩余寿命超过 90% 时跳过续期回写，高频读不产生写放大。 |
-| `namespace`   | `string`                            | 否   | `""`             | key 前缀（`namespace:key`），隔离同源下不同应用/模块。                                                          |
-| `raw`         | `boolean`                           | 否   | `false`          | 直接存原始值，跳过 entity 信封（无 ttl/codec）。用于与外部数据互通。                                            |
-| `force`       | `boolean`                           | 否   | `true`           | 容量不足时清理过期项后重试写入，否则记录日志并放弃。**仅同步后端生效。**                                        |
-| `readonly`    | `boolean`                           | 否   | `false`          | 只写一次：仅当键为空（不存在/已过期）才写入，否则丢弃本次写入。                                                 |
-| `enckey`      | `boolean`                           | 否   | `false`          | 是否对**键**也加密：配置了 `codec` 时，存储键经 codec 确定性加密（隐藏明文键名）。                              |
-| `db`          | `AsyncStorage`                      | 否   | —                | IndexedDB 实例（如 `new Idb()`），暴露为 `factory().db`。未传却使用 `db` 会抛错提示。                           |
+| 选项          | 类型                                                         | 必填 | 默认             | 说明                                                                                                                                                                         |
+| ------------- | ------------------------------------------------------------ | ---- | ---------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `memoized`    | `boolean`                                                    | 否   | `false`          | 启用内存读缓存：写入双写、读取缓存优先、删除双删。按需开启（非全量镜像），内存随使用增长。                                                                                   |
+| `cloned`      | `boolean`                                                    | 否   | `false`          | 与 memo 缓存共享的对象按深拷贝（`structuredClone`）返回，隔离调用方修改对缓存的污染；默认共享引用（零开销）。                                                                |
+| `serialize`   | `(entity: StorageEntity) => string`                          | 否   | `JSON.stringify` | 自定义 entity → 字符串序列化。                                                                                                                                               |
+| `deserialize` | `(raw: string) => StorageEntity`                             | 否   | `JSON.parse`     | 自定义字符串 → entity 反序列化（需与 `serialize` 配对）。                                                                                                                    |
+| `codeable`    | `boolean`                                                    | 否   | `false`          | 是否调用 `codec`。便于按环境（开发/生产）开关编解码。                                                                                                                        |
+| `codec`       | `Codec`                                                      | 否   | —                | 对序列化字符串做编解码（混淆/压缩）。仅 `codeable` 为 true 时生效。                                                                                                          |
+| `sliding`     | `boolean`                                                    | 否   | `false`          | 滑动过期：每次读命中按原始 `ttl` 续期（适合会话/登录态）。剩余寿命超过 90% 时跳过续期回写，高频读不产生写放大。                                                              |
+| `namespace`   | `string`                                                     | 否   | `""`             | key 前缀（`namespace:key`），隔离同源下不同应用/模块。                                                                                                                       |
+| `raw`         | `boolean`                                                    | 否   | `false`          | 直接存原始值，跳过 entity 信封（无 ttl/codec）。用于与外部数据互通。                                                                                                         |
+| `force`       | `boolean`                                                    | 否   | `true`           | 容量不足时清理过期项后重试写入，否则记录日志并放弃。**仅同步后端生效。**                                                                                                     |
+| `readonly`    | `boolean`                                                    | 否   | `false`          | 只写一次：仅当键为空（不存在/已过期）才写入，否则丢弃本次写入。                                                                                                              |
+| `enckey`      | `boolean`                                                    | 否   | `false`          | 是否对**键**也混淆：配置了 `codec` 时，存储键经 codec 确定性混淆（隐藏明文键名）。仅用 codec 混淆键名、**非安全防护**；且需配合 `codec`，否则告警并降级为明文键。            |
+| `onError`     | `(info: { op: "set"; key: string; error: unknown }) => void` | 否   | —                | 写入失败回调（配额超限、`force` 重试仍失败等）。提供时取代默认的 `console.error`，使调用方可感知失败（`set` 返回 `void`，失败本不可见）。批量 `set` 下每个失败键各回调一次。 |
+| `db`          | `AsyncStorage`                                               | 否   | —                | IndexedDB 实例（如 `new Idb()`），暴露为 `factory().db`。未传却使用 `db` 会抛错提示。                                                                                        |
 
 ### 处理器方法（`ls` / `ss` / `db`）
 
@@ -76,19 +77,18 @@ await db.get("user"); // Promise<{ id: 1 }>
 | ----------------------------- | ----------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `get<T>(key)`                 | `R<T \| null>`    | 读取；不存在 → `null`。                                                                                                                              |
 | `get(key, defaultValue)`      | `R<T>`            | 读取；不存在/已过期/解不开 → `defaultValue`。                                                                                                        |
-| `set(key, value, ttl?)`       | `R<void>`         | 写入；`ttl` 毫秒。                                                                                                                                   |
-| `set(key, value, memoized?)`  | `R<void>`         | 写入；`boolean` 按次切换是否写缓存。                                                                                                                 |
-| `set(key, value, options?)`   | `R<void>`         | 写入；`StorageOptions`（ttl / expireAt / memoized）。                                                                                                |
+| `set(key, value, ttl?)`       | `R<void>`         | 写入；`ttl` 毫秒。非法 `ttl`（`0` / 负数 / `NaN` / `Infinity`）告警并忽略——数据照常持久化（不会写入即被删，也不会变永不过期）。                      |
+| `set(key, value, options?)`   | `R<void>`         | 写入；`StorageOptions`（ttl / expireAt / memoized）。开启 memo 现仅能经对象传入（`set(k, v, { memoized: true })`）。                                 |
 | `remove(key)`                 | `R<void>`         | 删除（缓存 + 后端）。                                                                                                                                |
 | `get(keys, defaults?)`        | `R<元组>`         | **批量读取**：传键数组，返回等长元组；`defaults` 逐位对应并逐位联动类型（`get(["a","b"],[1,false])` → `[number, boolean]`；`as const` 保留字面量）。 |
 | `set(keys, values, options?)` | `R<void>`         | **批量写入**：逐位配对；第三参对全部键生效。`values` 偏短时缺位键跳过（告警）。                                                                      |
-| `remove(keys)`                | `R<void>`         | **批量删除**。`db` 上批量读写删均走**单 IndexedDB 事务**（比循环快约 4 倍；依赖后端的 `getMany/setMany/removeMany`，`Idb` 已内置）。                 |
+| `remove(keys)`                | `R<void>`         | **批量删除**。批量 `get`/`set`/`remove` 在键数组上逐键复用单键逻辑实现（异步后端为逐键一事务）。                                                     |
 | `keys()`                      | `R<string[]>`     | 本实例管辖范围内的全部逻辑键（已解密、去命名空间前缀）。                                                                                             |
 | `purge()`                     | `R<void>`         | 主动清理过期条目（仅管辖内、本库写入的数据）。平时为惰性过期，长期不被读取的过期数据靠它回收配额。                                                   |
 | `clear()`                     | `R<void>`         | 配置了 `namespace` 或 `enckey` 时仅清本实例管辖的键（不波及其他命名空间/外部数据）；否则整库清空。                                                   |
 | `destroy()`                   | `R<void>`         | 释放资源：清空 memo 读缓存并断开可关闭后端（IndexedDB 连接）。**保留已落盘数据。**                                                                   |
 | `key(index)`                  | `R<string\|null>` | 第 index 个逻辑键（已解密、去命名空间前缀）。                                                                                                        |
-| `length`                      | `R<number>`       | 条目数（getter）。                                                                                                                                   |
+| `length`                      | `R<number>`       | 条目数（getter）。配置 `namespace` 或 `enckey` 时只数本实例管辖的键（与 `keys()`/`clear()` 作用域一致）；否则返回后端全局条目数。                    |
 | `namespace`                   | `string`          | 命名空间前缀（形如 `"ns:"`，无则为 `""`）。                                                                                                          |
 | `setNamespace(ns?)`           | `void`            | 原地切换前缀（如按 username 隔离账号）；清空 memo 读缓存，已持有的引用自动生效。                                                                     |
 
@@ -96,11 +96,11 @@ await db.get("user"); // Promise<{ id: 1 }>
 
 仅以下三项按次生效（codec / sliding / raw 等其余配置均为实例级，见 `BaseStorageOptions`）：
 
-| 选项       | 类型                       | 必填 | 默认 | 说明                                                                                              |
-| ---------- | -------------------------- | ---- | ---- | ------------------------------------------------------------------------------------------------- |
-| `ttl`      | `number`                   | 否   | —    | 存活时间（毫秒，相对）。设置 `expireAt = now + ttl`。                                             |
-| `expireAt` | `number \| string \| Date` | 否   | —    | 绝对过期（时间戳/日期字符串/`Date`）。若早于当前且无法按 `sliding` + `ttl` 续期，告警并放弃写入。 |
-| `memoized` | `boolean`                  | 否   | —    | 本次写入是否同步存入 memo 读缓存（覆盖实例级 `memoized`）。                                       |
+| 选项       | 类型                       | 必填 | 默认 | 说明                                                                                                                                 |
+| ---------- | -------------------------- | ---- | ---- | ------------------------------------------------------------------------------------------------------------------------------------ |
+| `ttl`      | `number`                   | 否   | —    | 存活时间（毫秒，相对）。设置 `expireAt = now + ttl`。非法值（`0` / 负数 / `NaN` / `Infinity`）告警并忽略，数据照常持久化且不带过期。 |
+| `expireAt` | `number \| string \| Date` | 否   | —    | 绝对过期（时间戳/日期字符串/`Date`）。若早于当前且无法按 `sliding` + `ttl` 续期，告警并放弃写入。                                    |
+| `memoized` | `boolean`                  | 否   | —    | 本次写入是否同步存入 memo 读缓存（覆盖实例级 `memoized`）。                                                                          |
 
 ### `fast(target, key)`
 
@@ -188,7 +188,7 @@ ls.set("x", { when: new Date(), ids: new Set([1n, 2n]) }); // 完整还原
 | ------ | -------- | ---- | -------------------- | -------------------- |
 | `name` | `string` | 否   | `"@codejoo/storage"` | IndexedDB 数据库名。 |
 
-方法（均返回 Promise）：`get(key)`、`set(key, value)`、`remove(key)`、`clear()`、`key(index)`、`keys()`、`length()`、`destroy()`（关闭连接；保留数据），以及单事务批量原语 `getMany(keys)` / `setMany(entries)` / `removeMany(keys)`——处理器的批量快路径由它们支撑。
+方法（均返回 Promise）：`get(key)`、`set(key, value)`、`remove(key)`、`clear()`、`key(index)`、`keys()`、`length()`、`destroy()`（关闭连接；保留数据）。处理器层的批量操作在这些单键方法上循环实现（异步后端逐键一事务）——不再有 `getMany`/`setMany`/`removeMany` 批量原语。
 
 ### `crossTab(handler, channel?)`
 
@@ -202,7 +202,7 @@ const stop = crossTab(ls);
 
 ### `debug(handler)`
 
-独立辅助函数，经**独立子路径**（`@codejoo/storage/debug`）发布——不在主入口中，单文件产物（`dist/index.mjs` / `index.min.js`）物理上不含它。读出 handler 全部条目的**解密后**明文，返回 `{ "命名空间:键": 值 }` 快照（**保留命名空间**），并暂存到 `"_$debug"`。用于查看以 `codeable`/`enckey` 写入的数据。
+独立辅助函数，经**独立子路径**（`@codejoo/storage/debug`）发布——不在主入口中，单文件产物（`dist/index.mjs` / `index.min.js`）物理上不含它。读出 handler 全部条目的**解密后**明文，返回 `{ "命名空间:键": 值 }` 快照（**保留命名空间**）。它是**纯读取、无副作用**——不会把快照写回存储，因此不会污染 `keys()`/`length`。用于查看以 `codeable`/`enckey` 写入的数据。
 
 ```ts
 import { factory, codec } from "@codejoo/storage";
@@ -217,7 +217,15 @@ await debug(db); // 异步后端 → Promise
 
 - **同步 vs 异步** 由后端类型经泛型决定：`ls.get(k)` 返回值，`db.get(k)` 返回 `Promise`。一套 proxy 实现同时服务两者。
 - **`db` 的特性**：`ttl` / `expireAt` / `codec` / `namespace` / `sliding` / `memoized` 对 `db` 同样生效（只是要 `await`）。`force` 容量清理目前仅对同步后端生效。
+- **memo 按 `factory()` 实例隔离**：每次 `factory()` 调用各自独立的内存读缓存，不同实例互不共享 memo（不会跨实例串读）。
 - **Tree-shaking**：包的 `import` 指向 `dist/esm/`（每模块一个文件）。配合 `sideEffects: false`，未用到的模块/导出会被打包器删除。
+
+## 与原生 localStorage 的差异
+
+- **默认存的是 entity 信封**（`{ value, createdAt, ... }`），而非裸字符串。绕过本库直接用原生 `localStorage.getItem` 读到的是 JSON 信封，而非你的原始值（`raw` 模式除外）。
+- **`set` 失败不抛配额错**（原生会抛 `QuotaExceededError`）。配额满时仅记录日志 / 回调 `onError` 后放弃本次写入——需要感知写入失败请用 `onError`。
+- **`length` 与 `clear()` 受命名空间作用域影响**：配置 `namespace`/`enckey` 时仅覆盖本实例管辖的键，与原生的全局语义不同。
+- **过期是惰性的**：过期项不读取也不主动删除，靠 `purge()` 或配额压力回收。
 
 ## 构建产物
 
@@ -229,13 +237,13 @@ await debug(db); // 异步后端 → Promise
 
 ## 测试
 
-[`test/`](./test/) 下有一个独立的浏览器测试页。启动 dev server 后打开：
-
 ```sh
-pnpm dev          # 然后打开输出的 URL + /test/
+pnpm test
 ```
 
-它直接加载源码（Vite 即时转译 TS），逐项渲染每个 API 的通过/失败。
+会在**真实 Chromium**（Playwright，vitest browser 模式）中跑完整集成套件（`test/*.browser.test.ts`），使用真实的 `localStorage` / `sessionStorage` / `IndexedDB` / `BroadcastChannel`（非 jsdom 模拟），覆盖同步后端、异步 IDB 事务、跨标签同步等真实浏览器行为。
+
+交互式 playground 仍保留在 [`test/manual.html`](./test/manual.html)：运行 `pnpm dev` 后打开 `/test/manual.html`。
 
 ## 许可
 

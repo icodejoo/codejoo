@@ -1,8 +1,8 @@
 # Changelog
 
-## 0.1.0（未发布 → 待发布）
+## 0.1.1（待发布）
 
-相对 0.0.3 的完整变更。**包含多项破坏性变更**，升级前请阅读「Breaking」一节。
+相对 0.0.3 的完整变更（0.1.0 未正式发布，其变更并入本版）。**包含多项破坏性变更**，升级前请阅读「Breaking」一节。
 
 ### Breaking
 
@@ -12,16 +12,26 @@
 - **构建 target 提升至 es2022**（移除全部降级 helper）；`tsconfig` lib 提升至 ESNext。
 - 批量 `set` 的 `values` 短于 `keys` 时，缺位键**跳过并告警**（此前会写入 `value: undefined`）。
 - **`debug` 移出主入口**：改为子路径导入 `import { debug } from "@codejoo/storage/debug"`——单文件产物（`dist/index.mjs` / `index.min.js`）不再包含 debug 代码。
+- **`set` 移除 boolean（memoized）位置重载**：第三参不再接受 `boolean`，仅 `set(key, value, ttl?: number)` 与 `set(key, value, options?: StorageOptions)`；按次开启 memo 改用对象形式 `set(k, v, { memoized: true })`。
 
 ### Added
 
-- **批量 API**：`get`/`set`/`remove` 支持数组 keys；批量 `get` 的默认值元组逐位联动返回类型（`get(["a","b"],[1,false])` → `[number, boolean]`，`as const` 保留字面量）。`db` 上批量操作经 `Idb` 新增的 `getMany/setMany/removeMany` 走**单事务快路径**（50 键实测快约 4 倍）。
+- **批量 API**：`get`/`set`/`remove` 支持数组 keys；批量 `get` 的默认值元组逐位联动返回类型（`get(["a","b"],[1,false])` → `[number, boolean]`，`as const` 保留字面量）。批量操作经**循环实现**：在键数组上逐键复用单键逻辑（异步后端逐键一事务），不依赖批量原语。
 - **`keys()`**：返回本实例管辖范围内的逻辑键（已解密、去命名空间前缀）；`debug()` 改用它，命名空间下不再混入外部键。
-- **`purge()`**：主动清理过期条目（仅管辖内、本库写入的数据）；db 上为 getMany+removeMany 两事务完成。
+- **`purge()`**：主动清理过期条目（仅管辖内、本库写入的数据）；逐键复用单键删除逻辑（含 memo 双删）。
+- **`onError` 选项**：写入失败（配额超限、`force` 重试仍失败）回调 `{ op, key, error }`，取代默认 `console.error`，使调用方可感知失败（`set` 返回 `void`，失败本不可见）；批量 `set` 下每个失败键各回调一次。
 - **`cloned` 选项**（默认 false）：与 memo 共享的对象按 `structuredClone` 副本返回，隔离调用方修改。
 - **`crossTab(handler)` 插件**（独立导入、可 tree-shake）：纯内存模式下经 BroadcastChannel 跨标签同步 set/remove/clear。
 - **codec 三变体**：`codec`（XOR，默认）、`codecBase64`（原生 toBase64 + atob/btoa 回退）、`codecAtob`（全程 atob/btoa，与 codecBase64 同格式互解）。
-- `SyncStore`/`AsyncStorage` 可选契约：`keys()` 与批量原语，自定义后端提供即获得快路径。
+- `SyncStore`/`AsyncStorage` 可选契约：`keys()`，自定义后端提供即让枚举类操作（clear/keys/purge）走快路径。
+
+### Changed
+
+- **非法 `ttl`（`0` / 负数 / `NaN` / `Infinity`）告警并忽略**：数据照常持久化，不会"写入即被删"或变永不过期。
+- **`length` 改为命名空间作用域**：配置 `namespace` 或 `enckey` 时只数本实例管辖的键（与 `keys()`/`clear()` 一致）；否则返回后端全局条目数。
+- **memo 按 `factory()` 实例隔离**：不同 `factory()` 调用各自独立的内存读缓存，互不共享（此前为模块级共享）。
+- **`debug()` 改为纯读取、无副作用**：返回 `{ "命名空间:键": 值 }` 快照，不再写回 `_$debug`，不污染 `keys()`/`length`。
+- **运行时错误/告警信息英文化**。
 
 ### Fixed
 

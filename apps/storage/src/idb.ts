@@ -46,7 +46,7 @@ export class Idb {
     try {
       return await (this.db ??= this.open());
     } catch (err) {
-      console.warn("[storage] IndexedDB 不可用，已退回内存模式", err);
+      console.warn("[storage] IndexedDB unavailable, fell back to in-memory mode", err);
       supported.indexedDB = false; // 运行时不支持，同步给全局可用性标记
       this.mem = new Memory();
       this.db = undefined;
@@ -106,60 +106,6 @@ export class Idb {
     );
   }
 
-  /** 批量读：单事务完成（proxy 批量 get / purge 据此走快路径，免 N 次事务开销） */
-  async getMany(keys: readonly string[]): Promise<(string | null)[]> {
-    const db = await this.database();
-    if (!db) return keys.map((k) => this.mem!.get(k) as string | null);
-    return new Promise((resolve, reject) => {
-      const s = db.transaction(STORE, "readonly").objectStore(STORE);
-      const out = Array.from<string | null>({ length: keys.length });
-      let left = keys.length;
-      if (!left) return resolve(out);
-      keys.forEach((k, i) => {
-        const r = s.get(k);
-        r.onsuccess = () => {
-          out[i] = (r.result as string | undefined) ?? null;
-          if (--left === 0) resolve(out);
-        };
-        r.onerror = () => reject(r.error);
-      });
-    });
-  }
-
-  /** 批量写：单事务原子完成 */
-  async setMany(entries: readonly (readonly [string, string])[]): Promise<void> {
-    const db = await this.database();
-    if (!db) {
-      for (const [k, v] of entries) this.mem!.set(k, v);
-      return;
-    }
-    return new Promise((resolve, reject) => {
-      const tx = db.transaction(STORE, "readwrite");
-      const s = tx.objectStore(STORE);
-      for (const [k, v] of entries) s.put(v, k);
-      tx.oncomplete = () => resolve();
-      tx.onerror = () => reject(tx.error);
-      tx.onabort = () => reject(tx.error);
-    });
-  }
-
-  /** 批量删：单事务原子完成 */
-  async removeMany(keys: readonly string[]): Promise<void> {
-    const db = await this.database();
-    if (!db) {
-      for (const k of keys) this.mem!.remove(k);
-      return;
-    }
-    return new Promise((resolve, reject) => {
-      const tx = db.transaction(STORE, "readwrite");
-      const s = tx.objectStore(STORE);
-      for (const k of keys) s.delete(k);
-      tx.oncomplete = () => resolve();
-      tx.onerror = () => reject(tx.error);
-      tx.onabort = () => reject(tx.error);
-    });
-  }
-
   /** 一次事务返回全部键（proxy 的 clear/keys/purge 据此走快路径，免逐下标 O(n²)） */
   async keys(): Promise<string[]> {
     const ks = await this.op<IDBValidKey[] | string[]>(
@@ -179,6 +125,8 @@ export class Idb {
       (s) => s.getAllKeys(null, index + 1),
       () => this.mem!.key(index),
     );
+    // 本库写入的键恒为字符串，getAllKeys 取回的 IDBValidKey 即字符串；String() 仅为类型收口
+    // oxlint-disable-next-line typescript/no-base-to-string
     return Array.isArray(keys) ? (index < keys.length ? String(keys[index]) : null) : keys;
   }
 
