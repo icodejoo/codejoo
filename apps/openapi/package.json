@@ -1,11 +1,37 @@
 {
   "name": "@codejoo/openapi2lang",
-  "version": "1.0.6",
+  "version": "1.0.7",
   "description": "Convert an OpenAPI 3.x / Swagger 2.0 document into type declarations for TypeScript, Dart and 25+ other languages.",
+  "keywords": [
+    "api",
+    "code-generation",
+    "codegen",
+    "dart",
+    "openapi",
+    "openapi3",
+    "quicktype",
+    "rest",
+    "schema",
+    "swagger",
+    "swagger2",
+    "type-generation",
+    "types",
+    "typescript"
+  ],
+  "homepage": "https://github.com/icodejoo/codejoo/tree/main/apps/openapi#readme",
+  "bugs": {
+    "url": "https://github.com/icodejoo/codejoo/issues"
+  },
   "license": "MIT",
+  "author": "icodejoo",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/icodejoo/codejoo.git",
+    "directory": "apps/openapi"
+  },
   "files": [
     "dist",
-    "README_zh.md"
+    "README.md"
   ],
   "type": "module",
   "main": "./dist/index.mjs",
@@ -26,7 +52,8 @@
     "lint": "vp lint -c oxlint.config.ts",
     "check": "vp fmt -c oxfmt.config.ts --check && vp lint -c oxlint.config.ts",
     "build": "pnpm run fmt && vp pack",
-    "dev": "vp pack --watch"
+    "dev": "vp pack --watch",
+    "pub": "pnpm run build && pnpm version patch --no-git-tag-version && git add package.json && git commit -m \"chore: release openapi2lang\" && npm publish"
   },
   "dependencies": {
     "js-yaml": "^4.1.0",
