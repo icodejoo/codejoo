@@ -1,0 +1,68 @@
+{
+  "name": "@codejoo/stomp",
+  "version": "0.1.0",
+  "description": "Framework-agnostic STOMP-over-WebSocket client wrapper over @stomp/stompjs: shared-parse callback queue, ref-counted/id/topic unsubscribe, auto re-subscribe on reconnect, offline send buffering, auto ack/nack, injectable binary decoder, token-refresh beforeConnect, connection-state observation and foreground-resume reconnect.",
+  "keywords": [
+    "ack",
+    "auto-reconnect",
+    "browser",
+    "nack",
+    "pub-sub",
+    "reconnect",
+    "stomp",
+    "stompjs",
+    "subscribe",
+    "type-safe",
+    "typescript",
+    "websocket",
+    "wrapper"
+  ],
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/icodejoo/codejoo.git",
+    "directory": "apps/stomp"
+  },
+  "files": [
+    "dist",
+    "src",
+    "README.md"
+  ],
+  "type": "module",
+  "sideEffects": false,
+  "main": "./dist/esm/index.mjs",
+  "module": "./dist/esm/index.mjs",
+  "types": "./dist/esm/index.d.mts",
+  "exports": {
+    ".": {
+      "types": "./dist/esm/index.d.mts",
+      "import": "./dist/esm/index.mjs",
+      "default": "./dist/esm/index.mjs"
+    },
+    "./package.json": "./package.json"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "scripts": {
+    "fmt": "vp fmt -c oxfmt.config.ts",
+    "lint": "vp lint -c oxlint.config.ts",
+    "check": "vp fmt -c oxfmt.config.ts --check && vp lint -c oxlint.config.ts",
+    "build": "vp pack",
+    "dev": "vp pack --watch",
+    "test": "vp test",
+    "prepublishOnly": "pnpm run check && vp pack"
+  },
+  "devDependencies": {
+    "@stomp/stompjs": "^7.0.0",
+    "@types/node": "catalog:",
+    "@types/ws": "^8.5.12",
+    "@typescript/native-preview": "catalog:",
+    "vite-plus": "catalog:",
+    "vitest": "catalog:",
+    "ws": "^8.18.0"
+  },
+  "peerDependencies": {
+    "@stomp/stompjs": "^7.0.0"
+  }
+}
