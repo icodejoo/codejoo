@@ -1,6 +1,6 @@
 {
   "name": "@codejoo/stomp",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Framework-agnostic STOMP-over-WebSocket client wrapper over @stomp/stompjs: shared-parse callback queue, ref-counted/id/topic unsubscribe, auto re-subscribe on reconnect, offline send buffering, auto ack/nack, injectable binary decoder, token-refresh beforeConnect, connection-state observation and foreground-resume reconnect.",
   "keywords": [
     "ack",
@@ -26,7 +26,8 @@
   "files": [
     "dist",
     "src",
-    "README.md"
+    "README.md",
+    "README.zh-CN.md"
   ],
   "type": "module",
   "sideEffects": false,

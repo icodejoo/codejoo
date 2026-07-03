@@ -62,9 +62,9 @@ export type ConnectionState = (typeof ConnectionState)[keyof typeof ConnectionSt
 /** 连接状态监听器。 */
 export type StateListener = (state: ConnectionState) => void;
 
-/** [SocketClient.subscribe] 的返回句柄。 */
+/** [Stompsocket.subscribe] 的返回句柄。 */
 export interface StompSub {
-  /** 订阅 id，可用于 [SocketClient.unsubscribe]。 */
+  /** 订阅 id，可用于 [Stompsocket.unsubscribe]。 */
   readonly id: string;
   /**
    * 取消本次注册的回调（引用计数）：当该 id 的最后一个回调被取消时，
@@ -73,7 +73,7 @@ export interface StompSub {
   unsubscribe: () => void;
 }
 
-export interface SocketClientOptions {
+export interface StompsocketOptions {
   /** WebSocket 地址（ws:// 或 wss://）。 */
   brokerURL: string;
   /** 入向心跳（ms），默认 10000。 */
@@ -118,7 +118,7 @@ export interface SocketClientOptions {
   onConnected?: (frame: IFrame) => void;
   /** 断开连接（STOMP DISCONNECT）后触发。 */
   onDisconnected?: (frame: IFrame) => void;
-  /** 连接状态每次变化都会触发（命令式桥接口）。也可用 [SocketClient.onState] 多路订阅。 */
+  /** 连接状态每次变化都会触发（命令式桥接口）。也可用 [Stompsocket.onState] 多路订阅。 */
   onStateChanged?: StateListener;
   /** 服务端 STOMP ERROR 帧回调（鉴权失败、目的地非法等）。 */
   onStompError?: (frame: IFrame) => void;
@@ -171,9 +171,9 @@ const AUTO_ID_PREFIX = "auto#sub-";
  * 关键点：stompjs 只重连**传输**、不恢复订阅，本类在 onConnect 里重放本地订阅。
  * 状态观测用框架无关的监听器（[state]/[onState]/onStateChanged），Vue 可几行桥接成 ref。
  */
-export class SocketClient {
+export class Stompsocket {
   private readonly client: Client;
-  private readonly opts: Required<Pick<SocketClientOptions, "queueWhileDisconnected" | "maxQueuedMessages" | "debug" | "reconnectDelay" | "resumeOnForeground">> & SocketClientOptions;
+  private readonly opts: Required<Pick<StompsocketOptions, "queueWhileDisconnected" | "maxQueuedMessages" | "debug" | "reconnectDelay" | "resumeOnForeground">> & StompsocketOptions;
 
   private readonly subscriptions = new Map<string, Subscription>();
   private autoId = 0;
@@ -186,7 +186,7 @@ export class SocketClient {
   private generation = 0;
   private readonly stateListeners = new Set<StateListener>();
 
-  constructor(options: SocketClientOptions) {
+  constructor(options: StompsocketOptions) {
     this.opts = {
       queueWhileDisconnected: true,
       maxQueuedMessages: 100,
@@ -313,8 +313,8 @@ export class SocketClient {
    * 复制一份新实例：[overrides] 中提供的参数覆盖，未提供的继承当前配置。
    * 返回的是全新的、未连接的实例（不克隆订阅与连接状态），需自行 [activate]。
    */
-  copyWith(overrides: Partial<SocketClientOptions> = {}): SocketClient {
-    return new SocketClient({ ...this.opts, ...overrides });
+  copyWith(overrides: Partial<StompsocketOptions> = {}): Stompsocket {
+    return new Stompsocket({ ...this.opts, ...overrides });
   }
 
   // ---------------------------------------------------------------------------

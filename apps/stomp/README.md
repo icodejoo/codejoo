@@ -1,6 +1,8 @@
 # @codejoo/stomp
 
-Framework-agnostic STOMP-over-WebSocket client wrapper over [`@stomp/stompjs`](https://github.com/stomp-js/stompjs).
+> 中文文档见 [README.zh-CN.md](./README.zh-CN.md)（含完整 API 说明）。
+
+Framework-agnostic STOMP-over-WebSocket client wrapper over [`@stomp/stompjs`](https://github.com/stomp-js/stompjs). The top-level class is `Stompsocket`.
 
 `@stomp/stompjs` is a **peer dependency** — install it yourself:
 
@@ -16,7 +18,7 @@ pnpm add @codejoo/stomp @stomp/stompjs
 - **Three ways to unsubscribe** — the returned handle's `unsubscribe()` (ref-counted), `unsubscribe({ id | destination })`, and `clear()`.
 - **Auto re-subscribe on reconnect** — replays local subscriptions in `onConnect`.
 - **Offline send buffering** — `send()` while disconnected buffers and flushes on connect.
-- **Auto ack/nack** — success → ACK, throwing callback → NACK; parse failure → configurable NACK (redeliver) or ACK (drop).
+- **Ack modes** — `auto` (server acks, no client ack), `smart` (auto ACK on success / NACK on throw), `manual` (ack/nack via the `AckControl` passed to the callback, callable from outside).
 - **Injectable binary decoder** — you decide how to decode binary frames.
 - **Token refresh** — async `beforeConnect` returns fresh `connectHeaders` on every (re)connect.
 - **Connection-state observation** — `state` getter + `onState(listener)` + `onStateChanged`.
@@ -26,9 +28,9 @@ pnpm add @codejoo/stomp @stomp/stompjs
 ## Usage
 
 ```ts
-import { SocketClient, AckMode } from "@codejoo/stomp";
+import { Stompsocket, AckMode } from "@codejoo/stomp";
 
-const client = new SocketClient({
+const client = new Stompsocket({
   brokerURL: "wss://example.com/ws",
   beforeConnect: async () => ({ Authorization: `Bearer ${await getToken()}` }),
   onConnected: () => resyncSnapshot(), // re-fetch after any (re)connect
@@ -42,8 +44,8 @@ sub.unsubscribe();
 
 client.send("/app/order", { body: { sku: "A", qty: 2 } }); // object → JSON
 
-// manual ack/nack per message
-client.subscribe("/queue/tasks", handle, { ack: AckMode.clientIndividual });
+// manual ack — store the control and ack later, even outside the callback
+client.subscribe("/queue/tasks", (json, ack) => queue(json, ack), { ack: AckMode.manual });
 
 await client.dispose();
 ```

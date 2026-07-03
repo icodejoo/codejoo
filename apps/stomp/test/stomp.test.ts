@@ -1,13 +1,13 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
-import { type AckControl, AckMode, ConnectionState, ParseFailureAck, type JsonMessage, type SocketClientOptions, SocketClient } from "../src/index.ts";
+import { type AckControl, AckMode, ConnectionState, ParseFailureAck, type JsonMessage, type StompsocketOptions, Stompsocket } from "../src/index.ts";
 import { StompTestBroker } from "./broker.ts";
 
 let broker: StompTestBroker;
-const clients: SocketClient[] = [];
+const clients: Stompsocket[] = [];
 
-function make(opts: Partial<SocketClientOptions> = {}): SocketClient {
-  const c = new SocketClient({
+function make(opts: Partial<StompsocketOptions> = {}): Stompsocket {
+  const c = new Stompsocket({
     brokerURL: `ws://127.0.0.1:${broker.port}`,
     reconnectDelay: 80,
     resumeOnForeground: false, // node 无 document，避免噪音
@@ -36,7 +36,7 @@ afterEach(async () => {
   await broker.stop();
 });
 
-describe("@codejoo/stomp SocketClient", () => {
+describe("@codejoo/stomp Stompsocket", () => {
   it("subscribe：收到并解析 JSON 消息", async () => {
     const c = make();
     c.activate();
