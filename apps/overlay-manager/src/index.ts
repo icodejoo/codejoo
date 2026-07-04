@@ -504,18 +504,21 @@ class LayermanImpl implements Layerman {
     };
 
     const existing = this.byId.get(entry.id);
+    let immediateActivate = false;
     if (existing) {
       if (this.isActive(existing)) {
-        // 正在展示：仅当新配置自身够资格显示才顶替（同 replace 的资格判定），否则不动当前活跃者，
-        // 直接丢弃本次 open（避免出现「关掉当前的、自己却显示不出来」的空白）。
-        if (!this.conditionsPass(entry) || !this.cooldownPass(entry)) {
-          this.settleDismiss(entry);
-          return handle;
-        }
+        // 正在展示 → 无条件顶替（自更新语义：同 id 重开 = 用新配置替换当前实例，不受
+        // conditions/cooldown 门控——cooldown 会读到该 id 自己首次 open 记的 count，门控会把
+        // 「cooldown + 重开更新 data」这个常见写法误拦掉）。旧的丢弃不回队列。
         this.discardActive(existing);
-        if (existing.slot !== slot) this.schedule(existing.slot);
         entry.replaceJumped = true;
         entry.skipGap = true;
+        if (existing.slot !== slot) this.schedule(existing.slot);
+        // 目标 slot 当下空闲、未暂停、非 overlap 时直接接管，不经过 schedule() 的逐项资格过滤——
+        // 否则会被自身 cooldown/条件拦下，换了 slot 时甚至会落回普通队列后永久卡住（result 都不会
+        // settle）。paused 时必须遵守 pauseAll 的「全量冻结」（不变量 5c），退化为正常入队等
+        // resume；目标 slot 被别的活跃者占用时也退化为正常排队——那是与「自更新」无关的槽位竞争。
+        if (!config.overlap && !this.paused && !this.serial.has(slot)) immediateActivate = true;
       } else {
         // 在队列 → 覆盖旧的那条
         this.removeFromQueue(existing);
@@ -526,6 +529,11 @@ class LayermanImpl implements Layerman {
 
     this.byId.set(entry.id, entry);
     this.log(entry.id, LOG_STATE.pending);
+
+    if (immediateActivate) {
+      this.activate(entry);
+      return handle;
+    }
 
     if (config.overlap) {
       if (this.conditionsPass(entry) && this.cooldownPass(entry)) {

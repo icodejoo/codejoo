@@ -190,6 +190,37 @@ describe("@codejoo/layerman", () => {
     expect(m.getSnapshot().queued).toEqual(["a"]);
   });
 
+  it("重开已激活 id：即使配了 cooldown 也无条件顶替更新（自更新语义，不受 cooldown 门控）", () => {
+    const m = make();
+    m.open({ id: "a", data: { n: 1 }, cooldown: { session: 1 } });
+    const key1 = m.get("a")?.instanceKey;
+    m.open({ id: "a", data: { n: 2 }, cooldown: { session: 1 } }); // 同 id 重开，cooldown 已耗尽
+    expect(ids(m)).toEqual(["a"]); // 仍是活跃的，未被 cooldown 拦下
+    expect(m.get("a")?.data).toEqual({ n: 2 }); // data 已更新
+    expect(m.get("a")?.instanceKey).not.toBe(key1); // discard 旧实例，换新 instanceKey
+  });
+
+  it("重开已激活 id + pauseAll：遵守全量冻结，不立即接管，入队等 resume", () => {
+    const m = make();
+    m.open({ id: "a", data: { n: 1 } });
+    m.pauseAll();
+    m.open({ id: "a", data: { n: 2 } }); // 暂停中重开
+    expect(ids(m)).toEqual([]); // 未立即接管
+    expect(m.getSnapshot().queued).toEqual(["a"]);
+    m.resumeAll();
+    expect(ids(m)).toEqual(["a"]);
+    expect(m.get("a")?.data).toEqual({ n: 2 });
+  });
+
+  it("重开已激活 id 且换到空闲 slot：即使配了 cooldown 也无条件立即接管新 slot", () => {
+    const m = make();
+    m.open({ id: "a", slot: "s1", data: { n: 1 }, cooldown: { session: 1 } });
+    m.open({ id: "a", slot: "s2", data: { n: 2 }, cooldown: { session: 1 } }); // 换 slot 重开
+    expect(m.get("a")?.slot).toBe("s2");
+    expect(m.get("a")?.data).toEqual({ n: 2 });
+    expect(m.getSnapshot().queued).toEqual([]); // 未卡在队列里
+  });
+
   it("冷却：minGap 间隔内不显示，过后经触发可显示", () => {
     const m = make();
     m.open({ id: "a", cooldown: { minGap: { seconds: 10 } } });
