@@ -1,0 +1,24 @@
+{
+  "name": "@codejoo/overlaymanager-example",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vp dev",
+    "test": "vp test -c vitest.browser.config.ts"
+  },
+  "dependencies": {
+    "@codejoo/overlaymanager": "workspace:*",
+    "vant": "catalog:",
+    "vue": "catalog:"
+  },
+  "devDependencies": {
+    "@types/node": "catalog:",
+    "@typescript/native-preview": "catalog:",
+    "@vitejs/plugin-vue": "catalog:",
+    "@vitest/browser": "catalog:",
+    "@vitest/browser-playwright": "catalog:",
+    "playwright": "catalog:",
+    "vite-plus": "catalog:",
+    "vitest": "catalog:"
+  }
+}
