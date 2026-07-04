@@ -1,13 +1,13 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { createApp, effectScope, ref } from "vue";
 
-import { createOverlayManager, type OverlayManager } from "../src/index.ts";
-import { createOverlayManagerPlugin, CURRENT_OVERLAY_KEY, OVERLAY_MANAGER_KEY, useCurrentOverlay, useOverlay, useOverlays, useOverlayState } from "../src/vue.ts";
+import { createLayerman, type Layerman } from "../src/index.ts";
+import { createLayermanPlugin, CURRENT_OVERLAY_KEY, LAYERMAN_KEY, useCurrentOverlay, useOverlay, useOverlays, useOverlayState } from "../src/vue.ts";
 
-const managers: OverlayManager[] = [];
+const managers: Layerman[] = [];
 
-function make(): OverlayManager {
-  const m = createOverlayManager({ crossTab: false });
+function make(): Layerman {
+  const m = createLayerman({ crossTab: false });
   managers.push(m);
   return m;
 }
@@ -23,7 +23,7 @@ afterEach(() => {
   vi.useRealTimers();
 });
 
-describe("@codejoo/overlaymanager/vue", () => {
+describe("@codejoo/layerman/vue", () => {
   it("useOverlayState：状态桥成响应式，open 后 ref 更新", () => {
     const m = make();
     const scope = effectScope();
@@ -99,6 +99,23 @@ describe("@codejoo/overlaymanager/vue", () => {
     scope.stop();
   });
 
+  it("useOverlay：model 在排队中 set(false) → 直接撤下队列，不卡住", () => {
+    const m = make();
+    const scope = effectScope();
+    scope.run(() => {
+      m.open({ id: "blocker" }); // 占住默认串行槽
+      const o = useOverlay("dlg", undefined, m);
+      o.model.value = true; // 排队（未展示）
+      expect(o.model.value).toBe(false);
+      expect(m.getSnapshot().queued).toEqual(["dlg"]);
+
+      o.model.value = false; // 排队中取消
+      expect(m.getSnapshot().queued).toEqual([]);
+      expect(m.get("dlg")).toBeUndefined();
+    });
+    scope.stop();
+  });
+
   it("useOverlay：defaults(overlap) 让 v-model/model 立即显示、绕过串行、不回弹", () => {
     const m = make();
     const scope = effectScope();
@@ -166,7 +183,7 @@ describe("@codejoo/overlaymanager/vue", () => {
   it("插件注入：runWithContext 内无需显式传 om", () => {
     const m = make();
     const app = createApp({});
-    app.use(createOverlayManagerPlugin(m));
+    app.use(createLayermanPlugin(m));
     app.runWithContext(() => {
       const scope = effectScope();
       scope.run(() => {
@@ -189,7 +206,7 @@ describe("@codejoo/overlaymanager/vue", () => {
   it("useCurrentOverlay：经 inject 拿到自身 id 的控制句柄（无需透传）", () => {
     const m = make();
     const app = createApp({});
-    app.provide(OVERLAY_MANAGER_KEY, m);
+    app.provide(LAYERMAN_KEY, m);
     app.provide(CURRENT_OVERLAY_KEY, "cur");
     app.runWithContext(() => {
       const scope = effectScope();
@@ -206,7 +223,7 @@ describe("@codejoo/overlaymanager/vue", () => {
   it("useCurrentOverlay：无当前 overlay 注入 → 抛错", () => {
     const m = make();
     const app = createApp({});
-    app.provide(OVERLAY_MANAGER_KEY, m);
+    app.provide(LAYERMAN_KEY, m);
     app.runWithContext(() => {
       expect(() => useCurrentOverlay()).toThrow(/current overlay/);
     });

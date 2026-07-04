@@ -1,4 +1,4 @@
-# @codejoo/overlaymanager
+# @codejoo/layerman
 
 Framework-agnostic **headless** overlay queue manager for dialogs, modals, bottom-sheets, drawers
 and toasts. It owns _when/which_ overlay is active — serial one-at-a-time queue with named slots,
@@ -11,16 +11,16 @@ the `active` list; the package is pure logic with **zero runtime dependencies**.
 ## Install
 
 ```bash
-pnpm add @codejoo/overlaymanager
+pnpm add @codejoo/layerman
 # optional Vue 3 adapter is bundled under the /vue subpath (vue is an optional peer)
 ```
 
 ## Core quickstart
 
 ```ts
-import { createOverlayManager } from "@codejoo/overlaymanager";
+import { createLayerman } from "@codejoo/layerman";
 
-const om = createOverlayManager({ gap: 300 });
+const om = createLayerman({ gap: 300 });
 await om.ready(); // wait for cooldown state to hydrate from storage
 
 // subscribe (framework-agnostic); active is the list you render
@@ -82,13 +82,13 @@ The `/vue` subpath is a thin reactive bridge — composables only, no components
 
 ```ts
 // overlay.ts — create once
-import { createOverlayManager } from "@codejoo/overlaymanager";
-export const om = createOverlayManager();
+import { createLayerman } from "@codejoo/layerman";
+export const om = createLayerman();
 
 // main.ts
-import { createOverlayManagerPlugin } from "@codejoo/overlaymanager/vue";
+import { createLayermanPlugin } from "@codejoo/layerman/vue";
 await om.ready();
-app.use(createOverlayManagerPlugin(om)); // provides om app-wide (or pass om explicitly per call)
+app.use(createLayermanPlugin(om)); // provides om app-wide (or pass om explicitly per call)
 ```
 
 ### Idiom A — imperative + a central `<OverlayHost>`
@@ -99,7 +99,7 @@ Overlays carry the component to render in `data`; one global host renders `activ
 <!-- OverlayHost.vue — mount once at the app root -->
 <script setup lang="ts">
 import type { Component } from "vue";
-import { useOverlays } from "@codejoo/overlaymanager/vue";
+import { useOverlays } from "@codejoo/layerman/vue";
 import { om } from "./overlay";
 
 type OverlayData = { comp: Component; props?: Record<string, unknown> };
@@ -159,7 +159,7 @@ A component that already lives in the template delegates its visibility to the m
 
 ```vue
 <script setup lang="ts">
-import { useOverlay } from "@codejoo/overlaymanager/vue";
+import { useOverlay } from "@codejoo/layerman/vue";
 
 const { visible, phase, open, resolve } = useOverlay("promo");
 defineExpose({ open }); // parent can call promoRef.open()
@@ -183,7 +183,7 @@ const claimed = await promoRef.value.open({ priority: 10, cooldown: { day: 1 } }
 `useOverlay(id, defaults?, om?)` returns `{ instance, visible, model, phase, open, close, remove,
 resolve, reject, pause, resume }` (`defaults` covered below). The manager instance is resolved as
 **plugin-default + explicit override**: pass `om` to any composable, or omit it to use the one from
-`createOverlayManagerPlugin` / `provideOverlayManager`.
+`createLayermanPlugin` / `provideLayerman`.
 
 For a **central renderer** (idiom A), wrap each rendered overlay in a tiny component that calls
 `provideCurrentOverlay(o.id)`; the overlay component can then use `useCurrentOverlay()` to get its own
@@ -197,7 +197,7 @@ you can't change their API. Use the writable `model`:
 
 ```vue
 <script setup lang="ts">
-import { useOverlay } from "@codejoo/overlaymanager/vue";
+import { useOverlay } from "@codejoo/layerman/vue";
 const { model, resolve } = useOverlay("confirm");
 </script>
 
@@ -212,8 +212,10 @@ const { model, resolve } = useOverlay("confirm");
 </template>
 ```
 
-`model` get = "is it showing"; `set(true)` = `open()`; `set(false)` = **immediate `remove()`** (the
-dialog owns its exit animation, so this avoids a v-model bounce).
+`model` get = "is it showing"; `set(true)` = `open()`; `set(false)` = `close()` (respecting a
+configured `beforeClose` guard) followed by an **immediate `remove()`** once closing has taken effect
+— or a direct `remove()` if the overlay is still queued. Either way the dialog owns its exit
+animation, so this avoids a v-model bounce.
 
 **Making a `v-model` overlay show immediately / jump the queue.** `v-model="model"` (or `ref = true`)
 only _enqueues_ — if it gets queued behind others or a `gap`, `model`'s getter reads back `false` and
@@ -263,16 +265,16 @@ not stuffed into a `v-model` synchronous boolean.
 The same adapter shape ships for other frameworks (each an optional peer dep, thin bridge over the
 core — no framework in the zero-dep core itself):
 
-- **`@codejoo/overlaymanager/react`** — hooks via `useSyncExternalStore` (SSR-safe): `useOverlays`,
-  `useOverlay(id, defaults?, om?)`, `OverlayManagerProvider` / `useOverlayManager`, `useCurrentOverlay`.
-- **`@codejoo/overlaymanager/svelte`** — `svelte/store` readables (Svelte 4/5): `overlayState`,
-  `overlays`, `overlay(id, defaults?, om?)`, `setOverlayManager` / `getOverlayManager`.
-- **`@codejoo/overlaymanager/solid`** — signals: `useOverlayState`, `useOverlays`,
-  `useOverlay(id, defaults?, om?)`, `OverlayManagerProvider` / `useOverlayManager`.
+- **`@codejoo/layerman/react`** — hooks via `useSyncExternalStore` (SSR-safe): `useOverlays`,
+  `useOverlay(id, defaults?, om?)`, `LayermanProvider` / `useLayerman`, `useCurrentOverlay`.
+- **`@codejoo/layerman/svelte`** — `svelte/store` readables (Svelte 4/5): `overlayState`,
+  `overlays`, `overlay(id, defaults?, om?)`, `setLayerman` / `getLayerman`.
+- **`@codejoo/layerman/solid`** — signals: `useOverlayState`, `useOverlays`,
+  `useOverlay(id, defaults?, om?)`, `LayermanProvider` / `useLayerman`.
 
 Each exposes `{ instance, visible, phase, open, close, remove, resolve, reject, pause, resume }`
 (Vue additionally has the writable `model` for `v-model`). A Flutter port lives separately at
-`dart-labs/overlaymanager` (embraces Flutter's `Overlay`; `show()` returns `Future<T?>`).
+`dart-labs/layerman` (embraces Flutter's `Overlay`; `show()` returns `Future<T?>`).
 
 ## License
 

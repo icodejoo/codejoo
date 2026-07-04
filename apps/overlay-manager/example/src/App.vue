@@ -2,8 +2,8 @@
 import { computed } from "vue";
 import { Button as VanButton, Dialog as VanDialog, Popup as VanPopup, showToast } from "vant";
 
-import type { OverlayInstance } from "@codejoo/overlaymanager";
-import { useOverlay, useOverlays } from "@codejoo/overlaymanager/vue";
+import type { OverlayInstance } from "@codejoo/layerman";
+import { useOverlay, useOverlays } from "@codejoo/layerman/vue";
 
 import { om } from "./overlay";
 
@@ -72,7 +72,7 @@ const backendResolve = () => {
 
 <template>
   <div style="padding: 20px; font-family: system-ui; max-width: 480px; margin: 0 auto">
-    <h2>@codejoo/overlaymanager × Vant</h2>
+    <h2>@codejoo/layerman × Vant</h2>
 
     <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin: 12px 0">
       <VanButton size="small" type="primary" data-testid="queue" @click="queueThree">串行入队 3 个</VanButton>
@@ -136,7 +136,7 @@ const backendResolve = () => {
 
     <!-- 确认弹窗 + await 结果 -->
     <VanDialog v-model:show="confirm.model.value" title="确认操作" show-cancel-button @confirm="confirm.resolve(true)" @cancel="confirm.resolve(false)">
-      <div data-testid="dialog-body" style="padding: 24px; text-align: center">确定执行此操作吗？(由 overlay-manager 队列驱动)</div>
+      <div data-testid="dialog-body" style="padding: 24px; text-align: center">确定执行此操作吗？(由 layerman 队列驱动)</div>
     </VanDialog>
   </div>
 </template>

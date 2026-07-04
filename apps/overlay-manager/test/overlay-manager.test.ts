@@ -1,11 +1,11 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { type AsyncableStorage, createOverlayManager, type OverlayManager, type OverlayManagerOptions } from "../src/index.ts";
+import { type AsyncableStorage, createLayerman, type Layerman, type LayermanOptions } from "../src/index.ts";
 
-const managers: OverlayManager[] = [];
+const managers: Layerman[] = [];
 
-function make(opts: OverlayManagerOptions = {}): OverlayManager {
-  const m = createOverlayManager({ crossTab: false, ...opts });
+function make(opts: LayermanOptions = {}): Layerman {
+  const m = createLayerman({ crossTab: false, ...opts });
   managers.push(m);
   return m;
 }
@@ -25,7 +25,7 @@ function memStorage(): { storage: AsyncableStorage; map: Map<string, string> } {
 }
 
 /** 当前活跃 id（排序，便于断言）。 */
-function ids(m: OverlayManager): string[] {
+function ids(m: Layerman): string[] {
   return m
     .getSnapshot()
     .active.map((o) => o.id)
@@ -48,7 +48,7 @@ afterEach(() => {
   vi.useRealTimers();
 });
 
-describe("@codejoo/overlaymanager", () => {
+describe("@codejoo/layerman", () => {
   it("串行：一次只显示一个，前一个 remove 后才显示下一个", async () => {
     const m = make();
     await m.ready();
@@ -61,6 +61,17 @@ describe("@codejoo/overlaymanager", () => {
     expect(ids(m)).toEqual(["a"]);
     await vi.advanceTimersByTimeAsync(300); // autoRemove 默认 300ms
     expect(ids(m)).toEqual(["b"]);
+  });
+
+  it("id 可选：不传时内部生成唯一 id 并直接入队", async () => {
+    const m = make();
+    await m.ready();
+    const h1 = m.open({});
+    const h2 = m.open({});
+    expect(h1.id).toBeTruthy();
+    expect(h2.id).not.toBe(h1.id);
+    expect(ids(m)).toEqual([h1.id]);
+    expect(m.getSnapshot().queued).toEqual([h2.id]);
   });
 
   it("gap：下一个等待 gap 毫秒", async () => {
@@ -386,9 +397,9 @@ describe("@codejoo/overlaymanager", () => {
     const m = make({ debug: true, logger });
     m.open({ id: "a" });
     m.close("a");
-    expect(logger).toHaveBeenCalledWith("[overlays-manager]:a:pending");
-    expect(logger).toHaveBeenCalledWith("[overlays-manager]:a:open");
-    expect(logger).toHaveBeenCalledWith("[overlays-manager]:a:closing");
+    expect(logger).toHaveBeenCalledWith("[layerman]:a:pending");
+    expect(logger).toHaveBeenCalledWith("[layerman]:a:open");
+    expect(logger).toHaveBeenCalledWith("[layerman]:a:closing");
   });
 
   it("beforeClose 关闭守卫：返回 false 取消关闭；其余放行", async () => {
@@ -410,6 +421,26 @@ describe("@codejoo/overlaymanager", () => {
     m.close("a");
     await flush();
     expect(m.get("a")?.phase).toBe("open");
+  });
+
+  it("beforeClose 同步抛错：视同拒绝，不让异常穿透 close()", () => {
+    const m = make({ autoRemove: false });
+    m.open({
+      id: "a",
+      beforeClose: () => {
+        throw new Error("boom");
+      },
+    });
+    expect(() => m.close("a")).not.toThrow();
+    expect(m.get("a")?.phase).toBe("open"); // 关闭被取消
+  });
+
+  it('id 传空字符串：视同未指定，内部生成新 id 而非复用 ""', () => {
+    const m = make();
+    const h1 = m.open({ id: "" });
+    const h2 = m.open({ id: "" });
+    expect(h1.id).toBeTruthy();
+    expect(h2.id).not.toBe(h1.id);
   });
 
   it("update(id, patch)：就地浅合并 data，不动队列", () => {

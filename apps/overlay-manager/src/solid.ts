@@ -1,12 +1,12 @@
 /**
- * @codejoo/overlaymanager/solid — SolidJS 接入层（可选 peer 依赖 `solid-js`）。
+ * @codejoo/layerman/solid — SolidJS 接入层（可选 peer 依赖 `solid-js`）。
  *
  * 只做一件事：把管理器的 `subscribe`+`getSnapshot` 桥成 Solid signal（accessor），再在其上封出
  * 命令式 / 声明式两种唤起风格的原语。不含任何渲染组件、不写 JSX、不依赖 solid 的编译器——只用
  * solid-js 运行时原语（`createSignal`/`createMemo`/`onCleanup`/`createContext`/`useContext`）。
  *
  * 管理器实例的获取遵循「Provider 默认 + 参数覆盖」：composable 的可选 `om` 参数优先，缺省则从
- * `OverlayManagerProvider` / `provideOverlayManager` 注入的实例回退。
+ * `LayermanProvider` / `provideLayerman` 注入的实例回退。
  *
  * 所有 composable 假定在 Solid 响应式作用域内调用（组件 `setup` 或 `createRoot` 内）——signal 的
  * 创建、`onCleanup` 退订、`useContext` 注入均依赖当前 owner/tracking scope。
@@ -14,25 +14,25 @@
 
 import { type Accessor, createContext, createSignal, getOwner, onCleanup, useContext } from "solid-js";
 
-import type { OverlayConfig, OverlayHandle, OverlayInstance, OverlayManager, OverlayState } from "./index.ts";
+import type { OverlayConfig, OverlayHandle, OverlayInstance, Layerman, OverlayState } from "./index.ts";
 
-/** 「当前管理器」注入 Context（idiomatic：`<OverlayManagerContext.Provider value={om}>`）。 */
-export const OverlayManagerContext = createContext<OverlayManager>();
+/** 「当前管理器」注入 Context（idiomatic：`<LayermanContext.Provider value={om}>`）。 */
+export const LayermanContext = createContext<Layerman>();
 /** 「当前 overlay id」注入 Context（由中央渲染器逐条 provide，overlay 组件内 useCurrentOverlay 消费）。 */
 export const CurrentOverlayContext = createContext<string>();
 
-/** idiomatic JSX Provider 别名：`<OverlayManagerProvider value={om}>...</OverlayManagerProvider>`。 */
-export const OverlayManagerProvider = OverlayManagerContext.Provider;
+/** idiomatic JSX Provider 别名：`<LayermanProvider value={om}>...</LayermanProvider>`。 */
+export const LayermanProvider = LayermanContext.Provider;
 /** idiomatic JSX Provider 别名（当前 overlay id）。 */
 export const CurrentOverlayProvider = CurrentOverlayContext.Provider;
 
 /**
  * 非 JSX 注入：在当前 owner（组件 setup / `createRoot` 回调）上就地写入默认管理器 Context。
  * 之后同一 owner 内、或此后创建的子作用域内的 composable 不传 `om` 即可回退到它。
- * 等价于用 `<OverlayManagerProvider value={om}>` 包裹，但无需 JSX。
+ * 等价于用 `<LayermanProvider value={om}>` 包裹，但无需 JSX。
  */
-export function provideOverlayManager(om: OverlayManager): void {
-  provideContext(OverlayManagerContext.id, om);
+export function provideLayerman(om: Layerman): void {
+  provideContext(LayermanContext.id, om);
 }
 
 /** 非 JSX 注入：为「当前 overlay」提供 id（等价于 `<CurrentOverlayProvider value={id}>`）。 */
@@ -44,7 +44,7 @@ export function provideCurrentOverlay(id: string): void {
 function provideContext(id: symbol, value: unknown): void {
   const owner = getOwner();
   if (!owner) {
-    throw new Error("[overlay-manager/solid] provide*(): must be called inside a reactive scope (component setup or createRoot)");
+    throw new Error("[layerman/solid] provide*(): must be called inside a reactive scope (component setup or createRoot)");
   }
   (owner as { context: Record<symbol, unknown> | null }).context = {
     ...(owner as { context: Record<symbol, unknown> | null }).context,
@@ -52,10 +52,10 @@ function provideContext(id: symbol, value: unknown): void {
   };
 }
 
-function useManager(om?: OverlayManager): OverlayManager {
-  const resolved = om ?? useContext(OverlayManagerContext);
+function useManager(om?: Layerman): Layerman {
+  const resolved = om ?? useContext(LayermanContext);
   if (!resolved) {
-    throw new Error("[overlay-manager/solid] no manager available — pass one explicitly or wrap with OverlayManagerProvider / provideOverlayManager");
+    throw new Error("[layerman/solid] no manager available — pass one explicitly or wrap with LayermanProvider / provideLayerman");
   }
   return resolved;
 }
@@ -64,7 +64,7 @@ function useManager(om?: OverlayManager): OverlayManager {
  * 把管理器状态桥成 Solid signal（accessor）：初值取 `getSnapshot()`，`subscribe` 同步驱动 setter，
  * 作用域销毁时 `onCleanup` 自动退订。核心 `subscribe` 为同步触发，故 open/close 后 accessor 立即反映。
  */
-export function useOverlayState(om?: OverlayManager): Accessor<OverlayState> {
+export function useOverlayState(om?: Layerman): Accessor<OverlayState> {
   const m = useManager(om);
   const [state, setState] = createSignal(m.getSnapshot());
   const unsub = m.subscribe((s) => setState(s));
@@ -79,7 +79,7 @@ export function useOverlayState(om?: OverlayManager): Accessor<OverlayState> {
  * 二者在客户端都完全响应式；但 vitest 在 node 下解析到 solid-js 的 **SSR 构建**，其 `createMemo`
  * 只在创建时求值一次并冻结（返回 `() => v`）——派生 signal 每次读取都重算，故在 SSR 与客户端下都正确。
  */
-export function useOverlays(om?: OverlayManager): {
+export function useOverlays(om?: Layerman): {
   active: Accessor<readonly OverlayInstance[]>;
   queued: Accessor<readonly string[]>;
 } {
@@ -124,7 +124,7 @@ function resolveDefaults<TData>(defaults?: OverlayDefaults<TData>): Omit<Overlay
  * getter 函数，**在每次 open 时求值取最新**（不是持续追踪，而是每次唤起读一次）。函数型字段
  * （`when`/`resolve`/钩子）写在返回的对象里，不会被误当 getter 调用。
  */
-export function useOverlay<TData = unknown>(id: string, defaults?: OverlayDefaults<TData>, om?: OverlayManager): UseOverlayReturn<TData> {
+export function useOverlay<TData = unknown>(id: string, defaults?: OverlayDefaults<TData>, om?: Layerman): UseOverlayReturn<TData> {
   const m = useManager(om);
   const state = useOverlayState(m);
   // 派生 signal（非 createMemo）——理由同 useOverlays：SSR 构建下 createMemo 会冻结。
@@ -148,10 +148,10 @@ export function useOverlay<TData = unknown>(id: string, defaults?: OverlayDefaul
  * （`instance/visible/phase/open/close/remove/resolve/reject/pause/resume`），无需父层透传 id。
  * 需外层用 `provideCurrentOverlay(id)`（或 `<CurrentOverlayProvider value={id}>`）。
  */
-export function useCurrentOverlay<TData = unknown>(om?: OverlayManager): UseOverlayReturn<TData> {
+export function useCurrentOverlay<TData = unknown>(om?: Layerman): UseOverlayReturn<TData> {
   const id = useContext(CurrentOverlayContext);
   if (!id) {
-    throw new Error("[overlay-manager/solid] useCurrentOverlay(): no current overlay — wrap the rendered overlay with provideCurrentOverlay(id)");
+    throw new Error("[layerman/solid] useCurrentOverlay(): no current overlay — wrap the rendered overlay with provideCurrentOverlay(id)");
   }
   return useOverlay<TData>(id, undefined, om);
 }

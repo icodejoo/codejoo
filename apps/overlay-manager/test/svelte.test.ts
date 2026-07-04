@@ -1,13 +1,13 @@
 import { get, type Readable } from "svelte/store";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { createOverlayManager, type OverlayManager, type OverlayState } from "../src/index.ts";
-import { getOverlayManager, overlay, overlays, overlayState, provideCurrentOverlay, setOverlayManager } from "../src/svelte.ts";
+import { createLayerman, type Layerman, type OverlayState } from "../src/index.ts";
+import { getLayerman, overlay, overlays, overlayState, provideCurrentOverlay, setLayerman } from "../src/svelte.ts";
 
-const managers: OverlayManager[] = [];
+const managers: Layerman[] = [];
 
-function make(): OverlayManager {
-  const m = createOverlayManager({ crossTab: false });
+function make(): Layerman {
+  const m = createLayerman({ crossTab: false });
   managers.push(m);
   return m;
 }
@@ -23,7 +23,7 @@ afterEach(() => {
   vi.useRealTimers();
 });
 
-describe("@codejoo/overlaymanager/svelte", () => {
+describe("@codejoo/layerman/svelte", () => {
   it("overlayState：桥成 Readable，open/remove 推送新值（active/queued 变化）", () => {
     const m = make();
     const state = overlayState(m);
@@ -143,8 +143,8 @@ describe("@codejoo/overlaymanager/svelte", () => {
     // setContext/getContext 依赖组件实例；node 纯逻辑环境下 getContext 抛错。
     // 这记录了「组件外必须显式传 om」的约束。
     expect(() => overlayState()).toThrow();
-    expect(() => setOverlayManager(make())).toThrow();
-    expect(() => getOverlayManager()).toThrow();
+    expect(() => setLayerman(make())).toThrow();
+    expect(() => getLayerman()).toThrow();
     expect(() => provideCurrentOverlay("x")).toThrow();
   });
 

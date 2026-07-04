@@ -1,21 +1,21 @@
 // 真实 Chromium（@vitest/browser-playwright）中的全 API 集成测试。
-// 核心 API：直接 import 已发布产物 @codejoo/overlaymanager，在浏览器里跑（真定时器、真 localStorage）。
+// 核心 API：直接 import 已发布产物 @codejoo/layerman，在浏览器里跑（真定时器、真 localStorage）。
 // Vue 适配层：挂载真实 App.vue（Vant 组件），断言 useOverlay/model/plugin 等。
 import "vant/lib/index.css";
 
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { createApp } from "vue";
 
-import { createOverlayManager, type OverlayManager } from "@codejoo/overlaymanager";
-import { createOverlayManagerPlugin } from "@codejoo/overlaymanager/vue";
+import { createLayerman, type Layerman } from "@codejoo/layerman";
+import { createLayermanPlugin } from "@codejoo/layerman/vue";
 
 import App from "../src/App.vue";
 import { om } from "../src/overlay";
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 let seq = 0;
-const mk = (opts = {}): OverlayManager => createOverlayManager({ gap: 0, crossTab: false, storageKey: `t${++seq}`, ...opts });
-const ids = (m: OverlayManager) => m.getSnapshot().active.map((o) => o.id);
+const mk = (opts = {}): Layerman => createLayerman({ gap: 0, crossTab: false, storageKey: `t${++seq}`, ...opts });
+const ids = (m: Layerman) => m.getSnapshot().active.map((o) => o.id);
 
 beforeEach(() => localStorage.clear());
 
@@ -295,7 +295,7 @@ describe("Vue 适配层（真实 App.vue + Vant）", () => {
     host = document.createElement("div");
     document.body.appendChild(host);
     app = createApp(App);
-    app.use(createOverlayManagerPlugin(om));
+    app.use(createLayermanPlugin(om));
     app.mount(host);
   });
   afterEach(() => {

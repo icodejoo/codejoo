@@ -1,13 +1,13 @@
 import { createRoot } from "solid-js";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { createOverlayManager, type OverlayManager } from "../src/index.ts";
-import { provideCurrentOverlay, provideOverlayManager, useCurrentOverlay, useOverlay, useOverlays, useOverlayState } from "../src/solid.ts";
+import { createLayerman, type Layerman } from "../src/index.ts";
+import { provideCurrentOverlay, provideLayerman, useCurrentOverlay, useOverlay, useOverlays, useOverlayState } from "../src/solid.ts";
 
-const managers: OverlayManager[] = [];
+const managers: Layerman[] = [];
 
-function make(): OverlayManager {
-  const m = createOverlayManager({ crossTab: false });
+function make(): Layerman {
+  const m = createLayerman({ crossTab: false });
   managers.push(m);
   return m;
 }
@@ -23,7 +23,7 @@ afterEach(() => {
   vi.useRealTimers();
 });
 
-describe("@codejoo/overlaymanager/solid", () => {
+describe("@codejoo/layerman/solid", () => {
   it("useOverlayState：状态桥成 signal，open 后 accessor 同步更新", () => {
     const m = make();
     createRoot((dispose) => {
@@ -113,10 +113,10 @@ describe("@codejoo/overlaymanager/solid", () => {
     await expect(h.result).resolves.toBe(true);
   });
 
-  it("provideOverlayManager：注入后 composable 不传 om 亦可回退", () => {
+  it("provideLayerman：注入后 composable 不传 om 亦可回退", () => {
     const m = make();
     createRoot((dispose) => {
-      provideOverlayManager(m);
+      provideLayerman(m);
       const o = useOverlay("fromCtx"); // 不传 om → 走 useContext
       o.open();
       expect(o.visible()).toBe(true);
@@ -134,7 +134,7 @@ describe("@codejoo/overlaymanager/solid", () => {
   it("useCurrentOverlay：经注入拿到自身 id 的控制句柄（无需透传）", () => {
     const m = make();
     createRoot((dispose) => {
-      provideOverlayManager(m);
+      provideLayerman(m);
       provideCurrentOverlay("cur");
       const o = useCurrentOverlay();
       o.open();
@@ -147,7 +147,7 @@ describe("@codejoo/overlaymanager/solid", () => {
   it("useCurrentOverlay：无当前 overlay 注入 → 抛错", () => {
     const m = make();
     createRoot((dispose) => {
-      provideOverlayManager(m);
+      provideLayerman(m);
       expect(() => useCurrentOverlay()).toThrow(/current overlay/);
       dispose();
     });

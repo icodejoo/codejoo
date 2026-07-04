@@ -3,14 +3,14 @@ import { createElement, type ReactNode } from "react";
 import { act, renderHook } from "@testing-library/react";
 import { afterEach, describe, expect, it } from "vitest";
 
-import { createOverlayManager, type OverlayManager } from "../src/index.ts";
-import { OverlayManagerProvider, useCurrentOverlay, useOverlay, useOverlayManager, useOverlays, useOverlayState } from "../src/react.ts";
+import { createLayerman, type Layerman } from "../src/index.ts";
+import { LayermanProvider, useCurrentOverlay, useOverlay, useLayerman, useOverlays, useOverlayState } from "../src/react.ts";
 import { CurrentOverlayContext } from "../src/react.ts";
 
-const managers: OverlayManager[] = [];
+const managers: Layerman[] = [];
 
-function make(): OverlayManager {
-  const m = createOverlayManager({ crossTab: false });
+function make(): Layerman {
+  const m = createLayerman({ crossTab: false });
   managers.push(m);
   return m;
 }
@@ -20,7 +20,7 @@ afterEach(() => {
   managers.length = 0;
 });
 
-describe("@codejoo/overlaymanager/react", () => {
+describe("@codejoo/layerman/react", () => {
   it("useOverlayState：桥成 React 状态，open 后更新（SSR 空态起步）", () => {
     const m = make();
     const { result } = renderHook(() => useOverlayState(m));
@@ -106,9 +106,9 @@ describe("@codejoo/overlaymanager/react", () => {
     await expect(handle!.result).resolves.toBe(true);
   });
 
-  it("Provider 注入：不传 om 时经 <OverlayManagerProvider> 取到 manager", () => {
+  it("Provider 注入：不传 om 时经 <LayermanProvider> 取到 manager", () => {
     const m = make();
-    const wrapper = ({ children }: { children: ReactNode }) => createElement(OverlayManagerProvider, { manager: m }, children);
+    const wrapper = ({ children }: { children: ReactNode }) => createElement(LayermanProvider, { manager: m }, children);
     const { result } = renderHook(() => useOverlay("fromProvider"), { wrapper });
     act(() => {
       result.current.open();
@@ -117,13 +117,13 @@ describe("@codejoo/overlaymanager/react", () => {
     expect(m.get("fromProvider")?.id).toBe("fromProvider");
   });
 
-  it("useOverlayManager：既未传参又未注入 → 抛错", () => {
-    expect(() => renderHook(() => useOverlayManager())).toThrow(/no manager/);
+  it("useLayerman：既未传参又未注入 → 抛错", () => {
+    expect(() => renderHook(() => useLayerman())).toThrow(/no manager/);
   });
 
   it("useCurrentOverlay：经 Context 拿到自身 id 的控制句柄（无需透传）", () => {
     const m = make();
-    const wrapper = ({ children }: { children: ReactNode }) => createElement(OverlayManagerProvider, { manager: m }, createElement(CurrentOverlayContext.Provider, { value: "cur" }, children));
+    const wrapper = ({ children }: { children: ReactNode }) => createElement(LayermanProvider, { manager: m }, createElement(CurrentOverlayContext.Provider, { value: "cur" }, children));
     const { result } = renderHook(() => useCurrentOverlay(), { wrapper });
     act(() => {
       result.current.open();
@@ -134,7 +134,7 @@ describe("@codejoo/overlaymanager/react", () => {
 
   it("useCurrentOverlay：无当前 overlay 注入 → 抛错", () => {
     const m = make();
-    const wrapper = ({ children }: { children: ReactNode }) => createElement(OverlayManagerProvider, { manager: m }, children);
+    const wrapper = ({ children }: { children: ReactNode }) => createElement(LayermanProvider, { manager: m }, children);
     expect(() => renderHook(() => useCurrentOverlay(), { wrapper })).toThrow(/current overlay/);
   });
 });

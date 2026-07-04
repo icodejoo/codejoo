@@ -1,47 +1,47 @@
 /**
- * @codejoo/overlaymanager/react — React 18/19 接入层（可选 peer 依赖 `react`）。
+ * @codejoo/layerman/react — React 18/19 接入层（可选 peer 依赖 `react`）。
  *
  * 只做一件事：把管理器的 `subscribe`+`getSnapshot`(+`getServerSnapshot`) 经 `useSyncExternalStore`
  * 桥成 React 状态（引用变即触发、天然抗 tearing、SSR 安全），再在其上封出命令式 / 声明式两种
  * 唤起风格的 hook。不含任何渲染组件——渲染留给宿主（本文件保持 .ts，无 JSX）。
  *
  * 管理器实例的获取遵循「Context 默认 + 参数覆盖」：hook 的可选 `om` 参数优先，缺省则从
- * `OverlayManagerProvider` 注入的实例回退，取不到则抛错。
+ * `LayermanProvider` 注入的实例回退，取不到则抛错。
  */
 
 import { createContext, createElement, type FunctionComponent, type ReactNode, useCallback, useContext, useMemo, useRef, useSyncExternalStore } from "react";
 
-import type { OverlayConfig, OverlayHandle, OverlayInstance, OverlayManager, OverlayState } from "./index.ts";
+import type { OverlayConfig, OverlayHandle, OverlayInstance, Layerman, OverlayState } from "./index.ts";
 
 /* ────────────────────────────── Context 注入 ────────────────────────────── */
 
-/** 注入默认管理器的 Context（`useOverlayManager`/各 hook 缺省时回退到它）。 */
-export const OverlayManagerContext = createContext<OverlayManager | null>(null);
+/** 注入默认管理器的 Context（`useLayerman`/各 hook 缺省时回退到它）。 */
+export const LayermanContext = createContext<Layerman | null>(null);
 
 /** Provider 的 props。 */
-export interface OverlayManagerProviderProps {
+export interface LayermanProviderProps {
   /** 要注入的管理器实例。 */
-  manager: OverlayManager;
+  manager: Layerman;
   children?: ReactNode;
 }
 
 /**
- * 为子树注入默认管理器：`<OverlayManagerProvider manager={om}>…</OverlayManagerProvider>`。
+ * 为子树注入默认管理器：`<LayermanProvider manager={om}>…</LayermanProvider>`。
  * 子树内的 hook 不传 `om` 时即从此取。
  */
-export const OverlayManagerProvider: FunctionComponent<OverlayManagerProviderProps> = ({ manager, children }) => createElement(OverlayManagerContext.Provider, { value: manager }, children);
+export const LayermanProvider: FunctionComponent<LayermanProviderProps> = ({ manager, children }) => createElement(LayermanContext.Provider, { value: manager }, children);
 
 /** 工厂式写法：预绑定一个管理器，返回一个只需 `children` 的 Provider 组件。 */
-export function createOverlayManagerProvider(manager: OverlayManager): FunctionComponent<{ children?: ReactNode }> {
-  return ({ children }) => createElement(OverlayManagerContext.Provider, { value: manager }, children);
+export function createLayermanProvider(manager: Layerman): FunctionComponent<{ children?: ReactNode }> {
+  return ({ children }) => createElement(LayermanContext.Provider, { value: manager }, children);
 }
 
 /** 取当前生效的管理器：显式 `om` 优先，否则读 Context，都没有则抛错。 */
-export function useOverlayManager(om?: OverlayManager): OverlayManager {
-  const fromContext = useContext(OverlayManagerContext);
+export function useLayerman(om?: Layerman): Layerman {
+  const fromContext = useContext(LayermanContext);
   const resolved = om ?? fromContext;
   if (!resolved) {
-    throw new Error("[overlay-manager/react] no manager available — pass one explicitly or wrap with <OverlayManagerProvider>");
+    throw new Error("[layerman/react] no manager available — pass one explicitly or wrap with <LayermanProvider>");
   }
   return resolved;
 }
@@ -52,8 +52,8 @@ export function useOverlayManager(om?: OverlayManager): OverlayManager {
  * 把管理器状态桥成 React 状态（`useSyncExternalStore` 自带订阅/退订，抗 tearing、SSR 安全）。
  * 服务端 / hydration 用 `getServerSnapshot`（核心返回冻结的空态）。
  */
-export function useOverlayState(om?: OverlayManager): OverlayState {
-  const m = useOverlayManager(om);
+export function useOverlayState(om?: Layerman): OverlayState {
+  const m = useLayerman(om);
   // 绑定 this 并稳定引用：管理器方法作为裸引用传入会丢失 this，且 useSyncExternalStore 要求
   // subscribe 引用稳定（否则每次渲染都退订重订）。以 m 为 key 记忆一组绑定后的方法。
   const store = useMemo(
@@ -68,7 +68,7 @@ export function useOverlayState(om?: OverlayManager): OverlayState {
 }
 
 /** 命令式风格：拿到 active / queued，用于中央渲染器遍历。 */
-export function useOverlays(om?: OverlayManager): {
+export function useOverlays(om?: Layerman): {
   active: readonly OverlayInstance[];
   queued: readonly string[];
 } {
@@ -109,8 +109,8 @@ export interface UseOverlayReturn<TData = unknown> {
  * `defaults` 可传普通对象或返回配置的函数（**在每次 open 时调用取最新值**——不是持续追踪，而是
  * 每次唤起读一次）。用 `useRef` 稳定引用避免因 `defaults` 每次渲染变化而重建回调、触发重渲。
  */
-export function useOverlay<TData = unknown>(id: string, defaults?: OverlayDefaults<TData>, om?: OverlayManager): UseOverlayReturn<TData> {
-  const m = useOverlayManager(om);
+export function useOverlay<TData = unknown>(id: string, defaults?: OverlayDefaults<TData>, om?: Layerman): UseOverlayReturn<TData> {
+  const m = useLayerman(om);
   const state = useOverlayState(m);
   const instance = useMemo(() => state.active.find((o: OverlayInstance) => o.id === id), [state, id]);
 
@@ -167,10 +167,10 @@ export const provideCurrentOverlay: FunctionComponent<CurrentOverlayProviderProp
  * 在 overlay 组件**内部**使用：经 Context 拿到自身 id，返回与 `useOverlay(id)` 相同的句柄，
  * 无需父层透传 id。需外层用 `<provideCurrentOverlay id={id}>`（或直接用 `useOverlay(id)`）。
  */
-export function useCurrentOverlay<TData = unknown>(om?: OverlayManager): UseOverlayReturn<TData> {
+export function useCurrentOverlay<TData = unknown>(om?: Layerman): UseOverlayReturn<TData> {
   const id = useContext(CurrentOverlayContext);
   if (!id) {
-    throw new Error("[overlay-manager/react] useCurrentOverlay(): no current overlay — wrap the rendered overlay with <provideCurrentOverlay id={id}>");
+    throw new Error("[layerman/react] useCurrentOverlay(): no current overlay — wrap the rendered overlay with <provideCurrentOverlay id={id}>");
   }
   return useOverlay<TData>(id, undefined, om);
 }

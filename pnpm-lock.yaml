@@ -169,7 +169,7 @@ importers:
 
   apps/overlay-manager/example:
     dependencies:
-      '@codejoo/overlaymanager':
+      '@codejoo/layerman':
         specifier: workspace:*
         version: link:..
       vant:

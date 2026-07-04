@@ -1,11 +1,11 @@
 /**
- * @codejoo/overlaymanager/vue — Vue 3 接入层（可选 peer 依赖 `vue`）。
+ * @codejoo/layerman/vue — Vue 3 接入层（可选 peer 依赖 `vue`）。
  *
  * 只做一件事：把管理器的 `subscribe`+`getSnapshot` 桥成响应式 `shallowRef`（引用变即触发），
  * 再在其上封出命令式 / 声明式两种唤起风格的 composable。不含任何渲染组件——渲染留给宿主。
  *
  * 管理器实例的获取遵循「插件默认 + 参数覆盖」：composable 的可选 `om` 参数优先，缺省则从
- * `createOverlayManagerPlugin` 注入的实例回退。
+ * `createLayermanPlugin` 注入的实例回退。
  */
 
 import {
@@ -25,37 +25,37 @@ import {
   type WritableComputedRef,
 } from "vue";
 
-import type { OverlayConfig, OverlayHandle, OverlayInstance, OverlayManager, OverlayState } from "./index.ts";
+import type { OverlayConfig, OverlayHandle, OverlayInstance, Layerman, OverlayState } from "./index.ts";
 
 /** provide/inject 键。 */
-export const OVERLAY_MANAGER_KEY: InjectionKey<OverlayManager> = Symbol("overlay-manager");
+export const LAYERMAN_KEY: InjectionKey<Layerman> = Symbol("layerman");
 /** 「当前 overlay id」的注入键（由中央渲染器逐条 provide，overlay 组件内 useCurrentOverlay 消费）。 */
 export const CURRENT_OVERLAY_KEY: InjectionKey<string> = Symbol("current-overlay");
 
-/** Vue 插件：`app.use(createOverlayManagerPlugin(om))`，为全应用注入默认管理器。 */
-export function createOverlayManagerPlugin(om: OverlayManager): Plugin {
+/** Vue 插件：`app.use(createLayermanPlugin(om))`，为全应用注入默认管理器。 */
+export function createLayermanPlugin(om: Layerman): Plugin {
   return {
     install(app: App) {
-      app.provide(OVERLAY_MANAGER_KEY, om);
+      app.provide(LAYERMAN_KEY, om);
     },
   };
 }
 
 /** 组合式 API 内 provide 默认管理器（等价于插件，用于 setup 内手动注入）。 */
-export function provideOverlayManager(om: OverlayManager): void {
-  provide(OVERLAY_MANAGER_KEY, om);
+export function provideLayerman(om: Layerman): void {
+  provide(LAYERMAN_KEY, om);
 }
 
-function useManager(om?: OverlayManager): OverlayManager {
-  const resolved = om ?? inject(OVERLAY_MANAGER_KEY, undefined);
+function useManager(om?: Layerman): Layerman {
+  const resolved = om ?? inject(LAYERMAN_KEY, undefined);
   if (!resolved) {
-    throw new Error("[overlay-manager/vue] no manager available — pass one explicitly or install createOverlayManagerPlugin");
+    throw new Error("[layerman/vue] no manager available — pass one explicitly or install createLayermanPlugin");
   }
   return resolved;
 }
 
 /** 把管理器状态桥成响应式 `Ref<OverlayState>`（作用域销毁时自动退订）。 */
-export function useOverlayState(om?: OverlayManager): Ref<OverlayState> {
+export function useOverlayState(om?: Layerman): Ref<OverlayState> {
   const m = useManager(om);
   const state = shallowRef(m.getSnapshot());
   const unsub = m.subscribe((s) => {
@@ -66,7 +66,7 @@ export function useOverlayState(om?: OverlayManager): Ref<OverlayState> {
 }
 
 /** 命令式风格：拿到响应式的 active / queued，用于中央渲染器遍历。 */
-export function useOverlays(om?: OverlayManager): {
+export function useOverlays(om?: Layerman): {
   active: ComputedRef<readonly OverlayInstance[]>;
   queued: ComputedRef<readonly string[]>;
 } {
@@ -86,9 +86,10 @@ export interface UseOverlayReturn<TData = unknown> {
   /**
    * 可写的可见性,直接给第三方「只暴露 v-model」的弹窗用:`<ThirdPartyDialog v-model="model" />`。
    * - get：是否正在展示(open/closing）。
-   * - set(true)：若未展示则 `open()`（无额外配置；要 priority/cooldown 等请改用 `open(config)`）。
-   * - set(false)：**立即 `remove()`**（非两阶段）——第三方弹窗自带退场动画,不需要我们的 closing
-   *   期,立即移除可避免 v-model 回弹。
+   * - set(true)：若未展示且未排队则 `open()`（无额外配置；要 priority/cooldown 等请改用 `open(config)`）。
+   * - set(false)：走 `close()`（尊重 `beforeClose` 守卫，不再被硬闯过去）。无 `beforeClose` 时
+   *   `close()` 内部同步转 `closing`，随即紧跟 `remove()` 收尾——效果等同「立即移除」，第三方弹窗
+   *   仍不需要我们的 closing 期；配了 `beforeClose` 时守卫异步决定是否真正关闭，此时不强制移除。
    * 注意：队列/gap/条件/冷却仍生效,`set(true)` 若被排队则不会立刻可见,getter 如实反映真实状态。
    */
   model: WritableComputedRef<boolean>;
@@ -120,7 +121,7 @@ export interface UseOverlayReturn<TData = unknown> {
  * 因此想「立刻显示/插队」的 v-model 弹窗应在 `defaults` 里带 `overlap: true`（叠加、绕过串行）或
  * `replace: true`（抢占当前串行槽）——两者都会让实例立即进入 active，getter 立刻为 true、不回弹。
  */
-export function useOverlay<TData = unknown>(id: string, defaults?: MaybeRefOrGetter<Omit<OverlayConfig<TData>, "id">>, om?: OverlayManager): UseOverlayReturn<TData> {
+export function useOverlay<TData = unknown>(id: string, defaults?: MaybeRefOrGetter<Omit<OverlayConfig<TData>, "id">>, om?: Layerman): UseOverlayReturn<TData> {
   const m = useManager(om);
   const state = useOverlayState(m);
   const instance = computed(() => state.value.active.find((o: OverlayInstance) => o.id === id));
@@ -131,8 +132,16 @@ export function useOverlay<TData = unknown>(id: string, defaults?: MaybeRefOrGet
       get: () => instance.value !== undefined,
       set: (value: boolean) => {
         if (value) {
-          if (instance.value === undefined) m.open({ ...toValue(defaults), id });
+          if (instance.value === undefined && !state.value.queued.includes(id)) m.open({ ...toValue(defaults), id });
+        } else if (m.get(id)) {
+          // 已展示（open/closing）：走 close()（尊重 beforeClose）。无 beforeClose 时 close() 已同步
+          // 转 closing——按原「立即移除」的第三方 v-model 契约收尾；有 beforeClose 时 close() 是异步
+          // 的（守卫未决），此时 phase 仍是 open，交给守卫自行处理，不强制 remove。
+          m.close(id);
+          if (m.get(id)?.phase === "closing") m.remove(id);
         } else {
+          // 尚未展示（还在排队/pending）：beforeClose 语义上只守「已展示时的关闭」，对排队项不适用
+          // ——直接 remove() 撤下，维持原「立即移除」契约（否则会卡在队列里出不来）。
           m.remove(id);
         }
       },
@@ -161,10 +170,10 @@ export function provideCurrentOverlay(id: string): void {
  * （`instance/visible/phase/open/close/remove/resolve/reject/pause/resume`），无需父层透传 id。
  * 需外层用 `provideCurrentOverlay(id)`（或声明式 template+ref 场景直接用 `useOverlay(id)`）。
  */
-export function useCurrentOverlay<TData = unknown>(om?: OverlayManager): UseOverlayReturn<TData> {
+export function useCurrentOverlay<TData = unknown>(om?: Layerman): UseOverlayReturn<TData> {
   const id = inject(CURRENT_OVERLAY_KEY, undefined);
   if (!id) {
-    throw new Error("[overlay-manager/vue] useCurrentOverlay(): no current overlay — wrap the rendered overlay with provideCurrentOverlay(id)");
+    throw new Error("[layerman/vue] useCurrentOverlay(): no current overlay — wrap the rendered overlay with provideCurrentOverlay(id)");
   }
   return useOverlay<TData>(id, undefined, om);
 }

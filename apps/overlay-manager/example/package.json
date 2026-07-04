@@ -1,5 +1,5 @@
 {
-  "name": "@codejoo/overlaymanager-example",
+  "name": "@codejoo/layerman-example",
   "private": true,
   "type": "module",
   "scripts": {
@@ -7,7 +7,7 @@
     "test": "vp test -c vitest.browser.config.ts"
   },
   "dependencies": {
-    "@codejoo/overlaymanager": "workspace:*",
+    "@codejoo/layerman": "workspace:*",
     "vant": "catalog:",
     "vue": "catalog:"
   },

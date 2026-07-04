@@ -1,18 +1,18 @@
 ---
 name: overlay-manager
 description: >-
-  Work on @codejoo/overlaymanager (apps/overlay-manager) — the framework-agnostic
+  Work on @codejoo/layerman (apps/overlay-manager) — the framework-agnostic
   HEADLESS overlay/dialog/modal/bottom-sheet/drawer queue manager (factory
-  createOverlayManager). Read BEFORE modifying src/index.ts, its tests, or the READMEs.
+  createLayerman). Read BEFORE modifying src/index.ts, its tests, or the READMEs.
   Covers architecture, the non-obvious invariants tests depend on, and the verify workflow.
   Triggers on: overlay, dialog, modal, bottomsheet, drawer, queue, priority, replace,
   overlap, affix, cooldown, resolve, setContext, subscribe, headless popup manager.
 ---
 
-# @codejoo/overlaymanager
+# @codejoo/layerman
 
 `apps/overlay-manager` — a **framework-agnostic, headless** overlay queue manager. Package
-`@codejoo/overlaymanager`, factory **`createOverlayManager()`**. It manages *when/which*
+`@codejoo/layerman`, factory **`createLayerman()`**. It manages *when/which*
 overlays are active — queue, priority, conditions, cooldown, backend-driven resolution — and
 **touches no DOM/UI/animation whatsoever**. The host renders the `active` list; the package is
 pure logic with **zero runtime deps**.
@@ -35,8 +35,8 @@ Public store/query methods (`subscribe`/`getSnapshot`/`getServerSnapshot`/`get`)
 constructor** so consumers (e.g. React `useSyncExternalStore`) can pass them as bare refs without
 losing `this`.
 
-There is also a Flutter port at `D:\workspaces\dart-labs\overlaymanager` (separate repo) — NOT a
-headless port; it embraces Flutter (`Overlay`/`OverlayEntry`, `OverlayManagerScope`), `show()` returns
+There is also a Flutter port at `D:\workspaces\dart-labs\layerman` (separate repo) — NOT a
+headless port; it embraces Flutter (`Overlay`/`OverlayEntry`, `LayermanScope`), `show()` returns
 `Future<T?>`. See its own memory note.
 
 ## Vue adapter (`src/vue.ts`)
@@ -54,17 +54,24 @@ getter read `false` → v-model bounce). Function fields (`when`/`resolve`/hooks
 resolved object, so `toValue` never mis-invokes them. **`useCurrentOverlay(om?)`** injects the current
 overlay id (provided per-item by `provideCurrentOverlay(id)` in a central-renderer wrapper) and returns
 the same handle without threading `id` — for the `<component :is>` idiom. Manager resolution is **plugin-default + param-override**: pass `om` explicitly,
-else it `inject`s the one provided by `createOverlayManagerPlugin(om)` / `provideOverlayManager(om)`.
+else it `inject`s the one provided by `createLayermanPlugin(om)` / `provideLayerman(om)`.
 
 **`model` is a `WritableComputedRef<boolean>` for third-party dialogs that expose only `v-model`**
-(ElDialog/Vant/AntDV): get = is-active; `set(true)` = `open()` (skipped if already active);
-`set(false)` = **immediate `remove()`, NOT two-phase `close()`**. This is deliberate: our `closing`
-phase keeps the instance in `active` so a **self-rendered** overlay can play its exit animation
-while still mounted. A third-party dialog instead owns its visibility+animation internally and only
-needs the bound boolean to flip `false`; if `set(false)` used `close()`, the getter (which counts a
-`closing` instance as present) would keep the boolean `true`, so the third-party would never start
-its leave animation until the 300ms auto-remove — laggy/bouncing. `remove()` flips the boolean at
-once, hands the exit animation entirely to the third-party, and frees the slot immediately.
+(ElDialog/Vant/AntDV): get = is-active; `set(true)` = `open()` (skipped if already active or queued).
+`set(false)` branches on whether the instance is currently shown: if it's still **queued** (never
+opened), `set(false)` calls `remove()` directly — `beforeClose` only guards an already-*shown*
+close, so it doesn't apply here, and skipping straight to `remove()` avoids the entry getting stuck
+in the queue. If it **is** shown (open/closing), `set(false)` calls `close()` — which respects a
+configured `beforeClose` guard — and only follows up with an immediate `remove()` once `close()` has
+synchronously advanced the entry to `closing` (i.e. no `beforeClose`, or `beforeClose` isn't
+configured). This is deliberate: our `closing` phase keeps the instance in `active` so a
+**self-rendered** overlay can play its exit animation while still mounted, but a third-party dialog
+owns its visibility+animation internally and only needs the bound boolean to flip `false` — if
+`set(false)` left it at `close()`'s `closing` phase, the getter (which counts `closing` as present)
+would keep the boolean `true` until the 300ms auto-remove — laggy/bouncing — so the immediate
+follow-up `remove()` flips the boolean at once and frees the slot right away in the common
+no-`beforeClose` case. With a `beforeClose` guard configured, `close()` defers asynchronously
+(guard pending) and the follow-up `remove()` is skipped until the guard resolves.
 Multi-entry pack (`vite.config.ts` `entry: { index, vue }`) emits `dist/esm/{index,vue}.{mjs,d.mts}`.
 Vue tests use `effectScope()` (for `onScopeDispose`) and `app.runWithContext()` (for the inject path)
 — no DOM/`@vue/test-utils` needed.
@@ -79,12 +86,15 @@ Vue (both function-style and template+ref), or anything, via `subscribe` + `getS
 
 ## Architecture map (all in `src/index.ts`)
 
-- **Factory, not singleton** — `createOverlayManager(opts)` → `OverlayManagerImpl`. Enables test
+- **Factory, not singleton** — `createLayerman(opts)` → `LayermanImpl`. Enables test
   isolation and multiple managers. `await manager.ready()` awaits cooldown hydrate before use.
 - **Slots = independent serial queues** — `queues: Map<slot, Entry[]>`, `serial: Map<slot, Entry>`
   (0..1 occupant per slot: resolving/open/closing). `overlapping: Entry[]` is a global stack that
   bypasses the serial rule. Default slot is `""`.
-- **`byId: Map<id, Entry>`** — the single source of truth for lookup; `id` is required & unique.
+- **`byId: Map<id, Entry>`** — the single source of truth for lookup; `id` is unique. `open()`'s
+  `id` is optional — omitted ⇒ `genId()` mints `__layerman_auto_${n}` and the entry skips the
+  duplicate/existing-id dance entirely (guaranteed fresh), going straight into the normal
+  enqueue/schedule path.
 - **Scheduler (`schedule(slot)`)** — never locks a candidate during the wait: on any trigger it
   cancels the pending open-timer, re-picks `front` (sort `cmpEntry`: replace-jumped band first,
   then priority desc, then FIFO `seq`) among *eligible* entries, computes
@@ -124,7 +134,7 @@ Vue (both function-style and template+ref), or anything, via `subscribe` + `getS
   side-effect-free and safe pre-hydrate; `getServerSnapshot()` returns a constant empty state.
 - **Cross-tab** — optional `BroadcastChannel` (`${storageKey}:sync`) syncs cooldown counts only;
   on receive it merges (max counts / latest ts) and re-schedules all slots.
-- **Logging** — `debug` + `logger` emit `[overlays-manager]:${id}:${state}` where state ∈
+- **Logging** — `debug` + `logger` emit `[layerman]:${id}:${state}` where state ∈
   {pending, resolving, open, closing, closed}. These 5 are internal lifecycle transitions; the
   **public `OverlayInstance.phase` is only `open|closing`** (rendering contract stays minimal).
 
@@ -172,7 +182,7 @@ Vue (both function-style and template+ref), or anything, via `subscribe` + `getS
 
 **Sub-projects reuse the parent workspace's dependencies by default.** The example under
 `example/` is a workspace member (`pnpm-workspace.yaml` globs `apps/*/example`) and pulls **every**
-dep from the monorepo — `@codejoo/overlaymanager` via `workspace:*`, and tooling/libs via
+dep from the monorepo — `@codejoo/layerman` via `workspace:*`, and tooling/libs via
 `catalog:` (`vue`, `vant`, `@vitejs/plugin-vue`, `vitest`, `@vitest/browser`,
 `@vitest/browser-playwright`, `playwright`, `vite-plus`). Do NOT install a dep locally in a
 sub-project unless it is genuinely sub-project-specific — and only then, and say why. Shared
@@ -207,9 +217,9 @@ pnpm build         # vp pack → dist/esm
 ```
 
 There is also a runnable **Vue 3 + Vant example with a full-API browser test** at
-`example/` — a **nested workspace member** (`@codejoo/overlaymanager-example`, private) that reuses
+`example/` — a **nested workspace member** (`@codejoo/layerman-example`, private) that reuses
 every dep from the parent (see Dependency policy above). `pnpm --filter
-@codejoo/overlaymanager-example test` runs `vp test -c vitest.browser.config.ts` in real Chromium
+@codejoo/layerman-example test` runs `vp test -c vitest.browser.config.ts` in real Chromium
 (shared `@vitest/browser-playwright` + `@vitejs/plugin-vue`), ~28 cases covering every core API
 (importing the built package directly) plus the Vue adapter (mounting the real Vant `App.vue`).
 Build the package first (`workspace:*` resolves to `dist`). Cooldown

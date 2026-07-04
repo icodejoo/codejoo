@@ -1,5 +1,5 @@
 /**
- * @codejoo/overlaymanager — 框架无关的 headless overlay 队列管理器。
+ * @codejoo/layerman — 框架无关的 headless overlay 队列管理器。
  *
  * 只负责「活跃 id + phase + 排序 + 门控 + 冷却 + 数据驱动」，**不碰任何 DOM/UI/动画**。
  * 渲染、蒙层、动画、z-index 全部由宿主完成；本包对外暴露响应式状态（`subscribe` +
@@ -39,10 +39,10 @@ export interface OverlayContext {
   [key: string]: unknown;
 }
 
-/** overlay 配置（`open` 的入参）。`id` 必传且唯一；`data` 对本包完全不透明。 */
+/** overlay 配置（`open` 的入参）。`id` 唯一；`data` 对本包完全不透明。 */
 export interface OverlayConfig<TData = unknown> {
-  /** 唯一键。用于队列追踪、事件标识、冷却持久化。 */
-  id: string;
+  /** 唯一键。用于队列追踪、事件标识、冷却持久化。不传则内部自动生成并直接入队（保证唯一，跳过同 id 覆盖判定）。 */
+  id?: string;
   /** 不透明载荷（宿主渲染所需；声明式自渲染组件可不传）。 */
   data?: TData;
   /** 命名 slot：每个 slot 一条独立串行队列。不填进默认队列。 */
@@ -148,15 +148,15 @@ export interface AsyncableStorage {
   set(key: string, value: string): void | Promise<void>;
 }
 
-/** `createOverlayManager` 配置。 */
-export interface OverlayManagerOptions {
+/** `createLayerman` 配置。 */
+export interface LayermanOptions {
   /** 全局转场间隔毫秒，默认 0。 */
   gap?: number;
   /** 关闭后自动移除：`true`（=300ms）| 数字（自定毫秒）| `false`（纯手动）。默认 `true`。 */
   autoRemove?: boolean | number;
   /** 冷却持久化存储；默认有 `localStorage` 用它，否则纯内存。 */
   storage?: AsyncableStorage;
-  /** 存储/广播键，默认 `overlay-manager:v1`。 */
+  /** 存储/广播键，默认 `layerman:v1`。 */
   storageKey?: string;
   /** 时间源，默认 `Date.now`（供测试）。 */
   now?: () => number;
@@ -169,7 +169,7 @@ export interface OverlayManagerOptions {
 }
 
 /** 管理器实例接口。 */
-export interface OverlayManager {
+export interface Layerman {
   open<TData = unknown, TResult = unknown>(config: OverlayConfig<TData>): OverlayHandle<TResult>;
   resolve(id: string, value: unknown): void;
   reject(id: string, error: unknown): void;
@@ -236,6 +236,9 @@ interface Entry {
   skipGap: boolean;
   /** 本次 open 是否豁免冷却计数（被 replace 从 open 态退回后重开）。 */
   exemptCooldown: boolean;
+  /** resolve() 在 pauseAll 期间落地：结果先记在这，resumeAll 时再处理（避免暂停期间变活跃）。 */
+  hasPendingResolve: boolean;
+  pendingResolveData?: unknown;
   phase: LogState;
   /** result 是否已兑现（resolve/reject/dismiss 任一）。 */
   settled: boolean;
@@ -404,7 +407,7 @@ class CooldownStore {
   }
 }
 
-class OverlayManagerImpl implements OverlayManager {
+class LayermanImpl implements Layerman {
   private gap: number;
   private autoRemoveDefault: boolean | number;
   private now: () => number;
@@ -426,6 +429,7 @@ class OverlayManagerImpl implements OverlayManager {
   private startedAt: number;
   private seqCounter = 0;
   private keyCounter = 0;
+  private idCounter = 0;
   private paused = false;
 
   private subscribers = new Set<(state: OverlayState) => void>();
@@ -434,13 +438,13 @@ class OverlayManagerImpl implements OverlayManager {
   private channel?: BroadcastChannel;
   private readyPromise: Promise<void>;
 
-  constructor(options: OverlayManagerOptions = {}) {
+  constructor(options: LayermanOptions = {}) {
     this.gap = options.gap ?? 0;
     this.autoRemoveDefault = options.autoRemove ?? true;
     this.now = options.now ?? Date.now;
     this.debug = options.debug ?? false;
     this.logger = options.logger ?? ((m) => console.log(m));
-    this.storageKey = options.storageKey ?? "overlay-manager:v1";
+    this.storageKey = options.storageKey ?? "layerman:v1";
     this.startedAt = this.now();
 
     const storage = options.storage ?? defaultStorage();
@@ -473,14 +477,24 @@ class OverlayManagerImpl implements OverlayManager {
 
   /* ── 日志 ── */
   private log(id: string, state: LogState): void {
-    if (this.debug) this.logger(`[overlays-manager]:${id}:${state}`);
+    if (this.debug) this.logger(`[layerman]:${id}:${state}`);
+  }
+
+  /** 安全调用宿主回调：抛错不应打断内部状态推进（emit/schedule 等后续步骤仍需执行）。 */
+  private safeInvoke(fn?: () => void): void {
+    if (!fn) return;
+    try {
+      fn();
+    } catch {
+      /* 宿主回调抛错——已忽略，不影响内部状态机推进 */
+    }
   }
 
   /* ── 入口：open ── */
   open<TData = unknown, TResult = unknown>(config: OverlayConfig<TData>): OverlayHandle<TResult> {
-    if (!config.id) throw new Error("[overlay-manager] overlay.id is required");
     const slot = config.slot ?? "";
-    const entry = this.createEntry(config as OverlayConfig, slot);
+    const id = config.id || this.genId();
+    const entry = this.createEntry(config as OverlayConfig, slot, id);
     const handle: OverlayHandle<TResult> = {
       id: entry.id,
       result: new Promise<TResult | DismissResult>((res, rej) => {
@@ -492,8 +506,14 @@ class OverlayManagerImpl implements OverlayManager {
     const existing = this.byId.get(entry.id);
     if (existing) {
       if (this.isActive(existing)) {
-        // 正在展示 → 直接 replace，旧的丢弃不回队列
+        // 正在展示：仅当新配置自身够资格显示才顶替（同 replace 的资格判定），否则不动当前活跃者，
+        // 直接丢弃本次 open（避免出现「关掉当前的、自己却显示不出来」的空白）。
+        if (!this.conditionsPass(entry) || !this.cooldownPass(entry)) {
+          this.settleDismiss(entry);
+          return handle;
+        }
         this.discardActive(existing);
+        if (existing.slot !== slot) this.schedule(existing.slot);
         entry.replaceJumped = true;
         entry.skipGap = true;
       } else {
@@ -514,7 +534,7 @@ class OverlayManagerImpl implements OverlayManager {
         else this.openOverlap(entry);
       } else {
         this.byId.delete(entry.id);
-        this.settleDismiss(entry);
+        this.finalizeRemoved(entry);
       }
       return handle;
     }
@@ -536,10 +556,14 @@ class OverlayManagerImpl implements OverlayManager {
     return handle;
   }
 
-  private createEntry(cfg: OverlayConfig, slot: string): Entry {
+  private genId(): string {
+    return `__layerman_auto_${++this.idCounter}`;
+  }
+
+  private createEntry(cfg: OverlayConfig, slot: string, id: string): Entry {
     return {
       cfg,
-      id: cfg.id,
+      id,
       slot,
       priority: cfg.priority ?? 0,
       instanceKey: ++this.keyCounter,
@@ -549,6 +573,7 @@ class OverlayManagerImpl implements OverlayManager {
       replaceJumped: false,
       skipGap: false,
       exemptCooldown: false,
+      hasPendingResolve: false,
       phase: LOG_STATE.pending,
       settled: false,
       settle: () => {},
@@ -578,10 +603,15 @@ class OverlayManagerImpl implements OverlayManager {
   /* ── 条件 & 冷却 ── */
   private conditionsPass(entry: Entry): boolean {
     const cfg = entry.cfg;
-    if (cfg.when) return cfg.when(this.context);
-    if (cfg.route != null && !OverlayManagerImpl.routeMatch(cfg.route, this.context.route)) return false;
-    if (cfg.requiresAuth != null && cfg.requiresAuth !== !!this.context.auth) return false;
-    return true;
+    try {
+      if (cfg.when) return cfg.when(this.context);
+      if (cfg.route != null && !LayermanImpl.routeMatch(cfg.route, this.context.route)) return false;
+      if (cfg.requiresAuth != null && cfg.requiresAuth !== !!this.context.auth) return false;
+      return true;
+    } catch {
+      // 宿主 when() 抛错——视为条件不满足，不让异常打断 setContext/schedule 的整轮推进
+      return false;
+    }
   }
 
   private static routeMatch(pattern: string | string[] | RegExp, route: string | undefined): boolean {
@@ -654,6 +684,16 @@ class OverlayManagerImpl implements OverlayManager {
   private onResolved(entry: Entry, data: unknown): void {
     // resolving 期间被 displace/clear → 不再是槽占用者，丢弃本次结果
     if (this.serial.get(entry.slot) !== entry || entry.phase !== LOG_STATE.resolving) return;
+    if (this.paused) {
+      // 暂停期间不得变为活跃（pauseAll 是全量冻结）：记下结果，resumeAll 时再处理。
+      entry.hasPendingResolve = true;
+      entry.pendingResolveData = data;
+      return;
+    }
+    this.finishResolve(entry, data);
+  }
+
+  private finishResolve(entry: Entry, data: unknown): void {
     if (data === null || data === undefined) {
       this.serial.delete(entry.slot);
       this.byId.delete(entry.id);
@@ -675,7 +715,7 @@ class OverlayManagerImpl implements OverlayManager {
     }
     entry.exemptCooldown = false;
     this.log(entry.id, LOG_STATE.open);
-    entry.cfg.onShow?.();
+    this.safeInvoke(entry.cfg.onShow);
     if (entry.cfg.duration != null) this.startDuration(entry);
     this.emit();
   }
@@ -689,7 +729,7 @@ class OverlayManagerImpl implements OverlayManager {
       if (rec && this.channel) this.channel.postMessage({ id: entry.id, rec });
     }
     this.log(entry.id, LOG_STATE.open);
-    entry.cfg.onShow?.();
+    this.safeInvoke(entry.cfg.onShow);
     if (entry.cfg.duration != null) this.startDuration(entry);
     this.emit();
   }
@@ -709,7 +749,7 @@ class OverlayManagerImpl implements OverlayManager {
     cur.replaceJumped = false;
     cur.skipGap = false;
     this.enqueue(cur);
-    if (wasOpen) cur.cfg.onClose?.();
+    if (wasOpen) this.safeInvoke(cur.cfg.onClose);
     this.log(cur.id, LOG_STATE.pending);
   }
 
@@ -717,9 +757,11 @@ class OverlayManagerImpl implements OverlayManager {
   private discardActive(existing: Entry): void {
     this.clearTimers(existing);
     if (existing.abort) existing.abort.abort();
+    const wasOpen = existing.phase === LOG_STATE.open;
     if (this.serial.get(existing.slot) === existing) this.serial.delete(existing.slot);
     if (existing.overlapping) this.overlapping = this.overlapping.filter((x) => x !== existing);
     this.byId.delete(existing.id);
+    if (wasOpen) this.safeInvoke(existing.cfg.onClose);
     this.finalizeRemoved(existing);
   }
 
@@ -730,7 +772,14 @@ class OverlayManagerImpl implements OverlayManager {
     const guard = e.cfg.beforeClose;
     if (guard) {
       // beforeClose 关闭守卫：返回（或 Promise resolve）`false` 则取消本次关闭；其余值放行。
-      Promise.resolve(guard()).then(
+      // guard() 本身可能同步抛错——放进 try 里，视同守卫拒绝，不让异常穿透 close()。
+      let result: boolean | Promise<boolean>;
+      try {
+        result = guard();
+      } catch {
+        return;
+      }
+      Promise.resolve(result).then(
         (ok) => {
           if (ok !== false && this.byId.get(id) === e && e.phase === LOG_STATE.open) this.doClose(e);
         },
@@ -747,7 +796,7 @@ class OverlayManagerImpl implements OverlayManager {
     e.phase = LOG_STATE.closing;
     this.clearDuration(e);
     this.log(e.id, LOG_STATE.closing);
-    e.cfg.onClose?.();
+    this.safeInvoke(e.cfg.onClose);
     this.emit();
     this.scheduleAutoRemove(e);
   }
@@ -781,7 +830,7 @@ class OverlayManagerImpl implements OverlayManager {
 
   private finalizeRemoved(e: Entry): void {
     this.log(e.id, LOG_STATE.closed);
-    e.cfg.onRemove?.();
+    this.safeInvoke(e.cfg.onRemove);
     this.settleDismiss(e);
   }
 
@@ -887,7 +936,16 @@ class OverlayManagerImpl implements OverlayManager {
       if (this.byId.get(e.id) === e && this.conditionsPass(e) && this.cooldownPass(e)) this.openOverlap(e);
       else if (this.byId.get(e.id) === e) {
         this.byId.delete(e.id);
-        this.settleDismiss(e);
+        this.finalizeRemoved(e);
+      }
+    }
+    // 放行暂停期间落地的 resolve() 结果（此前被冻结，未变为活跃）
+    for (const e of Array.from(this.serial.values())) {
+      if (e.hasPendingResolve) {
+        e.hasPendingResolve = false;
+        const data = e.pendingResolveData;
+        e.pendingResolveData = undefined;
+        this.finishResolve(e, data);
       }
     }
     for (const e of this.byId.values()) this.thawDuration(e);
@@ -964,7 +1022,7 @@ class OverlayManagerImpl implements OverlayManager {
     // stackIndex = 叠加渲染层序（入场序），isTopmost = 最上层。headless 不设 z-index，
     // 只把层序喂给宿主，由宿主算 z-index / 给非顶层加 pointer-events:none。
     const last = actives.length - 1;
-    const active = actives.map((e, i) => OverlayManagerImpl.toInstance(e, i, i === last));
+    const active = actives.map((e, i) => LayermanImpl.toInstance(e, i, i === last));
 
     const queued: string[] = [];
     for (const q of this.queues.values()) for (const e of q) queued.push(e.id);
@@ -1023,6 +1081,6 @@ class OverlayManagerImpl implements OverlayManager {
 }
 
 /** 创建一个 overlay 管理器实例。`await manager.ready()` 后开始工作（等冷却状态 hydrate）。 */
-export function createOverlayManager(options?: OverlayManagerOptions): OverlayManager {
-  return new OverlayManagerImpl(options);
+export function createLayerman(options?: LayermanOptions): Layerman {
+  return new LayermanImpl(options);
 }
