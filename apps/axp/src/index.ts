@@ -19,8 +19,8 @@ export {
 } from "./plugins/auth"
 export type { IAuthOptions, TAuthFunc } from "./plugins/auth"
 
-export { default as buildKey, $key } from "./plugins/build-key"
-export type { IBuildKeyOptions, IBuildKeyObject, KeyOpts } from "./plugins/build-key"
+export { default as reqkey, $key } from "./plugins/reqkey"
+export type { IReqkeyOptions, IReqkeyObject, KeyOpts } from "./plugins/reqkey"
 
 export { default as cache, removeCache, clearCache } from "./plugins/cache"
 export type { ICacheOptions } from "./plugins/cache"
@@ -31,8 +31,8 @@ export type { ICancelOptions } from "./plugins/cancel"
 export { default as envs } from "./plugins/envs"
 export type { IEnvRule, IEnvsOptions } from "./plugins/envs"
 
-export { default as normalizeRequest } from "./plugins/normalize-request"
-export type { INormalizeRequestOptions, TPredicate } from "./plugins/normalize-request"
+export { default as reqclean } from "./plugins/reqclean"
+export type { IReqcleanOptions, TPredicate } from "./plugins/reqclean"
 
 export { default as loading } from "./plugins/loading"
 export type { ILoadingOptions, TLoadingFunc } from "./plugins/loading"

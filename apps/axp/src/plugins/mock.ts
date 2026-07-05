@@ -46,8 +46,10 @@ export default function mock(
           return prev(config);
         }
 
-        // 克隆出 mock 专用 config（保留原始 config 以便回落真实接口）
-        const mockConfig = { ...config };
+        // 克隆出 mock 专用 config（保留原始 config 以便回落真实接口）。
+        // 显式关掉 cache/share：mockConfig 与 config 共享同一个 config.key，若探测 mock 时
+        // 被 cache/share 用该 key 写入/占用了条目，真实回落调用会命中"mock 探测"留下的脏数据。
+        const mockConfig = { ...config, cache: false as const, share: false as const };
         $rewriteUrl(mockConfig, opt.mockUrl);
 
         // 先打 mock，不存在(404/不可达)则回落原始请求 → 真实接口

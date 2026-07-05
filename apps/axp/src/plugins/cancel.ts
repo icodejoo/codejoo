@@ -10,6 +10,13 @@ const name = 'cancel'
 /** 每个 axios 实例对应的活跃 AbortController 集合 */
 const instances = new WeakMap<AxiosInstance, Set<AbortController>>();
 
+/** 标记"这个 signal 是本插件签发的"——`retry` 等插件用同一个 config 对象重发时，
+ *  `config.signal` 这个可枚举字段会熬过 `mergeConfig`，但 Symbol bag 里的 controller 不会
+ *  （已被上一次响应阶段 release 掉）。只看 `config.signal` 是否存在无法区分"用户自带"还是
+ *  "本插件上一轮发的、已释放的"，会导致重发请求永远拿不到新 controller、脱离 cancelAll 追踪。
+ *  用 signal 对象本身的身份做区分：命中这个 WeakSet → 本插件签发过，可以放心换发新的。 */
+const selfIssued = new WeakSet<AbortSignal>();
+
 
 /**
  * 取消请求插件：为每个未自带 `signal`/`cancelToken` 的请求自动注入 AbortController，
@@ -36,9 +43,13 @@ export default function cancel({ enable = true }: ICancelOptions = {}): Plugin {
 
             ctx.request(
                 function $cancel(config) {
-                    if (config.signal || config.cancelToken) return config;  // 用户自带，尊重
+                    if (config.cancelToken) return config;  // 用户自带，尊重
+                    // 有 signal 但不是本插件签发的 → 用户自带，尊重；是本插件签发的（含"上一轮
+                    // 发过、已被 release 的"）→ 换发一个新的，重新纳入追踪
+                    if (config.signal && !selfIssued.has(config.signal)) return config;
                     const ctrl = new AbortController();
                     config.signal = ctrl.signal;
+                    selfIssued.add(ctrl.signal);
                     // 内部 controller 收进私有 bag（Symbol 键），不以可枚举字段污染 config
                     setInternal(config, 'cancelCtrl', ctrl);
                     set.add(ctrl);

@@ -46,7 +46,9 @@ export default function repath(
                         }
 
                         //fall back to data ONLY when params didn't supply the value
-                        if (value === null && data) {
+                        //（`==` on purpose: params[key] can legitimately be `undefined`,
+                        // not just the `null` this variable starts at — either means "no value"）
+                        if (value == null && data) {
                             if (isObject(data) && key in data) {
                                 value = data[key];
                                 if (removeKey) {

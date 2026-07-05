@@ -52,8 +52,8 @@ describe('$resolveKey', () => {
     it('插件级函数再次之', () => {
         expect($resolveKey({} as any, {}, { key: () => 'plug' })).toBe('plug');
     });
-    it('回退到 config.key（build-key 兜底）', () => {
-        expect($resolveKey({ key: 'fromBuildKey' } as any, {}, {})).toBe('fromBuildKey');
+    it('回退到 config.key（reqkey 兜底）', () => {
+        expect($resolveKey({ key: 'fromReqkey' } as any, {}, {})).toBe('fromReqkey');
     });
     it('全部缺失 → undefined', () => {
         expect($resolveKey({} as any, {}, {})).toBeUndefined();

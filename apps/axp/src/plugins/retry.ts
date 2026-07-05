@@ -1,6 +1,7 @@
 
 import type { Plugin } from '../types';
 import { __DEV__ } from '../helper';
+import { AxiosError } from 'axios';
 import type { AxiosRequestConfig, AxiosResponse } from 'axios';
 
 
@@ -23,6 +24,9 @@ const COUNT_KEY = '__retryCount'
  *     故**重试请求不会重新触发这些 adapter 插件**（loading 不重复计数、不重新查/写缓存等）。
  *     如需重试期间维持 loading，请把 retry 装在 loading 之内或改用 share 的 retry 策略。
  *   - **最大次数后**：清理计数并 reject 最后一次的 error，链路下游正常 catch
+ *   - **不要与 `share({ policy: 'retry' })` 叠加在同一个 key 上**：share 的重试发生在
+ *     adapter 层、settle 前对本插件不可见；一旦 share 耗尽才 reject，本插件会再次整链路
+ *     重发，触发 share 全新一轮内部重试 —— 总次数变成两者 retries 的乘积而非取大值。
  *
  * @example
  *   useAxiosPlugin(ax).use(retry({ max: 3 }))
@@ -59,7 +63,18 @@ export default function retry({ enable = true, max = 0, isExceptionRequest }: IR
                 async (response) => {
                     const config = response.config;
                     const exc = $resolveException(config, defaults);
-                    if (exc && exc(response)) return attempt(config, response);
+                    // 包成真正的 AxiosError（携带 .response）——裸 response 一旦重试耗尽被 reject，
+                    // 下游 normalize-response 的 onRejected 读不到 err.response，会把真实业务
+                    // payload 丢成 { status: 0, data: null }。
+                    if (exc && exc(response)) {
+                        return attempt(config, new AxiosError(
+                            `[${name}] business exception`,
+                            undefined,
+                            config,
+                            undefined,
+                            response,
+                        ));
+                    }
                     delete (config as Record<string, number>)[COUNT_KEY];
                     return response;
                 },

@@ -1,6 +1,6 @@
 ---
 name: codejoo-axp
-description: Use when working in apps/axp (@codejoo/axp) — a typed, plugin-based HTTP client over axios. Core wraps an axios instance and dispatches verb calls into three response shapes; PluginManager auto-tracks/reverts every ctx side-effect; bundled plugins cover build-key, cache, share, retry, loading, auth, mock, filter-request, normalize-response, repath, envs, cancel. Covers architecture, the hard-won invariants (esp. axios mergeConfig re-merge), and how to extend/test.
+description: Use when working in apps/axp (@codejoo/axp) — a typed, plugin-based HTTP client over axios. Core wraps an axios instance and dispatches verb calls into three response shapes; PluginManager auto-tracks/reverts every ctx side-effect; bundled plugins cover reqkey, cache, share, retry, loading, auth, mock, reqclean, normalize-response, repath, envs, cancel. Covers architecture, the hard-won invariants (esp. axios mergeConfig re-merge), and how to extend/test.
 ---
 
 # @codejoo/axp
@@ -37,7 +37,7 @@ caller's (no priority field).
 - **PluginManager auto-reverts everything registered via `ctx`** — plugin authors write no cleanup. Return a cleanup fn from `install` only for non-axios resources (timers/sockets). `#refresh` re-runs every `install`, so install-time effects must be idempotent (e.g. `envs`).
 - **Ordering = `use()` order.** Request interceptors LIFO, response FIFO, transformers append-order, adapter last-wins. Documented, not enforced.
 - **`fn.name` reassign needs `Object.defineProperty`** under strict-mode ESM (plain `fn.name =` throws). Used by `normalize-response`, `repath`, `auth` so `eject(factory)` works after minify.
-- **`build-key` tests are relational** (`a===b` / `a!==b`), never literal hashes — preserve invariants (key-order-independent objects, ordered arrays, empty-container equivalence, separator anti-collision), not specific digests. Double-lane FNV-1a → ~64-bit.
+- **`reqkey` tests are relational** (`a===b` / `a!==b`), never literal hashes — preserve invariants (key-order-independent objects, ordered arrays, empty-container equivalence, separator anti-collision), not specific digests. Double-lane FNV-1a → ~64-bit.
 - **Schema is `model.MethodRefs` (method-major), consumed directly — no `_Indexed`.** `@codejoo/openapi2lang` emits TWO views: `model.PathRefs` (path-major, for openapi2lang's own `Request`/`OpenApi`) and `model.MethodRefs` (method-major `{ [method]: { [path]: [resp, req] } }`, **statically pre-expanded** by the emitter — `emitMethodRefs` in openapi's `typescript-emitter.ts`, NOT a TS-level `Invert<PathRefs>`). `Core<T>`'s `LoosePath`/`EntryFor` do `T[Mt][P]` literal lookups — O(1), no mapped/conditional fan-out. There used to be a `_Indexed<T>` type that inverted PathRefs at type-check time; it's gone — don't reintroduce it. Local route extension declaration-merges into `MethodRefs` (method-major nesting), not PathRefs. axp ships a hand-maintained fixture `types/paths.d.ts` containing both interfaces; regenerate via openapi's generate flow when the spec changes.
 
 ## Build & test (the real acceptance gate)

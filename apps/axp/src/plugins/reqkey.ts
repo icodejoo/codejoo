@@ -4,15 +4,15 @@ import type { Plugin, IPluginCommonRequestOptions, MaybeFun } from '../types';
 
 
 
-const name = 'build-key'
+const name = 'reqkey'
 
 /**
  *
  * @returns 对请求生成唯一key，用于防抖、缓存等
  */
-export default function buildKey({ after, before, enable = true, fastMode, ignoreKeys, ignoreValues, sample }: IBuildKeyOptions = {}): Plugin {
+export default function reqkey({ after, before, enable = true, fastMode, ignoreKeys, ignoreValues, sample }: IReqkeyOptions = {}): Plugin {
     // 插件级默认（请求级未指定时回退到此）
-    const defaults: IBuildKeyObject = { fastMode, ignoreKeys, ignoreValues, sample };
+    const defaults: IReqkeyObject = { fastMode, ignoreKeys, ignoreValues, sample };
     return {
         name: name,
         install(ctx) {
@@ -47,7 +47,7 @@ function isEnabled(k: unknown): boolean {
  *   - defaults：插件级默认配置；请求级未指定时回退到此
  *   - 优先级：请求级显式字段 > 插件级 defaults > 内置默认
  */
-export function $parse(config: AxiosRequestConfig, defaults?: IBuildKeyObject): string | null {
+export function $parse(config: AxiosRequestConfig, defaults?: IReqkeyObject): string | null {
     const build = config.key
     if (!build && build !== 0) return null
     // key:true → 默认 simple，插件级 fastMode 可覆盖；插件级 ignore 列表透传
@@ -291,12 +291,12 @@ function stringHash(s: string, h: number, sample: boolean): number | undefined {
     return hash('L' + l, h);
 }
 
-export interface IBuildKeyOptions extends IPluginCommonRequestOptions, IBuildKeyObject {
+export interface IReqkeyOptions extends IPluginCommonRequestOptions, IReqkeyObject {
 
 }
 
 
-export interface IBuildKeyObject {
+export interface IReqkeyObject {
     enable?: boolean
     /**
      * 是否启用简单模式。
@@ -325,7 +325,7 @@ export interface IBuildKeyObject {
 
 declare module "axios" {
     interface AxiosRequestConfig {
-        key?: MaybeFun<'deep' | IBuildKeyObject | number | null | undefined | void | boolean | ({} & string)>;
+        key?: MaybeFun<'deep' | IReqkeyObject | number | null | undefined | void | boolean | ({} & string)>;
     }
     interface InternalAxiosRequestConfig {
         key?: string

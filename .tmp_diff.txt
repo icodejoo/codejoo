@@ -1,0 +1,1618 @@
+warning: in the working copy of 'apps/overlay-manager/.claude/skills/overlay-manager/SKILL.md', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'apps/overlay-manager/README.md', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'apps/overlay-manager/README.zh-CN.md', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'apps/overlay-manager/example/README.md', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'apps/overlay-manager/example/index.html', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'apps/overlay-manager/example/package.json', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'apps/overlay-manager/example/src/App.vue', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'apps/overlay-manager/example/src/main.ts', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'apps/overlay-manager/example/src/overlay.ts', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'apps/overlay-manager/example/test/overlay.browser.test.ts', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'apps/overlay-manager/example/vitest.browser.config.ts', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'apps/overlay-manager/package.json', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'apps/overlay-manager/src/index.ts', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'apps/overlay-manager/src/react.ts', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'apps/overlay-manager/src/solid.ts', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'apps/overlay-manager/src/svelte.ts', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'apps/overlay-manager/src/vue.ts', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'apps/overlay-manager/test/overlay-manager.test.ts', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'apps/overlay-manager/test/react.test.ts', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'apps/overlay-manager/test/solid.test.ts', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'apps/overlay-manager/test/svelte.test.ts', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'apps/overlay-manager/test/types.test.ts', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'apps/overlay-manager/test/vue.test.ts', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'apps/overlay-manager/vite.config.ts', LF will be replaced by CRLF the next time Git touches it
+diff --git a/apps/overlay-manager/.claude/skills/overlay-manager/SKILL.md b/apps/overlay-manager/.claude/skills/overlay-manager/SKILL.md
+index aa8a00e..a703394 100644
+--- a/apps/overlay-manager/.claude/skills/overlay-manager/SKILL.md
++++ b/apps/overlay-manager/.claude/skills/overlay-manager/SKILL.md
+@@ -1,18 +1,18 @@
+ ---
+ name: overlay-manager
+ description: >-
+-  Work on @codejoo/overlaymanager (apps/overlay-manager) — the framework-agnostic
++  Work on @codejoo/layerman (apps/overlay-manager) — the framework-agnostic
+   HEADLESS overlay/dialog/modal/bottom-sheet/drawer queue manager (factory
+-  createOverlayManager). Read BEFORE modifying src/index.ts, its tests, or the READMEs.
++  createLayerman). Read BEFORE modifying src/index.ts, its tests, or the READMEs.
+   Covers architecture, the non-obvious invariants tests depend on, and the verify workflow.
+   Triggers on: overlay, dialog, modal, bottomsheet, drawer, queue, priority, replace,
+   overlap, affix, cooldown, resolve, setContext, subscribe, headless popup manager.
+ ---
+ 
+-# @codejoo/overlaymanager
++# @codejoo/layerman
+ 
+ `apps/overlay-manager` — a **framework-agnostic, headless** overlay queue manager. Package
+-`@codejoo/overlaymanager`, factory **`createOverlayManager()`**. It manages *when/which*
++`@codejoo/layerman`, factory **`createLayerman()`**. It manages *when/which*
+ overlays are active — queue, priority, conditions, cooldown, backend-driven resolution — and
+ **touches no DOM/UI/animation whatsoever**. The host renders the `active` list; the package is
+ pure logic with **zero runtime deps**.
+@@ -35,8 +35,8 @@ Public store/query methods (`subscribe`/`getSnapshot`/`getServerSnapshot`/`get`)
+ constructor** so consumers (e.g. React `useSyncExternalStore`) can pass them as bare refs without
+ losing `this`.
+ 
+-There is also a Flutter port at `D:\workspaces\dart-labs\overlaymanager` (separate repo) — NOT a
+-headless port; it embraces Flutter (`Overlay`/`OverlayEntry`, `OverlayManagerScope`), `show()` returns
++There is also a Flutter port at `D:\workspaces\dart-labs\layerman` (separate repo) — NOT a
++headless port; it embraces Flutter (`Overlay`/`OverlayEntry`, `LayermanScope`), `show()` returns
+ `Future<T?>`. See its own memory note.
+ 
+ ## Vue adapter (`src/vue.ts`)
+@@ -54,7 +54,7 @@ getter read `false` → v-model bounce). Function fields (`when`/`resolve`/hooks
+ resolved object, so `toValue` never mis-invokes them. **`useCurrentOverlay(om?)`** injects the current
+ overlay id (provided per-item by `provideCurrentOverlay(id)` in a central-renderer wrapper) and returns
+ the same handle without threading `id` — for the `<component :is>` idiom. Manager resolution is **plugin-default + param-override**: pass `om` explicitly,
+-else it `inject`s the one provided by `createOverlayManagerPlugin(om)` / `provideOverlayManager(om)`.
++else it `inject`s the one provided by `createLayermanPlugin(om)` / `provideLayerman(om)`.
+ 
+ **`model` is a `WritableComputedRef<boolean>` for third-party dialogs that expose only `v-model`**
+ (ElDialog/Vant/AntDV): get = is-active; `set(true)` = `open()` (skipped if already active);
+@@ -79,12 +79,15 @@ Vue (both function-style and template+ref), or anything, via `subscribe` + `getS
+ 
+ ## Architecture map (all in `src/index.ts`)
+ 
+-- **Factory, not singleton** — `createOverlayManager(opts)` → `OverlayManagerImpl`. Enables test
++- **Factory, not singleton** — `createLayerman(opts)` → `LayermanImpl`. Enables test
+   isolation and multiple managers. `await manager.ready()` awaits cooldown hydrate before use.
+ - **Slots = independent serial queues** — `queues: Map<slot, Entry[]>`, `serial: Map<slot, Entry>`
+   (0..1 occupant per slot: resolving/open/closing). `overlapping: Entry[]` is a global stack that
+   bypasses the serial rule. Default slot is `""`.
+-- **`byId: Map<id, Entry>`** — the single source of truth for lookup; `id` is required & unique.
++- **`byId: Map<id, Entry>`** — the single source of truth for lookup; `id` is unique. `open()`'s
++  `id` is optional — omitted ⇒ `genId()` mints `__layerman_auto_${n}` and the entry skips the
++  duplicate/existing-id dance entirely (guaranteed fresh), going straight into the normal
++  enqueue/schedule path.
+ - **Scheduler (`schedule(slot)`)** — never locks a candidate during the wait: on any trigger it
+   cancels the pending open-timer, re-picks `front` (sort `cmpEntry`: replace-jumped band first,
+   then priority desc, then FIFO `seq`) among *eligible* entries, computes
+@@ -124,7 +127,7 @@ Vue (both function-style and template+ref), or anything, via `subscribe` + `getS
+   side-effect-free and safe pre-hydrate; `getServerSnapshot()` returns a constant empty state.
+ - **Cross-tab** — optional `BroadcastChannel` (`${storageKey}:sync`) syncs cooldown counts only;
+   on receive it merges (max counts / latest ts) and re-schedules all slots.
+-- **Logging** — `debug` + `logger` emit `[overlays-manager]:${id}:${state}` where state ∈
++- **Logging** — `debug` + `logger` emit `[layerman]:${id}:${state}` where state ∈
+   {pending, resolving, open, closing, closed}. These 5 are internal lifecycle transitions; the
+   **public `OverlayInstance.phase` is only `open|closing`** (rendering contract stays minimal).
+ 
+@@ -172,7 +175,7 @@ Vue (both function-style and template+ref), or anything, via `subscribe` + `getS
+ 
+ **Sub-projects reuse the parent workspace's dependencies by default.** The example under
+ `example/` is a workspace member (`pnpm-workspace.yaml` globs `apps/*/example`) and pulls **every**
+-dep from the monorepo — `@codejoo/overlaymanager` via `workspace:*`, and tooling/libs via
++dep from the monorepo — `@codejoo/layerman` via `workspace:*`, and tooling/libs via
+ `catalog:` (`vue`, `vant`, `@vitejs/plugin-vue`, `vitest`, `@vitest/browser`,
+ `@vitest/browser-playwright`, `playwright`, `vite-plus`). Do NOT install a dep locally in a
+ sub-project unless it is genuinely sub-project-specific — and only then, and say why. Shared
+@@ -207,9 +210,9 @@ pnpm build         # vp pack → dist/esm
+ ```
+ 
+ There is also a runnable **Vue 3 + Vant example with a full-API browser test** at
+-`example/` — a **nested workspace member** (`@codejoo/overlaymanager-example`, private) that reuses
++`example/` — a **nested workspace member** (`@codejoo/layerman-example`, private) that reuses
+ every dep from the parent (see Dependency policy above). `pnpm --filter
+-@codejoo/overlaymanager-example test` runs `vp test -c vitest.browser.config.ts` in real Chromium
++@codejoo/layerman-example test` runs `vp test -c vitest.browser.config.ts` in real Chromium
+ (shared `@vitest/browser-playwright` + `@vitejs/plugin-vue`), ~28 cases covering every core API
+ (importing the built package directly) plus the Vue adapter (mounting the real Vant `App.vue`).
+ Build the package first (`workspace:*` resolves to `dist`). Cooldown
+diff --git a/apps/overlay-manager/README.md b/apps/overlay-manager/README.md
+index dd3842e..baa7c68 100644
+--- a/apps/overlay-manager/README.md
++++ b/apps/overlay-manager/README.md
+@@ -1,4 +1,4 @@
+-# @codejoo/overlaymanager
++# @codejoo/layerman
+ 
+ Framework-agnostic **headless** overlay queue manager for dialogs, modals, bottom-sheets, drawers
+ and toasts. It owns _when/which_ overlay is active — serial one-at-a-time queue with named slots,
+@@ -11,16 +11,16 @@ the `active` list; the package is pure logic with **zero runtime dependencies**.
+ ## Install
+ 
+ ```bash
+-pnpm add @codejoo/overlaymanager
++pnpm add @codejoo/layerman
+ # optional Vue 3 adapter is bundled under the /vue subpath (vue is an optional peer)
+ ```
+ 
+ ## Core quickstart
+ 
+ ```ts
+-import { createOverlayManager } from "@codejoo/overlaymanager";
++import { createLayerman } from "@codejoo/layerman";
+ 
+-const om = createOverlayManager({ gap: 300 });
++const om = createLayerman({ gap: 300 });
+ await om.ready(); // wait for cooldown state to hydrate from storage
+ 
+ // subscribe (framework-agnostic); active is the list you render
+@@ -82,13 +82,13 @@ The `/vue` subpath is a thin reactive bridge — composables only, no components
+ 
+ ```ts
+ // overlay.ts — create once
+-import { createOverlayManager } from "@codejoo/overlaymanager";
+-export const om = createOverlayManager();
++import { createLayerman } from "@codejoo/layerman";
++export const om = createLayerman();
+ 
+ // main.ts
+-import { createOverlayManagerPlugin } from "@codejoo/overlaymanager/vue";
++import { createLayermanPlugin } from "@codejoo/layerman/vue";
+ await om.ready();
+-app.use(createOverlayManagerPlugin(om)); // provides om app-wide (or pass om explicitly per call)
++app.use(createLayermanPlugin(om)); // provides om app-wide (or pass om explicitly per call)
+ ```
+ 
+ ### Idiom A — imperative + a central `<OverlayHost>`
+@@ -99,7 +99,7 @@ Overlays carry the component to render in `data`; one global host renders `activ
+ <!-- OverlayHost.vue — mount once at the app root -->
+ <script setup lang="ts">
+ import type { Component } from "vue";
+-import { useOverlays } from "@codejoo/overlaymanager/vue";
++import { useOverlays } from "@codejoo/layerman/vue";
+ import { om } from "./overlay";
+ 
+ type OverlayData = { comp: Component; props?: Record<string, unknown> };
+@@ -159,7 +159,7 @@ A component that already lives in the template delegates its visibility to the m
+ 
+ ```vue
+ <script setup lang="ts">
+-import { useOverlay } from "@codejoo/overlaymanager/vue";
++import { useOverlay } from "@codejoo/layerman/vue";
+ 
+ const { visible, phase, open, resolve } = useOverlay("promo");
+ defineExpose({ open }); // parent can call promoRef.open()
+@@ -183,7 +183,7 @@ const claimed = await promoRef.value.open({ priority: 10, cooldown: { day: 1 } }
+ `useOverlay(id, defaults?, om?)` returns `{ instance, visible, model, phase, open, close, remove,
+ resolve, reject, pause, resume }` (`defaults` covered below). The manager instance is resolved as
+ **plugin-default + explicit override**: pass `om` to any composable, or omit it to use the one from
+-`createOverlayManagerPlugin` / `provideOverlayManager`.
++`createLayermanPlugin` / `provideLayerman`.
+ 
+ For a **central renderer** (idiom A), wrap each rendered overlay in a tiny component that calls
+ `provideCurrentOverlay(o.id)`; the overlay component can then use `useCurrentOverlay()` to get its own
+@@ -197,7 +197,7 @@ you can't change their API. Use the writable `model`:
+ 
+ ```vue
+ <script setup lang="ts">
+-import { useOverlay } from "@codejoo/overlaymanager/vue";
++import { useOverlay } from "@codejoo/layerman/vue";
+ const { model, resolve } = useOverlay("confirm");
+ </script>
+ 
+@@ -263,16 +263,16 @@ not stuffed into a `v-model` synchronous boolean.
+ The same adapter shape ships for other frameworks (each an optional peer dep, thin bridge over the
+ core — no framework in the zero-dep core itself):
+ 
+-- **`@codejoo/overlaymanager/react`** — hooks via `useSyncExternalStore` (SSR-safe): `useOverlays`,
+-  `useOverlay(id, defaults?, om?)`, `OverlayManagerProvider` / `useOverlayManager`, `useCurrentOverlay`.
+-- **`@codejoo/overlaymanager/svelte`** — `svelte/store` readables (Svelte 4/5): `overlayState`,
+-  `overlays`, `overlay(id, defaults?, om?)`, `setOverlayManager` / `getOverlayManager`.
+-- **`@codejoo/overlaymanager/solid`** — signals: `useOverlayState`, `useOverlays`,
+-  `useOverlay(id, defaults?, om?)`, `OverlayManagerProvider` / `useOverlayManager`.
++- **`@codejoo/layerman/react`** — hooks via `useSyncExternalStore` (SSR-safe): `useOverlays`,
++  `useOverlay(id, defaults?, om?)`, `LayermanProvider` / `useLayerman`, `useCurrentOverlay`.
++- **`@codejoo/layerman/svelte`** — `svelte/store` readables (Svelte 4/5): `overlayState`,
++  `overlays`, `overlay(id, defaults?, om?)`, `setLayerman` / `getLayerman`.
++- **`@codejoo/layerman/solid`** — signals: `useOverlayState`, `useOverlays`,
++  `useOverlay(id, defaults?, om?)`, `LayermanProvider` / `useLayerman`.
+ 
+ Each exposes `{ instance, visible, phase, open, close, remove, resolve, reject, pause, resume }`
+ (Vue additionally has the writable `model` for `v-model`). A Flutter port lives separately at
+-`dart-labs/overlaymanager` (embraces Flutter's `Overlay`; `show()` returns `Future<T?>`).
++`dart-labs/layerman` (embraces Flutter's `Overlay`; `show()` returns `Future<T?>`).
+ 
+ ## License
+ 
+diff --git a/apps/overlay-manager/README.zh-CN.md b/apps/overlay-manager/README.zh-CN.md
+index 2a3a2c4..dded85e 100644
+--- a/apps/overlay-manager/README.zh-CN.md
++++ b/apps/overlay-manager/README.zh-CN.md
+@@ -1,4 +1,4 @@
+-# @codejoo/overlaymanager
++# @codejoo/layerman
+ 
+ 框架无关的 **headless** overlay 队列管理器,适用于 dialog、modal、bottomsheet、drawer、toast。
+ 它只负责「**该显示哪个 / 何时显示**」——串行「一次一个」队列、命名 slot、优先级 /
+@@ -10,7 +10,7 @@ replace / overlap / affix、按弹窗的条件与冷却、后端数据驱动的
+ ## 安装
+ 
+ ```bash
+-pnpm add @codejoo/overlaymanager
++pnpm add @codejoo/layerman
+ # 可选的 Vue 3 接入层在 /vue 子路径(vue 为可选 peer 依赖)
+ ```
+ 
+@@ -41,9 +41,9 @@ pnpm add @codejoo/overlaymanager
+ ## 快速上手
+ 
+ ```ts
+-import { createOverlayManager } from "@codejoo/overlaymanager";
++import { createLayerman } from "@codejoo/layerman";
+ 
+-const om = createOverlayManager({ gap: 300 });
++const om = createLayerman({ gap: 300 });
+ await om.ready(); // 等冷却状态从存储 hydrate
+ 
+ const unsub = om.subscribe((state) => render(state.active)); // active 就是你要渲染的列表
+@@ -64,17 +64,17 @@ om.close("welcome"); // → phase "closing";autoRemove(默认 300ms)后移除并
+ 
+ ```ts
+ // overlay.ts —— 全局创建一次
+-import { createOverlayManager } from "@codejoo/overlaymanager";
+-export const om = createOverlayManager();
++import { createLayerman } from "@codejoo/layerman";
++export const om = createLayerman();
+ 
+ // main.ts
+-import { createOverlayManagerPlugin } from "@codejoo/overlaymanager/vue";
++import { createLayermanPlugin } from "@codejoo/layerman/vue";
+ await om.ready();
+-app.use(createOverlayManagerPlugin(om)); // 全应用注入默认实例(也可每次调用显式传 om)
++app.use(createLayermanPlugin(om)); // 全应用注入默认实例(也可每次调用显式传 om)
+ ```
+ 
+ 管理器实例遵循「**插件默认 + 参数覆盖**」:给任意 composable 传 `om` 即优先用它,不传则回退到
+-`createOverlayManagerPlugin` / `provideOverlayManager` 注入的实例。
++`createLayermanPlugin` / `provideLayerman` 注入的实例。
+ 
+ ### 风格 A —— 命令式 + 中央渲染器 `<OverlayHost>`
+ 
+@@ -84,7 +84,7 @@ app.use(createOverlayManagerPlugin(om)); // 全应用注入默认实例(也可
+ <!-- OverlayHost.vue —— 挂在 App 根部,全局唯一 -->
+ <script setup lang="ts">
+ import type { Component } from "vue";
+-import { useOverlays } from "@codejoo/overlaymanager/vue";
++import { useOverlays } from "@codejoo/layerman/vue";
+ import { om } from "./overlay";
+ 
+ type OverlayData = { comp: Component; props?: Record<string, unknown> };
+@@ -143,7 +143,7 @@ if (ok) doDelete();
+ 
+ ```vue
+ <script setup lang="ts">
+-import { useOverlay } from "@codejoo/overlaymanager/vue";
++import { useOverlay } from "@codejoo/layerman/vue";
+ 
+ const { visible, phase, open, resolve } = useOverlay("promo");
+ defineExpose({ open }); // 父组件可 promoRef.open()
+@@ -178,7 +178,7 @@ API。用可写的 `model`:
+ 
+ ```vue
+ <script setup lang="ts">
+-import { useOverlay } from "@codejoo/overlaymanager/vue";
++import { useOverlay } from "@codejoo/layerman/vue";
+ const { model, resolve } = useOverlay("confirm");
+ </script>
+ 
+@@ -247,11 +247,11 @@ pnpm build   # vp pack → dist/esm(index + vue/react/svelte/solid 多入口)
+ 
+ 同样的适配层形态也提供给其他框架(各为可选 peer 依赖、核心零依赖不含任何框架):
+ 
+-- **`@codejoo/overlaymanager/react`** —— `useSyncExternalStore`(SSR 安全):`useOverlays`、`useOverlay(id, defaults?, om?)`、`OverlayManagerProvider`/`useOverlayManager`、`useCurrentOverlay`。
+-- **`@codejoo/overlaymanager/svelte`** —— `svelte/store` readable(兼容 4/5):`overlayState`、`overlays`、`overlay(id, defaults?, om?)`、`setOverlayManager`/`getOverlayManager`。
+-- **`@codejoo/overlaymanager/solid`** —— signal:`useOverlayState`、`useOverlays`、`useOverlay(id, defaults?, om?)`、`OverlayManagerProvider`/`useOverlayManager`。
++- **`@codejoo/layerman/react`** —— `useSyncExternalStore`(SSR 安全):`useOverlays`、`useOverlay(id, defaults?, om?)`、`LayermanProvider`/`useLayerman`、`useCurrentOverlay`。
++- **`@codejoo/layerman/svelte`** —— `svelte/store` readable(兼容 4/5):`overlayState`、`overlays`、`overlay(id, defaults?, om?)`、`setLayerman`/`getLayerman`。
++- **`@codejoo/layerman/solid`** —— signal:`useOverlayState`、`useOverlays`、`useOverlay(id, defaults?, om?)`、`LayermanProvider`/`useLayerman`。
+ 
+-各自返回 `{ instance, visible, phase, open, close, remove, resolve, reject, pause, resume }`(Vue 另有可写 `model` 供 v-model)。另有 Flutter 版在 `dart-labs/overlaymanager`(拥抱 Flutter 的 `Overlay`,`show()` 返回 `Future<T?>`)。
++各自返回 `{ instance, visible, phase, open, close, remove, resolve, reject, pause, resume }`(Vue 另有可写 `model` 供 v-model)。另有 Flutter 版在 `dart-labs/layerman`(拥抱 Flutter 的 `Overlay`,`show()` 返回 `Future<T?>`)。
+ 
+ ## License
+ 
+diff --git a/apps/overlay-manager/example/README.md b/apps/overlay-manager/example/README.md
+index c0abf00..f68ff45 100644
+--- a/apps/overlay-manager/example/README.md
++++ b/apps/overlay-manager/example/README.md
+@@ -1,9 +1,9 @@
+-# overlay-manager × Vue 3 + Vant example
++# layerman × Vue 3 + Vant example
+ 
+-A runnable demo + full-API browser test for `@codejoo/overlaymanager` and its `/vue` adapter,
++A runnable demo + full-API browser test for `@codejoo/layerman` and its `/vue` adapter,
+ driving real [Vant](https://vant-ui.github.io/vant/) components.
+ 
+-This is a **workspace member** — every dependency is reused from the monorepo (`@codejoo/overlaymanager`
++This is a **workspace member** — every dependency is reused from the monorepo (`@codejoo/layerman`
+ via `workspace:*`, and `vue`/`vant`/`@vitejs/plugin-vue`/`vitest`/`@vitest/browser*`/`playwright`/
+ `vite-plus` via the root `pnpm-workspace.yaml` catalog). Nothing is installed locally.
+ 
+@@ -22,8 +22,8 @@ via `workspace:*`, and `vue`/`vant`/`@vitejs/plugin-vue`/`vitest`/`@vitest/brows
+ 
+ ```bash
+ pnpm install                                   # from repo root (installs the whole workspace)
+-pnpm --filter @codejoo/overlaymanager build   # the example links the package by its dist
++pnpm --filter @codejoo/layerman build   # the example links the package by its dist
+ 
+-pnpm --filter @codejoo/overlaymanager-example dev    # vp dev — click around
+-pnpm --filter @codejoo/overlaymanager-example test   # vp test — real Chromium, full-API assertions
++pnpm --filter @codejoo/layerman-example dev    # vp dev — click around
++pnpm --filter @codejoo/layerman-example test   # vp test — real Chromium, full-API assertions
+ ```
+diff --git a/apps/overlay-manager/example/index.html b/apps/overlay-manager/example/index.html
+index b1ddcd9..3096cd0 100644
+--- a/apps/overlay-manager/example/index.html
++++ b/apps/overlay-manager/example/index.html
+@@ -3,7 +3,7 @@
+   <head>
+     <meta charset="UTF-8" />
+     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+-    <title>overlay-manager × Vant</title>
++    <title>layerman × Vant</title>
+   </head>
+   <body>
+     <div id="app"></div>
+diff --git a/apps/overlay-manager/example/package.json b/apps/overlay-manager/example/package.json
+index 75e20b0..206cab2 100644
+--- a/apps/overlay-manager/example/package.json
++++ b/apps/overlay-manager/example/package.json
+@@ -1,5 +1,5 @@
+ {
+-  "name": "@codejoo/overlaymanager-example",
++  "name": "@codejoo/layerman-example",
+   "private": true,
+   "type": "module",
+   "scripts": {
+@@ -7,7 +7,7 @@
+     "test": "vp test -c vitest.browser.config.ts"
+   },
+   "dependencies": {
+-    "@codejoo/overlaymanager": "workspace:*",
++    "@codejoo/layerman": "workspace:*",
+     "vant": "catalog:",
+     "vue": "catalog:"
+   },
+diff --git a/apps/overlay-manager/example/src/App.vue b/apps/overlay-manager/example/src/App.vue
+index 4867bf0..646fb92 100644
+--- a/apps/overlay-manager/example/src/App.vue
++++ b/apps/overlay-manager/example/src/App.vue
+@@ -2,8 +2,8 @@
+ import { computed } from "vue";
+ import { Button as VanButton, Dialog as VanDialog, Popup as VanPopup, showToast } from "vant";
+ 
+-import type { OverlayInstance } from "@codejoo/overlaymanager";
+-import { useOverlay, useOverlays } from "@codejoo/overlaymanager/vue";
++import type { OverlayInstance } from "@codejoo/layerman";
++import { useOverlay, useOverlays } from "@codejoo/layerman/vue";
+ 
+ import { om } from "./overlay";
+ 
+@@ -72,7 +72,7 @@ const backendResolve = () => {
+ 
+ <template>
+   <div style="padding: 20px; font-family: system-ui; max-width: 480px; margin: 0 auto">
+-    <h2>@codejoo/overlaymanager × Vant</h2>
++    <h2>@codejoo/layerman × Vant</h2>
+ 
+     <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin: 12px 0">
+       <VanButton size="small" type="primary" data-testid="queue" @click="queueThree">串行入队 3 个</VanButton>
+@@ -136,7 +136,7 @@ const backendResolve = () => {
+ 
+     <!-- 确认弹窗 + await 结果 -->
+     <VanDialog v-model:show="confirm.model.value" title="确认操作" show-cancel-button @confirm="confirm.resolve(true)" @cancel="confirm.resolve(false)">
+-      <div data-testid="dialog-body" style="padding: 24px; text-align: center">确定执行此操作吗？(由 overlay-manager 队列驱动)</div>
++      <div data-testid="dialog-body" style="padding: 24px; text-align: center">确定执行此操作吗？(由 layerman 队列驱动)</div>
+     </VanDialog>
+   </div>
+ </template>
+diff --git a/apps/overlay-manager/example/src/main.ts b/apps/overlay-manager/example/src/main.ts
+index ee85388..5429d1d 100644
+--- a/apps/overlay-manager/example/src/main.ts
++++ b/apps/overlay-manager/example/src/main.ts
+@@ -1,9 +1,9 @@
+ import { createApp } from "vue";
+ import "vant/lib/index.css";
+ 
+-import { createOverlayManagerPlugin } from "@codejoo/overlaymanager/vue";
++import { createLayermanPlugin } from "@codejoo/layerman/vue";
+ 
+ import App from "./App.vue";
+ import { om } from "./overlay";
+ 
+-createApp(App).use(createOverlayManagerPlugin(om)).mount("#app");
++createApp(App).use(createLayermanPlugin(om)).mount("#app");
+diff --git a/apps/overlay-manager/example/src/overlay.ts b/apps/overlay-manager/example/src/overlay.ts
+index 3fb8cd1..b4d4035 100644
+--- a/apps/overlay-manager/example/src/overlay.ts
++++ b/apps/overlay-manager/example/src/overlay.ts
+@@ -1,4 +1,4 @@
+-import { createOverlayManager } from "@codejoo/overlaymanager";
++import { createLayerman } from "@codejoo/layerman";
+ 
+ /** 演示用管理器：gap 300ms，肉眼可见"一次一个"又不拖沓。驱动本页 Vue/Vant UI。 */
+-export const om = createOverlayManager({ gap: 300, debug: true });
++export const om = createLayerman({ gap: 300, debug: true });
+diff --git a/apps/overlay-manager/example/test/overlay.browser.test.ts b/apps/overlay-manager/example/test/overlay.browser.test.ts
+index 9e05c37..dc659e2 100644
+--- a/apps/overlay-manager/example/test/overlay.browser.test.ts
++++ b/apps/overlay-manager/example/test/overlay.browser.test.ts
+@@ -1,21 +1,21 @@
+ // 真实 Chromium（@vitest/browser-playwright）中的全 API 集成测试。
+-// 核心 API：直接 import 已发布产物 @codejoo/overlaymanager，在浏览器里跑（真定时器、真 localStorage）。
++// 核心 API：直接 import 已发布产物 @codejoo/layerman，在浏览器里跑（真定时器、真 localStorage）。
+ // Vue 适配层：挂载真实 App.vue（Vant 组件），断言 useOverlay/model/plugin 等。
+ import "vant/lib/index.css";
+ 
+ import { afterEach, beforeEach, describe, expect, it } from "vitest";
+ import { createApp } from "vue";
+ 
+-import { createOverlayManager, type OverlayManager } from "@codejoo/overlaymanager";
+-import { createOverlayManagerPlugin } from "@codejoo/overlaymanager/vue";
++import { createLayerman, type Layerman } from "@codejoo/layerman";
++import { createLayermanPlugin } from "@codejoo/layerman/vue";
+ 
+ import App from "../src/App.vue";
+ import { om } from "../src/overlay";
+ 
+ const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+ let seq = 0;
+-const mk = (opts = {}): OverlayManager => createOverlayManager({ gap: 0, crossTab: false, storageKey: `t${++seq}`, ...opts });
+-const ids = (m: OverlayManager) => m.getSnapshot().active.map((o) => o.id);
++const mk = (opts = {}): Layerman => createLayerman({ gap: 0, crossTab: false, storageKey: `t${++seq}`, ...opts });
++const ids = (m: Layerman) => m.getSnapshot().active.map((o) => o.id);
+ 
+ beforeEach(() => localStorage.clear());
+ 
+@@ -295,7 +295,7 @@ describe("Vue 适配层（真实 App.vue + Vant）", () => {
+     host = document.createElement("div");
+     document.body.appendChild(host);
+     app = createApp(App);
+-    app.use(createOverlayManagerPlugin(om));
++    app.use(createLayermanPlugin(om));
+     app.mount(host);
+   });
+   afterEach(() => {
+diff --git a/apps/overlay-manager/example/vitest.browser.config.ts b/apps/overlay-manager/example/vitest.browser.config.ts
+index 3dc9293..4be8111 100644
+--- a/apps/overlay-manager/example/vitest.browser.config.ts
++++ b/apps/overlay-manager/example/vitest.browser.config.ts
+@@ -4,7 +4,7 @@ import { defineConfig } from "vitest/config";
+ 
+ /**
+  * 在真实 Chromium（Playwright）中运行的浏览器集成测试。
+- * 覆盖 @codejoo/overlaymanager 全部核心 API + Vue/Vant 适配层。
++ * 覆盖 @codejoo/layerman 全部核心 API + Vue/Vant 适配层。
+  * 全部依赖复用父工程 catalog（vue、vant、plugin-vue、vitest、@vitest/browser 系列、playwright）。
+  */
+ export default defineConfig({
+diff --git a/apps/overlay-manager/package.json b/apps/overlay-manager/package.json
+index cc8d225..366ed51 100644
+--- a/apps/overlay-manager/package.json
++++ b/apps/overlay-manager/package.json
+@@ -1,6 +1,6 @@
+ {
+-  "name": "@codejoo/overlaymanager",
+-  "version": "0.1.0",
++  "name": "@codejoo/layerman",
++  "version": "0.0.1",
+   "description": "Framework-agnostic headless overlay/dialog/modal/bottom-sheet/drawer queue manager: serial one-at-a-time queue with named slots, priority/replace/overlap/affix, per-overlay conditions (route/auth/predicate) and cooldown (session/day/hour/minute/total/min-gap), backend-driven async resolve, imperative promise results, two-phase close, injectable async storage, cross-tab cooldown sync — zero runtime deps, no DOM.",
+   "keywords": [
+     "bottom-sheet",
+diff --git a/apps/overlay-manager/src/index.ts b/apps/overlay-manager/src/index.ts
+index a8f2f1b..2b69817 100644
+--- a/apps/overlay-manager/src/index.ts
++++ b/apps/overlay-manager/src/index.ts
+@@ -1,5 +1,5 @@
+ /**
+- * @codejoo/overlaymanager — 框架无关的 headless overlay 队列管理器。
++ * @codejoo/layerman — 框架无关的 headless overlay 队列管理器。
+  *
+  * 只负责「活跃 id + phase + 排序 + 门控 + 冷却 + 数据驱动」，**不碰任何 DOM/UI/动画**。
+  * 渲染、蒙层、动画、z-index 全部由宿主完成；本包对外暴露响应式状态（`subscribe` +
+@@ -39,10 +39,10 @@ export interface OverlayContext {
+   [key: string]: unknown;
+ }
+ 
+-/** overlay 配置（`open` 的入参）。`id` 必传且唯一；`data` 对本包完全不透明。 */
++/** overlay 配置（`open` 的入参）。`id` 唯一；`data` 对本包完全不透明。 */
+ export interface OverlayConfig<TData = unknown> {
+-  /** 唯一键。用于队列追踪、事件标识、冷却持久化。 */
+-  id: string;
++  /** 唯一键。用于队列追踪、事件标识、冷却持久化。不传则内部自动生成并直接入队（保证唯一，跳过同 id 覆盖判定）。 */
++  id?: string;
+   /** 不透明载荷（宿主渲染所需；声明式自渲染组件可不传）。 */
+   data?: TData;
+   /** 命名 slot：每个 slot 一条独立串行队列。不填进默认队列。 */
+@@ -148,15 +148,15 @@ export interface AsyncableStorage {
+   set(key: string, value: string): void | Promise<void>;
+ }
+ 
+-/** `createOverlayManager` 配置。 */
+-export interface OverlayManagerOptions {
++/** `createLayerman` 配置。 */
++export interface LayermanOptions {
+   /** 全局转场间隔毫秒，默认 0。 */
+   gap?: number;
+   /** 关闭后自动移除：`true`（=300ms）| 数字（自定毫秒）| `false`（纯手动）。默认 `true`。 */
+   autoRemove?: boolean | number;
+   /** 冷却持久化存储；默认有 `localStorage` 用它，否则纯内存。 */
+   storage?: AsyncableStorage;
+-  /** 存储/广播键，默认 `overlay-manager:v1`。 */
++  /** 存储/广播键，默认 `layerman:v1`。 */
+   storageKey?: string;
+   /** 时间源，默认 `Date.now`（供测试）。 */
+   now?: () => number;
+@@ -169,7 +169,7 @@ export interface OverlayManagerOptions {
+ }
+ 
+ /** 管理器实例接口。 */
+-export interface OverlayManager {
++export interface Layerman {
+   open<TData = unknown, TResult = unknown>(config: OverlayConfig<TData>): OverlayHandle<TResult>;
+   resolve(id: string, value: unknown): void;
+   reject(id: string, error: unknown): void;
+@@ -236,6 +236,9 @@ interface Entry {
+   skipGap: boolean;
+   /** 本次 open 是否豁免冷却计数（被 replace 从 open 态退回后重开）。 */
+   exemptCooldown: boolean;
++  /** resolve() 在 pauseAll 期间落地：结果先记在这，resumeAll 时再处理（避免暂停期间变活跃）。 */
++  hasPendingResolve: boolean;
++  pendingResolveData?: unknown;
+   phase: LogState;
+   /** result 是否已兑现（resolve/reject/dismiss 任一）。 */
+   settled: boolean;
+@@ -404,7 +407,7 @@ class CooldownStore {
+   }
+ }
+ 
+-class OverlayManagerImpl implements OverlayManager {
++class LayermanImpl implements Layerman {
+   private gap: number;
+   private autoRemoveDefault: boolean | number;
+   private now: () => number;
+@@ -426,6 +429,7 @@ class OverlayManagerImpl implements OverlayManager {
+   private startedAt: number;
+   private seqCounter = 0;
+   private keyCounter = 0;
++  private idCounter = 0;
+   private paused = false;
+ 
+   private subscribers = new Set<(state: OverlayState) => void>();
+@@ -434,13 +438,13 @@ class OverlayManagerImpl implements OverlayManager {
+   private channel?: BroadcastChannel;
+   private readyPromise: Promise<void>;
+ 
+-  constructor(options: OverlayManagerOptions = {}) {
++  constructor(options: LayermanOptions = {}) {
+     this.gap = options.gap ?? 0;
+     this.autoRemoveDefault = options.autoRemove ?? true;
+     this.now = options.now ?? Date.now;
+     this.debug = options.debug ?? false;
+     this.logger = options.logger ?? ((m) => console.log(m));
+-    this.storageKey = options.storageKey ?? "overlay-manager:v1";
++    this.storageKey = options.storageKey ?? "layerman:v1";
+     this.startedAt = this.now();
+ 
+     const storage = options.storage ?? defaultStorage();
+@@ -473,14 +477,24 @@ class OverlayManagerImpl implements OverlayManager {
+ 
+   /* ── 日志 ── */
+   private log(id: string, state: LogState): void {
+-    if (this.debug) this.logger(`[overlays-manager]:${id}:${state}`);
++    if (this.debug) this.logger(`[layerman]:${id}:${state}`);
++  }
++
++  /** 安全调用宿主回调：抛错不应打断内部状态推进（emit/schedule 等后续步骤仍需执行）。 */
++  private safeInvoke(fn?: () => void): void {
++    if (!fn) return;
++    try {
++      fn();
++    } catch {
++      /* 宿主回调抛错——已忽略，不影响内部状态机推进 */
++    }
+   }
+ 
+   /* ── 入口：open ── */
+   open<TData = unknown, TResult = unknown>(config: OverlayConfig<TData>): OverlayHandle<TResult> {
+-    if (!config.id) throw new Error("[overlay-manager] overlay.id is required");
+     const slot = config.slot ?? "";
+-    const entry = this.createEntry(config as OverlayConfig, slot);
++    const id = config.id ?? this.genId();
++    const entry = this.createEntry(config as OverlayConfig, slot, id);
+     const handle: OverlayHandle<TResult> = {
+       id: entry.id,
+       result: new Promise<TResult | DismissResult>((res, rej) => {
+@@ -492,8 +506,14 @@ class OverlayManagerImpl implements OverlayManager {
+     const existing = this.byId.get(entry.id);
+     if (existing) {
+       if (this.isActive(existing)) {
+-        // 正在展示 → 直接 replace，旧的丢弃不回队列
++        // 正在展示：仅当新配置自身够资格显示才顶替（同 replace 的资格判定），否则不动当前活跃者，
++        // 直接丢弃本次 open（避免出现「关掉当前的、自己却显示不出来」的空白）。
++        if (!this.conditionsPass(entry) || !this.cooldownPass(entry)) {
++          this.settleDismiss(entry);
++          return handle;
++        }
+         this.discardActive(existing);
++        if (existing.slot !== slot) this.schedule(existing.slot);
+         entry.replaceJumped = true;
+         entry.skipGap = true;
+       } else {
+@@ -514,7 +534,7 @@ class OverlayManagerImpl implements OverlayManager {
+         else this.openOverlap(entry);
+       } else {
+         this.byId.delete(entry.id);
+-        this.settleDismiss(entry);
++        this.finalizeRemoved(entry);
+       }
+       return handle;
+     }
+@@ -536,10 +556,14 @@ class OverlayManagerImpl implements OverlayManager {
+     return handle;
+   }
+ 
+-  private createEntry(cfg: OverlayConfig, slot: string): Entry {
++  private genId(): string {
++    return `__layerman_auto_${++this.idCounter}`;
++  }
++
++  private createEntry(cfg: OverlayConfig, slot: string, id: string): Entry {
+     return {
+       cfg,
+-      id: cfg.id,
++      id,
+       slot,
+       priority: cfg.priority ?? 0,
+       instanceKey: ++this.keyCounter,
+@@ -549,6 +573,7 @@ class OverlayManagerImpl implements OverlayManager {
+       replaceJumped: false,
+       skipGap: false,
+       exemptCooldown: false,
++      hasPendingResolve: false,
+       phase: LOG_STATE.pending,
+       settled: false,
+       settle: () => {},
+@@ -578,10 +603,15 @@ class OverlayManagerImpl implements OverlayManager {
+   /* ── 条件 & 冷却 ── */
+   private conditionsPass(entry: Entry): boolean {
+     const cfg = entry.cfg;
+-    if (cfg.when) return cfg.when(this.context);
+-    if (cfg.route != null && !OverlayManagerImpl.routeMatch(cfg.route, this.context.route)) return false;
+-    if (cfg.requiresAuth != null && cfg.requiresAuth !== !!this.context.auth) return false;
+-    return true;
++    try {
++      if (cfg.when) return cfg.when(this.context);
++      if (cfg.route != null && !LayermanImpl.routeMatch(cfg.route, this.context.route)) return false;
++      if (cfg.requiresAuth != null && cfg.requiresAuth !== !!this.context.auth) return false;
++      return true;
++    } catch {
++      // 宿主 when() 抛错——视为条件不满足，不让异常打断 setContext/schedule 的整轮推进
++      return false;
++    }
+   }
+ 
+   private static routeMatch(pattern: string | string[] | RegExp, route: string | undefined): boolean {
+@@ -654,6 +684,16 @@ class OverlayManagerImpl implements OverlayManager {
+   private onResolved(entry: Entry, data: unknown): void {
+     // resolving 期间被 displace/clear → 不再是槽占用者，丢弃本次结果
+     if (this.serial.get(entry.slot) !== entry || entry.phase !== LOG_STATE.resolving) return;
++    if (this.paused) {
++      // 暂停期间不得变为活跃（pauseAll 是全量冻结）：记下结果，resumeAll 时再处理。
++      entry.hasPendingResolve = true;
++      entry.pendingResolveData = data;
++      return;
++    }
++    this.finishResolve(entry, data);
++  }
++
++  private finishResolve(entry: Entry, data: unknown): void {
+     if (data === null || data === undefined) {
+       this.serial.delete(entry.slot);
+       this.byId.delete(entry.id);
+@@ -675,7 +715,7 @@ class OverlayManagerImpl implements OverlayManager {
+     }
+     entry.exemptCooldown = false;
+     this.log(entry.id, LOG_STATE.open);
+-    entry.cfg.onShow?.();
++    this.safeInvoke(entry.cfg.onShow);
+     if (entry.cfg.duration != null) this.startDuration(entry);
+     this.emit();
+   }
+@@ -689,7 +729,7 @@ class OverlayManagerImpl implements OverlayManager {
+       if (rec && this.channel) this.channel.postMessage({ id: entry.id, rec });
+     }
+     this.log(entry.id, LOG_STATE.open);
+-    entry.cfg.onShow?.();
++    this.safeInvoke(entry.cfg.onShow);
+     if (entry.cfg.duration != null) this.startDuration(entry);
+     this.emit();
+   }
+@@ -709,7 +749,7 @@ class OverlayManagerImpl implements OverlayManager {
+     cur.replaceJumped = false;
+     cur.skipGap = false;
+     this.enqueue(cur);
+-    if (wasOpen) cur.cfg.onClose?.();
++    if (wasOpen) this.safeInvoke(cur.cfg.onClose);
+     this.log(cur.id, LOG_STATE.pending);
+   }
+ 
+@@ -717,9 +757,11 @@ class OverlayManagerImpl implements OverlayManager {
+   private discardActive(existing: Entry): void {
+     this.clearTimers(existing);
+     if (existing.abort) existing.abort.abort();
++    const wasOpen = existing.phase === LOG_STATE.open;
+     if (this.serial.get(existing.slot) === existing) this.serial.delete(existing.slot);
+     if (existing.overlapping) this.overlapping = this.overlapping.filter((x) => x !== existing);
+     this.byId.delete(existing.id);
++    if (wasOpen) this.safeInvoke(existing.cfg.onClose);
+     this.finalizeRemoved(existing);
+   }
+ 
+@@ -747,7 +789,7 @@ class OverlayManagerImpl implements OverlayManager {
+     e.phase = LOG_STATE.closing;
+     this.clearDuration(e);
+     this.log(e.id, LOG_STATE.closing);
+-    e.cfg.onClose?.();
++    this.safeInvoke(e.cfg.onClose);
+     this.emit();
+     this.scheduleAutoRemove(e);
+   }
+@@ -781,7 +823,7 @@ class OverlayManagerImpl implements OverlayManager {
+ 
+   private finalizeRemoved(e: Entry): void {
+     this.log(e.id, LOG_STATE.closed);
+-    e.cfg.onRemove?.();
++    this.safeInvoke(e.cfg.onRemove);
+     this.settleDismiss(e);
+   }
+ 
+@@ -887,7 +929,16 @@ class OverlayManagerImpl implements OverlayManager {
+       if (this.byId.get(e.id) === e && this.conditionsPass(e) && this.cooldownPass(e)) this.openOverlap(e);
+       else if (this.byId.get(e.id) === e) {
+         this.byId.delete(e.id);
+-        this.settleDismiss(e);
++        this.finalizeRemoved(e);
++      }
++    }
++    // 放行暂停期间落地的 resolve() 结果（此前被冻结，未变为活跃）
++    for (const e of Array.from(this.serial.values())) {
++      if (e.hasPendingResolve) {
++        e.hasPendingResolve = false;
++        const data = e.pendingResolveData;
++        e.pendingResolveData = undefined;
++        this.finishResolve(e, data);
+       }
+     }
+     for (const e of this.byId.values()) this.thawDuration(e);
+@@ -964,7 +1015,7 @@ class OverlayManagerImpl implements OverlayManager {
+     // stackIndex = 叠加渲染层序（入场序），isTopmost = 最上层。headless 不设 z-index，
+     // 只把层序喂给宿主，由宿主算 z-index / 给非顶层加 pointer-events:none。
+     const last = actives.length - 1;
+-    const active = actives.map((e, i) => OverlayManagerImpl.toInstance(e, i, i === last));
++    const active = actives.map((e, i) => LayermanImpl.toInstance(e, i, i === last));
+ 
+     const queued: string[] = [];
+     for (const q of this.queues.values()) for (const e of q) queued.push(e.id);
+@@ -1023,6 +1074,6 @@ class OverlayManagerImpl implements OverlayManager {
+ }
+ 
+ /** 创建一个 overlay 管理器实例。`await manager.ready()` 后开始工作（等冷却状态 hydrate）。 */
+-export function createOverlayManager(options?: OverlayManagerOptions): OverlayManager {
+-  return new OverlayManagerImpl(options);
++export function createLayerman(options?: LayermanOptions): Layerman {
++  return new LayermanImpl(options);
+ }
+diff --git a/apps/overlay-manager/src/react.ts b/apps/overlay-manager/src/react.ts
+index 68fe57a..e0dce44 100644
+--- a/apps/overlay-manager/src/react.ts
++++ b/apps/overlay-manager/src/react.ts
+@@ -1,47 +1,47 @@
+ /**
+- * @codejoo/overlaymanager/react — React 18/19 接入层（可选 peer 依赖 `react`）。
++ * @codejoo/layerman/react — React 18/19 接入层（可选 peer 依赖 `react`）。
+  *
+  * 只做一件事：把管理器的 `subscribe`+`getSnapshot`(+`getServerSnapshot`) 经 `useSyncExternalStore`
+  * 桥成 React 状态（引用变即触发、天然抗 tearing、SSR 安全），再在其上封出命令式 / 声明式两种
+  * 唤起风格的 hook。不含任何渲染组件——渲染留给宿主（本文件保持 .ts，无 JSX）。
+  *
+  * 管理器实例的获取遵循「Context 默认 + 参数覆盖」：hook 的可选 `om` 参数优先，缺省则从
+- * `OverlayManagerProvider` 注入的实例回退，取不到则抛错。
++ * `LayermanProvider` 注入的实例回退，取不到则抛错。
+  */
+ 
+ import { createContext, createElement, type FunctionComponent, type ReactNode, useCallback, useContext, useMemo, useRef, useSyncExternalStore } from "react";
+ 
+-import type { OverlayConfig, OverlayHandle, OverlayInstance, OverlayManager, OverlayState } from "./index.ts";
++import type { OverlayConfig, OverlayHandle, OverlayInstance, Layerman, OverlayState } from "./index.ts";
+ 
+ /* ────────────────────────────── Context 注入 ────────────────────────────── */
+ 
+-/** 注入默认管理器的 Context（`useOverlayManager`/各 hook 缺省时回退到它）。 */
+-export const OverlayManagerContext = createContext<OverlayManager | null>(null);
++/** 注入默认管理器的 Context（`useLayerman`/各 hook 缺省时回退到它）。 */
++export const LayermanContext = createContext<Layerman | null>(null);
+ 
+ /** Provider 的 props。 */
+-export interface OverlayManagerProviderProps {
++export interface LayermanProviderProps {
+   /** 要注入的管理器实例。 */
+-  manager: OverlayManager;
++  manager: Layerman;
+   children?: ReactNode;
+ }
+ 
+ /**
+- * 为子树注入默认管理器：`<OverlayManagerProvider manager={om}>…</OverlayManagerProvider>`。
++ * 为子树注入默认管理器：`<LayermanProvider manager={om}>…</LayermanProvider>`。
+  * 子树内的 hook 不传 `om` 时即从此取。
+  */
+-export const OverlayManagerProvider: FunctionComponent<OverlayManagerProviderProps> = ({ manager, children }) => createElement(OverlayManagerContext.Provider, { value: manager }, children);
++export const LayermanProvider: FunctionComponent<LayermanProviderProps> = ({ manager, children }) => createElement(LayermanContext.Provider, { value: manager }, children);
+ 
+ /** 工厂式写法：预绑定一个管理器，返回一个只需 `children` 的 Provider 组件。 */
+-export function createOverlayManagerProvider(manager: OverlayManager): FunctionComponent<{ children?: ReactNode }> {
+-  return ({ children }) => createElement(OverlayManagerContext.Provider, { value: manager }, children);
++export function createLayermanProvider(manager: Layerman): FunctionComponent<{ children?: ReactNode }> {
++  return ({ children }) => createElement(LayermanContext.Provider, { value: manager }, children);
+ }
+ 
+ /** 取当前生效的管理器：显式 `om` 优先，否则读 Context，都没有则抛错。 */
+-export function useOverlayManager(om?: OverlayManager): OverlayManager {
+-  const fromContext = useContext(OverlayManagerContext);
++export function useLayerman(om?: Layerman): Layerman {
++  const fromContext = useContext(LayermanContext);
+   const resolved = om ?? fromContext;
+   if (!resolved) {
+-    throw new Error("[overlay-manager/react] no manager available — pass one explicitly or wrap with <OverlayManagerProvider>");
++    throw new Error("[layerman/react] no manager available — pass one explicitly or wrap with <LayermanProvider>");
+   }
+   return resolved;
+ }
+@@ -52,8 +52,8 @@ export function useOverlayManager(om?: OverlayManager): OverlayManager {
+  * 把管理器状态桥成 React 状态（`useSyncExternalStore` 自带订阅/退订，抗 tearing、SSR 安全）。
+  * 服务端 / hydration 用 `getServerSnapshot`（核心返回冻结的空态）。
+  */
+-export function useOverlayState(om?: OverlayManager): OverlayState {
+-  const m = useOverlayManager(om);
++export function useOverlayState(om?: Layerman): OverlayState {
++  const m = useLayerman(om);
+   // 绑定 this 并稳定引用：管理器方法作为裸引用传入会丢失 this，且 useSyncExternalStore 要求
+   // subscribe 引用稳定（否则每次渲染都退订重订）。以 m 为 key 记忆一组绑定后的方法。
+   const store = useMemo(
+@@ -68,7 +68,7 @@ export function useOverlayState(om?: OverlayManager): OverlayState {
+ }
+ 
+ /** 命令式风格：拿到 active / queued，用于中央渲染器遍历。 */
+-export function useOverlays(om?: OverlayManager): {
++export function useOverlays(om?: Layerman): {
+   active: readonly OverlayInstance[];
+   queued: readonly string[];
+ } {
+@@ -109,8 +109,8 @@ export interface UseOverlayReturn<TData = unknown> {
+  * `defaults` 可传普通对象或返回配置的函数（**在每次 open 时调用取最新值**——不是持续追踪，而是
+  * 每次唤起读一次）。用 `useRef` 稳定引用避免因 `defaults` 每次渲染变化而重建回调、触发重渲。
+  */
+-export function useOverlay<TData = unknown>(id: string, defaults?: OverlayDefaults<TData>, om?: OverlayManager): UseOverlayReturn<TData> {
+-  const m = useOverlayManager(om);
++export function useOverlay<TData = unknown>(id: string, defaults?: OverlayDefaults<TData>, om?: Layerman): UseOverlayReturn<TData> {
++  const m = useLayerman(om);
+   const state = useOverlayState(m);
+   const instance = useMemo(() => state.active.find((o: OverlayInstance) => o.id === id), [state, id]);
+ 
+@@ -167,10 +167,10 @@ export const provideCurrentOverlay: FunctionComponent<CurrentOverlayProviderProp
+  * 在 overlay 组件**内部**使用：经 Context 拿到自身 id，返回与 `useOverlay(id)` 相同的句柄，
+  * 无需父层透传 id。需外层用 `<provideCurrentOverlay id={id}>`（或直接用 `useOverlay(id)`）。
+  */
+-export function useCurrentOverlay<TData = unknown>(om?: OverlayManager): UseOverlayReturn<TData> {
++export function useCurrentOverlay<TData = unknown>(om?: Layerman): UseOverlayReturn<TData> {
+   const id = useContext(CurrentOverlayContext);
+   if (!id) {
+-    throw new Error("[overlay-manager/react] useCurrentOverlay(): no current overlay — wrap the rendered overlay with <provideCurrentOverlay id={id}>");
++    throw new Error("[layerman/react] useCurrentOverlay(): no current overlay — wrap the rendered overlay with <provideCurrentOverlay id={id}>");
+   }
+   return useOverlay<TData>(id, undefined, om);
+ }
+diff --git a/apps/overlay-manager/src/solid.ts b/apps/overlay-manager/src/solid.ts
+index 42a9b32..3ab3e2b 100644
+--- a/apps/overlay-manager/src/solid.ts
++++ b/apps/overlay-manager/src/solid.ts
+@@ -1,12 +1,12 @@
+ /**
+- * @codejoo/overlaymanager/solid — SolidJS 接入层（可选 peer 依赖 `solid-js`）。
++ * @codejoo/layerman/solid — SolidJS 接入层（可选 peer 依赖 `solid-js`）。
+  *
+  * 只做一件事：把管理器的 `subscribe`+`getSnapshot` 桥成 Solid signal（accessor），再在其上封出
+  * 命令式 / 声明式两种唤起风格的原语。不含任何渲染组件、不写 JSX、不依赖 solid 的编译器——只用
+  * solid-js 运行时原语（`createSignal`/`createMemo`/`onCleanup`/`createContext`/`useContext`）。
+  *
+  * 管理器实例的获取遵循「Provider 默认 + 参数覆盖」：composable 的可选 `om` 参数优先，缺省则从
+- * `OverlayManagerProvider` / `provideOverlayManager` 注入的实例回退。
++ * `LayermanProvider` / `provideLayerman` 注入的实例回退。
+  *
+  * 所有 composable 假定在 Solid 响应式作用域内调用（组件 `setup` 或 `createRoot` 内）——signal 的
+  * 创建、`onCleanup` 退订、`useContext` 注入均依赖当前 owner/tracking scope。
+@@ -14,25 +14,25 @@
+ 
+ import { type Accessor, createContext, createSignal, getOwner, onCleanup, useContext } from "solid-js";
+ 
+-import type { OverlayConfig, OverlayHandle, OverlayInstance, OverlayManager, OverlayState } from "./index.ts";
++import type { OverlayConfig, OverlayHandle, OverlayInstance, Layerman, OverlayState } from "./index.ts";
+ 
+-/** 「当前管理器」注入 Context（idiomatic：`<OverlayManagerContext.Provider value={om}>`）。 */
+-export const OverlayManagerContext = createContext<OverlayManager>();
++/** 「当前管理器」注入 Context（idiomatic：`<LayermanContext.Provider value={om}>`）。 */
++export const LayermanContext = createContext<Layerman>();
+ /** 「当前 overlay id」注入 Context（由中央渲染器逐条 provide，overlay 组件内 useCurrentOverlay 消费）。 */
+ export const CurrentOverlayContext = createContext<string>();
+ 
+-/** idiomatic JSX Provider 别名：`<OverlayManagerProvider value={om}>...</OverlayManagerProvider>`。 */
+-export const OverlayManagerProvider = OverlayManagerContext.Provider;
++/** idiomatic JSX Provider 别名：`<LayermanProvider value={om}>...</LayermanProvider>`。 */
++export const LayermanProvider = LayermanContext.Provider;
+ /** idiomatic JSX Provider 别名（当前 overlay id）。 */
+ export const CurrentOverlayProvider = CurrentOverlayContext.Provider;
+ 
+ /**
+  * 非 JSX 注入：在当前 owner（组件 setup / `createRoot` 回调）上就地写入默认管理器 Context。
+  * 之后同一 owner 内、或此后创建的子作用域内的 composable 不传 `om` 即可回退到它。
+- * 等价于用 `<OverlayManagerProvider value={om}>` 包裹，但无需 JSX。
++ * 等价于用 `<LayermanProvider value={om}>` 包裹，但无需 JSX。
+  */
+-export function provideOverlayManager(om: OverlayManager): void {
+-  provideContext(OverlayManagerContext.id, om);
++export function provideLayerman(om: Layerman): void {
++  provideContext(LayermanContext.id, om);
+ }
+ 
+ /** 非 JSX 注入：为「当前 overlay」提供 id（等价于 `<CurrentOverlayProvider value={id}>`）。 */
+@@ -44,7 +44,7 @@ export function provideCurrentOverlay(id: string): void {
+ function provideContext(id: symbol, value: unknown): void {
+   const owner = getOwner();
+   if (!owner) {
+-    throw new Error("[overlay-manager/solid] provide*(): must be called inside a reactive scope (component setup or createRoot)");
++    throw new Error("[layerman/solid] provide*(): must be called inside a reactive scope (component setup or createRoot)");
+   }
+   (owner as { context: Record<symbol, unknown> | null }).context = {
+     ...(owner as { context: Record<symbol, unknown> | null }).context,
+@@ -52,10 +52,10 @@ function provideContext(id: symbol, value: unknown): void {
+   };
+ }
+ 
+-function useManager(om?: OverlayManager): OverlayManager {
+-  const resolved = om ?? useContext(OverlayManagerContext);
++function useManager(om?: Layerman): Layerman {
++  const resolved = om ?? useContext(LayermanContext);
+   if (!resolved) {
+-    throw new Error("[overlay-manager/solid] no manager available — pass one explicitly or wrap with OverlayManagerProvider / provideOverlayManager");
++    throw new Error("[layerman/solid] no manager available — pass one explicitly or wrap with LayermanProvider / provideLayerman");
+   }
+   return resolved;
+ }
+@@ -64,7 +64,7 @@ function useManager(om?: OverlayManager): OverlayManager {
+  * 把管理器状态桥成 Solid signal（accessor）：初值取 `getSnapshot()`，`subscribe` 同步驱动 setter，
+  * 作用域销毁时 `onCleanup` 自动退订。核心 `subscribe` 为同步触发，故 open/close 后 accessor 立即反映。
+  */
+-export function useOverlayState(om?: OverlayManager): Accessor<OverlayState> {
++export function useOverlayState(om?: Layerman): Accessor<OverlayState> {
+   const m = useManager(om);
+   const [state, setState] = createSignal(m.getSnapshot());
+   const unsub = m.subscribe((s) => setState(s));
+@@ -79,7 +79,7 @@ export function useOverlayState(om?: OverlayManager): Accessor<OverlayState> {
+  * 二者在客户端都完全响应式；但 vitest 在 node 下解析到 solid-js 的 **SSR 构建**，其 `createMemo`
+  * 只在创建时求值一次并冻结（返回 `() => v`）——派生 signal 每次读取都重算，故在 SSR 与客户端下都正确。
+  */
+-export function useOverlays(om?: OverlayManager): {
++export function useOverlays(om?: Layerman): {
+   active: Accessor<readonly OverlayInstance[]>;
+   queued: Accessor<readonly string[]>;
+ } {
+@@ -124,7 +124,7 @@ function resolveDefaults<TData>(defaults?: OverlayDefaults<TData>): Omit<Overlay
+  * getter 函数，**在每次 open 时求值取最新**（不是持续追踪，而是每次唤起读一次）。函数型字段
+  * （`when`/`resolve`/钩子）写在返回的对象里，不会被误当 getter 调用。
+  */
+-export function useOverlay<TData = unknown>(id: string, defaults?: OverlayDefaults<TData>, om?: OverlayManager): UseOverlayReturn<TData> {
++export function useOverlay<TData = unknown>(id: string, defaults?: OverlayDefaults<TData>, om?: Layerman): UseOverlayReturn<TData> {
+   const m = useManager(om);
+   const state = useOverlayState(m);
+   // 派生 signal（非 createMemo）——理由同 useOverlays：SSR 构建下 createMemo 会冻结。
+@@ -148,10 +148,10 @@ export function useOverlay<TData = unknown>(id: string, defaults?: OverlayDefaul
+  * （`instance/visible/phase/open/close/remove/resolve/reject/pause/resume`），无需父层透传 id。
+  * 需外层用 `provideCurrentOverlay(id)`（或 `<CurrentOverlayProvider value={id}>`）。
+  */
+-export function useCurrentOverlay<TData = unknown>(om?: OverlayManager): UseOverlayReturn<TData> {
++export function useCurrentOverlay<TData = unknown>(om?: Layerman): UseOverlayReturn<TData> {
+   const id = useContext(CurrentOverlayContext);
+   if (!id) {
+-    throw new Error("[overlay-manager/solid] useCurrentOverlay(): no current overlay — wrap the rendered overlay with provideCurrentOverlay(id)");
++    throw new Error("[layerman/solid] useCurrentOverlay(): no current overlay — wrap the rendered overlay with provideCurrentOverlay(id)");
+   }
+   return useOverlay<TData>(id, undefined, om);
+ }
+diff --git a/apps/overlay-manager/src/svelte.ts b/apps/overlay-manager/src/svelte.ts
+index e118cc7..68decf3 100644
+--- a/apps/overlay-manager/src/svelte.ts
++++ b/apps/overlay-manager/src/svelte.ts
+@@ -1,22 +1,22 @@
+ /**
+- * @codejoo/overlaymanager/svelte — Svelte 接入层（可选 peer 依赖 `svelte`，兼容 4/5）。
++ * @codejoo/layerman/svelte — Svelte 接入层（可选 peer 依赖 `svelte`，兼容 4/5）。
+  *
+  * 只做一件事：把管理器的 `subscribe`+`getSnapshot` 桥成 **Svelte store 契约**（纯对象
+  * `{ subscribe }`，不依赖 runes 编译器 / DOM），再在其上封出命令式 / 声明式两种唤起风格的
+  * helper。不含任何 `.svelte` 组件——渲染留给宿主。
+  *
+  * 管理器实例的获取遵循「context 默认 + 参数覆盖」：helper 的可选 `om` 参数优先，缺省则从
+- * `setOverlayManager(om)` 注入的 context 回退。⚠️`setContext`/`getContext` 只能在组件 init
++ * `setLayerman(om)` 注入的 context 回退。⚠️`setContext`/`getContext` 只能在组件 init
+  * 期调用；不在组件上下文（如纯逻辑 / 测试）时，请显式传入 `om`。
+  */
+ 
+ import { getContext, setContext } from "svelte";
+ import { derived, type Readable, readable } from "svelte/store";
+ 
+-import type { OverlayConfig, OverlayHandle, OverlayInstance, OverlayManager, OverlayState } from "./index.ts";
++import type { OverlayConfig, OverlayHandle, OverlayInstance, Layerman, OverlayState } from "./index.ts";
+ 
+ /** context 键：默认管理器。 */
+-const OVERLAY_MANAGER_KEY = Symbol("overlay-manager");
++const LAYERMAN_KEY = Symbol("layerman");
+ /** context 键：「当前 overlay id」（由中央渲染器逐条 setContext，overlay 组件内消费）。 */
+ const CURRENT_OVERLAY_KEY = Symbol("current-overlay");
+ 
+@@ -24,20 +24,20 @@ const CURRENT_OVERLAY_KEY = Symbol("current-overlay");
+  * 在组件 init 期注入默认管理器（等价于 Vue 插件 / provide）。**只能在组件初始化时调用**。
+  * 之后同组件树内的 helper 不传 `om` 即可经 context 回退到它。
+  */
+-export function setOverlayManager(om: OverlayManager): void {
+-  setContext(OVERLAY_MANAGER_KEY, om);
++export function setLayerman(om: Layerman): void {
++  setContext(LAYERMAN_KEY, om);
+ }
+ 
+ /** 在组件 init 期读取被注入的默认管理器（无则 undefined）。**只能在组件初始化时调用**。 */
+-export function getOverlayManager(): OverlayManager | undefined {
+-  return getContext<OverlayManager | undefined>(OVERLAY_MANAGER_KEY);
++export function getLayerman(): Layerman | undefined {
++  return getContext<Layerman | undefined>(LAYERMAN_KEY);
+ }
+ 
+-function useManager(om?: OverlayManager): OverlayManager {
++function useManager(om?: Layerman): Layerman {
+   // 显式传入优先，且不触碰 context —— 保证「不在组件上下文」的用法（纯逻辑/测试）可用。
+-  const resolved = om ?? getOverlayManager();
++  const resolved = om ?? getLayerman();
+   if (!resolved) {
+-    throw new Error("[overlay-manager/svelte] no manager available — pass one explicitly or call setOverlayManager(om) during component init");
++    throw new Error("[layerman/svelte] no manager available — pass one explicitly or call setLayerman(om) during component init");
+   }
+   return resolved;
+ }
+@@ -47,13 +47,13 @@ function useManager(om?: OverlayManager): OverlayManager {
+  * `start` 被调用并 `om.subscribe(set, { immediate })` 立即回填最新快照；返回的退订函数即
+  * store 的 stop 回调 —— 最后一个订阅者离开时自动退订核心，无泄漏。
+  */
+-export function overlayState(om?: OverlayManager): Readable<OverlayState> {
++export function overlayState(om?: Layerman): Readable<OverlayState> {
+   const m = useManager(om);
+   return readable(m.getSnapshot(), (set) => m.subscribe(set, { immediate: true }));
+ }
+ 
+ /** 命令式风格：拿到 active / queued 两个只读 store，用于中央渲染器遍历。 */
+-export function overlays(om?: OverlayManager): {
++export function overlays(om?: Layerman): {
+   active: Readable<readonly OverlayInstance[]>;
+   queued: Readable<readonly string[]>;
+ } {
+@@ -92,7 +92,7 @@ export type OverlayDefaults<TData = unknown> = Omit<OverlayConfig<TData>, "id">
+  * 等），会合并进**每一次** open；`open(config)` 的入参再覆盖 `defaults`。`defaults` 支持传对象或
+  * getter 函数，getter **在每次 open 时求值取最新**（不是持续追踪）。
+  */
+-export function overlay<TData = unknown>(id: string, defaults?: OverlayDefaults<TData>, om?: OverlayManager): OverlayBinding<TData> {
++export function overlay<TData = unknown>(id: string, defaults?: OverlayDefaults<TData>, om?: Layerman): OverlayBinding<TData> {
+   const m = useManager(om);
+   const state = overlayState(m);
+   const instance = derived(state, (s) => s.active.find((o: OverlayInstance) => o.id === id));
+@@ -124,10 +124,10 @@ export function provideCurrentOverlay(id: string): void {
+  * 在 overlay 组件**内部**使用：经 context 拿到自身 id，返回与 `overlay(id)` 相同的绑定，无需父层
+  * 透传 id。需外层用 `provideCurrentOverlay(id)`。**只能在组件初始化时调用**（依赖 getContext）。
+  */
+-export function currentOverlay<TData = unknown>(om?: OverlayManager): OverlayBinding<TData> {
++export function currentOverlay<TData = unknown>(om?: Layerman): OverlayBinding<TData> {
+   const id = getContext<string | undefined>(CURRENT_OVERLAY_KEY);
+   if (!id) {
+-    throw new Error("[overlay-manager/svelte] currentOverlay(): no current overlay — wrap the rendered overlay with provideCurrentOverlay(id)");
++    throw new Error("[layerman/svelte] currentOverlay(): no current overlay — wrap the rendered overlay with provideCurrentOverlay(id)");
+   }
+   return overlay<TData>(id, undefined, om);
+ }
+diff --git a/apps/overlay-manager/src/vue.ts b/apps/overlay-manager/src/vue.ts
+index 52fc195..93f30bb 100644
+--- a/apps/overlay-manager/src/vue.ts
++++ b/apps/overlay-manager/src/vue.ts
+@@ -1,11 +1,11 @@
+ /**
+- * @codejoo/overlaymanager/vue — Vue 3 接入层（可选 peer 依赖 `vue`）。
++ * @codejoo/layerman/vue — Vue 3 接入层（可选 peer 依赖 `vue`）。
+  *
+  * 只做一件事：把管理器的 `subscribe`+`getSnapshot` 桥成响应式 `shallowRef`（引用变即触发），
+  * 再在其上封出命令式 / 声明式两种唤起风格的 composable。不含任何渲染组件——渲染留给宿主。
+  *
+  * 管理器实例的获取遵循「插件默认 + 参数覆盖」：composable 的可选 `om` 参数优先，缺省则从
+- * `createOverlayManagerPlugin` 注入的实例回退。
++ * `createLayermanPlugin` 注入的实例回退。
+  */
+ 
+ import {
+@@ -25,37 +25,37 @@ import {
+   type WritableComputedRef,
+ } from "vue";
+ 
+-import type { OverlayConfig, OverlayHandle, OverlayInstance, OverlayManager, OverlayState } from "./index.ts";
++import type { OverlayConfig, OverlayHandle, OverlayInstance, Layerman, OverlayState } from "./index.ts";
+ 
+ /** provide/inject 键。 */
+-export const OVERLAY_MANAGER_KEY: InjectionKey<OverlayManager> = Symbol("overlay-manager");
++export const LAYERMAN_KEY: InjectionKey<Layerman> = Symbol("layerman");
+ /** 「当前 overlay id」的注入键（由中央渲染器逐条 provide，overlay 组件内 useCurrentOverlay 消费）。 */
+ export const CURRENT_OVERLAY_KEY: InjectionKey<string> = Symbol("current-overlay");
+ 
+-/** Vue 插件：`app.use(createOverlayManagerPlugin(om))`，为全应用注入默认管理器。 */
+-export function createOverlayManagerPlugin(om: OverlayManager): Plugin {
++/** Vue 插件：`app.use(createLayermanPlugin(om))`，为全应用注入默认管理器。 */
++export function createLayermanPlugin(om: Layerman): Plugin {
+   return {
+     install(app: App) {
+-      app.provide(OVERLAY_MANAGER_KEY, om);
++      app.provide(LAYERMAN_KEY, om);
+     },
+   };
+ }
+ 
+ /** 组合式 API 内 provide 默认管理器（等价于插件，用于 setup 内手动注入）。 */
+-export function provideOverlayManager(om: OverlayManager): void {
+-  provide(OVERLAY_MANAGER_KEY, om);
++export function provideLayerman(om: Layerman): void {
++  provide(LAYERMAN_KEY, om);
+ }
+ 
+-function useManager(om?: OverlayManager): OverlayManager {
+-  const resolved = om ?? inject(OVERLAY_MANAGER_KEY, undefined);
++function useManager(om?: Layerman): Layerman {
++  const resolved = om ?? inject(LAYERMAN_KEY, undefined);
+   if (!resolved) {
+-    throw new Error("[overlay-manager/vue] no manager available — pass one explicitly or install createOverlayManagerPlugin");
++    throw new Error("[layerman/vue] no manager available — pass one explicitly or install createLayermanPlugin");
+   }
+   return resolved;
+ }
+ 
+ /** 把管理器状态桥成响应式 `Ref<OverlayState>`（作用域销毁时自动退订）。 */
+-export function useOverlayState(om?: OverlayManager): Ref<OverlayState> {
++export function useOverlayState(om?: Layerman): Ref<OverlayState> {
+   const m = useManager(om);
+   const state = shallowRef(m.getSnapshot());
+   const unsub = m.subscribe((s) => {
+@@ -66,7 +66,7 @@ export function useOverlayState(om?: OverlayManager): Ref<OverlayState> {
+ }
+ 
+ /** 命令式风格：拿到响应式的 active / queued，用于中央渲染器遍历。 */
+-export function useOverlays(om?: OverlayManager): {
++export function useOverlays(om?: Layerman): {
+   active: ComputedRef<readonly OverlayInstance[]>;
+   queued: ComputedRef<readonly string[]>;
+ } {
+@@ -86,9 +86,10 @@ export interface UseOverlayReturn<TData = unknown> {
+   /**
+    * 可写的可见性,直接给第三方「只暴露 v-model」的弹窗用:`<ThirdPartyDialog v-model="model" />`。
+    * - get：是否正在展示(open/closing）。
+-   * - set(true)：若未展示则 `open()`（无额外配置；要 priority/cooldown 等请改用 `open(config)`）。
+-   * - set(false)：**立即 `remove()`**（非两阶段）——第三方弹窗自带退场动画,不需要我们的 closing
+-   *   期,立即移除可避免 v-model 回弹。
++   * - set(true)：若未展示且未排队则 `open()`（无额外配置；要 priority/cooldown 等请改用 `open(config)`）。
++   * - set(false)：走 `close()`（尊重 `beforeClose` 守卫，不再被硬闯过去）。无 `beforeClose` 时
++   *   `close()` 内部同步转 `closing`，随即紧跟 `remove()` 收尾——效果等同「立即移除」，第三方弹窗
++   *   仍不需要我们的 closing 期；配了 `beforeClose` 时守卫异步决定是否真正关闭，此时不强制移除。
+    * 注意：队列/gap/条件/冷却仍生效,`set(true)` 若被排队则不会立刻可见,getter 如实反映真实状态。
+    */
+   model: WritableComputedRef<boolean>;
+@@ -120,7 +121,7 @@ export interface UseOverlayReturn<TData = unknown> {
+  * 因此想「立刻显示/插队」的 v-model 弹窗应在 `defaults` 里带 `overlap: true`（叠加、绕过串行）或
+  * `replace: true`（抢占当前串行槽）——两者都会让实例立即进入 active，getter 立刻为 true、不回弹。
+  */
+-export function useOverlay<TData = unknown>(id: string, defaults?: MaybeRefOrGetter<Omit<OverlayConfig<TData>, "id">>, om?: OverlayManager): UseOverlayReturn<TData> {
++export function useOverlay<TData = unknown>(id: string, defaults?: MaybeRefOrGetter<Omit<OverlayConfig<TData>, "id">>, om?: Layerman): UseOverlayReturn<TData> {
+   const m = useManager(om);
+   const state = useOverlayState(m);
+   const instance = computed(() => state.value.active.find((o: OverlayInstance) => o.id === id));
+@@ -131,9 +132,13 @@ export function useOverlay<TData = unknown>(id: string, defaults?: MaybeRefOrGet
+       get: () => instance.value !== undefined,
+       set: (value: boolean) => {
+         if (value) {
+-          if (instance.value === undefined) m.open({ ...toValue(defaults), id });
++          if (instance.value === undefined && !state.value.queued.includes(id)) m.open({ ...toValue(defaults), id });
+         } else {
+-          m.remove(id);
++          m.close(id);
++          // 无 beforeClose 时 close() 已同步转 closing——按原「立即移除」的第三方 v-model 契约收尾；
++          // 有 beforeClose 时 close() 是异步的（守卫未决），此时 phase 仍是 open，交给守卫自行处理。
++          const cur = m.get(id);
++          if (cur && cur.phase === "closing") m.remove(id);
+         }
+       },
+     }),
+@@ -161,10 +166,10 @@ export function provideCurrentOverlay(id: string): void {
+  * （`instance/visible/phase/open/close/remove/resolve/reject/pause/resume`），无需父层透传 id。
+  * 需外层用 `provideCurrentOverlay(id)`（或声明式 template+ref 场景直接用 `useOverlay(id)`）。
+  */
+-export function useCurrentOverlay<TData = unknown>(om?: OverlayManager): UseOverlayReturn<TData> {
++export function useCurrentOverlay<TData = unknown>(om?: Layerman): UseOverlayReturn<TData> {
+   const id = inject(CURRENT_OVERLAY_KEY, undefined);
+   if (!id) {
+-    throw new Error("[overlay-manager/vue] useCurrentOverlay(): no current overlay — wrap the rendered overlay with provideCurrentOverlay(id)");
++    throw new Error("[layerman/vue] useCurrentOverlay(): no current overlay — wrap the rendered overlay with provideCurrentOverlay(id)");
+   }
+   return useOverlay<TData>(id, undefined, om);
+ }
+diff --git a/apps/overlay-manager/test/overlay-manager.test.ts b/apps/overlay-manager/test/overlay-manager.test.ts
+index 8bde355..f330dde 100644
+--- a/apps/overlay-manager/test/overlay-manager.test.ts
++++ b/apps/overlay-manager/test/overlay-manager.test.ts
+@@ -1,11 +1,11 @@
+ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+ 
+-import { type AsyncableStorage, createOverlayManager, type OverlayManager, type OverlayManagerOptions } from "../src/index.ts";
++import { type AsyncableStorage, createLayerman, type Layerman, type LayermanOptions } from "../src/index.ts";
+ 
+-const managers: OverlayManager[] = [];
++const managers: Layerman[] = [];
+ 
+-function make(opts: OverlayManagerOptions = {}): OverlayManager {
+-  const m = createOverlayManager({ crossTab: false, ...opts });
++function make(opts: LayermanOptions = {}): Layerman {
++  const m = createLayerman({ crossTab: false, ...opts });
+   managers.push(m);
+   return m;
+ }
+@@ -25,7 +25,7 @@ function memStorage(): { storage: AsyncableStorage; map: Map<string, string> } {
+ }
+ 
+ /** 当前活跃 id（排序，便于断言）。 */
+-function ids(m: OverlayManager): string[] {
++function ids(m: Layerman): string[] {
+   return m
+     .getSnapshot()
+     .active.map((o) => o.id)
+@@ -48,7 +48,7 @@ afterEach(() => {
+   vi.useRealTimers();
+ });
+ 
+-describe("@codejoo/overlaymanager", () => {
++describe("@codejoo/layerman", () => {
+   it("串行：一次只显示一个，前一个 remove 后才显示下一个", async () => {
+     const m = make();
+     await m.ready();
+@@ -63,6 +63,17 @@ describe("@codejoo/overlaymanager", () => {
+     expect(ids(m)).toEqual(["b"]);
+   });
+ 
++  it("id 可选：不传时内部生成唯一 id 并直接入队", async () => {
++    const m = make();
++    await m.ready();
++    const h1 = m.open({});
++    const h2 = m.open({});
++    expect(h1.id).toBeTruthy();
++    expect(h2.id).not.toBe(h1.id);
++    expect(ids(m)).toEqual([h1.id]);
++    expect(m.getSnapshot().queued).toEqual([h2.id]);
++  });
++
+   it("gap：下一个等待 gap 毫秒", async () => {
+     const m = make({ gap: 1000 });
+     m.open({ id: "a" });
+@@ -386,9 +397,9 @@ describe("@codejoo/overlaymanager", () => {
+     const m = make({ debug: true, logger });
+     m.open({ id: "a" });
+     m.close("a");
+-    expect(logger).toHaveBeenCalledWith("[overlays-manager]:a:pending");
+-    expect(logger).toHaveBeenCalledWith("[overlays-manager]:a:open");
+-    expect(logger).toHaveBeenCalledWith("[overlays-manager]:a:closing");
++    expect(logger).toHaveBeenCalledWith("[layerman]:a:pending");
++    expect(logger).toHaveBeenCalledWith("[layerman]:a:open");
++    expect(logger).toHaveBeenCalledWith("[layerman]:a:closing");
+   });
+ 
+   it("beforeClose 关闭守卫：返回 false 取消关闭；其余放行", async () => {
+diff --git a/apps/overlay-manager/test/react.test.ts b/apps/overlay-manager/test/react.test.ts
+index 9252119..b244dc9 100644
+--- a/apps/overlay-manager/test/react.test.ts
++++ b/apps/overlay-manager/test/react.test.ts
+@@ -3,14 +3,14 @@ import { createElement, type ReactNode } from "react";
+ import { act, renderHook } from "@testing-library/react";
+ import { afterEach, describe, expect, it } from "vitest";
+ 
+-import { createOverlayManager, type OverlayManager } from "../src/index.ts";
+-import { OverlayManagerProvider, useCurrentOverlay, useOverlay, useOverlayManager, useOverlays, useOverlayState } from "../src/react.ts";
++import { createLayerman, type Layerman } from "../src/index.ts";
++import { LayermanProvider, useCurrentOverlay, useOverlay, useLayerman, useOverlays, useOverlayState } from "../src/react.ts";
+ import { CurrentOverlayContext } from "../src/react.ts";
+ 
+-const managers: OverlayManager[] = [];
++const managers: Layerman[] = [];
+ 
+-function make(): OverlayManager {
+-  const m = createOverlayManager({ crossTab: false });
++function make(): Layerman {
++  const m = createLayerman({ crossTab: false });
+   managers.push(m);
+   return m;
+ }
+@@ -20,7 +20,7 @@ afterEach(() => {
+   managers.length = 0;
+ });
+ 
+-describe("@codejoo/overlaymanager/react", () => {
++describe("@codejoo/layerman/react", () => {
+   it("useOverlayState：桥成 React 状态，open 后更新（SSR 空态起步）", () => {
+     const m = make();
+     const { result } = renderHook(() => useOverlayState(m));
+@@ -106,9 +106,9 @@ describe("@codejoo/overlaymanager/react", () => {
+     await expect(handle!.result).resolves.toBe(true);
+   });
+ 
+-  it("Provider 注入：不传 om 时经 <OverlayManagerProvider> 取到 manager", () => {
++  it("Provider 注入：不传 om 时经 <LayermanProvider> 取到 manager", () => {
+     const m = make();
+-    const wrapper = ({ children }: { children: ReactNode }) => createElement(OverlayManagerProvider, { manager: m }, children);
++    const wrapper = ({ children }: { children: ReactNode }) => createElement(LayermanProvider, { manager: m }, children);
+     const { result } = renderHook(() => useOverlay("fromProvider"), { wrapper });
+     act(() => {
+       result.current.open();
+@@ -117,13 +117,13 @@ describe("@codejoo/overlaymanager/react", () => {
+     expect(m.get("fromProvider")?.id).toBe("fromProvider");
+   });
+ 
+-  it("useOverlayManager：既未传参又未注入 → 抛错", () => {
+-    expect(() => renderHook(() => useOverlayManager())).toThrow(/no manager/);
++  it("useLayerman：既未传参又未注入 → 抛错", () => {
++    expect(() => renderHook(() => useLayerman())).toThrow(/no manager/);
+   });
+ 
+   it("useCurrentOverlay：经 Context 拿到自身 id 的控制句柄（无需透传）", () => {
+     const m = make();
+-    const wrapper = ({ children }: { children: ReactNode }) => createElement(OverlayManagerProvider, { manager: m }, createElement(CurrentOverlayContext.Provider, { value: "cur" }, children));
++    const wrapper = ({ children }: { children: ReactNode }) => createElement(LayermanProvider, { manager: m }, createElement(CurrentOverlayContext.Provider, { value: "cur" }, children));
+     const { result } = renderHook(() => useCurrentOverlay(), { wrapper });
+     act(() => {
+       result.current.open();
+@@ -134,7 +134,7 @@ describe("@codejoo/overlaymanager/react", () => {
+ 
+   it("useCurrentOverlay：无当前 overlay 注入 → 抛错", () => {
+     const m = make();
+-    const wrapper = ({ children }: { children: ReactNode }) => createElement(OverlayManagerProvider, { manager: m }, children);
++    const wrapper = ({ children }: { children: ReactNode }) => createElement(LayermanProvider, { manager: m }, children);
+     expect(() => renderHook(() => useCurrentOverlay(), { wrapper })).toThrow(/current overlay/);
+   });
+ });
+diff --git a/apps/overlay-manager/test/solid.test.ts b/apps/overlay-manager/test/solid.test.ts
+index e22f17d..4517d1e 100644
+--- a/apps/overlay-manager/test/solid.test.ts
++++ b/apps/overlay-manager/test/solid.test.ts
+@@ -1,13 +1,13 @@
+ import { createRoot } from "solid-js";
+ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+ 
+-import { createOverlayManager, type OverlayManager } from "../src/index.ts";
+-import { provideCurrentOverlay, provideOverlayManager, useCurrentOverlay, useOverlay, useOverlays, useOverlayState } from "../src/solid.ts";
++import { createLayerman, type Layerman } from "../src/index.ts";
++import { provideCurrentOverlay, provideLayerman, useCurrentOverlay, useOverlay, useOverlays, useOverlayState } from "../src/solid.ts";
+ 
+-const managers: OverlayManager[] = [];
++const managers: Layerman[] = [];
+ 
+-function make(): OverlayManager {
+-  const m = createOverlayManager({ crossTab: false });
++function make(): Layerman {
++  const m = createLayerman({ crossTab: false });
+   managers.push(m);
+   return m;
+ }
+@@ -23,7 +23,7 @@ afterEach(() => {
+   vi.useRealTimers();
+ });
+ 
+-describe("@codejoo/overlaymanager/solid", () => {
++describe("@codejoo/layerman/solid", () => {
+   it("useOverlayState：状态桥成 signal，open 后 accessor 同步更新", () => {
+     const m = make();
+     createRoot((dispose) => {
+@@ -113,10 +113,10 @@ describe("@codejoo/overlaymanager/solid", () => {
+     await expect(h.result).resolves.toBe(true);
+   });
+ 
+-  it("provideOverlayManager：注入后 composable 不传 om 亦可回退", () => {
++  it("provideLayerman：注入后 composable 不传 om 亦可回退", () => {
+     const m = make();
+     createRoot((dispose) => {
+-      provideOverlayManager(m);
++      provideLayerman(m);
+       const o = useOverlay("fromCtx"); // 不传 om → 走 useContext
+       o.open();
+       expect(o.visible()).toBe(true);
+@@ -134,7 +134,7 @@ describe("@codejoo/overlaymanager/solid", () => {
+   it("useCurrentOverlay：经注入拿到自身 id 的控制句柄（无需透传）", () => {
+     const m = make();
+     createRoot((dispose) => {
+-      provideOverlayManager(m);
++      provideLayerman(m);
+       provideCurrentOverlay("cur");
+       const o = useCurrentOverlay();
+       o.open();
+@@ -147,7 +147,7 @@ describe("@codejoo/overlaymanager/solid", () => {
+   it("useCurrentOverlay：无当前 overlay 注入 → 抛错", () => {
+     const m = make();
+     createRoot((dispose) => {
+-      provideOverlayManager(m);
++      provideLayerman(m);
+       expect(() => useCurrentOverlay()).toThrow(/current overlay/);
+       dispose();
+     });
+diff --git a/apps/overlay-manager/test/svelte.test.ts b/apps/overlay-manager/test/svelte.test.ts
+index e19a851..ae7cc97 100644
+--- a/apps/overlay-manager/test/svelte.test.ts
++++ b/apps/overlay-manager/test/svelte.test.ts
+@@ -1,13 +1,13 @@
+ import { get, type Readable } from "svelte/store";
+ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+ 
+-import { createOverlayManager, type OverlayManager, type OverlayState } from "../src/index.ts";
+-import { getOverlayManager, overlay, overlays, overlayState, provideCurrentOverlay, setOverlayManager } from "../src/svelte.ts";
++import { createLayerman, type Layerman, type OverlayState } from "../src/index.ts";
++import { getLayerman, overlay, overlays, overlayState, provideCurrentOverlay, setLayerman } from "../src/svelte.ts";
+ 
+-const managers: OverlayManager[] = [];
++const managers: Layerman[] = [];
+ 
+-function make(): OverlayManager {
+-  const m = createOverlayManager({ crossTab: false });
++function make(): Layerman {
++  const m = createLayerman({ crossTab: false });
+   managers.push(m);
+   return m;
+ }
+@@ -23,7 +23,7 @@ afterEach(() => {
+   vi.useRealTimers();
+ });
+ 
+-describe("@codejoo/overlaymanager/svelte", () => {
++describe("@codejoo/layerman/svelte", () => {
+   it("overlayState：桥成 Readable，open/remove 推送新值（active/queued 变化）", () => {
+     const m = make();
+     const state = overlayState(m);
+@@ -143,8 +143,8 @@ describe("@codejoo/overlaymanager/svelte", () => {
+     // setContext/getContext 依赖组件实例；node 纯逻辑环境下 getContext 抛错。
+     // 这记录了「组件外必须显式传 om」的约束。
+     expect(() => overlayState()).toThrow();
+-    expect(() => setOverlayManager(make())).toThrow();
+-    expect(() => getOverlayManager()).toThrow();
++    expect(() => setLayerman(make())).toThrow();
++    expect(() => getLayerman()).toThrow();
+     expect(() => provideCurrentOverlay("x")).toThrow();
+   });
+ 
+diff --git a/apps/overlay-manager/test/types.test.ts b/apps/overlay-manager/test/types.test.ts
+index f9534e0..e29fa37 100644
+--- a/apps/overlay-manager/test/types.test.ts
++++ b/apps/overlay-manager/test/types.test.ts
+@@ -1,11 +1,11 @@
+ import { describe, expectTypeOf, it } from "vitest";
+ 
+-import { createOverlayManager, type DismissResult, type OverlayInstance, type OverlayRecord } from "../src/index.ts";
++import { createLayerman, type DismissResult, type OverlayInstance, type OverlayRecord } from "../src/index.ts";
+ 
+ // 类型级契约测试：由 tsc(tsconfig include test/**) 静态校验；运行时为 no-op。
+ describe("类型契约", () => {
+   it("open<TData,TResult> 返回可 await 的结果", () => {
+-    const m = createOverlayManager();
++    const m = createLayerman();
+     const h = m.open<{ a: number }, boolean>({ id: "x", data: { a: 1 } });
+     expectTypeOf(h.id).toEqualTypeOf<string>();
+     expectTypeOf(h.result).resolves.toEqualTypeOf<boolean | DismissResult>();
+@@ -18,7 +18,7 @@ describe("类型契约", () => {
+   });
+ 
+   it("clear 接受选择器与 options；update/get 签名", () => {
+-    const m = createOverlayManager();
++    const m = createLayerman();
+     m.clear((_ctx, recs) => {
+       expectTypeOf(recs).toEqualTypeOf<OverlayRecord[]>();
+       return recs.map((r) => r.id);
+diff --git a/apps/overlay-manager/test/vue.test.ts b/apps/overlay-manager/test/vue.test.ts
+index 69fcaa6..fbedeed 100644
+--- a/apps/overlay-manager/test/vue.test.ts
++++ b/apps/overlay-manager/test/vue.test.ts
+@@ -1,13 +1,13 @@
+ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+ import { createApp, effectScope, ref } from "vue";
+ 
+-import { createOverlayManager, type OverlayManager } from "../src/index.ts";
+-import { createOverlayManagerPlugin, CURRENT_OVERLAY_KEY, OVERLAY_MANAGER_KEY, useCurrentOverlay, useOverlay, useOverlays, useOverlayState } from "../src/vue.ts";
++import { createLayerman, type Layerman } from "../src/index.ts";
++import { createLayermanPlugin, CURRENT_OVERLAY_KEY, LAYERMAN_KEY, useCurrentOverlay, useOverlay, useOverlays, useOverlayState } from "../src/vue.ts";
+ 
+-const managers: OverlayManager[] = [];
++const managers: Layerman[] = [];
+ 
+-function make(): OverlayManager {
+-  const m = createOverlayManager({ crossTab: false });
++function make(): Layerman {
++  const m = createLayerman({ crossTab: false });
+   managers.push(m);
+   return m;
+ }
+@@ -23,7 +23,7 @@ afterEach(() => {
+   vi.useRealTimers();
+ });
+ 
+-describe("@codejoo/overlaymanager/vue", () => {
++describe("@codejoo/layerman/vue", () => {
+   it("useOverlayState：状态桥成响应式，open 后 ref 更新", () => {
+     const m = make();
+     const scope = effectScope();
+@@ -166,7 +166,7 @@ describe("@codejoo/overlaymanager/vue", () => {
+   it("插件注入：runWithContext 内无需显式传 om", () => {
+     const m = make();
+     const app = createApp({});
+-    app.use(createOverlayManagerPlugin(m));
++    app.use(createLayermanPlugin(m));
+     app.runWithContext(() => {
+       const scope = effectScope();
+       scope.run(() => {
+@@ -189,7 +189,7 @@ describe("@codejoo/overlaymanager/vue", () => {
+   it("useCurrentOverlay：经 inject 拿到自身 id 的控制句柄（无需透传）", () => {
+     const m = make();
+     const app = createApp({});
+-    app.provide(OVERLAY_MANAGER_KEY, m);
++    app.provide(LAYERMAN_KEY, m);
+     app.provide(CURRENT_OVERLAY_KEY, "cur");
+     app.runWithContext(() => {
+       const scope = effectScope();
+@@ -206,7 +206,7 @@ describe("@codejoo/overlaymanager/vue", () => {
+   it("useCurrentOverlay：无当前 overlay 注入 → 抛错", () => {
+     const m = make();
+     const app = createApp({});
+-    app.provide(OVERLAY_MANAGER_KEY, m);
++    app.provide(LAYERMAN_KEY, m);
+     app.runWithContext(() => {
+       expect(() => useCurrentOverlay()).toThrow(/current overlay/);
+     });
+diff --git a/apps/overlay-manager/vite.config.ts b/apps/overlay-manager/vite.config.ts
+index 256fb48..35a01d9 100644
+--- a/apps/overlay-manager/vite.config.ts
++++ b/apps/overlay-manager/vite.config.ts
+@@ -4,10 +4,10 @@ export default defineConfig({
+   pack: {
+     entry: {
+       index: "src/index.ts",
+-      vue: "src/vue.ts", // 可选子路径 @codejoo/overlaymanager/vue（vue 为外部 peer）
+-      react: "src/react.ts", // @codejoo/overlaymanager/react
+-      svelte: "src/svelte.ts", // @codejoo/overlaymanager/svelte
+-      solid: "src/solid.ts", // @codejoo/overlaymanager/solid
++      vue: "src/vue.ts", // 可选子路径 @codejoo/layerman/vue（vue 为外部 peer）
++      react: "src/react.ts", // @codejoo/layerman/react
++      svelte: "src/svelte.ts", // @codejoo/layerman/svelte
++      solid: "src/solid.ts", // @codejoo/layerman/solid
+     },
+     format: "esm",
+     platform: "browser",

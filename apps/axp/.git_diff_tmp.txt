@@ -1,0 +1,609 @@
+diff --git a/apps/axp/.claude/skills/codejoo-axp/SKILL.md b/apps/axp/.claude/skills/codejoo-axp/SKILL.md
+index a266a44..440edd0 100644
+--- a/apps/axp/.claude/skills/codejoo-axp/SKILL.md
++++ b/apps/axp/.claude/skills/codejoo-axp/SKILL.md
+@@ -1,6 +1,6 @@
+ ---
+ name: codejoo-axp
+-description: Use when working in apps/axp (@codejoo/axp) — a typed, plugin-based HTTP client over axios. Core wraps an axios instance and dispatches verb calls into three response shapes; PluginManager auto-tracks/reverts every ctx side-effect; bundled plugins cover build-key, cache, share, retry, loading, auth, mock, filter-request, normalize-response, repath, envs, cancel. Covers architecture, the hard-won invariants (esp. axios mergeConfig re-merge), and how to extend/test.
++description: Use when working in apps/axp (@codejoo/axp) — a typed, plugin-based HTTP client over axios. Core wraps an axios instance and dispatches verb calls into three response shapes; PluginManager auto-tracks/reverts every ctx side-effect; bundled plugins cover reqkey, cache, share, retry, loading, auth, mock, reqclean, normalize-response, repath, envs, cancel. Covers architecture, the hard-won invariants (esp. axios mergeConfig re-merge), and how to extend/test.
+ ---
+ 
+ # @codejoo/axp
+@@ -37,7 +37,7 @@ caller's (no priority field).
+ - **PluginManager auto-reverts everything registered via `ctx`** — plugin authors write no cleanup. Return a cleanup fn from `install` only for non-axios resources (timers/sockets). `#refresh` re-runs every `install`, so install-time effects must be idempotent (e.g. `envs`).
+ - **Ordering = `use()` order.** Request interceptors LIFO, response FIFO, transformers append-order, adapter last-wins. Documented, not enforced.
+ - **`fn.name` reassign needs `Object.defineProperty`** under strict-mode ESM (plain `fn.name =` throws). Used by `normalize-response`, `repath`, `auth` so `eject(factory)` works after minify.
+-- **`build-key` tests are relational** (`a===b` / `a!==b`), never literal hashes — preserve invariants (key-order-independent objects, ordered arrays, empty-container equivalence, separator anti-collision), not specific digests. Double-lane FNV-1a → ~64-bit.
++- **`reqkey` tests are relational** (`a===b` / `a!==b`), never literal hashes — preserve invariants (key-order-independent objects, ordered arrays, empty-container equivalence, separator anti-collision), not specific digests. Double-lane FNV-1a → ~64-bit.
+ - **Schema is `model.MethodRefs` (method-major), consumed directly — no `_Indexed`.** `@codejoo/openapi2lang` emits TWO views: `model.PathRefs` (path-major, for openapi2lang's own `Request`/`OpenApi`) and `model.MethodRefs` (method-major `{ [method]: { [path]: [resp, req] } }`, **statically pre-expanded** by the emitter — `emitMethodRefs` in openapi's `typescript-emitter.ts`, NOT a TS-level `Invert<PathRefs>`). `Core<T>`'s `LoosePath`/`EntryFor` do `T[Mt][P]` literal lookups — O(1), no mapped/conditional fan-out. There used to be a `_Indexed<T>` type that inverted PathRefs at type-check time; it's gone — don't reintroduce it. Local route extension declaration-merges into `MethodRefs` (method-major nesting), not PathRefs. axp ships a hand-maintained fixture `types/paths.d.ts` containing both interfaces; regenerate via openapi's generate flow when the spec changes.
+ 
+ ## Build & test (the real acceptance gate)
+diff --git a/apps/axp/README.md b/apps/axp/README.md
+index f8fd238..8803037 100644
+--- a/apps/axp/README.md
++++ b/apps/axp/README.md
+@@ -15,14 +15,14 @@ npm i @codejoo/axp   # peer dep: axios
+ 
+ ```ts
+ import axios from 'axios';
+-import { create, cache, retry, share, buildKey } from '@codejoo/axp';
++import { create, cache, retry, share, reqkey } from '@codejoo/axp';
+ 
+ // model.MethodRefs is the method-major schema emitted by codegen (statically
+ // pre-expanded — no type-level inversion). model.PathRefs stays path-major.
+ const api = create<model.MethodRefs>(axios.create({ baseURL: '/api' }), { debug: false });
+ 
+-// build-key feeds cache/share with a dedup key; install in the order you want them to run
+-api.use([buildKey(), cache({ expires: 30_000 }), share(), retry({ max: 2 })]);
++// reqkey feeds cache/share with a dedup key; install in the order you want them to run
++api.use([reqkey(), cache({ expires: 30_000 }), share(), retry({ max: 2 })]);
+ 
+ const pets = await api.get('/pet/findByStatus')({ status: 'available' });   // → model.Pet[]
+ await api.post('/pet')({ name: 'lassie', photoUrls: [] });                  // → model.Pet
+@@ -86,7 +86,7 @@ Every plugin takes `{ enable?: boolean }` (default `true`; `false` = not install
+ Tables below omit `enable` and list the rest. Request-level fields are set per call
+ in the dispatch `config` (e.g. `api.get(p)(payload, { cache: true })`).
+ 
+-### `buildKey(options?)` — compute a dedup/cache key onto `config.key`
++### `reqkey(options?)` — compute a dedup/cache key onto `config.key`
+ | option | type | default | purpose |
+ | --- | --- | --- | --- |
+ | `fastMode` | `boolean` | `true` for `key:true`, `false` for object form | simple (`method+url`) vs deep (`+params+data`) |
+@@ -95,7 +95,7 @@ in the dispatch `config` (e.g. `api.get(p)(payload, { cache: true })`).
+ | `sample` | `boolean` | `false` | sample strings > 64 chars instead of full hash |
+ | `before` / `after` | `(config) => any` | — | hooks run before/after key generation |
+ 
+-Request field `key`: `true` \| `'deep'` \| `number` \| `string` \| `IBuildKeyObject` \| `(config) => …`. Also exports `$key`.
++Request field `key`: `true` \| `'deep'` \| `number` \| `string` \| `IReqkeyObject` \| `(config) => …`. Also exports `$key`.
+ 
+ ### `cache(options?)` — TTL response cache (adapter-level short-circuit)
+ | option | type | default | purpose |
+@@ -113,7 +113,7 @@ Request field `cache`: `false` (off) \| `true` (on, **shared reference** — tre
+ | `interval` | `number` (ms) | `0` | gap between retries (`retry` policy) |
+ | `retries` | `number` | `3` | max retries (`retry` policy) |
+ 
+-Keys off `config.key` (install `buildKey` first). Request field `share`: `false` \| `true` \| a policy string \| `{ policy?, interval?, retries? }` \| `(config) => …`.
++Keys off `config.key` (install `reqkey` first). Request field `share`: `false` \| `true` \| a policy string \| `{ policy?, interval?, retries? }` \| `(config) => …`.
+ 
+ ### `retry(options?)` — re-issue failed requests
+ | option | type | default | purpose |
+@@ -172,14 +172,14 @@ onFailure: (tm, resp) => {
+ 
+ Enable defaults to `false` (gate with `import.meta.env.DEV`). Request field `mock`: `false` \| `true` \| `{ mock?, mockUrl?, fallbackWhen? }`.
+ 
+-### `normalizeRequest(options?)` — strip empty params/data fields
++### `reqclean(options?)` — strip empty params/data fields
+ | option | type | default | purpose |
+ | --- | --- | --- | --- |
+ | `predicate` | `(kv: [key, value]) => boolean` | drops `null`/`undefined`/`NaN`/blank string | return `true` to drop a field |
+ | `ignoreKeys` | `string[]` | — | keys kept even if predicate drops |
+ | `ignoreValues` | `any[]` | — | values kept even if predicate drops |
+ 
+-Request field `filter`: `false`/falsy (skip) \| `true` \| `INormalizeRequestOptions` \| `(config) => …`. (The request-level trigger stays `filter` — `normalize` is taken by `normalizeResponse`.)
++Request field `filter`: `false`/falsy (skip) \| `true` \| `IReqcleanOptions` \| `(config) => …`. (The request-level trigger stays `filter` — `normalize` is taken by `normalizeResponse`.)
+ 
+ ### `normalizeResponse(options?)` — strict business-success check
+ On `ApiResponse.fromResponse(res).successful === false`, rejects an `ApiError` (carrying a structured `ApiResponse`); on the error path attaches `error.api`. Does not rewrite successful `response.data`. Option: `nullable?: boolean`.
+diff --git a/apps/axp/e2e/README.md b/apps/axp/e2e/README.md
+index 7b69601..de6562b 100644
+--- a/apps/axp/e2e/README.md
++++ b/apps/axp/e2e/README.md
+@@ -48,7 +48,7 @@ ALL E2E PASSED ✅
+ | 模块 | 覆盖的导出 / 行为 |
+ |---|---|
+ | Core | `create` · `Core` · `get/post/put/delete/patch/head/options` · 三态返回 `raw`/`wrap`/解包 · `use`/`eject`/`plugins`/`extends` |
+-| buildKey | `buildKey` · `$key`(simple / deep 双车道 64-bit) |
++| reqkey | `reqkey` · `$key`(simple / deep 双车道 64-bit) |
+ | cache | `cache` · `removeCache` · `clearCache`(用服务端命中数证明只发一次网络) |
+ | share | `share` 的 `start`/`race`/`end`/`retry` 四策略 |
+ | retry | `retry`(失败重试到成功 / `retry:0` 禁用) |
+@@ -56,7 +56,7 @@ ALL E2E PASSED ✅
+ | loading | `loading`(全局计数 0→1 / 1→0 触发) |
+ | mock | `mock`(URL 重写到 mockUrl;mock 不存在时默认回落真实接口) |
+ | envs | `envs`(安装期规则合并) |
+-| normalizeRequest | `normalizeRequest`(空字段过滤) |
++| reqclean | `reqclean`(空字段过滤) |
+ | repath | `repath`(`{id}`/`:pid` 替换) |
+ | normalizeResponse | `normalizeResponse` · `ApiError`(业务失败以 ApiError reject) |
+ | TokenManager | `TokenManager`(set/get/clear,Bearer 前缀) |
+diff --git a/apps/axp/e2e/playground/main.ts b/apps/axp/e2e/playground/main.ts
+index b9756a8..1e1a7df 100644
+--- a/apps/axp/e2e/playground/main.ts
++++ b/apps/axp/e2e/playground/main.ts
+@@ -4,19 +4,19 @@
+  *
+  * 覆盖清单（100% 公开导出）：
+  *   create / Core(get,post,put,delete,patch,head,options, raw/wrap/plain, use,eject,plugins,extends)
+- *   buildKey,$key · cache,removeCache,clearCache · cancel,cancelAll · envs
+- *   normalizeRequest · loading · mock · normalizeResponse
++ *   reqkey,$key · cache,removeCache,clearCache · cancel,cancelAll · envs
++ *   reqclean · loading · mock · normalizeResponse
+  *   repath · retry · share · ApiResponse,ApiError · TokenManager
+  */
+ import axios from 'axios';
+ import {
+   create, Core,
+   ApiResponse, ApiError, TokenManager,
+-  buildKey, $key,
++  reqkey, $key,
+   cache, removeCache, clearCache,
+   cancel, cancelAll,
+   envs,
+-  normalizeRequest,
++  reqclean,
+   loading,
+   mock,
+   normalizeResponse,
+@@ -136,15 +136,15 @@ const features: Feature[] = [
+     ],
+   },
+   {
+-    id: 'buildkey', title: 'buildKey · $key', desc: 'simple/deep/object key 生成 + 插件端到端写入 config.key',
++    id: 'reqkey', title: 'reqkey · $key', desc: 'simple/deep/object key 生成 + 插件端到端写入 config.key',
+     actions: [
+-      { id: 'buildkey-simple', label: 'simple 忽略 params', run: () => ({ a: $key({ url: '/u', method: 'GET', params: { x: 1 } }, true), b: $key({ url: '/u', method: 'GET', params: { x: 2 } }, true), equal: $key({ url: '/u', method: 'GET', params: { x: 1 } }, true) === $key({ url: '/u', method: 'GET', params: { x: 2 } }, true) }) },
+-      { id: 'buildkey-deep', label: 'deep 区分 params', run: () => ({ a: $key({ url: '/u', method: 'GET', params: { x: 1 } }, false), b: $key({ url: '/u', method: 'GET', params: { x: 2 } }, false), equal: $key({ url: '/u', method: 'GET', params: { x: 1 } }, false) === $key({ url: '/u', method: 'GET', params: { x: 2 } }, false) }) },
++      { id: 'reqkey-simple', label: 'simple 忽略 params', run: () => ({ a: $key({ url: '/u', method: 'GET', params: { x: 1 } }, true), b: $key({ url: '/u', method: 'GET', params: { x: 2 } }, true), equal: $key({ url: '/u', method: 'GET', params: { x: 1 } }, true) === $key({ url: '/u', method: 'GET', params: { x: 2 } }, true) }) },
++      { id: 'reqkey-deep', label: 'deep 区分 params', run: () => ({ a: $key({ url: '/u', method: 'GET', params: { x: 1 } }, false), b: $key({ url: '/u', method: 'GET', params: { x: 2 } }, false), equal: $key({ url: '/u', method: 'GET', params: { x: 1 } }, false) === $key({ url: '/u', method: 'GET', params: { x: 2 } }, false) }) },
+       {
+-        id: 'buildkey-plugin', label: '插件写入 key', run: async () => {
++        id: 'reqkey-plugin', label: '插件写入 key', run: async () => {
+           const a = mkApi(); let captured: string | undefined;
+           a.use({ name: 'capture', install(ctx) { ctx.request((c) => { captured = (c as any).key; return c; }); } });
+-          a.use(buildKey());
++          a.use(reqkey());
+           await a.get('/api/echo')({ a: 1 }, { key: true } as any);
+           return { capturedKey: captured };
+         },
+@@ -188,7 +188,7 @@ const features: Feature[] = [
+       {
+         id: 'share-start', label: 'start 合并并发', run: async () => {
+           await resetHits();
+-          const a = mkApi(); a.use(share({ policy: 'start' })); a.use(buildKey());
++          const a = mkApi(); a.use(share({ policy: 'start' })); a.use(reqkey());
+           const calls = Array.from({ length: 5 }, () => a.get('/api/hit')({ id: 'shareStart' }, { key: true, share: true } as any));
+           const results = await Promise.all(calls);
+           return { hitsSeen: (results as any[]).map((r) => r.hits), serverHits: await readHits('shareStart') };
+@@ -197,7 +197,7 @@ const features: Feature[] = [
+       {
+         id: 'share-race', label: 'race 各发竞速', run: async () => {
+           await resetHits();
+-          const a = mkApi(); a.use(share({ policy: 'race' })); a.use(buildKey());
++          const a = mkApi(); a.use(share({ policy: 'race' })); a.use(reqkey());
+           const calls = Array.from({ length: 3 }, () => a.get('/api/hit')({ id: 'shareRace' }, { key: true, share: true } as any));
+           const results = await Promise.all(calls);
+           return { results, serverHits: await readHits('shareRace') };
+@@ -206,7 +206,7 @@ const features: Feature[] = [
+       {
+         id: 'share-end', label: 'end 末位生效', run: async () => {
+           await resetHits();
+-          const a = mkApi(); a.use(share({ policy: 'end' })); a.use(buildKey());
++          const a = mkApi(); a.use(share({ policy: 'end' })); a.use(reqkey());
+           const calls = Array.from({ length: 3 }, () => a.get('/api/hit')({ id: 'shareEnd' }, { key: true, share: true } as any));
+           const results = await Promise.all(calls);
+           return { sameResult: new Set((results as any[]).map((r) => JSON.stringify(r))).size, serverHits: await readHits('shareEnd') };
+@@ -215,7 +215,7 @@ const features: Feature[] = [
+       {
+         id: 'share-retry', label: 'retry 共享重试', run: async () => {
+           await resetHits();
+-          const a = mkApi(); a.use(share({ policy: 'retry', retries: 3 })); a.use(buildKey());
++          const a = mkApi(); a.use(share({ policy: 'retry', retries: 3 })); a.use(reqkey());
+           const r = await a.get('/api/hit')({ id: 'shareRetry', fail: 2 }, { key: true, share: 'retry' } as any);
+           return { result: r, serverHits: await readHits('shareRetry') };
+         },
+@@ -308,11 +308,11 @@ const features: Feature[] = [
+     ],
+   },
+   {
+-    id: 'filter', title: 'normalizeRequest', desc: '剥离 params/data 中的空字段',
++    id: 'filter', title: 'reqclean', desc: '剥离 params/data 中的空字段',
+     actions: [
+       {
+         id: 'filter-run', label: '过滤空字段', run: async () => {
+-          const a = mkApi(); a.use(normalizeRequest());
++          const a = mkApi(); a.use(reqclean());
+           const r: any = await a.get('/api/echo')({ a: 1, b: '', c: null, d: '  ', e: 0 }, { filter: true } as any);
+           return { query: r.query };
+         },
+@@ -373,7 +373,7 @@ const integrationFeatures: Feature[] = [
+     actions: [{
+       id: 'int-share-start', label: '跑 30 并发', run: async () => {
+         await resetHits();
+-        const a = mkApi(); a.use([buildKey(), share({ policy: 'start' })]);
++        const a = mkApi(); a.use([reqkey(), share({ policy: 'start' })]);
+         const res = await Promise.all(
+           Array.from({ length: 30 }, () => a.get('/api/hit')({ id: 'intShare', delay: 80 }, { key: true, share: 'start' } as any)),
+         );
+@@ -388,7 +388,7 @@ const integrationFeatures: Feature[] = [
+     actions: [{
+       id: 'int-race-run', label: '跑 race', run: async () => {
+         await resetHits();
+-        const a = mkApi(); a.use([buildKey(), share({ policy: 'race' })]);
++        const a = mkApi(); a.use([reqkey(), share({ policy: 'race' })]);
+         const res = await Promise.all(
+           Array.from({ length: 3 }, () => a.get('/api/hit')({ id: 'intRace', fail: 2, delay: 30 }, { key: true, share: 'race' } as any)),
+         );
+diff --git a/apps/axp/package.json b/apps/axp/package.json
+index e13cb5c..5fd7030 100644
+--- a/apps/axp/package.json
++++ b/apps/axp/package.json
+@@ -1,6 +1,6 @@
+ {
+   "name": "@codejoo/axp",
+-  "version": "0.0.1",
++  "version": "0.1.0",
+   "type": "module",
+   "keywords": [
+     "axios",
+diff --git a/apps/axp/src/index.ts b/apps/axp/src/index.ts
+index fe66276..9857cb8 100644
+--- a/apps/axp/src/index.ts
++++ b/apps/axp/src/index.ts
+@@ -19,8 +19,8 @@ export {
+ } from "./plugins/auth"
+ export type { IAuthOptions, TAuthFunc } from "./plugins/auth"
+ 
+-export { default as buildKey, $key } from "./plugins/build-key"
+-export type { IBuildKeyOptions, IBuildKeyObject, KeyOpts } from "./plugins/build-key"
++export { default as reqkey, $key } from "./plugins/reqkey"
++export type { IReqkeyOptions, IReqkeyObject, KeyOpts } from "./plugins/reqkey"
+ 
+ export { default as cache, removeCache, clearCache } from "./plugins/cache"
+ export type { ICacheOptions } from "./plugins/cache"
+@@ -31,8 +31,8 @@ export type { ICancelOptions } from "./plugins/cancel"
+ export { default as envs } from "./plugins/envs"
+ export type { IEnvRule, IEnvsOptions } from "./plugins/envs"
+ 
+-export { default as normalizeRequest } from "./plugins/normalize-request"
+-export type { INormalizeRequestOptions, TPredicate } from "./plugins/normalize-request"
++export { default as reqclean } from "./plugins/reqclean"
++export type { IReqcleanOptions, TPredicate } from "./plugins/reqclean"
+ 
+ export { default as loading } from "./plugins/loading"
+ export type { ILoadingOptions, TLoadingFunc } from "./plugins/loading"
+diff --git a/apps/axp/src/plugins/cache.ts b/apps/axp/src/plugins/cache.ts
+index 35b605c..416cd7f 100644
+--- a/apps/axp/src/plugins/cache.ts
++++ b/apps/axp/src/plugins/cache.ts
+@@ -15,7 +15,7 @@ const stores = new WeakMap<AxiosInstance, Map<string, ICacheEntry>>();
+  *
+  *   - **基于 adapter 包装**：命中缓存直接 `Promise.resolve(cachedResponse)`，
+  *     不发 HTTP；未命中走原 adapter 并把响应写入缓存
+- *   - **缓存维度**：默认用 `config.key`（由 build-key 计算）；可在请求级 `config.cache.key`
++ *   - **缓存维度**：默认用 `config.key`（由 reqkey 计算）；可在请求级 `config.cache.key`
+  *     或插件级 `defaults.key` 自定义
+  *   - **TTL**：请求级 `expires` > 插件级 `defaults.expires`，默认 60s
+  *   - **存储**：本插件用进程内 Map（不持久化）。需要 sessionStorage / localStorage
+@@ -25,7 +25,7 @@ const stores = new WeakMap<AxiosInstance, Map<string, ICacheEntry>>();
+  * @example
+  *   useAxiosPlugin(ax)
+  *     .use(cache({ expires: 30_000 }))
+- *     .use(buildKey({ ... }));   // 注意：cache 之前装，buildKey 之后装
++ *     .use(reqkey({ ... }));   // 注意：cache 之前装，reqkey 之后装
+  *
+  *   ax.get('/api/list', { cache: true });
+  *   ax.get('/api/user', { cache: { expires: 5_000 } });
+@@ -123,7 +123,7 @@ export function $resolveCache(config: AxiosRequestConfig, defaults: ICacheOption
+     return null;
+ }
+ 
+-/** 解析缓存 key：请求级 > 插件级 > config.key（build-key 兜底）@internal */
++/** 解析缓存 key：请求级 > 插件级 > config.key（reqkey 兜底）@internal */
+ export function $resolveKey(
+     config: AxiosRequestConfig,
+     resolved: IResolvedCache,
+@@ -164,7 +164,7 @@ export interface ICacheOptions {
+     enable?: boolean;
+     /** 默认 TTL（毫秒）；可由请求级 `config.cache.expires` 覆盖。默认 60_000。 */
+     expires?: number;
+-    /** 默认 key 计算函数；未指定时回退到 `config.key`（build-key 写入）。 */
++    /** 默认 key 计算函数；未指定时回退到 `config.key`（reqkey 写入）。 */
+     key?: (config: AxiosRequestConfig) => string | undefined;
+     /** 默认拷贝策略；对象形式请求级 `config.cache.clone` 未指定时回退到此。默认共享引用。 */
+     clone?: TCloneStrategy;
+diff --git a/apps/axp/src/plugins/normalize-request.ts b/apps/axp/src/plugins/reqclean.ts
+similarity index 85%
+rename from apps/axp/src/plugins/normalize-request.ts
+rename to apps/axp/src/plugins/reqclean.ts
+index b0f79c0..c585eb9 100644
+--- a/apps/axp/src/plugins/normalize-request.ts
++++ b/apps/axp/src/plugins/reqclean.ts
+@@ -4,7 +4,7 @@ import { isObject, __DEV__ } from '../helper';
+ import type { AxiosRequestConfig } from 'axios';
+ 
+ 
+-const name = 'normalize-request'
++const name = 'reqclean'
+ 
+ /**
+  * 在请求发出前过滤掉 params / data 中的"空字段"，避免无意义的 key/value
+@@ -20,11 +20,11 @@ const name = 'normalize-request'
+  *   - 对象                    → 覆盖插件级
+  *   - 函数                    → 动态返回上述任一形式
+  *
+- * @returns 过滤 params / data，按需配合 build-key 等插件使用
++ * @returns 过滤 params / data，按需配合 reqkey 等插件使用
+  */
+-export default function normalizeRequest({ enable = true, predicate, ignoreKeys, ignoreValues }: INormalizeRequestOptions = {}): Plugin {
++export default function reqclean({ enable = true, predicate, ignoreKeys, ignoreValues }: IReqcleanOptions = {}): Plugin {
+     // 插件级默认（请求级未指定时回退到此）
+-    const defaults: INormalizeRequestOptions = { predicate, ignoreKeys, ignoreValues };
++    const defaults: IReqcleanOptions = { predicate, ignoreKeys, ignoreValues };
+     return {
+         name,
+         install(ctx) {
+@@ -72,11 +72,11 @@ function isEnabled(f: unknown): boolean {
+  */
+ export function $resolveOptions(
+     config: AxiosRequestConfig,
+-    defaults: INormalizeRequestOptions,
+-): Required<Pick<INormalizeRequestOptions, 'predicate'>> & Pick<INormalizeRequestOptions, 'ignoreKeys' | 'ignoreValues'> {
++    defaults: IReqcleanOptions,
++): Required<Pick<IReqcleanOptions, 'predicate'>> & Pick<IReqcleanOptions, 'ignoreKeys' | 'ignoreValues'> {
+     let f = config.filter;
+     if (typeof f === 'function') f = f(config);
+-    const override: INormalizeRequestOptions = (f && typeof f === 'object') ? f : {};
++    const override: IReqcleanOptions = (f && typeof f === 'object') ? f : {};
+     return {
+         predicate: override.predicate ?? defaults.predicate ?? defaultPredicate,
+         ignoreKeys: override.ignoreKeys ?? defaults.ignoreKeys,
+@@ -86,8 +86,8 @@ export function $resolveOptions(
+ 
+ 
+ /**
+- * 对一层对象做条目级过滤（不递归——HTTP 序列化场景下嵌套结构由 build-key 等
+- * 后续插件按需再处理；normalize-request 只负责剥离顶层无意义字段）。
++ * 对一层对象做条目级过滤（不递归——HTTP 序列化场景下嵌套结构由 reqkey 等
++ * 后续插件按需再处理；reqclean 只负责剥离顶层无意义字段）。
+  *
+  *   - key 命中 ignoreKeys → 保留
+  *   - value 命中 ignoreValues → 保留
+@@ -125,7 +125,7 @@ export function $filter(
+ export type TDroppedKV = [key: string, value: any];
+ 
+ 
+-/** 默认 predicate：与 build-key 的默认过滤语义对齐 */
++/** 默认 predicate：与 reqkey 的默认过滤语义对齐 */
+ export function defaultPredicate(kv: [key: string, value: any]): boolean {
+     const v = kv[1];
+     if (v == null || Number.isNaN(v)) return true;
+@@ -148,7 +148,7 @@ function matchesValue(target: any, list: any[]): boolean {
+ 
+ export type TPredicate = (kv: [key: string, value: any]) => boolean;
+ 
+-export interface INormalizeRequestOptions {
++export interface IReqcleanOptions {
+     /** 插件级总开关；默认 `true` */
+     enable?: boolean;
+     /** 自定义"是否丢弃"判断；返回 `true` 表示该条目被丢弃 */
+@@ -162,9 +162,9 @@ export interface INormalizeRequestOptions {
+ 
+ declare module 'axios' {
+     interface AxiosRequestConfig {
+-        filter?: MaybeFun<INormalizeRequestOptions | boolean | Falsy>;
++        filter?: MaybeFun<IReqcleanOptions | boolean | Falsy>;
+     }
+     interface InternalAxiosRequestConfig {
+-        // filter?: INormalizeRequestOptions | boolean | Falsy;
++        // filter?: IReqcleanOptions | boolean | Falsy;
+     }
+ }
+diff --git a/apps/axp/src/plugins/build-key.ts b/apps/axp/src/plugins/reqkey.ts
+similarity index 95%
+rename from apps/axp/src/plugins/build-key.ts
+rename to apps/axp/src/plugins/reqkey.ts
+index 800d751..b111f55 100644
+--- a/apps/axp/src/plugins/build-key.ts
++++ b/apps/axp/src/plugins/reqkey.ts
+@@ -4,15 +4,15 @@ import type { Plugin, IPluginCommonRequestOptions, MaybeFun } from '../types';
+ 
+ 
+ 
+-const name = 'build-key'
++const name = 'reqkey'
+ 
+ /**
+  *
+  * @returns 对请求生成唯一key，用于防抖、缓存等
+  */
+-export default function buildKey({ after, before, enable = true, fastMode, ignoreKeys, ignoreValues, sample }: IBuildKeyOptions = {}): Plugin {
++export default function reqkey({ after, before, enable = true, fastMode, ignoreKeys, ignoreValues, sample }: IReqkeyOptions = {}): Plugin {
+     // 插件级默认（请求级未指定时回退到此）
+-    const defaults: IBuildKeyObject = { fastMode, ignoreKeys, ignoreValues, sample };
++    const defaults: IReqkeyObject = { fastMode, ignoreKeys, ignoreValues, sample };
+     return {
+         name: name,
+         install(ctx) {
+@@ -47,7 +47,7 @@ function isEnabled(k: unknown): boolean {
+  *   - defaults：插件级默认配置；请求级未指定时回退到此
+  *   - 优先级：请求级显式字段 > 插件级 defaults > 内置默认
+  */
+-export function $parse(config: AxiosRequestConfig, defaults?: IBuildKeyObject): string | null {
++export function $parse(config: AxiosRequestConfig, defaults?: IReqkeyObject): string | null {
+     const build = config.key
+     if (!build && build !== 0) return null
+     // key:true → 默认 simple，插件级 fastMode 可覆盖；插件级 ignore 列表透传
+@@ -291,12 +291,12 @@ function stringHash(s: string, h: number, sample: boolean): number | undefined {
+     return hash('L' + l, h);
+ }
+ 
+-export interface IBuildKeyOptions extends IPluginCommonRequestOptions, IBuildKeyObject {
++export interface IReqkeyOptions extends IPluginCommonRequestOptions, IReqkeyObject {
+ 
+ }
+ 
+ 
+-export interface IBuildKeyObject {
++export interface IReqkeyObject {
+     enable?: boolean
+     /**
+      * 是否启用简单模式。
+@@ -325,7 +325,7 @@ export interface IBuildKeyObject {
+ 
+ declare module "axios" {
+     interface AxiosRequestConfig {
+-        key?: MaybeFun<'deep' | IBuildKeyObject | number | null | undefined | void | boolean | ({} & string)>;
++        key?: MaybeFun<'deep' | IReqkeyObject | number | null | undefined | void | boolean | ({} & string)>;
+     }
+     interface InternalAxiosRequestConfig {
+         key?: string
+diff --git a/apps/axp/src/plugins/share.ts b/apps/axp/src/plugins/share.ts
+index b85108a..a012950 100644
+--- a/apps/axp/src/plugins/share.ts
++++ b/apps/axp/src/plugins/share.ts
+@@ -8,7 +8,7 @@ const name = 'share'
+ 
+ /**
+  * 防抖 / 节流 / 合并 / 重试 多策略合一插件，按 `policy` 切换具体语义。
+- * **所有策略以 `config.key` 为去重维度——key 由 `buildKey` 插件计算。**
++ * **所有策略以 `config.key` 为去重维度——key 由 `reqkey` 插件计算。**
+  *
+  *   - **start**：相同 key 的并发请求等待并复用首个的 promise（HTTP 只发一次）
+  *   - **end**：  后到的请求顶替前面，所有 caller 等待最后一个的 HTTP 结果
+diff --git a/apps/axp/test/cache.test.ts b/apps/axp/test/cache.test.ts
+index 9bcf5bf..bfa7fab 100644
+--- a/apps/axp/test/cache.test.ts
++++ b/apps/axp/test/cache.test.ts
+@@ -52,8 +52,8 @@ describe('$resolveKey', () => {
+     it('插件级函数再次之', () => {
+         expect($resolveKey({} as any, {}, { key: () => 'plug' })).toBe('plug');
+     });
+-    it('回退到 config.key（build-key 兜底）', () => {
+-        expect($resolveKey({ key: 'fromBuildKey' } as any, {}, {})).toBe('fromBuildKey');
++    it('回退到 config.key（reqkey 兜底）', () => {
++        expect($resolveKey({ key: 'fromReqkey' } as any, {}, {})).toBe('fromReqkey');
+     });
+     it('全部缺失 → undefined', () => {
+         expect($resolveKey({} as any, {}, {})).toBeUndefined();
+diff --git a/apps/axp/test/index.ts b/apps/axp/test/index.ts
+index 9fadc5e..599cf95 100644
+--- a/apps/axp/test/index.ts
++++ b/apps/axp/test/index.ts
+@@ -1,5 +1,5 @@
+ import axios from 'axios';
+-import { create, normalizeRequest, normalizeResponse } from '../src';
++import { create, reqclean, normalizeResponse } from '../src';
+ 
+ 
+ 
+@@ -7,7 +7,7 @@ const githubApi = create<model.MethodRefs>(axios.create({ baseURL: "https://api.
+ const internalApi = create<model.MethodRefs>(axios.create({ baseURL: "https://api.internal.example.com", adapter: 'fetch' }));
+ 
+ 
+-githubApi.use(normalizeRequest())
++githubApi.use(reqclean())
+ githubApi.use(normalizeResponse())
+ 
+ class TestApi {
+diff --git a/apps/axp/test/integration.test.ts b/apps/axp/test/integration.test.ts
+index fd88abc..057703f 100644
+--- a/apps/axp/test/integration.test.ts
++++ b/apps/axp/test/integration.test.ts
+@@ -1,6 +1,6 @@
+ import { describe, it, expect, vi } from 'vitest';
+ import axios from 'axios';
+-import { create, buildKey, share, cache, retry, loading, mock } from '../src';
++import { create, reqkey, share, cache, retry, loading, mock } from '../src';
+ import { makeNetwork } from './helpers/network';
+ 
+ /** 装好网络仿真的 Core 工厂 */
+@@ -17,7 +17,7 @@ describe('集成 — share「start」高并发去重', () => {
+   it('50 个并发同 key 请求 → 真实 HTTP 只发一次，全部拿到同一结果', async () => {
+     const { net, api } = mkApi();
+     net.on('GET', '/list', (_c, hit) => ({ data: { code: 0, data: { servedHit: hit } } }));
+-    api.use([buildKey(), share({ policy: 'start' })]);
++    api.use([reqkey(), share({ policy: 'start' })]);
+ 
+     const reqs = Array.from({ length: 50 }, () =>
+       api.get('/list')(undefined, { key: true, share: 'start', ...lat(20) }),
+@@ -37,7 +37,7 @@ describe('集成 — race 乱序 + 夹杂错误', () => {
+     net.on('GET', '/race', (_c, hit) =>
+       hit < 3 ? { status: 500 } : { data: { code: 0, data: 'winner' } },
+     );
+-    api.use([buildKey(), share({ policy: 'race' })]);
++    api.use([reqkey(), share({ policy: 'race' })]);
+ 
+     const reqs = Array.from({ length: 3 }, () =>
+       api.get('/race')(undefined, { key: true, share: 'race', ...lat(10) }),
+@@ -77,7 +77,7 @@ describe('集成 — cache 命中（顺序）', () => {
+     const { net, api } = mkApi();
+     let n = 0;
+     net.on('GET', '/cfg', () => ({ data: { code: 0, data: { v: ++n } } }));
+-    api.use([buildKey(), cache({ expires: 10_000 })]);
++    api.use([reqkey(), cache({ expires: 10_000 })]);
+ 
+     const r1: any = await api.get('/cfg')(undefined, { key: true, cache: true });
+     const r2: any = await api.get('/cfg')(undefined, { key: true, cache: true });
+diff --git a/apps/axp/test/normalize-request.test.ts b/apps/axp/test/reqclean.test.ts
+similarity index 93%
+rename from apps/axp/test/normalize-request.test.ts
+rename to apps/axp/test/reqclean.test.ts
+index 6868763..dfd3476 100644
+--- a/apps/axp/test/normalize-request.test.ts
++++ b/apps/axp/test/reqclean.test.ts
+@@ -1,9 +1,9 @@
+ import { describe, it, expect } from 'vitest';
+-import normalizeRequest, {
++import reqclean, {
+     $resolveOptions,
+     $filter,
+     defaultPredicate,
+-} from '../src/plugins/normalize-request';
++} from '../src/plugins/reqclean';
+ 
+ 
+ function makeMockCtx() {
+@@ -11,7 +11,7 @@ function makeMockCtx() {
+     const runWhens: Array<(config: any) => boolean> = [];
+     const ctx: any = {
+         axios: { defaults: {} },
+-        name: 'normalize-request',
++        name: 'reqclean',
+         logger: { log: () => { }, warn: () => { }, error: () => { } },
+         request: (f: any, _r: any, opts: any) => { reqHandlers.push(f); if (opts?.runWhen) runWhens.push(opts.runWhen); },
+         response: () => { },
+@@ -99,10 +99,10 @@ describe('$resolveOptions — 请求级/插件级合并', () => {
+ });
+ 
+ 
+-describe('normalize-request — 集成（拦截器 + runWhen）', () => {
++describe('reqclean — 集成（拦截器 + runWhen）', () => {
+     it('过滤 params 与 data，并 delete config.filter', () => {
+         const { ctx, reqHandlers } = makeMockCtx();
+-        normalizeRequest().install(ctx);
++        reqclean().install(ctx);
+         const config: any = { url: '/x', filter: true, params: { a: 1, b: '' }, data: { c: null, d: 2 } };
+         reqHandlers[0](config);
+         expect(config.params).toEqual({ a: 1 });
+@@ -112,13 +112,13 @@ describe('normalize-request — 集成（拦截器 + runWhen）', () => {
+ 
+     it('runWhen：enable:false → 恒不运行', () => {
+         const { ctx, runWhens } = makeMockCtx();
+-        normalizeRequest({ enable: false }).install(ctx);
++        reqclean({ enable: false }).install(ctx);
+         expect(runWhens[0]({ filter: true })).toBe(false);
+     });
+ 
+     it('runWhen：config.filter 为假值 → 不运行', () => {
+         const { ctx, runWhens } = makeMockCtx();
+-        normalizeRequest().install(ctx);
++        reqclean().install(ctx);
+         expect(runWhens[0]({ filter: false })).toBe(false);
+         expect(runWhens[0]({ filter: '' })).toBe(false);
+         expect(runWhens[0]({ filter: true })).toBe(true);
+diff --git a/apps/axp/test/build-key.test.ts b/apps/axp/test/reqkey.test.ts
+similarity index 99%
+rename from apps/axp/test/build-key.test.ts
+rename to apps/axp/test/reqkey.test.ts
+index 593b77d..0c0911e 100644
+--- a/apps/axp/test/build-key.test.ts
++++ b/apps/axp/test/reqkey.test.ts
+@@ -1,6 +1,6 @@
+ import { describe, it, expect } from 'vitest';
+ import type { IHttpOptions } from '../src/types';
+-import { $key, $parse, type KeyOpts } from '../src/plugins/build-key';
++import { $key, $parse, type KeyOpts } from '../src/plugins/reqkey';
+ 
+ /** 把任意值格式化成可读单行（保留 undefined / NaN 等 JSON.stringify 会丢的信息） */
+ function fmt(v: any, seen = new WeakSet()): string {

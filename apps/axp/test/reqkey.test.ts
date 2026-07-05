@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import type { IHttpOptions } from '../src/types';
-import { $key, $parse, type KeyOpts } from '../src/plugins/build-key';
+import { $key, $parse, type KeyOpts } from '../src/plugins/reqkey';
 
 /** 把任意值格式化成可读单行（保留 undefined / NaN 等 JSON.stringify 会丢的信息） */
 function fmt(v: any, seen = new WeakSet()): string {

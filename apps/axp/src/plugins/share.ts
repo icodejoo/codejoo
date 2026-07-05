@@ -8,7 +8,7 @@ const name = 'share'
 
 /**
  * 防抖 / 节流 / 合并 / 重试 多策略合一插件，按 `policy` 切换具体语义。
- * **所有策略以 `config.key` 为去重维度——key 由 `buildKey` 插件计算。**
+ * **所有策略以 `config.key` 为去重维度——key 由 `reqkey` 插件计算。**
  *
  *   - **start**：相同 key 的并发请求等待并复用首个的 promise（HTTP 只发一次）
  *   - **end**：  后到的请求顶替前面，所有 caller 等待最后一个的 HTTP 结果
@@ -20,6 +20,12 @@ const name = 'share'
  * **核心实现**：每个 (key, 一轮请求) 共享一个 `Promise.withResolvers()` 的 promise，
  * 不同策略只是决定"哪个 HTTP 有资格 settle 它"。Promise 一经 settle，其他重复 resolve/reject
  * 自动 no-op，无需 callers 列表或显式去重。
+ *
+ * **不要与 `retry` 插件的 `policy:'retry'` 叠加**：本插件的 retry 发生在 adapter 层，settle
+ * 之前 `retry` 插件的响应拦截器完全看不到；一旦最终 reject 才会被 `retry` 再次整链路重发，
+ * 触发 share 一次全新的内部重试循环 —— 总次数变成 `(retry.max+1) * (share.retries+1)`
+ * 的乘积，而不是两者中较大的一个。同一 key 上二选一：用本插件的 `retry` 策略处理瞬时失败，
+ * 或用 `retry` 插件处理全链路重发，不要同时开。
  */
 export default function share({ enable = true, policy = 'start', interval = 0, retries = 3 }: ISharedOptions = {}): Plugin {
     const defaults: ISharedOptions = { policy, interval, retries };
@@ -33,14 +39,18 @@ export default function share({ enable = true, policy = 'start', interval = 0, r
             ctx.adapter((config) => {
                 const key = config.key;
                 if (!key) return prev(config);
+                // 全部读完 config.share 再删——否则 $resolveRetries/$resolveInterval 各自
+                // 重新 $unwrap(config) 时 config.share 已被删掉，per-request 的 interval/retries
+                // 覆盖会静默失效，回退到插件级 defaults（对齐 cache.ts 的 opt 先捕获再 delete 模式）。
                 const p = $resolvePolicy(config, defaults);
+                const r = p === 'start' ? 0 : $resolveRetries(config, defaults);
+                const interval = $resolveInterval(config, defaults);
                 delete config.share;
                 if (p === 'none') return prev(config);
                 if (p === 'end') return $end(prev, map, key, config);
                 if (p === 'race') return $race(prev, map, key, config);
                 // start = retry with retries=0
-                const r = p === 'start' ? 0 : $resolveRetries(config, defaults);
-                return $retry(prev, map, key, config, r, $resolveInterval(config, defaults));
+                return $retry(prev, map, key, config, r, interval);
             });
         },
     };

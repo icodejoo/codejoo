@@ -1,5 +1,5 @@
 import axios from 'axios';
-import { create, normalizeRequest, normalizeResponse } from '../src';
+import { create, reqclean, normalizeResponse } from '../src';
 
 
 
@@ -7,7 +7,7 @@ const githubApi = create<model.MethodRefs>(axios.create({ baseURL: "https://api.
 const internalApi = create<model.MethodRefs>(axios.create({ baseURL: "https://api.internal.example.com", adapter: 'fetch' }));
 
 
-githubApi.use(normalizeRequest())
+githubApi.use(reqclean())
 githubApi.use(normalizeResponse())
 
 class TestApi {

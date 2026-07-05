@@ -1,6 +1,6 @@
 import { describe, it, expect, vi } from 'vitest';
 import axios from 'axios';
-import { create, buildKey, share, cache, retry, loading, mock } from '../src';
+import { create, reqkey, share, cache, retry, loading, mock } from '../src';
 import { makeNetwork } from './helpers/network';
 
 /** 装好网络仿真的 Core 工厂 */
@@ -17,7 +17,7 @@ describe('集成 — share「start」高并发去重', () => {
   it('50 个并发同 key 请求 → 真实 HTTP 只发一次，全部拿到同一结果', async () => {
     const { net, api } = mkApi();
     net.on('GET', '/list', (_c, hit) => ({ data: { code: 0, data: { servedHit: hit } } }));
-    api.use([buildKey(), share({ policy: 'start' })]);
+    api.use([reqkey(), share({ policy: 'start' })]);
 
     const reqs = Array.from({ length: 50 }, () =>
       api.get('/list')(undefined, { key: true, share: 'start', ...lat(20) }),
@@ -37,7 +37,7 @@ describe('集成 — race 乱序 + 夹杂错误', () => {
     net.on('GET', '/race', (_c, hit) =>
       hit < 3 ? { status: 500 } : { data: { code: 0, data: 'winner' } },
     );
-    api.use([buildKey(), share({ policy: 'race' })]);
+    api.use([reqkey(), share({ policy: 'race' })]);
 
     const reqs = Array.from({ length: 3 }, () =>
       api.get('/race')(undefined, { key: true, share: 'race', ...lat(10) }),
@@ -77,7 +77,7 @@ describe('集成 — cache 命中（顺序）', () => {
     const { net, api } = mkApi();
     let n = 0;
     net.on('GET', '/cfg', () => ({ data: { code: 0, data: { v: ++n } } }));
-    api.use([buildKey(), cache({ expires: 10_000 })]);
+    api.use([reqkey(), cache({ expires: 10_000 })]);
 
     const r1: any = await api.get('/cfg')(undefined, { key: true, cache: true });
     const r2: any = await api.get('/cfg')(undefined, { key: true, cache: true });

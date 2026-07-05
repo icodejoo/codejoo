@@ -27,7 +27,15 @@ export default function envs(rules: IEnvRule[] = []): Plugin {
             for (const r of rules) {
                 if (r.rule()) {
                     if (__DEV__) ctx.logger.log(`${name} matched: ${describe(r)}`);
+                    // Object.assign 直接改 axios.defaults，PluginManager 的 teardown 不认识这个
+                    // 副作用（它只反转 ctx.request/response/adapter/transform*）——自己存快照，
+                    // 用 ctx.cleanup 注册回滚，让 eject / #refresh 时 defaults 能真正复原。
+                    const prev: Record<string, unknown> = {};
+                    for (const k of Object.keys(r.config)) {
+                        prev[k] = (ctx.axios.defaults as Record<string, unknown>)[k];
+                    }
                     Object.assign(ctx.axios.defaults, r.config);
+                    ctx.cleanup(() => Object.assign(ctx.axios.defaults, prev));
                     return;
                 }
             }

@@ -15,7 +15,7 @@ const stores = new WeakMap<AxiosInstance, Map<string, ICacheEntry>>();
  *
  *   - **基于 adapter 包装**：命中缓存直接 `Promise.resolve(cachedResponse)`，
  *     不发 HTTP；未命中走原 adapter 并把响应写入缓存
- *   - **缓存维度**：默认用 `config.key`（由 build-key 计算）；可在请求级 `config.cache.key`
+ *   - **缓存维度**：默认用 `config.key`（由 reqkey 计算）；可在请求级 `config.cache.key`
  *     或插件级 `defaults.key` 自定义
  *   - **TTL**：请求级 `expires` > 插件级 `defaults.expires`，默认 60s
  *   - **存储**：本插件用进程内 Map（不持久化）。需要 sessionStorage / localStorage
@@ -25,7 +25,7 @@ const stores = new WeakMap<AxiosInstance, Map<string, ICacheEntry>>();
  * @example
  *   useAxiosPlugin(ax)
  *     .use(cache({ expires: 30_000 }))
- *     .use(buildKey({ ... }));   // 注意：cache 之前装，buildKey 之后装
+ *     .use(reqkey({ ... }));   // 注意：cache 之前装，reqkey 之后装
  *
  *   ax.get('/api/list', { cache: true });
  *   ax.get('/api/user', { cache: { expires: 5_000 } });
@@ -123,7 +123,7 @@ export function $resolveCache(config: AxiosRequestConfig, defaults: ICacheOption
     return null;
 }
 
-/** 解析缓存 key：请求级 > 插件级 > config.key（build-key 兜底）@internal */
+/** 解析缓存 key：请求级 > 插件级 > config.key（reqkey 兜底）@internal */
 export function $resolveKey(
     config: AxiosRequestConfig,
     resolved: IResolvedCache,
@@ -164,7 +164,7 @@ export interface ICacheOptions {
     enable?: boolean;
     /** 默认 TTL（毫秒）；可由请求级 `config.cache.expires` 覆盖。默认 60_000。 */
     expires?: number;
-    /** 默认 key 计算函数；未指定时回退到 `config.key`（build-key 写入）。 */
+    /** 默认 key 计算函数；未指定时回退到 `config.key`（reqkey 写入）。 */
     key?: (config: AxiosRequestConfig) => string | undefined;
     /** 默认拷贝策略；对象形式请求级 `config.cache.clone` 未指定时回退到此。默认共享引用。 */
     clone?: TCloneStrategy;
