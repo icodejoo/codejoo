@@ -1,31 +1,49 @@
 {
   "name": "@codejoo/counter",
-  "version": "0.0.1",
-    "publishConfig": {
-    "access": "public"
-  },
-  "type": "module",
-  "main": "./dist/index.mjs",
-  "module": "./dist/index.mjs",
-  "types": "./dist/index.d.mts",
-  "exports": {
-    ".": { "types": "./dist/index.d.mts", "default": "./dist/index.mjs" },
-    "./count-down": { "types": "./dist/count-down.d.mts", "default": "./dist/count-down.mjs" },
-    "./count-up": { "types": "./dist/count-up.d.mts", "default": "./dist/count-up.mjs" },
-    "./card": { "types": "./dist/card.d.mts", "default": "./dist/card.mjs" },
-    "./odometer": { "types": "./dist/odometer.d.mts", "default": "./dist/odometer.mjs" },
-    "./ring": { "types": "./dist/ring.d.mts", "default": "./dist/ring.mjs" },
-    "./card.css": "./dist/card.css",
-    "./ring.css": "./dist/ring.css",
-    "./package.json": "./package.json"
-  },
-  "sideEffects": false,
+  "version": "0.1.0",
   "files": [
     "dist",
     "src",
     "README.md",
     "README.zh-CN.md"
   ],
+  "type": "module",
+  "sideEffects": false,
+  "main": "./dist/index.mjs",
+  "module": "./dist/index.mjs",
+  "types": "./dist/index.d.mts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.mts",
+      "default": "./dist/index.mjs"
+    },
+    "./count-down": {
+      "types": "./dist/count-down.d.mts",
+      "default": "./dist/count-down.mjs"
+    },
+    "./count-up": {
+      "types": "./dist/count-up.d.mts",
+      "default": "./dist/count-up.mjs"
+    },
+    "./card": {
+      "types": "./dist/card.d.mts",
+      "default": "./dist/card.mjs"
+    },
+    "./odometer": {
+      "types": "./dist/odometer.d.mts",
+      "default": "./dist/odometer.mjs"
+    },
+    "./ring": {
+      "types": "./dist/ring.d.mts",
+      "default": "./dist/ring.mjs"
+    },
+    "./card.css": "./dist/card.css",
+    "./ring.css": "./dist/ring.css",
+    "./package.json": "./package.json"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
   "scripts": {
     "fmt": "vp fmt -c oxfmt.config.ts",
     "lint": "vp lint -c oxlint.config.ts",

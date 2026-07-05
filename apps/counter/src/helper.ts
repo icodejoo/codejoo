@@ -7,21 +7,27 @@ export function $(el: string | Element): Element {
   return found;
 }
 
-// 元素 → 其首次进入视口的回调 + 所属 observer（命中后用于精确 unobserve）。
+// 元素 → 该元素上所有待激活的懒注册（cb + 所属 observer）。用数组而非单条记录，
+// 允许同一元素被多个懒任务同时观察（如同一元素上先后挂了懒 countdown 又挂懒 countup）而不互相顶掉。
 // WeakMap：元素被 GC 时记录自动释放，无泄漏。
-const lazyMap = new WeakMap<Element, { cb: () => void; io: IntersectionObserver }>();
+const lazyMap = new WeakMap<Element, { cb: () => void; io: IntersectionObserver }[]>();
 
-// 所有 lazy observer 共用同一派发回调：某元素进入视口即注销它并触发其回调（一次性）。
-const dispatch: IntersectionObserverCallback = (entries) => {
+// 所有 lazy observer 共用同一派发回调：某元素进入视口即触发该 observer 名下匹配的回调（一次性）。
+// 用回调形参里的 observer 而非闭包变量识别"是哪个 observer 触发的"，避免多个 observer 共用同一 dispatch 时互相误判。
+const dispatch: IntersectionObserverCallback = (entries, observer) => {
   for (let i = 0; i < entries.length; i++) {
     const entry = entries[i];
     if (!entry.isIntersecting) continue;
-    const rec = lazyMap.get(entry.target);
-    if (rec) {
-      lazyMap.delete(entry.target);
-      rec.io.unobserve(entry.target);
-      rec.cb();
-    }
+    const recs = lazyMap.get(entry.target);
+    if (!recs) continue;
+    // 同一元素可能挂了多个懒注册，只摘取属于当前 observer 的那一条，其余留给各自的 observer 触发
+    const idx = recs.findIndex((r) => r.io === observer);
+    if (idx === -1) continue;
+    const [rec] = recs.splice(idx, 1);
+    if (recs.length === 0) lazyMap.delete(entry.target);
+    // 同一元素上若还有别的注册复用同一个 observer，暂不 unobserve，避免误伤它们
+    if (!recs.some((r) => r.io === observer)) observer.unobserve(entry.target);
+    rec.cb();
   }
 };
 
@@ -55,10 +61,19 @@ export function lazyStart(el: Element, onEnter: () => void, observer?: Intersect
   }
   if (!defaultObserver) defaultObserver = createLazyObserver();
   const io = observer ?? defaultObserver;
-  lazyMap.set(el, { cb: onEnter, io });
+  const rec = { cb: onEnter, io };
+  const recs = lazyMap.get(el);
+  if (recs) recs.push(rec);
+  else lazyMap.set(el, [rec]);
   io.observe(el);
   return () => {
-    lazyMap.delete(el);
-    io.unobserve(el);
+    const list = lazyMap.get(el);
+    if (!list) return;
+    const idx = list.indexOf(rec);
+    if (idx === -1) return;
+    list.splice(idx, 1);
+    if (list.length === 0) lazyMap.delete(el);
+    // 同一元素上若还有别的注册复用同一个 observer，暂不 unobserve，避免误伤它们
+    if (!list.some((r) => r.io === io)) io.unobserve(el);
   };
 }

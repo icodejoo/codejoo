@@ -19,8 +19,10 @@ description: Work on apps/counter (@codejoo/counter) — a browser count-up/coun
   `types.ts` = public types. Non-ms tasks render only when the integer second changes (built-in throttle).
 - **plugins/** — render functions, **runtime-standalone** (import count-down only via `type`):
   `card.ts` (flip/slide/calendar, `card.css`), `odometer.ts` (rolling digits, shares `cd-*`),
-  `ring.ts` (circular 7-seg countdown, `ring.css`). Each `create*Render()` returns the render fn
-  **plus `destroy(el?)`** that releases references without mutating host DOM.
+  `ring.ts` (circular 7-seg countdown, `ring.css`), `shared.ts` (internal-only `isDigit`/`maskOf`,
+  no runtime deps, safe for every plugin entry to import without pulling anything else in).
+  Each `create*Render()` returns the render fn **plus `destroy(el?)`** that releases references
+  without mutating host DOM.
 - **index.ts** — umbrella re-export.
 
 ## Render contract
@@ -28,7 +30,9 @@ description: Work on apps/counter (@codejoo/counter) — a browser count-up/coun
 - count-up: `render(el, value, ctx)` — `ctx` has `value/from/to/fmt/el/id/active/paused`. Don't
   pre-format; call `ctx.fmt(value)` only when you need a string.
 - count-down: `render(el, remaining, value, ctx)` — `value` is the reused `[d,h,m,s,ms]` tuple;
-  `ctx.fmt(remaining)` formats. Contexts/tuples are **reused per frame — never hold across frames**.
+  `ctx.fmt(remaining)` formats. `ctx.oldValue` is an independent snapshot of `value` taken right
+  before the last time it actually changed (untouched on throttled/no-op frames) — use it to diff
+  which units just rolled over. Contexts/tuples are **reused per frame — never hold across frames**.
 
 ## Conventions / invariants
 
@@ -66,5 +70,10 @@ pnpm build           # multi-entry ESM (dist/*.mjs + *.d.mts) + copy css
 
 - Don't break the reuse contract: a render must tolerate being called every frame with the same
   value (idempotent, cached writes).
-- `lazy` tasks anchor their deadline/animation only on entering the viewport (IntersectionObserver).
-- count-down handles cadence (per-second for non-ms tasks); don't add call-rate dedup inside plugins.
+- `lazy` tasks anchor their deadline/animation only on entering the viewport (IntersectionObserver);
+  if a lazy task is `pause()`d before it ever becomes active, activation defers anchoring the
+  deadline until `resume()` — don't recompute `deadline` from the viewport-entry moment while paused.
+- count-down handles cadence (per-second for non-ms tasks); don't add call-rate dedup inside
+  plugins for that case. But a plugin that itself quantizes to a coarser grain than the engine does
+  (e.g. ring's ceil-to-whole-second) still gets called every frame for `showMilliseconds` tasks —
+  cache your own quantized key (see ring's `state.lastRemMs`) and bail before doing any formatting.

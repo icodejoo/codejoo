@@ -22,16 +22,18 @@ export function scheduleStart(active: boolean, el: Element | undefined, observer
     return undefined;
   }
   let timer: ReturnType<typeof setTimeout> | undefined;
+  let activated = false;
   const cancelObserve = lazyStart(
     el,
     () => {
+      activated = true; // 无 IntersectionObserver 环境下 lazyStart 会同步触发，此时 timer 还未赋值，需靠此标记拦截随后误装的超时器
       if (timer) clearTimeout(timer);
       onActivate();
       start();
     },
     observer,
   );
-  if (timeout > 0 && onTimeout) {
+  if (!activated && timeout > 0 && onTimeout) {
     timer = setTimeout(() => {
       cancelObserve(); // 断开观察
       onTimeout(); // 回收任务

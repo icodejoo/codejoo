@@ -61,9 +61,7 @@ const groups = store.groups;
 export const group = store.group;
 export const clear = store.clear;
 
-export function remove(id: number, label = defaultLabel) {
-  store.remove(id, label);
-}
+export const remove = store.remove;
 
 export function pause(id: number, label = defaultLabel) {
   const t = groups.get(label)?.queue.get(id);
@@ -87,12 +85,15 @@ export function resume(id: number, label = defaultLabel) {
 export function tick(elapsed: number, dt: number): boolean {
   lastElapsed = elapsed;
   let busy = false;
-  groups.forEach((g) => {
-    g.queue.forEach((task, id) => {
-      if (!task.active || task.paused || task.done) return; // 未激活 / 暂停 / 已完成保留：跳过且不计 busy
+  for (const g of groups.values()) {
+    for (const [id, task] of g.queue) {
+      if (!task.active || task.paused || task.done) continue; // 未激活 / 暂停 / 已完成保留：跳过且不计 busy
       if (task.resuming) {
-        // 把暂停期间流逝的时间平移进 startAt，进度从暂停点无缝继续
-        task.startAt += elapsed - task.pausedElapsed;
+        // 把暂停期间流逝的时间平移进 startAt，进度从暂停点无缝继续；
+        // 若任务在从未真正开始（startAt 仍是哨兵值 -1）时就被 pause→resume，不平移，
+        // 让下面的 "startAt < 0" 分支把本帧当作真正的起点（否则会平移出一个很小的 startAt，
+        // 导致 progress 用当前巨大的 elapsed 一算就 ≥1，动画瞬间跳到终值）
+        if (task.startAt >= 0) task.startAt += elapsed - task.pausedElapsed;
         task.resuming = false;
       }
       if (task.startAt < 0) {
@@ -109,7 +110,7 @@ export function tick(elapsed: number, dt: number): boolean {
         busy = true;
         if (task.interval > 0) {
           task.accum += dt;
-          if (task.accum < task.interval) return;
+          if (task.accum < task.interval) continue;
           // 保留余量而非清零，避免节流相位漂移
           task.accum -= task.interval;
         }
@@ -125,14 +126,14 @@ export function tick(elapsed: number, dt: number): boolean {
         // 否则保留实例停在末值，标记 done 跳过后续帧（可手动 remove 或同元素重定目标）
         if (task.autoKill) remove(id, task.label);
         else task.done = true;
-        return;
+        continue;
       }
       if (task.el) {
         // 不预格式化：传原始 value，渲染器需要字符串时自行 ctx.fmt(value)
         task.render(task.el, task.value, task.ctx);
       }
-    });
-  });
+    }
+  }
   return busy;
 }
 
@@ -157,6 +158,7 @@ function addTask(options: ICountupFullOptions): number {
     const existing = elTask.get(el);
     if (existing) {
       const merged = { ...defaults, ...groups.get(existing.label!)?.config, ...options };
+      const prevRender = existing.render;
       existing.from = options.from ?? existing.value; // 缺省从当前值起，无跳变
       existing.value = existing.from;
       existing.to = merged.to;
@@ -166,6 +168,9 @@ function addTask(options: ICountupFullOptions): number {
       existing.interval = fpsToMs(merged.fps);
       existing.fmt = merged.fmt;
       existing.render = merged.render;
+      if (prevRender !== existing.render) destroyRender(el, prevRender); // 换渲染器前先释放旧渲染器对该元素的内部引用
+      existing.lazy = merged.lazy;
+      existing.lazyTimeout = merged.lazyTimeout;
       existing.onStart = options.onStart;
       existing.onUpdate = options.onUpdate;
       existing.onDone = options.onDone;
@@ -182,6 +187,27 @@ function addTask(options: ICountupFullOptions): number {
       existing.ctx.to = existing.to;
       existing.ctx.value = existing.value;
       existing.ctx.fmt = existing.fmt;
+      if (!existing.active) {
+        // 仍是待激活的懒任务（尚未进入视口）：旧的 scheduleStart 挂钩（含其 lazyTimeout 定时器）
+        // 仍会用旧配置在到期后 remove(existing.id)，误杀刚被重定目标的任务，须先取消再按新配置重挂
+        existing.cancel?.();
+        const active = !(merged.lazy && el);
+        existing.active = active;
+        existing.ctx.active = active;
+        existing.cancel = scheduleStart(
+          active,
+          el,
+          merged.observer,
+          () => {
+            existing.active = true;
+            existing.ctx.active = true;
+            existing.startAt = -1;
+            existing.accum = 0;
+          },
+          merged.lazyTimeout,
+          () => remove(existing.id, existing.label),
+        );
+      }
       start();
       return existing.id;
     }

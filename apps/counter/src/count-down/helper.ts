@@ -1,13 +1,4 @@
-import type {
-  ICountdownContext,
-  ICountdownFormatter,
-  TCountdownDeadline,
-  TCountdownValue,
-  TDateUnit,
-  TDateParser,
-  TCountdownParser,
-  ICountdownOptions,
-} from "./types";
+import type { ICountdownContext, ICountdownFormatter, TCountdownDeadline, TCountdownValue, TDateUnit, TDateParser, TCountdownParser, ICountdownOptions } from "./types";
 // ========================= 常量 =========================
 
 const MS_SECOND = 1000;
@@ -189,6 +180,21 @@ export function resolveParser(parser: TCountdownParser | undefined, showDays: bo
   return parser ?? createCountdownParser(showDays);
 }
 
+/** 建独立副本（脱离 parser 内部复用的数组），仅用于任务创建时初始化 ctx.oldValue */
+export function copyCountdownValue(value: TCountdownValue): TCountdownValue {
+  return [value[0], value[1], value[2], value[3], value[4]];
+}
+
+/** 原地把 src 的 5 个分量拷进 dst（零分配），用于 tick 内覆写 ctx.value 前留存旧值 */
+export function snapshotValue(dst: TCountdownValue, src: TCountdownValue): void {
+  const d = dst as unknown as number[];
+  d[0] = src[0];
+  d[1] = src[1];
+  d[2] = src[2];
+  d[3] = src[3];
+  d[4] = src[4];
+}
+
 export function resolveDateParser(resolver: TDateParser | TDateUnit): TDateParser {
   if (typeof resolver === "string") {
     return buildDateParser(resolver);
@@ -196,7 +202,11 @@ export function resolveDateParser(resolver: TDateParser | TDateUnit): TDateParse
   return resolver;
 }
 
-export function resolveConfig<T extends ICountdownOptions>(defaults: Required<Omit<ICountdownOptions, "parser" | "observer">>, group?: ICountdownOptions, config?: T): Required<Omit<ICountdownOptions, "parser" | "observer">> & T {
+export function resolveConfig<T extends ICountdownOptions>(
+  defaults: Required<Omit<ICountdownOptions, "parser" | "observer">>,
+  group?: ICountdownOptions,
+  config?: T,
+): Required<Omit<ICountdownOptions, "parser" | "observer">> & T {
   if (!group && !config) return defaults as Required<Omit<ICountdownOptions, "parser" | "observer">> & T;
   return { ...defaults, ...group, ...config } as Required<Omit<ICountdownOptions, "parser" | "observer">> & T;
 }

@@ -48,7 +48,7 @@ export class Idb {
     } catch (err) {
       console.warn("[storage] IndexedDB unavailable, fell back to in-memory mode", err);
       supported.indexedDB = false; // 运行时不支持，同步给全局可用性标记
-      this.mem = new Memory();
+      this.mem ??= new Memory(); // 并发调用共享同一个失败的 open()，都会走到这里——不能每次都换一个新 Map，否则先写入的数据被孤立丢失
       this.db = undefined;
       return null;
     }
@@ -131,13 +131,13 @@ export class Idb {
   }
 
   /**
-   * 释放资源：关闭已打开的 IndexedDB 连接并丢弃句柄，断开内存兜底引用，便于 GC 回收。
+   * 释放资源：关闭已打开的 IndexedDB 连接并丢弃句柄，便于 GC 回收。
    * **不删除已落盘数据**（如需清空请用 clear）。关闭后再次调用任意方法会按需重新 open。
+   * 注意：不清空 `mem`——IndexedDB 不可用时它就是数据本身（唯一存储层），不是可丢弃的缓存/句柄。
    */
   async destroy(): Promise<void> {
     const opened = this.db;
     this.db = undefined;
-    this.mem = undefined;
     if (opened) {
       try {
         (await opened).close();

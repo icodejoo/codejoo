@@ -1,4 +1,5 @@
 import type { ICountupRenderContext, TCountupRender } from "../count-up/type";
+import { maskOf } from "./shared";
 
 export interface IOdometerRenderOptions {
   /**
@@ -49,6 +50,8 @@ interface IOSep {
   el: HTMLElement;
   /** 左邻数字位的位权（无左邻数字的前缀符记 -Infinity，永不作前导零隐藏） */
   leftK: number;
+  /** 是否是符号位（掩码首字符为 "-"）：随当前值的正负逐帧切换显隐，而非固定烘死 */
+  isSign: boolean;
 }
 
 interface IOState {
@@ -63,6 +66,8 @@ interface IOState {
   to: number;
   /** full 模式：动画结束后是否已塌缩为单格静态显示 */
   collapsed: boolean;
+  /** 上次绘制的符号位显隐状态，跳过重复的 classList 写 */
+  lastSign?: boolean;
 }
 
 /** 数值的整数位数（trunc 后），value<1 记 1（至少显示个位的 0）。整数循环，无字符串分配。 */
@@ -76,20 +81,9 @@ function intLen(value: number): number {
   return len;
 }
 
-function isDigit(ch: string): boolean {
-  return ch >= "0" && ch <= "9";
-}
-
 // 平移以 CSS 变量 --cd-cell-height 为单位（默认 1.25em）；提取常量避免重复字面量
 const TY_HEAD = "translateY(calc(var(--cd-cell-height, 1.25em) * ";
 const ty = (n: number) => TY_HEAD + n + "))";
-
-/** 数字位→#，分隔符/小数点原样保留 */
-function maskOf(s: string): string {
-  let m = "";
-  for (let i = 0; i < s.length; i++) m += isDigit(s[i]) ? "#" : s[i];
-  return m;
-}
 
 /**
  * 规划要构建的结构掩码：用 ctx.fmt 精确格式化 from/to 两端，
@@ -144,7 +138,7 @@ export function createOdometerRender(options: IOdometerRenderOptions = {}): IOdo
         sep.className = cls.sep;
         sep.textContent = mask[i];
         root.appendChild(sep);
-        seps.push({ el: sep, leftK: prevK });
+        seps.push({ el: sep, leftK: prevK, isSign: i === 0 && mask[i] === "-" });
         continue;
       }
       const li = document.createElement("li");
@@ -193,6 +187,16 @@ export function createOdometerRender(options: IOdometerRenderOptions = {}): IOdo
       col.strip.style.transform = "";
     }
     state.collapsed = true;
+  }
+
+  /** 按当前值正负切换符号位（掩码首字符 "-"）显隐；符号来自 from/to 中较长者时会被烘死在结构里，需逐帧按实际值纠正 */
+  function updateSign(state: IOState, negative: boolean) {
+    if (state.lastSign === negative) return;
+    state.lastSign = negative;
+    for (let i = 0; i < state.seps.length; i++) {
+      const sep = state.seps[i];
+      if (sep.isSign) sep.el.classList.toggle(cls.hidden, !negative);
+    }
   }
 
   /**
@@ -269,17 +273,20 @@ export function createOdometerRender(options: IOdometerRenderOptions = {}): IOdo
     }
 
     const visibleLen = leadingZeros ? Infinity : intLen(ctx.value);
+    const negative = ctx.value < 0;
 
     if (settle) {
       // 落定：按目标值裁剪到实际宽度（倒数 9999→5 会移除多余前导位），再塌缩为单格静态。
       // 仅此一帧才需要格式化字符串 → 按需调用 ctx.formatter，动画期完全不格式化（见 TCountupRender）
       const live = maskOf(ctx.fmt(ctx.value, ctx));
       if (state.mask !== live) state = rebuild(el, live, ctx);
+      updateSign(state, negative);
       reflow(state, visibleLen);
       if (!state.collapsed) collapse(state, ctx.value);
       return;
     }
 
+    updateSign(state, negative);
     reflow(state, visibleLen);
     paint(state, ctx.value, visibleLen);
   };

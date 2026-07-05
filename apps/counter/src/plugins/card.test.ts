@@ -178,6 +178,18 @@ describe("createCardRender DOM & structure", () => {
     expect(readClock(host)).toBe("1:2");
   });
 
+  it("skips calling ctx.fmt entirely when remaining is unchanged from the last render", () => {
+    const host = document.createElement("div");
+    const fmtSpy = vi.fn(() => "12");
+    const render = createCardRender();
+    render(host, 5000, val, { ...ctx, fmt: fmtSpy });
+    expect(fmtSpy).toHaveBeenCalledTimes(1);
+    render(host, 5000, val, { ...ctx, fmt: fmtSpy }); // 同一个 remaining 再渲染一次
+    expect(fmtSpy).toHaveBeenCalledTimes(1); // 不应再次调用 fmt
+    render(host, 4999, val, { ...ctx, fmt: fmtSpy }); // remaining 变了才需要重新格式化
+    expect(fmtSpy).toHaveBeenCalledTimes(2);
+  });
+
   it("isolates state per element", () => {
     const a = document.createElement("div");
     const b = document.createElement("div");

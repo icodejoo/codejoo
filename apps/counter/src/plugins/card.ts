@@ -1,4 +1,5 @@
 import type { TCountdownRender } from "../count-down/types";
+import { isDigit } from "./shared";
 
 export type TCardEffect = "flip" | "slide" | "calendar";
 
@@ -50,13 +51,11 @@ interface ICell {
   dispose?: () => void;
 }
 
-function isDigit(ch: string): boolean {
-  return ch >= "0" && ch <= "9";
-}
-
 interface ICardState {
   text: string;
   cells: ICell[];
+  /** 上次渲染时传入的原始 remaining，值未变时连 ctx.fmt 都不必调用 */
+  lastRemaining?: number;
 }
 
 function el(tag: string, className: string): HTMLElement {
@@ -186,15 +185,18 @@ export function createCardRender(options: ICardRenderOptions = {}): ICardRender 
   let states = new WeakMap<Element, ICardState>();
 
   const render = (host: Element, remaining: number, _value: unknown, ctx: Parameters<TCountdownRender>[3]) => {
-    const fmtValue = ctx.fmt(remaining, ctx);
     let state = states.get(host);
+    if (state && state.lastRemaining === remaining) return; // 原始剩余毫秒未变，连 ctx.fmt 都不必调用
+    const fmtValue = ctx.fmt(remaining, ctx);
     // 首次渲染或字符数变化（如天数进位）→ 重建卡片，不播动画
     if (!state || state.cells.length !== fmtValue.length) {
       state?.cells.forEach((c) => c.dispose?.()); // 重建前断开旧监听
       state = build(host as HTMLElement, fmtValue);
+      state.lastRemaining = remaining;
       states.set(host, state);
       return;
     }
+    state.lastRemaining = remaining;
     if (state.text === fmtValue) return;
     for (let i = 0; i < fmtValue.length; i++) {
       const cell = state.cells[i];
@@ -211,6 +213,7 @@ export function createCardRender(options: ICardRenderOptions = {}): ICardRender 
       } else {
         state.cells.forEach((c) => c.dispose?.());
         state = build(host as HTMLElement, fmtValue);
+        state.lastRemaining = remaining;
         states.set(host, state);
         return;
       }

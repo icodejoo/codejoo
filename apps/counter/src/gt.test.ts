@@ -187,6 +187,28 @@ describe("countdown", () => {
     expect(render).toHaveBeenCalledTimes(3);
   });
 
+  it("ctx.oldValue holds the previous rendered value, unchanged on skipped renders", () => {
+    const el = document.createElement("div");
+    const snapshots: { value: number[]; oldValue: number[] }[] = [];
+    const render = vi.fn((_el: Element, _remaining: number, value: readonly number[], ctx: { oldValue: readonly number[] }) => {
+      snapshots.push({ value: [...value], oldValue: [...ctx.oldValue] });
+    });
+    countdown(5000, el, { render });
+
+    countdownTick(); // remaining 5000 → value=[...,5,0], oldValue = 初始快照 [...,0,0]
+    expect(snapshots[0].value).toEqual([0, 0, 0, 5, 0]);
+    expect(snapshots[0].oldValue).toEqual([0, 0, 0, 0, 0]);
+
+    vi.setSystemTime(Date.now() + 300);
+    countdownTick(); // 秒位 5→4 → 渲染，oldValue 应为上一次渲染的 value
+    expect(snapshots[1].value).toEqual([0, 0, 0, 4, 700]);
+    expect(snapshots[1].oldValue).toEqual([0, 0, 0, 5, 0]);
+
+    vi.setSystemTime(Date.now() + 300);
+    countdownTick(); // 仍是同一秒 → 跳过渲染，oldValue 不应刷新
+    expect(snapshots.length).toBe(2);
+  });
+
   it("removes a task by id in O(1) without touching others", () => {
     const a = document.createElement("div");
     const b = document.createElement("div");
@@ -197,6 +219,58 @@ describe("countdown", () => {
     countdownTick();
     expect(a.textContent).toBe("");
     expect(b.textContent).toBe("00:00:03");
+  });
+
+  it("lazyTimeout does not recycle an already-activated task under jsdom (no IntersectionObserver)", () => {
+    const el = document.createElement("div");
+    const onDone = vi.fn();
+    countdown(5000, el, { lazyTimeout: 1000, onDone }); // jsdom 无 IntersectionObserver → lazyStart 同步激活
+    countdownTick();
+    expect(el.textContent).toBe("00:00:05");
+    vi.advanceTimersByTime(1000); // 若旧超时器未被拦截，会在此触发误回收
+    countdownTick();
+    expect(onDone).not.toHaveBeenCalled();
+    expect(el.textContent).not.toBe("");
+  });
+
+  it("onStart fires once before onDone even when the first eligible tick is already at/after the deadline", () => {
+    const el = document.createElement("div");
+    const order: string[] = [];
+    const onStart = vi.fn(() => order.push("start"));
+    const onDone = vi.fn(() => order.push("done"));
+    countdown(1000, el, { lazy: false, onStart, onDone });
+    vi.setSystemTime(Date.now() + 2000); // 首次 tick 时已过期
+    countdownTick();
+    expect(onStart).toHaveBeenCalledTimes(1);
+    expect(onDone).toHaveBeenCalledTimes(1);
+    expect(order).toEqual(["start", "done"]);
+  });
+
+  it("activating a lazy task while it is still paused defers the deadline anchor to resume() (no instant-finish)", () => {
+    let observerInstance: { trigger: (el: Element) => void } | undefined;
+    class FakeIntersectionObserver {
+      cb: IntersectionObserverCallback;
+      constructor(cb: IntersectionObserverCallback) {
+        this.cb = cb;
+        observerInstance = this as unknown as { trigger: (el: Element) => void };
+      }
+      observe() {}
+      unobserve() {}
+      trigger(el: Element) {
+        this.cb([{ target: el, isIntersecting: true } as IntersectionObserverEntry], this as unknown as IntersectionObserver);
+      }
+    }
+    vi.stubGlobal("IntersectionObserver", FakeIntersectionObserver);
+
+    const el = document.createElement("div");
+    const onDone = vi.fn();
+    const id = countdown(10000, el, { lazy: true, onDone }); // 尚未进入视口
+    countdown.pause(id); // 可见前先暂停
+    observerInstance!.trigger(el); // 进入视口（此时仍处于暂停）
+    countdown.resume(id); // 恢复：应按满时长重新起算，而非瞬间到期
+    countdownTick();
+    expect(onDone).not.toHaveBeenCalled();
+    expect(el.textContent).toBe("00:00:10");
   });
 
   it("clear fires onDestroy with current remaining", () => {
@@ -262,6 +336,33 @@ describe("countup", () => {
     const id2 = countup({ to: 10, el: el2, ...linear, render: Object.assign(vi.fn(), { destroy: destroy2 }) });
     countup.remove(id2); // 手动终止某个任务 → 同样 destroy
     expect(destroy2).toHaveBeenCalledWith(el2);
+  });
+
+  it("pause() then resume() before the task's first tick does not snap the animation to completion", () => {
+    countupTick(1000, 1000); // 把模块级 lastElapsed 推进到"晚于任务创建时刻"，模拟 ticker 早已运行多帧
+    const el = document.createElement("div");
+    const onDone = vi.fn();
+    const onStart = vi.fn();
+    const id = countup({ to: 100, el, onDone, onStart, ...linear }); // 创建后尚未被 tick 过，startAt 仍是哨兵值 -1
+    countup.pause(id);
+    countup.resume(id);
+    countupTick(1050, 50);
+    expect(onStart).toHaveBeenCalledTimes(1);
+    expect(onDone).not.toHaveBeenCalled();
+    expect(el.textContent).not.toBe("100");
+  });
+
+  it("retargeting in place releases the previous renderer via destroy() before swapping in the new one", () => {
+    const el = document.createElement("div");
+    const destroyOld = vi.fn();
+    const renderOld = Object.assign(vi.fn(), { destroy: destroyOld });
+    const renderNew = vi.fn();
+    countup({ to: 10, el, ...linear, render: renderOld });
+    countupTick(0, 0);
+    countup({ to: 20, el, ...linear, render: renderNew }); // 同元素原地重定，且换了渲染器
+    expect(destroyOld).toHaveBeenCalledWith(el);
+    countupTick(500, 500);
+    expect(renderNew).toHaveBeenCalled();
   });
 
   it("throttles updates by fps without phase drift", () => {

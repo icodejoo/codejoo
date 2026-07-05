@@ -23,9 +23,9 @@ pnpm add @codejoo/counter
 ```ts
 import { countup, countdown } from "@codejoo/counter";
 
-countup(1234, "#total");                         // animate 0 → 1234
+countup(1234, "#total"); // animate 0 → 1234
 countup(0, 99.9, { duration: 2000, fmt: (n) => n.toFixed(1) });
-countdown(60_000, "#timer", { fmt: "mm:ss" });   // 1-minute countdown
+countdown(60_000, "#timer", { fmt: "mm:ss" }); // 1-minute countdown
 countdown("2026-12-31 23:59:59", "#newyear", { fmt: "DD HH:mm:ss" });
 ```
 
@@ -58,14 +58,14 @@ Per-plugin options & API: [card](./docs/card.md) · [odometer](./docs/odometer.m
 
 ## Entry points
 
-| Import | Contents |
-| --- | --- |
-| `@codejoo/counter` | everything (core + count-up + count-down + plugins) |
-| `@codejoo/counter/count-down` | `countdown` + types |
-| `@codejoo/counter/count-up` | `countup` + types |
-| `@codejoo/counter/card` | `createCardRender` |
-| `@codejoo/counter/odometer` | `createOdometerRender` |
-| `@codejoo/counter/ring` | `createRingRender` |
+| Import                        | Contents                                            |
+| ----------------------------- | --------------------------------------------------- |
+| `@codejoo/counter`            | everything (core + count-up + count-down + plugins) |
+| `@codejoo/counter/count-down` | `countdown` + types                                 |
+| `@codejoo/counter/count-up`   | `countup` + types                                   |
+| `@codejoo/counter/card`       | `createCardRender`                                  |
+| `@codejoo/counter/odometer`   | `createOdometerRender`                              |
+| `@codejoo/counter/ring`       | `createRingRender`                                  |
 
 Each render plugin is runtime-standalone (it depends on count-down only via types), so importing
 `/ring` pulls in `ring` alone — nothing else.
@@ -83,7 +83,10 @@ Management: `countup.remove(id, label?)`, `.pause`, `.resume`, `.clear(label?)`,
 (use `dateParser` for unit durations). Options: `fmt` (template like `HH:mm:ss` / `DD HH:mm:ss.sss`,
 or a function), `showDays`, `showMilliseconds`, `timeOffset`, `dateParser`, `render`, `lazy`,
 `autoKill`, `observer`, `lazyTimeout`, `label`, hooks `onStart/onUpdate/onDone/onDestroy/onPause/onResume`.
-Same management methods as count-up.
+Same management methods as count-up. `render`/hooks receive a shared `ctx` with `value` (the
+reused `[d,h,m,s,ms]` tuple, mutated every tick) and `ctx.oldValue` — an independent snapshot of
+`value` right before the last time it actually changed (untouched on frames the tick throttles
+away), handy for diffing which units just rolled over.
 
 **core** — `import { counter, createLazyObserver } from "@codejoo/counter"`. `counter` exposes
 `start() / stop() / use(plugin) / destroy()`; count-up & count-down self-register on first use.

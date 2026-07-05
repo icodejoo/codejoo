@@ -16,7 +16,12 @@ function loop(now: number) {
   last = now;
   let busy = false;
   for (let i = 0; i < subscribers.length; i++) {
-    if (subscribers[i](now, dt) !== false) busy = true;
+    try {
+      if (subscribers[i](now, dt) !== false) busy = true;
+    } catch (err) {
+      // 单个插件抛错不应拖垮整个共享 ticker，其余插件仍需正常推进
+      console.error("[GT]: plugin install() threw, skipping this frame for it", err);
+    }
   }
   // 所有插件都空闲时自动停止，新任务加入时由插件调用 start() 重新启动
   if (busy) {

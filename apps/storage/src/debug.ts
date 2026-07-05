@@ -7,9 +7,11 @@ const DEBUG_KEY = "_$debug";
 /**
  * 调试快照（**独立导入**，不进核心 proxy，便于 tree-shake、缩小核心体积）。
  * 基于 handler.keys()（仅本实例管辖的键，命名空间下不混入外部数据）读出全部条目的「解密后」明文值，
- * 组装为 `{ 完整逻辑键(含命名空间): 值 }` 大对象返回。**纯读取、无副作用**：不写回存储，
+ * 组装为 `{ 完整逻辑键(含命名空间): 值 }` 大对象返回。**不主动写回存储**：不会新增数据，
  * 故不会污染 keys()/length，也不会在 raw 实例下把对象 String() 成 "[object Object]" 落盘。
  * 用于 enckey/codeable 加密场景下查看真实内容。
+ * 注意：内部走 handler.get()，其懒过期删除、sliding 续期回写等既有语义仍会照常触发——
+ * 快照会像一次真实读取一样清掉已过期条目、续期 sliding 键，并非绝对无副作用。
  *
  * ```ts
  * import { debug } from "@codejoo/storage";

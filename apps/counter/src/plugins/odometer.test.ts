@@ -95,6 +95,24 @@ for (const strip of MODES) {
       expect(visibleSeps(host).length).toBe(1); // "4,200"
     });
 
+    it("符号位随当前值正负逐帧切换显隐，不会烘死成静态字符（跨零动画）", () => {
+      const host = document.createElement("div");
+      const r = make();
+      const c = ctx(-3, -5, 5);
+      r(host, NF.format(-3), c);
+      const signEl = items(host).find((it) => it.classList.contains("cd-sep") && it.textContent === "-")!;
+      expect(signEl).toBeTruthy();
+      expect(signEl.classList.contains("cd-hidden")).toBe(false); // 当前为负，符号应可见
+
+      c.value = 3;
+      r(host, NF.format(3), c);
+      expect(signEl.classList.contains("cd-hidden")).toBe(true); // 当前为正，符号应隐藏
+
+      c.value = -1;
+      r(host, NF.format(-1), c);
+      expect(signEl.classList.contains("cd-hidden")).toBe(false); // 回到负数，符号重新可见
+    });
+
     it("leadingZeros:true 时保留前导零", () => {
       const host = document.createElement("div");
       const r = make({ leadingZeros: true });

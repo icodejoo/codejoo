@@ -170,19 +170,19 @@ export function proxy<S extends SyncStore | AsyncStorage>(storage: S, memo: Memo
    * 清理已过期数据：仅本实例管辖、且 entity 带 createdAt（本库写入标志）的条目，
    * 避免误删外部恰好形如 {expireAt} 的数据。容量不足重试与公开的 purge() 共用此入口。
    */
+  /** 是否已过期：须同时带 createdAt（本库写入标志），避免外部恰好形如 {expireAt} 的数据被误判 */
+  const isExpired = (e: StorageEntity | null, now: number): boolean => e?.expireAt != null && e.createdAt != null && now >= e.expireAt;
+
   function purgeExpired(): Maybe<void> {
     const now = Date.now();
-    const dead = (s: string | null): boolean => {
-      const e = load(s ?? "");
-      return e?.expireAt != null && e.createdAt != null && now >= e.expireAt;
-    };
+    const dead = (s: string | null): boolean => isExpired(load(s ?? ""), now);
     return chain(ownKeys(), (ks): Maybe<void> => {
       if (!isAsync) {
         for (const k of ks) if (dead(st.get(k) as string | null)) void del(k);
         return;
       }
       // 逐键复用单键 del（含 memo 双删）：异步后端逐键一事务
-      return Promise.all(ks.map((k) => Promise.resolve(chain(st.get(k), (s) => (dead(s) ? del(k) : undefined))))).then(() => undefined);
+      return Promise.all(ks.map((k) => chain(st.get(k), (s) => (dead(s) ? del(k) : undefined)))).then(() => undefined);
     });
   }
 
@@ -207,12 +207,12 @@ export function proxy<S extends SyncStore | AsyncStorage>(storage: S, memo: Memo
   /** entity 命中后的过期/续期处理，返回最终值 */
   function resolve(entity: StorageEntity, k: string, fromMemo: boolean, fallback: unknown): Maybe<unknown> {
     const now = Date.now();
-    if (entity.expireAt != null && now >= entity.expireAt) return chain(del(k), () => fallback); // 懒过期：双删
+    if (isExpired(entity, now)) return chain(del(k), () => fallback); // 懒过期：双删
     const shared = fromMemo || cache; // 值对象与 memo 共享引用（cloned 开启时对这类返回做深拷贝）
     if (sliding && entity.ttl != null && entity.expireAt != null && entity.expireAt - now <= entity.ttl * 0.9) {
       entity.expireAt = now + entity.ttl; // 滑动续期回写；剩余寿命 >90% 时跳过（消除高频读写放大，最多提前 ttl 的 10% 过期）
-      return chain(persist(k, dump(entity)), () => {
-        if (cache) memo.set(k, entity);
+      return chain(persist(k, dump(entity)), (ok) => {
+        if (ok && cache) memo.set(k, entity); // 与 write() 一致：仅落盘成功才写 memo，避免 memo 显示已续期而后端仍是旧值
         return shared ? dup(entity.value) : entity.value;
       });
     }
@@ -247,7 +247,7 @@ export function proxy<S extends SyncStore | AsyncStorage>(storage: S, memo: Memo
       // 批量：逐键复用单键逻辑（memo 命中/读穿/过期/续期全部沿用单键路径）。
       // 注意不可写成 key.map(get)——会把数组下标泄漏成默认值
       const rs = key.map((k, i) => get(k, ds?.[i]));
-      return out(isAsync ? Promise.all(rs.map((p) => Promise.resolve(p))) : rs);
+      return out(isAsync ? Promise.all(rs) : rs);
     }
     const k = fullKey(key);
     const fallback = defaultValue ?? null;
@@ -297,7 +297,7 @@ export function proxy<S extends SyncStore | AsyncStorage>(storage: S, memo: Memo
       const n = Math.min(key.length, vs.length);
       const rs: Maybe<void>[] = [];
       for (let i = 0; i < n; i++) rs.push(set(key[i], vs[i], arg));
-      return out(isAsync ? Promise.all(rs.map((p) => Promise.resolve(p))).then(() => undefined) : undefined);
+      return out(isAsync ? Promise.all(rs).then(() => undefined) : undefined);
     }
     const { ttl, memoized, expireAt } = parseArg(arg);
     const k = fullKey(key);
@@ -331,15 +331,18 @@ export function proxy<S extends SyncStore | AsyncStorage>(storage: S, memo: Memo
       memo.clear();
       ns = n ? n + ":" : "";
     },
-    /** 第 index 个逻辑键（已解密、去命名空间前缀）；供调试/枚举 */
-    key: (index: number) => R(chain(st.key(index), (sk) => (sk == null ? null : logical(sk)))),
+    /** 第 index 个逻辑键（已解密、去命名空间前缀）；供调试/枚举。有命名空间或 enckey 时按管辖范围取下标，与 keys()/length 口径一致 */
+    key: (index: number) =>
+      ns || enckey
+        ? R(chain(ownKeys(), (ks) => (index < 0 || index >= ks.length ? null : logical(ks[index]))))
+        : R(chain(st.key(index), (sk) => (sk == null ? null : logical(sk)))),
     keys: () => R(chain(ownKeys(), (ks) => ks.map(logical))),
     purge: () => R(purgeExpired()),
     remove: (key: string | readonly string[]) => {
       if (typeof key === "string") return R(del(fullKey(key)));
       // 批量：逐键复用单键 del（含 memo 双删）
       const fks = key.map((k) => fullKey(k));
-      if (isAsync) return R(Promise.all(fks.map((k) => Promise.resolve(del(k)))).then(() => undefined));
+      if (isAsync) return R(Promise.all(fks.map((k) => del(k))).then(() => undefined));
       for (const k of fks) void del(k);
       return R(undefined);
     },
@@ -349,7 +352,7 @@ export function proxy<S extends SyncStore | AsyncStorage>(storage: S, memo: Memo
       if (!ns && !enckey) return R(st.clear());
       return R(
         chain(ownKeys(), (ks): Maybe<void> => {
-          if (isAsync) return Promise.all(ks.map((k) => Promise.resolve(st.remove(k)))).then(() => undefined);
+          if (isAsync) return Promise.all(ks.map((k) => st.remove(k))).then(() => undefined);
           for (const k of ks) void st.remove(k); // 同步分支：st.remove 实际返回 void
         }),
       );

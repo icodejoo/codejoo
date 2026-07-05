@@ -37,8 +37,12 @@ export function factory(baseOptions?: BaseStorageOptions) {
   const lsMemo = new Memory();
   const ssMemo = new Memory();
   const dbMemo = new Memory();
-  const ls = proxy(supported.storage ? adapt(window.localStorage) : lsMemo, lsMemo, baseOptions);
-  const ss = proxy(supported.storage ? adapt(window.sessionStorage) : ssMemo, ssMemo, baseOptions);
+  // 原生存储不可用时的兜底后端必须与上面的 memo 缓存是不同的 Memory 实例：
+  // 二者若是同一个 Map，memo.clear()（destroy/clear/setNamespace 都会调）会把"落盘"数据本身一并清空，
+  // 且 memoized 写入 entity 对象会与后端写入的 JSON 字符串互相覆盖同一个键。
+  const ls = proxy(supported.storage ? adapt(window.localStorage) : new Memory(), lsMemo, baseOptions);
+  const ss = proxy(supported.storage ? adapt(window.sessionStorage) : new Memory(), ssMemo, baseOptions);
+  const dbProvided = baseOptions?.db != null;
   const db = proxy(baseOptions?.db ?? unimpl(), dbMemo, baseOptions);
 
   return {
@@ -49,11 +53,13 @@ export function factory(baseOptions?: BaseStorageOptions) {
      * 统一释放本实例占用的内存与连接：依次调用 ls/ss/db 各自的 destroy
      * （清空 memo 读缓存、断开 db 的 IndexedDB 连接）。不删除已落盘数据。
      * db 为异步后端，故整体返回 Promise，可 await 以确保连接已断开。
+     * 未传入 db 时跳过 db.destroy()——unimpl() 占位对象任何方法调用都会抛错，
+     * 而这里是无条件触发的收尾调用，不应因为用户根本没用过 db 而抛出。
      */
     destroy(): Promise<void> {
       ls.destroy();
       ss.destroy();
-      return Promise.resolve(db.destroy());
+      return dbProvided ? db.destroy() : Promise.resolve();
     },
     /**
      * 切换命名空间（如按 username 隔离账号，登入/登出时调用）：原地修改 ls/ss/db 三层前缀，

@@ -34,6 +34,8 @@ export interface ICountdownContext {
   remaining: number;
   /** 解析后的 [d, h, m, s, ms]（每帧更新，复用只读元组） */
   value: TCountdownValue;
+  /** 上一次 value 真正变化前的快照（复用只读元组，仅在 value 变化时更新，同 value 一样不要跨帧持有引用） */
+  oldValue: TCountdownValue;
   /** 是否已激活（lazy 进入视口后为 true） */
   active: boolean;
   /** 是否暂停中 */
@@ -137,7 +139,7 @@ interface IHooks {
   onStart?: (remaining: number, ctx: ICountdownContext) => void;
   onUpdate?: (remaining: number, ctx: ICountdownContext) => void;
   onDone?: (remaining: number, ctx: ICountdownContext) => void;
-  /** remove/clear 销毁任务时触发 */
+  /** clear() 销毁任务时触发（remove() 只断开 observer/释放渲染器引用，不触发此钩子） */
   onDestroy?: (remaining: number, ctx: ICountdownContext) => void;
   /** 暂停 / 恢复（pause/resume 时触发） */
   onPause?: (remaining: number, ctx: ICountdownContext) => void;

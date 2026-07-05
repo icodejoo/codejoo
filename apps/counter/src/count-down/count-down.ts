@@ -1,5 +1,5 @@
 import type { ICountdownOptions, ICountdownContext, ICountdownTask, ICountdownTaskOptions, TCountdownDeadline } from "./types";
-import { countdownRender, resolveConfig, resolveDateParser, resolveFormatter, resolveParser } from "./helper";
+import { copyCountdownValue, countdownRender, resolveConfig, resolveDateParser, resolveFormatter, resolveParser, snapshotValue } from "./helper";
 
 import { start, use } from "../core";
 import type { IPlugin } from "../core/types";
@@ -45,15 +45,16 @@ const store = createGroupStore<ICountdownTask, ICountdownOptions>({
   onRemove: (t) => {
     t.cancel?.();
     destroyRender(t.el, t.render); // 释放渲染器(如插件)对该元素的内部引用
-    if (t.el) elTask.delete(t.el);
+    elTask.delete(t.el);
   },
   onClearEach: (t) => {
     t.cancel?.();
     destroyRender(t.el, t.render);
-    if (t.el) elTask.delete(t.el);
+    elTask.delete(t.el);
     // 未激活的 lazy 任务尚未锚定 deadline，剩余时间未知 → 传 0
     const remaining = t.active ? t.deadline - Date.now() : 0;
     t.ctx.remaining = remaining;
+    snapshotValue(t.ctx.oldValue, t.ctx.value);
     t.ctx.value = t.parser(remaining, t.ctx);
     t.onDestroy?.(remaining, t.ctx);
   },
@@ -85,12 +86,14 @@ function add(deadline: TCountdownDeadline, el: string | Element, options?: strin
   const fmtFn = resolveFormatter(fmt, showDays, showMilliseconds);
   const parserFn = resolveParser(parser, showDays);
 
+  const initValue = parserFn(0);
   const ctx: ICountdownContext = {
     el: elRef,
     id: uid,
     deadline: 0,
     remaining: 0,
-    value: parserFn(0),
+    value: initValue,
+    oldValue: copyCountdownValue(initValue),
     active,
     paused: false,
     fmt: fmtFn,
@@ -125,6 +128,12 @@ function add(deadline: TCountdownDeadline, el: string | Element, options?: strin
     () => {
       task.active = true;
       task.ctx.active = true;
+      if (task.paused) {
+        // 懒任务在暂停期间进入视口：此刻不落定 deadline（避免暂停期间截止时间静默流逝），
+        // 只记下"此刻开始的剩余时长"，真正的 deadline 留到 resume() 时按 frozen 重锚
+        task.frozen = anchor() - Date.now();
+        return;
+      }
       task.deadline = anchor();
       task.ctx.deadline = task.deadline;
       task.last = -1;
@@ -161,30 +170,36 @@ export function resume(id: number, label = defaultLabel) {
 export function tick(): boolean {
   const now = Date.now();
   let busy = false;
-  groups.forEach((g, label) => {
-    g.queue.forEach((task, id) => {
-      if (!task.active || task.paused || task.done) return; // 未激活 / 暂停 / 已归零保留：跳过且不计 busy
+  for (const [label, g] of groups) {
+    for (const [id, task] of g.queue) {
+      if (!task.active || task.paused || task.done) continue; // 未激活 / 暂停 / 已归零保留：跳过且不计 busy
       const remaining = task.deadline - now;
       const ctx = task.ctx;
       ctx.remaining = remaining;
       if (remaining <= 0) {
         ctx.remaining = 0;
+        snapshotValue(ctx.oldValue, ctx.value);
         ctx.value = task.parser(0, ctx);
+        if (!task.started) {
+          task.started = true;
+          task.onStart?.(0, ctx); // 首帧即归零（截止时间已过 / 懒任务可见时已到期）：onDone 前仍要保证 onStart 先触发一次
+        }
         task.render(task.el, 0, ctx.value, ctx); // 末帧落定（0）
         task.onDone?.(0, ctx);
         // autoKill（默认）：出队并经 onRemove 释放（清元素索引 + 调用渲染器 destroy）；否则保留实例停在 0
         if (task.autoKill) remove(id, label);
         else task.done = true;
-        return;
+        continue;
       }
       busy = true;
       // 非毫秒任务只在秒位变化时渲染，每帧只剩一次减法和比较
       if (!task.showMs) {
         const sec = (remaining / MS_SECOND) | 0;
-        if (sec === task.last) return;
+        if (sec === task.last) continue;
         task.last = sec;
       }
       // 解析为 [d,h,m,s,ms] 元组（零分配复用）；字符串格式化交给渲染器按需调用 ctx.fmt
+      snapshotValue(ctx.oldValue, ctx.value);
       ctx.value = task.parser(remaining, ctx);
       if (!task.started) {
         task.started = true;
@@ -192,8 +207,8 @@ export function tick(): boolean {
       }
       task.onUpdate?.(remaining, ctx);
       task.render(task.el, remaining, ctx.value, ctx);
-    });
-  });
+    }
+  }
   return busy;
 }
 

@@ -314,6 +314,19 @@ describe("createRingRender 重建与隔离", () => {
     expect(onTicks(a).length).toBe(5);
     expect(onTicks(b).length).toBe(2);
   });
+
+  it("同一整秒内多次回调（毫秒精度任务每帧都会调用）跳过重绘，连 ctx.fmt 都不再调用", () => {
+    const host = document.createElement("div");
+    const r = createRingRender();
+    const fmtSpy = vi.fn(() => "00:05");
+    const ctx = { ...makeCtx("00:05"), fmt: fmtSpy };
+    r(host, 5000, val, ctx); // 首次
+    r(host, 4900, val, ctx); // 仍在同一整秒内（向上取整都是 5000ms）
+    r(host, 4001, val, ctx); // 仍是 5000ms
+    expect(fmtSpy).toHaveBeenCalledTimes(1);
+    r(host, 4000, val, ctx); // 跨到下一整秒 → 应重新格式化
+    expect(fmtSpy).toHaveBeenCalledTimes(2);
+  });
 });
 
 describe("createRingRender × countdown", () => {
