@@ -1,7 +1,7 @@
 ---
-name: overlay-manager
+name: layerman
 description: >-
-  Work on @codejoo/layerman (apps/overlay-manager) — the framework-agnostic
+  Work on @codejoo/layerman (apps/layerman) — the framework-agnostic
   HEADLESS overlay/dialog/modal/bottom-sheet/drawer queue manager (factory
   createLayerman). Read BEFORE modifying src/index.ts, its tests, or the READMEs.
   Covers architecture, the non-obvious invariants tests depend on, and the verify workflow.
@@ -11,7 +11,7 @@ description: >-
 
 # @codejoo/layerman
 
-`apps/overlay-manager` — a **framework-agnostic, headless** overlay queue manager. Package
+`apps/layerman` — a **framework-agnostic, headless** overlay queue manager. Package
 `@codejoo/layerman`, factory **`createLayerman()`**. It manages *when/which*
 overlays are active — queue, priority, conditions, cooldown, backend-driven resolution — and
 **touches no DOM/UI/animation whatsoever**. The host renders the `active` list; the package is
@@ -27,7 +27,7 @@ defaults?, om?)` + provider + `useCurrentOverlay`/`provideCurrentOverlay` shape)
 - `src/solid.ts` → `/solid` (`createSignal`+`onCleanup`; plain derived accessors, NOT `createMemo` —
   under node/SSR-build test `createMemo` freezes)
 
-Tests: `test/overlay-manager.test.ts` (core), `test/{vue,react,svelte,solid}.test.ts` (adapters),
+Tests: `test/layerman.test.ts` (core), `test/{vue,react,svelte,solid}.test.ts` (adapters),
 `test/types.test.ts` (type-level via `expectTypeOf`, gated by tsc since tsconfig includes `test/**`)
 — vitest; `react.test.ts` uses a `/** @vitest-environment jsdom */` docblock + `@testing-library/react`,
 the rest are node (svelte = store contract, solid = `createRoot`). **~91 package tests / 6 files.**
@@ -210,7 +210,7 @@ assert on `getSnapshot().active`/`.queued`, callbacks (`onShow/onClose/onRemove`
 promises.
 
 ```bash
-cd apps/overlay-manager
+cd apps/layerman
 pnpm test          # vitest — the real acceptance gate (32 tests)
 pnpm check         # oxfmt --check + type-aware oxlint (warnings OK, must be 0 errors)
 pnpm build         # vp pack → dist/esm
@@ -233,5 +233,5 @@ tooling:** `vitest.config.ts` restricts `test.include` to `test/**`, and `oxfmt`
 example's `.vue`/browser test and fail.
 
 When changing behavior, add/adjust a test and — if you touch public API — keep `README.md` (EN)
-and `README.zh-CN.md` (ZH) in sync. The locked design lives in `apps/overlay-manager/design.md`
+and `README.zh-CN.md` (ZH) in sync. The locked design lives in `apps/layerman/design.md`
 (the original brief) plus the memory note `project_overlay_manager`.

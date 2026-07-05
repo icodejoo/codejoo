@@ -15,7 +15,7 @@ via `workspace:*`, and `vue`/`vant`/`@vitejs/plugin-vue`/`vitest`/`@vitest/brows
   adapter** (mounting the real Vant app).
 
 > Cooldown `day/hour/minute/total` need a controllable clock → covered by the package's own unit
-> suite (`apps/overlay-manager`, fake timers). This browser test covers `session` + `minGap` (real
+> suite (`apps/layerman`, fake timers). This browser test covers `session` + `minGap` (real
 > short waits).
 
 ## Run

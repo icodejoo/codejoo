@@ -21,7 +21,7 @@
   "repository": {
     "type": "git",
     "url": "git+https://github.com/icodejoo/codejoo.git",
-    "directory": "apps/overlay-manager"
+    "directory": "apps/layerman"
   },
   "files": [
     "dist",
