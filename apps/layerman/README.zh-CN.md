@@ -165,7 +165,10 @@ const claimed = await promoRef.value.open({ priority: 10, cooldown: { day: 1 } }
 ```
 
 `useOverlay(id, defaults?, om?)` 返回 `{ instance, visible, model, phase, open, close, remove,
-resolve, reject, pause, resume }`(`defaults` 见下)。
+resolve, reject, pause, resume }`(`defaults` 见下)。本层每个 composable(`useOverlayState`、
+`useOverlays`、`useOverlay`、`useCurrentOverlay`)都必须在活跃的 effect scope 内调用——`setup()`
+内,或显式 `effectScope()` 内——否则订阅创建后无处挂自动退订,会在管理器整个生命周期里泄漏;在
+scope 外调用会直接抛错,而不是静默泄漏。
 
 **中央渲染器(风格 A)**:用小组件包裹每个渲染项、在其 setup 调 `provideCurrentOverlay(o.id)`,则 overlay
 组件内部可用 `useCurrentOverlay()` 零透传拿到自身 `{ close, resolve, data, … }`。把组件放进 `data` 经

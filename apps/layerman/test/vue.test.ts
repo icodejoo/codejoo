@@ -228,4 +228,34 @@ describe("@codejoo/layerman/vue", () => {
       expect(() => useCurrentOverlay()).toThrow(/current overlay/);
     });
   });
+
+  describe("bug fixes（全量 review）", () => {
+    it("useOverlayState：无活跃 effect scope 时应抛错，而不是静默泄漏订阅", () => {
+      const m = make();
+      expect(() => useOverlayState(m)).toThrow(/effect scope/);
+    });
+
+    it("model：重复 set(true) 不应打断正在进行的 resolve()（resolving 对外不可见，仅凭 active/queued 判断会漏判）", async () => {
+      const m = make();
+      let calls = 0;
+      const scope = effectScope();
+      scope.run(() => {
+        const o = useOverlay(
+          "a",
+          {
+            resolve: async () => {
+              calls++;
+              return { ok: true };
+            },
+          },
+          m,
+        );
+        o.model.value = true; // 触发 resolve()，尚未落地（resolving，对外不可见）
+        o.model.value = true; // 若无本地闩锁保护，会被误判为“未展示且未排队”而再次 open()，打断正在进行的 resolve()
+      });
+      await vi.advanceTimersByTimeAsync(0);
+      expect(calls).toBe(1); // resolve() 只应被调用一次
+      scope.stop();
+    });
+  });
 });

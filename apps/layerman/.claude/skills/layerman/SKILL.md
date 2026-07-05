@@ -17,7 +17,7 @@ overlays are active — queue, priority, conditions, cooldown, backend-driven re
 **touches no DOM/UI/animation whatsoever**. The host renders the `active` list; the package is
 pure logic with **zero runtime deps**.
 
-Core implementation is **one file**: `src/index.ts` (~700 lines, no sub-modules). Optional
+Core implementation is **one file**: `src/index.ts` (~1160 lines, no sub-modules). Optional
 **framework adapters** (each its own subpath + OPTIONAL peer dep, all thin reactive bridges over the
 core's `subscribe`+`getSnapshot`, mirroring the same `useOverlayState`/`useOverlays`/`useOverlay(id,
 defaults?, om?)` + provider + `useCurrentOverlay`/`provideCurrentOverlay` shape):
@@ -30,7 +30,8 @@ defaults?, om?)` + provider + `useCurrentOverlay`/`provideCurrentOverlay` shape)
 Tests: `test/layerman.test.ts` (core), `test/{vue,react,svelte,solid}.test.ts` (adapters),
 `test/types.test.ts` (type-level via `expectTypeOf`, gated by tsc since tsconfig includes `test/**`)
 — vitest; `react.test.ts` uses a `/** @vitest-environment jsdom */` docblock + `@testing-library/react`,
-the rest are node (svelte = store contract, solid = `createRoot`). **~91 package tests / 6 files.**
+the rest are node (svelte = store contract, solid = `createRoot`). **107 package tests / 6 files**
+(55 core + 17 Vue + 11 svelte + 11 solid + 10 react + 3 types).
 Public store/query methods (`subscribe`/`getSnapshot`/`getServerSnapshot`/`get`) are **bound in the
 constructor** so consumers (e.g. React `useSyncExternalStore`) can pass them as bare refs without
 losing `this`.
@@ -43,7 +44,10 @@ headless port; it embraces Flutter (`Overlay`/`OverlayEntry`, `LayermanScope`), 
 
 Pure bridge, no components. `useOverlayState(om?)` wraps `subscribe`+`getSnapshot` in a
 `shallowRef` (the snapshot's stable reference means assignment triggers reactivity), auto-unsub via
-`onScopeDispose`. `useOverlays(om?)` → reactive `active`/`queued`. `useOverlay(id, defaults?, om?)` → per-id
+`onScopeDispose`. **Throws if called with no active effect scope** (`getCurrentScope()` falsy) —
+there'd be nowhere to hang the cleanup, so it fails loudly instead of leaking the subscription for
+the manager's lifetime; always call it inside `setup()` or an explicit `effectScope()`.
+`useOverlays(om?)` → reactive `active`/`queued`. `useOverlay(id, defaults?, om?)` → per-id
 `{ instance, visible, model, phase, open, close, remove, resolve, reject, pause, resume }` for the
 template+ref idiom. `defaults` (2nd arg) is `MaybeRefOrGetter<Omit<OverlayConfig, "id">>` — the FULL core config (minus
 id), merged into every open (`model=true`/`open()`/ref) and resolved with `toValue` per open (so it
@@ -58,6 +62,12 @@ else it `inject`s the one provided by `createLayermanPlugin(om)` / `provideLayer
 
 **`model` is a `WritableComputedRef<boolean>` for third-party dialogs that expose only `v-model`**
 (ElDialog/Vant/AntDV): get = is-active; `set(true)` = `open()` (skipped if already active or queued).
+Core's public state has no `resolving` phase (invariant 6 below) — an in-flight `resolve()` entry is
+invisible to both `active` and `queued`, so the active/queued check alone can't detect "already
+busy" while resolving. `set(true)` guards this with a local `opening` latch: it flips on right
+before calling `open()` and only flips off once that `open()`'s `result` settles — a second
+`set(true)` fired before then (e.g. a double-click racing an in-flight `resolve()`) is a no-op
+instead of re-`open()`ing and discarding the in-flight resolve via `discardActive`.
 `set(false)` branches on whether the instance is currently shown: if it's still **queued** (never
 opened), `set(false)` calls `remove()` directly — `beforeClose` only guards an already-*shown*
 close, so it doesn't apply here, and skipping straight to `remove()` avoids the entry getting stuck
@@ -106,6 +116,12 @@ Vue (both function-style and template+ref), or anything, via `subscribe` + `getS
   `minute` counts + `minGap` `lastShownAt` persist as one JSON blob under `storageKey`.
   `day/hour/minute` buckets are **local calendar-aligned**; `minGap` is rolling. All configured
   fields AND together; counts increment on real open (write-through + cross-tab broadcast).
+  `hydrate()`'s `storage.get()` is async — a real `open()` landing before it resolves already wrote
+  into `persisted`, so hydrate only fills ids **not already present** (never clobbers a fresher
+  live write with a stale disk snapshot). `mergeRemote` picks the chronologically **later** bucket
+  per field (bucket labels are zero-padded, so lexical `>` = time order) instead of blindly adopting
+  the incoming one — a delayed cross-tab broadcast from an older bucket must not regress a bucket
+  the local tab already rolled past (it would look like a "new period" and bypass the count).
 - **Backend-driven `resolve`** — an overlay with `resolve(signal)` enters `resolving` (occupies
   the slot) only after it's front AND passes sync conditions/cooldown; `null` ⇒ skip. **Not
   interrupted by higher-priority arrivals** (committed once resolving); explicit `replace` aborts
@@ -117,7 +133,10 @@ Vue (both function-style and template+ref), or anything, via `subscribe` + `getS
   slot) → `remove(id)` frees + advances. `autoRemove` (`true`=300ms | number | false) auto-fires
   `remove` after `close` unless `false`. A per-overlay **`beforeClose?: () => boolean|Promise<boolean>`**
   guards `close`: resolves `false` ⇒ cancel (via `doClose` only after the guard passes; guard errors
-  also cancel). `beforeClose` does NOT gate `remove`/`clear`/auto-dismiss (those are forced).
+  also cancel). `beforeClose` does NOT gate `remove`/`clear`/auto-dismiss (those are forced). A
+  `closePending` flag on the entry blocks a second `close()` from re-invoking an async guard while
+  the first invocation's promise is still pending (e.g. double-click) — the guard may have side
+  effects (confirm dialog, analytics) and must fire at most once per close request.
 - **`update(id, patch)`** — shallow-merges `patch` into an active/pending entry's `data` and re-emits;
   no queue change (unlike `replace`).
 - **`clear(select?)`** — `select` is `(ctx, records:{id,data,slot,phase,active}[]) => string[]|void`;
@@ -152,7 +171,14 @@ Vue (both function-style and template+ref), or anything, via `subscribe` + `getS
    re-queues it (`displace`, `exemptCooldown = (was 'open')`). A **duplicate `open` of an already-
    active id** DISCARDS the old instance (`discardActive`, no re-queue, old result → dismissed) and
    the new one takes over with a fresh `instanceKey`. A duplicate of a *queued* id overwrites that
-   queue entry. There is no `update` flag.
+   queue entry. There is no `update` flag. The self-update branch also sets `exemptCooldown = true`
+   on the new entry — a same-id reopen while already active is "one continuous display" being
+   refreshed, not a second real showing, so it must not add to `session`/`total`/`day`/`hour`/
+   `minute` counts (N self-updates must not exhaust a `cooldown.total` limit meant for N real shows).
+   If the self-update also carries `overlap: true` and stays in the *same* slot, `discardActive`
+   frees that serial slot but the entry itself never re-occupies it (overlap entries don't touch
+   `serial`) — the `overlap` branch must call `schedule(slot)` before returning, or whatever was
+   queued behind the old occupant stalls until an unrelated event happens to touch that slot.
 5. **`affix` only blocks `replace`.** A `replace` against an affixed active overlay is redirected
    into the queue as a **replace-jumped** entry (ranks ahead of ALL normal entries regardless of
    their priority; among jumped entries priority decides). Explicit `close`/`remove`/`clear` and
@@ -168,6 +194,11 @@ Vue (both function-style and template+ref), or anything, via `subscribe` + `getS
    still work while paused. `clear` also dismisses `pendingOverlaps`. (This was a deliberate change:
    users expect "pause ⇒ nothing pops".) `resolve` only runs in the serial path, so an `overlap`
    overlay must NOT carry `resolve` — it opens immediately without resolving.
+5d. **`pause(id)`/`pauseAll()` freeze BOTH timers on an entry** — `freezeDuration`/`thawDuration`
+   (the `duration` auto-close countdown) AND `freezeAutoRemove`/`thawAutoRemove` (the post-`close()`
+   auto-`remove` countdown). Pausing a `closing`-phase entry must stop its `autoRemoveTimer` too, or
+   it gets yanked out of `active` mid-pause — "paused" has to mean nothing changes, not just
+   "duration frozen".
 6. **`resolve` is committed once entered.** `onResolved` guards `serial.get(slot) === entry &&
    phase === 'resolving'`; if displaced mid-flight it drops the result (the entry was re-queued and
    will resolve again). Higher-priority normal arrivals must NOT preempt it — only `replace` does.
@@ -204,14 +235,16 @@ standalone vite + playwright script.)
 
 ## Verify workflow
 
-Acceptance = **`pnpm test` green** (39 tests / 2 files via vitest through `vp test`: 32 core + 7
-Vue). Tests inject an in-memory `AsyncableStorage`, set `crossTab:false`, drive fake timers, and
-assert on `getSnapshot().active`/`.queued`, callbacks (`onShow/onClose/onRemove`), and `result`
-promises.
+Acceptance = **`pnpm test` green** (107 tests / 6 files via vitest through `vp test`: 55 core +
+17 Vue + 11 svelte + 11 solid + 10 react + 3 type-level). Tests inject an in-memory
+`AsyncableStorage`, set `crossTab:false` (a dedicated `crossTab:true` test drives the real global
+`BroadcastChannel` and pokes `m.channel.onmessage(...)` directly to simulate a remote tab), drive
+fake timers, and assert on `getSnapshot().active`/`.queued`, callbacks
+(`onShow/onClose/onRemove`), and `result` promises.
 
 ```bash
 cd apps/layerman
-pnpm test          # vitest — the real acceptance gate (32 tests)
+pnpm test          # vitest — the real acceptance gate (107 tests)
 pnpm check         # oxfmt --check + type-aware oxlint (warnings OK, must be 0 errors)
 pnpm build         # vp pack → dist/esm
 ```

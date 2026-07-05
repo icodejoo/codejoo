@@ -1,6 +1,6 @@
 {
   "name": "@codejoo/layerman",
-  "version": "0.0.2",
+  "version": "0.0.3",
   "description": "Framework-agnostic headless overlay/dialog/modal/bottom-sheet/drawer queue manager: serial one-at-a-time queue with named slots, priority/replace/overlap/affix, per-overlay conditions (route/auth/predicate) and cooldown (session/day/hour/minute/total/min-gap), backend-driven async resolve, imperative promise results, two-phase close, injectable async storage, cross-tab cooldown sync — zero runtime deps, no DOM.",
   "keywords": [
     "bottom-sheet",

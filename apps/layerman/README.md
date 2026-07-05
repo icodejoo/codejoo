@@ -181,7 +181,11 @@ const claimed = await promoRef.value.open({ priority: 10, cooldown: { day: 1 } }
 ```
 
 `useOverlay(id, defaults?, om?)` returns `{ instance, visible, model, phase, open, close, remove,
-resolve, reject, pause, resume }` (`defaults` covered below). The manager instance is resolved as
+resolve, reject, pause, resume }` (`defaults` covered below). Every Vue composable here
+(`useOverlayState`, `useOverlays`, `useOverlay`, `useCurrentOverlay`) must be called inside an
+active effect scope — `setup()`, or an explicit `effectScope()` — so the subscription it creates
+has somewhere to auto-unsubscribe; calling one outside a scope throws immediately rather than
+leaking the subscription silently. The manager instance is resolved as
 **plugin-default + explicit override**: pass `om` to any composable, or omit it to use the one from
 `createLayermanPlugin` / `provideLayerman`.
 

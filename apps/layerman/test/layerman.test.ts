@@ -530,4 +530,124 @@ describe("@codejoo/layerman", () => {
     m.setContext({ route: "/other" });
     expect(ids(m)).toEqual(["a"]); // 保留
   });
+
+  describe("bug fixes（全量 review）", () => {
+    it("重开已激活 id 为 overlap：腾空的串行槽必须重新调度，不能卡住排在后面的队列项", () => {
+      const m = make();
+      m.open({ id: "a" }); // 占用默认 slot
+      m.open({ id: "b" }); // 排在 a 后面
+      m.open({ id: "a", overlap: true }); // 自更新为 overlap：a 从串行槽被丢弃转叠加，槽腾空
+      expect(m.getSnapshot().active.find((o) => o.id === "a")?.overlapping).toBe(true);
+      expect(ids(m)).toEqual(["a", "b"]); // b 应已顶上串行槽，而不是卡在队列里
+      expect(m.getSnapshot().queued).toEqual([]);
+    });
+
+    it("重开已激活 id：自更新不应重复计冷却（豁免 exemptCooldown）", () => {
+      const m = make();
+      m.open({ id: "a", data: { n: 1 }, cooldown: { total: 2 } }); // 第 1 次真实展示，total=1
+      m.open({ id: "a", data: { n: 2 }, cooldown: { total: 2 } }); // 自更新
+      m.open({ id: "a", data: { n: 3 }, cooldown: { total: 2 } }); // 再次自更新
+      m.remove("a");
+      m.open({ id: "a", cooldown: { total: 2 } }); // 第 2 次真实展示，额度(2)还够用
+      expect(ids(m)).toEqual(["a"]); // 若两次自更新被误计为额外 2 次，total 会在这里被拦
+    });
+
+    it("跨标签页 mergeRemote：延迟到达的旧桶广播不能冲掉本地已滚动的新桶计数（day 冷却不被绕过）", () => {
+      const m = make({ crossTab: true }) as Layerman & { channel: { onmessage: (ev: { data: unknown }) => void } };
+      m.open({ id: "a", cooldown: { day: 1 } }); // 本地记一次：今天的 dayBucket
+      m.remove("a");
+      expect(ids(m)).toEqual([]);
+
+      const yesterday = new Date();
+      yesterday.setDate(yesterday.getDate() - 1);
+      const staleDayBucket = `${yesterday.getFullYear()}-${String(yesterday.getMonth() + 1).padStart(2, "0")}-${String(yesterday.getDate()).padStart(2, "0")}`;
+
+      // 模拟另一标签页发来的、属于昨天的旧广播延迟到达（比本地的今天记录晚到）
+      m.channel.onmessage({
+        data: {
+          id: "a",
+          rec: { total: 1, dayBucket: staleDayBucket, dayCount: 1, hourBucket: "irrelevant", hourCount: 1, minuteBucket: "irrelevant", minuteCount: 1, lastShownAt: Date.now() - 86_400_000 },
+        },
+      });
+
+      m.open({ id: "a", cooldown: { day: 1 } }); // 今天额度已用尽；若旧桶广播把本地桶冲成"昨天"，这里会误判为新的一天而放行
+      expect(ids(m)).toEqual([]);
+    });
+
+    it("beforeClose：守卫决议前的重复 close() 不应重复触发守卫", async () => {
+      const m = make({ autoRemove: false });
+      let calls = 0;
+      let resolveGuard!: (v: boolean) => void;
+      m.open({
+        id: "a",
+        beforeClose: () =>
+          new Promise<boolean>((res) => {
+            calls++;
+            resolveGuard = res;
+          }),
+      });
+      m.close("a"); // 触发守卫，尚未决议
+      m.close("a"); // 决议前的重复调用（如双击）
+      expect(calls).toBe(1); // 只应触发一次
+      resolveGuard(true);
+      await flush();
+      expect(m.get("a")?.phase).toBe("closing");
+    });
+
+    it("hydrate 竟态：storage.get() 落地前发生的真实 open() 写入不应被随后落地的旧磁盘快照覆盖", async () => {
+      const staleRaw = JSON.stringify({
+        a: { total: 0, dayBucket: "1970-01-01", dayCount: 0, hourBucket: "x", hourCount: 0, minuteBucket: "y", minuteCount: 0, lastShownAt: 0 },
+      });
+      let resolveGet!: (v: string | null) => void;
+      const storage: AsyncableStorage = {
+        get: () => new Promise((res) => (resolveGet = res)),
+        set: () => {},
+      };
+      const m = make({ storage }); // 构造函数已发起 hydrate()，storage.get() 尚未落地
+
+      m.open({ id: "a", cooldown: { total: 1 } }); // hydrate 落地前的真实 open：写入 total=1
+      m.remove("a");
+
+      resolveGet(staleRaw); // hydrate 此刻才落地：磁盘快照是旧的 total:0
+      await flush();
+
+      m.open({ id: "a", cooldown: { total: 1 } }); // 若旧快照把 total 冲回 0，这里会被误判为额度未耗尽而放行
+      expect(ids(m)).toEqual([]);
+    });
+
+    it("flush 写入失败：异步 storage.set() reject 不应变成未处理的 rejection", async () => {
+      const storage: AsyncableStorage = {
+        get: () => null,
+        set: () => Promise.reject(new Error("quota exceeded")),
+      };
+      const unhandled: unknown[] = [];
+      const onUnhandled = (err: unknown) => unhandled.push(err);
+      process.on("unhandledRejection", onUnhandled);
+      try {
+        const m = make({ storage });
+        await m.ready();
+        expect(() => m.open({ id: "a", cooldown: { total: 1 } })).not.toThrow();
+        await flush();
+        await Promise.resolve();
+      } finally {
+        process.off("unhandledRejection", onUnhandled);
+      }
+      expect(unhandled).toEqual([]);
+    });
+
+    it("pause：closing 态的 autoRemove 倒计时应被冻结，暂停期间不会到期移除", async () => {
+      const m = make(); // autoRemove 默认 300ms
+      m.open({ id: "a" });
+      m.close("a"); // → closing，autoRemove 定时器已排
+      await vi.advanceTimersByTimeAsync(100);
+      m.pause("a"); // 冻结
+      await vi.advanceTimersByTimeAsync(1000); // 远超原 300ms 窗口
+      expect(ids(m)).toEqual(["a"]); // 仍未被移除
+      m.resume("a"); // 恢复剩余 ~200ms
+      await vi.advanceTimersByTimeAsync(199);
+      expect(ids(m)).toEqual(["a"]);
+      await vi.advanceTimersByTimeAsync(1);
+      expect(ids(m)).toEqual([]); // 剩余时间耗尽后移除
+    });
+  });
 });

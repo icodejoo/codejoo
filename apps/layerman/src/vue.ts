@@ -57,11 +57,16 @@ function useManager(om?: Layerman): Layerman {
 /** 把管理器状态桥成响应式 `Ref<OverlayState>`（作用域销毁时自动退订）。 */
 export function useOverlayState(om?: Layerman): Ref<OverlayState> {
   const m = useManager(om);
+  // 必须有活跃的 effect scope 才能挂 onScopeDispose 退订——否则订阅永远不会被清理，在管理器
+  // 整个生命周期里泄漏。宁可尽早抛错让调用方看到问题，也不要静默泄漏。
+  if (!getCurrentScope()) {
+    throw new Error("[layerman/vue] useOverlayState(): no active effect scope — call inside setup() or wrap with effectScope(), otherwise the subscription can never be unsubscribed");
+  }
   const state = shallowRef(m.getSnapshot());
   const unsub = m.subscribe((s) => {
     state.value = s;
   });
-  if (getCurrentScope()) onScopeDispose(unsub);
+  onScopeDispose(unsub);
   return state;
 }
 
@@ -125,6 +130,12 @@ export function useOverlay<TData = unknown>(id: string, defaults?: MaybeRefOrGet
   const m = useManager(om);
   const state = useOverlayState(m);
   const instance = computed(() => state.value.active.find((o: OverlayInstance) => o.id === id));
+  // 核心的公开状态只有 open/closing 两态，中间的 resolving（后端数据驱动 resolve() 未落地前）对外
+  // 不可见：既不在 active 也不在 queued 里。仅凭这两者判断「是否已在处理中」会漏判 resolving——
+  // resolve() 尚在等待时若 model 再被置 true 一次，会被当作「未展示且未排队」重新 open()，导致
+  // 核心把这个正在进行中的 resolve 直接丢弃重开。用这个本地闩锁挡掉 open() 调用落地前的重复
+  // set(true)：直到 open() 返回的 result 结算（正常关闭/resolve/reject/dismiss 任一）才放开。
+  let opening = false;
   return {
     instance,
     visible: computed(() => instance.value !== undefined),
@@ -132,7 +143,14 @@ export function useOverlay<TData = unknown>(id: string, defaults?: MaybeRefOrGet
       get: () => instance.value !== undefined,
       set: (value: boolean) => {
         if (value) {
-          if (instance.value === undefined && !state.value.queued.includes(id)) m.open({ ...toValue(defaults), id });
+          if (!opening && instance.value === undefined && !state.value.queued.includes(id)) {
+            opening = true;
+            m.open({ ...toValue(defaults), id })
+              .result.finally(() => {
+                opening = false;
+              })
+              .catch(() => {});
+          }
         } else if (m.get(id)) {
           // 已展示（open/closing）：走 close()（尊重 beforeClose）。无 beforeClose 时 close() 已同步
           // 转 closing——按原「立即移除」的第三方 v-model 契约收尾；有 beforeClose 时 close() 是异步

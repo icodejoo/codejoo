@@ -248,7 +248,11 @@ interface Entry {
   durationEndsAt?: number;
   durationRemaining?: number;
   autoRemoveTimer?: Timer;
+  autoRemoveEndsAt?: number;
+  autoRemoveRemaining?: number;
   paused: boolean;
+  /** beforeClose 守卫正在等待（异步决议中），避免同一 close() 请求被重复触发守卫。 */
+  closePending: boolean;
   abort?: AbortController;
 }
 
@@ -321,7 +325,11 @@ class CooldownStore {
     if (!raw) return;
     try {
       const parsed = JSON.parse(raw) as Record<string, CooldownRecord>;
-      for (const id of Object.keys(parsed)) this.persisted.set(id, parsed[id]);
+      // 只填充尚未有记录的 id：hydrate() 的 storage.get() 是异步的，等待期间若已发生真实 open()，
+      // record()/bump() 会先写入内存里更新的记录——那必然比这份磁盘快照更新，不能被回填覆盖掉。
+      for (const id of Object.keys(parsed)) {
+        if (!this.persisted.has(id)) this.persisted.set(id, parsed[id]);
+      }
     } catch {
       /* 坏数据忽略 */
     }
@@ -332,7 +340,14 @@ class CooldownStore {
     const obj: Record<string, CooldownRecord> = {};
     for (const [id, rec] of this.persisted) obj[id] = rec;
     try {
-      void this.storage.set(this.storageKey, JSON.stringify(obj));
+      const result = this.storage.set(this.storageKey, JSON.stringify(obj));
+      // storage.set 可能是异步存储（返回 Promise 且可 reject）——同步 try/catch 接不住异步 rejection，
+      // 必须显式 catch 掉，否则写失败会变成未处理的 rejection 而不是按注释意图静默忽略。
+      if (result) {
+        result.catch(() => {
+          /* 写失败忽略 */
+        });
+      }
     } catch {
       /* 写失败忽略 */
     }
@@ -387,21 +402,32 @@ class CooldownStore {
     return rec;
   }
 
-  /** 合并来自其他标签页的记录（取更大计数 / 更新的时间戳）。 */
+  /** 桶标签不同时取更新（更大）的那个桶，而不是无条件采用 remote——否则一条延迟到达的旧桶
+   * 广播会把本地已经滚动到新桶的记录冲回旧桶，导致 canShow() 用当前真实时间一算「桶不匹配」→
+   * 误判计数为 0，冷却限制被绕过。桶标签是零填充的等长字符串，字典序即时间序。 */
+  private static mergeBucket(prevBucket: string, prevCount: number, remoteBucket: string, remoteCount: number): { bucket: string; count: number } {
+    if (prevBucket === remoteBucket) return { bucket: prevBucket, count: Math.max(prevCount, remoteCount) };
+    return prevBucket > remoteBucket ? { bucket: prevBucket, count: prevCount } : { bucket: remoteBucket, count: remoteCount };
+  }
+
+  /** 合并来自其他标签页的记录（取更大计数 / 更新的时间戳 / 更新的桶）。 */
   mergeRemote(id: string, remote: CooldownRecord): void {
     const prev = this.persisted.get(id);
     if (!prev) {
       this.persisted.set(id, remote);
       return;
     }
+    const day = CooldownStore.mergeBucket(prev.dayBucket, prev.dayCount, remote.dayBucket, remote.dayCount);
+    const hour = CooldownStore.mergeBucket(prev.hourBucket, prev.hourCount, remote.hourBucket, remote.hourCount);
+    const minute = CooldownStore.mergeBucket(prev.minuteBucket, prev.minuteCount, remote.minuteBucket, remote.minuteCount);
     this.persisted.set(id, {
       total: Math.max(prev.total, remote.total),
-      dayBucket: remote.dayBucket,
-      dayCount: prev.dayBucket === remote.dayBucket ? Math.max(prev.dayCount, remote.dayCount) : remote.dayCount,
-      hourBucket: remote.hourBucket,
-      hourCount: prev.hourBucket === remote.hourBucket ? Math.max(prev.hourCount, remote.hourCount) : remote.hourCount,
-      minuteBucket: remote.minuteBucket,
-      minuteCount: prev.minuteBucket === remote.minuteBucket ? Math.max(prev.minuteCount, remote.minuteCount) : remote.minuteCount,
+      dayBucket: day.bucket,
+      dayCount: day.count,
+      hourBucket: hour.bucket,
+      hourCount: hour.count,
+      minuteBucket: minute.bucket,
+      minuteCount: minute.count,
       lastShownAt: Math.max(prev.lastShownAt, remote.lastShownAt),
     });
   }
@@ -513,6 +539,9 @@ class LayermanImpl implements Layerman {
         this.discardActive(existing);
         entry.replaceJumped = true;
         entry.skipGap = true;
+        // 自更新语义：同一次连续展示不应重复计冷却（否则 N 次自更新会把 total/day/hour/minute
+        // 计到 N 次，可能把与本次展示无关的未来真实展示永久拦死）。
+        entry.exemptCooldown = true;
         if (existing.slot !== slot) this.schedule(existing.slot);
         // 目标 slot 当下空闲、未暂停、非 overlap 时直接接管，不经过 schedule() 的逐项资格过滤——
         // 否则会被自身 cooldown/条件拦下，换了 slot 时甚至会落回普通队列后永久卡住（result 都不会
@@ -544,6 +573,9 @@ class LayermanImpl implements Layerman {
         this.byId.delete(entry.id);
         this.finalizeRemoved(entry);
       }
+      // overlap 不占用 serial 槽；若上面的自更新分支刚 discardActive() 腾空了本 slot 的槽位，
+      // 必须重新调度，否则该 slot 队列里排在后面的条目会一直卡住，直到某个不相关事件碰到这个 slot。
+      this.schedule(slot);
       return handle;
     }
 
@@ -587,6 +619,7 @@ class LayermanImpl implements Layerman {
       settle: () => {},
       fail: () => {},
       paused: false,
+      closePending: false,
     };
   }
 
@@ -776,23 +809,29 @@ class LayermanImpl implements Layerman {
   /* ── 关闭握手（两阶段） ── */
   close(id: string): void {
     const e = this.byId.get(id);
-    if (!e || e.phase !== LOG_STATE.open) return;
+    if (!e || e.phase !== LOG_STATE.open || e.closePending) return;
     const guard = e.cfg.beforeClose;
     if (guard) {
       // beforeClose 关闭守卫：返回（或 Promise resolve）`false` 则取消本次关闭；其余值放行。
       // guard() 本身可能同步抛错——放进 try 里，视同守卫拒绝，不让异常穿透 close()。
+      // closePending 挡掉守卫决议期间的重复 close() 调用（如双击）——否则每次调用都会重新触发一次
+      // 可能带副作用（确认弹窗/埋点/网络请求）的宿主守卫。
+      e.closePending = true;
       let result: boolean | Promise<boolean>;
       try {
         result = guard();
       } catch {
+        e.closePending = false;
         return;
       }
       Promise.resolve(result).then(
         (ok) => {
+          e.closePending = false;
           if (ok !== false && this.byId.get(id) === e && e.phase === LOG_STATE.open) this.doClose(e);
         },
         () => {
           /* 守卫抛错 → 视为取消关闭 */
+          e.closePending = false;
         },
       );
       return;
@@ -813,6 +852,7 @@ class LayermanImpl implements Layerman {
     const ar = e.cfg.autoRemove ?? this.autoRemoveDefault;
     if (ar === false) return;
     const ms = ar === true ? DEFAULT_AUTO_REMOVE_MS : ar;
+    e.autoRemoveEndsAt = this.now() + ms;
     e.autoRemoveTimer = setTimeout(() => this.remove(e.id), ms);
   }
 
@@ -931,7 +971,10 @@ class LayermanImpl implements Layerman {
       clearTimeout(t);
       this.openTimers.delete(slot);
     }
-    for (const e of this.byId.values()) this.freezeDuration(e);
+    for (const e of this.byId.values()) {
+      this.freezeDuration(e);
+      this.freezeAutoRemove(e);
+    }
   }
 
   resumeAll(): void {
@@ -956,7 +999,10 @@ class LayermanImpl implements Layerman {
         this.finishResolve(e, data);
       }
     }
-    for (const e of this.byId.values()) this.thawDuration(e);
+    for (const e of this.byId.values()) {
+      this.thawDuration(e);
+      this.thawAutoRemove(e);
+    }
     for (const slot of this.queues.keys()) this.schedule(slot);
   }
 
@@ -965,6 +1011,7 @@ class LayermanImpl implements Layerman {
     if (!e || e.paused) return;
     e.paused = true;
     this.freezeDuration(e);
+    this.freezeAutoRemove(e);
   }
 
   resume(id: string): void {
@@ -972,6 +1019,7 @@ class LayermanImpl implements Layerman {
     if (!e || !e.paused) return;
     e.paused = false;
     this.thawDuration(e);
+    this.thawAutoRemove(e);
   }
 
   private startDuration(e: Entry): void {
@@ -999,6 +1047,24 @@ class LayermanImpl implements Layerman {
     e.durationRemaining = undefined;
     e.durationEndsAt = this.now() + ms;
     e.durationTimer = setTimeout(() => this.close(e.id), ms);
+  }
+
+  /** 冻结「关闭后自动移除」的倒计时（pause/pauseAll）——否则 closing 期间暂停的弹窗仍会被
+   * 未被冻结的 autoRemove 定时器如期移除，与「暂停」的直觉矛盾。 */
+  private freezeAutoRemove(e: Entry): void {
+    if (e.autoRemoveTimer == null) return;
+    clearTimeout(e.autoRemoveTimer);
+    e.autoRemoveTimer = undefined;
+    e.autoRemoveRemaining = Math.max(0, (e.autoRemoveEndsAt ?? this.now()) - this.now());
+  }
+
+  private thawAutoRemove(e: Entry): void {
+    if (this.paused || e.paused) return;
+    if (e.autoRemoveRemaining == null) return;
+    const ms = e.autoRemoveRemaining;
+    e.autoRemoveRemaining = undefined;
+    e.autoRemoveEndsAt = this.now() + ms;
+    e.autoRemoveTimer = setTimeout(() => this.remove(e.id), ms);
   }
 
   private clearDuration(e: Entry): void {
