@@ -19,14 +19,14 @@ const COUNT_KEY = '__retryCount'
  *   - **次数来源优先级**：`config.retry` 数字 > `config.retry.max` > 插件级 `defaults.max` > 0
  *   - **每次重试通过 `ctx.axios.request(config)` 重新走完整链路**——请求/响应拦截器会
  *     再跑一遍；count 用 WeakMap 按 config 对象记。
- *   - **注意（B2 方案 A）**：cache / share / loading / mock 等 adapter 类插件在首发时已
+ *   - **注意（B2 方案 A）**：cache / loading / mock 等 adapter 类插件在首发时已
  *     "解析即弃"地 `delete config.xxx`，且其私有标量存于不跨 `mergeConfig` re-merge 的位置，
  *     故**重试请求不会重新触发这些 adapter 插件**（loading 不重复计数、不重新查/写缓存等）。
- *     如需重试期间维持 loading，请把 retry 装在 loading 之内或改用 share 的 retry 策略。
+ *     如需重试期间维持 loading，请把 retry 装在 loading 之内。`share` 是例外——它按插件级
+ *     `policy` 兜底（`config.share` 被 delete 后仍会回退到插件默认策略），故重试的整链路
+ *     重发仍会重新经过 `share` 的去重逻辑；这是安全的（`share` 已不再有内部重试循环，两者
+ *     不会互相触发对方，见 share.ts 的类文档）。
  *   - **最大次数后**：清理计数并 reject 最后一次的 error，链路下游正常 catch
- *   - **不要与 `share({ policy: 'retry' })` 叠加在同一个 key 上**：share 的重试发生在
- *     adapter 层、settle 前对本插件不可见；一旦 share 耗尽才 reject，本插件会再次整链路
- *     重发，触发 share 全新一轮内部重试 —— 总次数变成两者 retries 的乘积而非取大值。
  *
  * @example
  *   useAxiosPlugin(ax).use(retry({ max: 3 }))
@@ -64,7 +64,7 @@ export default function retry({ enable = true, max = 0, isExceptionRequest }: IR
                     const config = response.config;
                     const exc = $resolveException(config, defaults);
                     // 包成真正的 AxiosError（携带 .response）——裸 response 一旦重试耗尽被 reject，
-                    // 下游 normalize-response 的 onRejected 读不到 err.response，会把真实业务
+                    // 下游 normalize 的 onRejected 读不到 err.response，会把真实业务
                     // payload 丢成 { status: 0, data: null }。
                     if (exc && exc(response)) {
                         return attempt(config, new AxiosError(

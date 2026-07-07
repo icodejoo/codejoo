@@ -4,22 +4,22 @@
  *
  * 覆盖清单（100% 公开导出）：
  *   create / Core(get,post,put,delete,patch,head,options, raw/wrap/plain, use,eject,plugins,extends)
- *   reqkey,$key · cache,removeCache,clearCache · cancel,cancelAll · envs
- *   reqclean · loading · mock · normalizeResponse
+ *   key,$key · cache,removeCache,clearCache · cancel,cancelAll · envs
+ *   filter · loading · mock · normalize
  *   repath · retry · share · ApiResponse,ApiError · TokenManager
  */
 import axios from 'axios';
 import {
   create, Core,
   ApiResponse, ApiError, TokenManager,
-  reqkey, $key,
+  key, $key,
   cache, removeCache, clearCache,
   cancel, cancelAll,
   envs,
-  reqclean,
+  filter,
   loading,
   mock,
-  normalizeResponse,
+  normalize,
   repath,
   retry,
   share,
@@ -136,15 +136,15 @@ const features: Feature[] = [
     ],
   },
   {
-    id: 'reqkey', title: 'reqkey · $key', desc: 'simple/deep/object key 生成 + 插件端到端写入 config.key',
+    id: 'key', title: 'key · $key', desc: 'simple/deep/object key 生成 + 插件端到端写入 config.key',
     actions: [
-      { id: 'reqkey-simple', label: 'simple 忽略 params', run: () => ({ a: $key({ url: '/u', method: 'GET', params: { x: 1 } }, true), b: $key({ url: '/u', method: 'GET', params: { x: 2 } }, true), equal: $key({ url: '/u', method: 'GET', params: { x: 1 } }, true) === $key({ url: '/u', method: 'GET', params: { x: 2 } }, true) }) },
-      { id: 'reqkey-deep', label: 'deep 区分 params', run: () => ({ a: $key({ url: '/u', method: 'GET', params: { x: 1 } }, false), b: $key({ url: '/u', method: 'GET', params: { x: 2 } }, false), equal: $key({ url: '/u', method: 'GET', params: { x: 1 } }, false) === $key({ url: '/u', method: 'GET', params: { x: 2 } }, false) }) },
+      { id: 'key-simple', label: 'simple 忽略 params', run: () => ({ a: $key({ url: '/u', method: 'GET', params: { x: 1 } }, true), b: $key({ url: '/u', method: 'GET', params: { x: 2 } }, true), equal: $key({ url: '/u', method: 'GET', params: { x: 1 } }, true) === $key({ url: '/u', method: 'GET', params: { x: 2 } }, true) }) },
+      { id: 'key-deep', label: 'deep 区分 params', run: () => ({ a: $key({ url: '/u', method: 'GET', params: { x: 1 } }, false), b: $key({ url: '/u', method: 'GET', params: { x: 2 } }, false), equal: $key({ url: '/u', method: 'GET', params: { x: 1 } }, false) === $key({ url: '/u', method: 'GET', params: { x: 2 } }, false) }) },
       {
-        id: 'reqkey-plugin', label: '插件写入 key', run: async () => {
+        id: 'key-plugin', label: '插件写入 key', run: async () => {
           const a = mkApi(); let captured: string | undefined;
           a.use({ name: 'capture', install(ctx) { ctx.request((c) => { captured = (c as any).key; return c; }); } });
-          a.use(reqkey());
+          a.use(key());
           await a.get('/api/echo')({ a: 1 }, { key: true } as any);
           return { capturedKey: captured };
         },
@@ -188,7 +188,7 @@ const features: Feature[] = [
       {
         id: 'share-start', label: 'start 合并并发', run: async () => {
           await resetHits();
-          const a = mkApi(); a.use(share({ policy: 'start' })); a.use(reqkey());
+          const a = mkApi(); a.use(share({ policy: 'start' })); a.use(key());
           const calls = Array.from({ length: 5 }, () => a.get('/api/hit')({ id: 'shareStart' }, { key: true, share: true } as any));
           const results = await Promise.all(calls);
           return { hitsSeen: (results as any[]).map((r) => r.hits), serverHits: await readHits('shareStart') };
@@ -197,7 +197,7 @@ const features: Feature[] = [
       {
         id: 'share-race', label: 'race 各发竞速', run: async () => {
           await resetHits();
-          const a = mkApi(); a.use(share({ policy: 'race' })); a.use(reqkey());
+          const a = mkApi(); a.use(share({ policy: 'race' })); a.use(key());
           const calls = Array.from({ length: 3 }, () => a.get('/api/hit')({ id: 'shareRace' }, { key: true, share: true } as any));
           const results = await Promise.all(calls);
           return { results, serverHits: await readHits('shareRace') };
@@ -206,18 +206,10 @@ const features: Feature[] = [
       {
         id: 'share-end', label: 'end 末位生效', run: async () => {
           await resetHits();
-          const a = mkApi(); a.use(share({ policy: 'end' })); a.use(reqkey());
+          const a = mkApi(); a.use(share({ policy: 'end' })); a.use(key());
           const calls = Array.from({ length: 3 }, () => a.get('/api/hit')({ id: 'shareEnd' }, { key: true, share: true } as any));
           const results = await Promise.all(calls);
           return { sameResult: new Set((results as any[]).map((r) => JSON.stringify(r))).size, serverHits: await readHits('shareEnd') };
-        },
-      },
-      {
-        id: 'share-retry', label: 'retry 共享重试', run: async () => {
-          await resetHits();
-          const a = mkApi(); a.use(share({ policy: 'retry', retries: 3 })); a.use(reqkey());
-          const r = await a.get('/api/hit')({ id: 'shareRetry', fail: 2 }, { key: true, share: 'retry' } as any);
-          return { result: r, serverHits: await readHits('shareRetry') };
         },
       },
     ],
@@ -308,11 +300,11 @@ const features: Feature[] = [
     ],
   },
   {
-    id: 'filter', title: 'reqclean', desc: '剥离 params/data 中的空字段',
+    id: 'filter', title: 'filter', desc: '剥离 params/data 中的空字段',
     actions: [
       {
         id: 'filter-run', label: '过滤空字段', run: async () => {
-          const a = mkApi(); a.use(reqclean());
+          const a = mkApi(); a.use(filter());
           const r: any = await a.get('/api/echo')({ a: 1, b: '', c: null, d: '  ', e: 0 }, { filter: true } as any);
           return { query: r.query };
         },
@@ -332,12 +324,12 @@ const features: Feature[] = [
     ],
   },
   {
-    id: 'normalize', title: 'normalizeResponse', desc: '业务 code 非成功 → 以 ApiError reject',
+    id: 'normalize', title: 'normalize', desc: '业务 code 非成功 → 以 ApiError reject',
     actions: [
-      { id: 'normalize-ok', label: 'code=0000 → 成功', run: () => { const a = mkApi(); a.use(normalizeResponse()); return a.get('/api/echo')({ ok: 1 }); } },
+      { id: 'normalize-ok', label: 'code=0000 → 成功', run: () => { const a = mkApi(); a.use(normalize()); return a.get('/api/echo')({ ok: 1 }); } },
       {
         id: 'normalize-fail', label: 'code=5001 → ApiError', run: async () => {
-          const a = mkApi(); a.use(normalizeResponse());
+          const a = mkApi(); a.use(normalize());
           try { await a.get('/api/echo')({ code: '5001' }); return { rejected: false }; }
           catch (e: any) { return { rejected: true, isApiError: e instanceof ApiError, response: e?.response }; }
         },
@@ -373,7 +365,7 @@ const integrationFeatures: Feature[] = [
     actions: [{
       id: 'int-share-start', label: '跑 30 并发', run: async () => {
         await resetHits();
-        const a = mkApi(); a.use([reqkey(), share({ policy: 'start' })]);
+        const a = mkApi(); a.use([key(), share({ policy: 'start' })]);
         const res = await Promise.all(
           Array.from({ length: 30 }, () => a.get('/api/hit')({ id: 'intShare', delay: 80 }, { key: true, share: 'start' } as any)),
         );
@@ -388,7 +380,7 @@ const integrationFeatures: Feature[] = [
     actions: [{
       id: 'int-race-run', label: '跑 race', run: async () => {
         await resetHits();
-        const a = mkApi(); a.use([reqkey(), share({ policy: 'race' })]);
+        const a = mkApi(); a.use([key(), share({ policy: 'race' })]);
         const res = await Promise.all(
           Array.from({ length: 3 }, () => a.get('/api/hit')({ id: 'intRace', fail: 2, delay: 30 }, { key: true, share: 'race' } as any)),
         );

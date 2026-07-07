@@ -5,7 +5,7 @@ import type {
   AxiosResponse,
 } from 'axios';
 import { asArray } from './helper';
-import ApiResponse from './objects/ApiResponse';
+import AxpResponse from './objects/Response';
 import { PluginManager } from './plugin';
 import type {
   CoreOptions,
@@ -153,7 +153,7 @@ let PROTO_BUILT = false;
  *             保证"薄 axios 包装"与第三方接口仍可用。 */
 function shapeResponse(res: AxiosResponse, config: IHttpOptions): unknown {
   if ((config as { raw?: boolean }).raw) return res.data;
-  if ((config as { wrap?: boolean }).wrap) return ApiResponse.fromResponse(res);
+  if ((config as { wrap?: boolean }).wrap) return AxpResponse.fromResponse(res);
   const body = res.data;
   if (body && typeof body === 'object' && 'code' in body && 'data' in body) {
     return (body as { data: unknown }).data;

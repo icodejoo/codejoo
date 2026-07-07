@@ -6,7 +6,7 @@ import type {
 } from 'axios';
 import type { MaybeFun, Plugin } from '../types';
 import { __DEV__ } from '../helper';
-import ApiResponse from '../objects/ApiResponse';
+import AxpResponse from '../objects/Response';
 import type { ITokenManager } from '../objects/TokenManager';
 
 export const name = 'auth';
@@ -249,7 +249,7 @@ export default function auth(options: IAuthOptions): Plugin {
           const bag = config as Record<string, unknown> | undefined;
           if (!bag?.[PROTECTED]) return response;
           if (bag[DENIED]) { $clearFlags(bag); return response; }
-          if (ApiResponse.fromResponse(response).successful) { $clearFlags(bag); return response; }
+          if (AxpResponse.fromResponse(response).successful) { $clearFlags(bag); return response; }
           return handleFailure(response, config!);
         },
         async (error: unknown) => {

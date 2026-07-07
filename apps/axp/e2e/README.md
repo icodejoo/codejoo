@@ -48,17 +48,17 @@ ALL E2E PASSED ✅
 | 模块 | 覆盖的导出 / 行为 |
 |---|---|
 | Core | `create` · `Core` · `get/post/put/delete/patch/head/options` · 三态返回 `raw`/`wrap`/解包 · `use`/`eject`/`plugins`/`extends` |
-| reqkey | `reqkey` · `$key`(simple / deep 双车道 64-bit) |
+| key | `key` · `$key`(simple / deep 双车道 64-bit) |
 | cache | `cache` · `removeCache` · `clearCache`(用服务端命中数证明只发一次网络) |
-| share | `share` 的 `start`/`race`/`end`/`retry` 四策略 |
+| share | `share` 的 `start`/`race`/`end` 三策略 |
 | retry | `retry`(失败重试到成功 / `retry:0` 禁用) |
 | cancel | `cancel` · `cancelAll`(`axios.isCancel` 验证中止) |
 | loading | `loading`(全局计数 0→1 / 1→0 触发) |
 | mock | `mock`(URL 重写到 mockUrl;mock 不存在时默认回落真实接口) |
 | envs | `envs`(安装期规则合并) |
-| reqclean | `reqclean`(空字段过滤) |
+| filter | `filter`(空字段过滤) |
 | repath | `repath`(`{id}`/`:pid` 替换) |
-| normalizeResponse | `normalizeResponse` · `ApiError`(业务失败以 ApiError reject) |
+| normalize | `normalize` · `ApiError`(业务失败以 ApiError reject) |
 | TokenManager | `TokenManager`(set/get/clear,Bearer 前缀) |
 | ApiResponse | `ApiResponse`(fromResponse 防 null + 成功判定) |
 

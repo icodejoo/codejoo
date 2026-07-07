@@ -2,11 +2,9 @@ import { describe, it, expect, vi } from 'vitest';
 import type { AxiosAdapter, AxiosRequestConfig, AxiosResponse, InternalAxiosRequestConfig } from 'axios';
 import {
     $resolvePolicy,
-    $resolveInterval,
-    $resolveRetries,
     $end,
     $race,
-    $retry,
+    $start,
     type ISharedOptions,
 } from '../src/plugins/share';
 
@@ -34,7 +32,6 @@ describe('$resolvePolicy', () => {
     it('config.share 是字符串 policy → 直接使用', () => {
         expect($resolvePolicy({ share: 'end' } as any, defaults)).toBe('end');
         expect($resolvePolicy({ share: 'race' } as any, defaults)).toBe('race');
-        expect($resolvePolicy({ share: 'retry' } as any, defaults)).toBe('retry');
         expect($resolvePolicy({ share: 'none' } as any, defaults)).toBe('none');
     });
 
@@ -83,14 +80,14 @@ const cfg = (): InternalAxiosRequestConfig => ({} as any);
 
 
 // ───────────────────────────────────────────────────────────────────────────
-//  start 语义（= $retry(retries=0, interval=0)）：首发，失败即终止，无重试
+//  $start：相同 key 并发请求复用首发的 promise，HTTP 只发一次，无内部重试
 // ───────────────────────────────────────────────────────────────────────────
 
-describe('$retry as start (retries=0)', () => {
+describe('$start', () => {
     it('单请求：正常发 HTTP，成功返回', async () => {
         const map = new Map();
         const { adp, pending } = deferredAdapter();
-        const p = $retry(adp, map, 'k1', cfg(), 0, 0);
+        const p = $start(adp, map, 'k1', cfg());
         expect(adp).toHaveBeenCalledOnce();
         pending[0].resolve(mockResp('ok'));
         await expect(p).resolves.toMatchObject({ data: 'ok' });
@@ -99,8 +96,8 @@ describe('$retry as start (retries=0)', () => {
     it('两并发同 key：HTTP 只发一次，两个 caller 都拿到同一结果', async () => {
         const map = new Map();
         const { adp, pending } = deferredAdapter();
-        const pA = $retry(adp, map, 'k1', cfg(), 0, 0);
-        const pB = $retry(adp, map, 'k1', cfg(), 0, 0);
+        const pA = $start(adp, map, 'k1', cfg());
+        const pB = $start(adp, map, 'k1', cfg());
         expect(adp).toHaveBeenCalledOnce();
         pending[0].resolve(mockResp('shared'));
         const [a, b] = await Promise.all([pA, pB]);
@@ -111,8 +108,8 @@ describe('$retry as start (retries=0)', () => {
     it('失败也共享：所有 caller 都收到同一个 reject', async () => {
         const map = new Map();
         const { adp, pending } = deferredAdapter();
-        const pA = $retry(adp, map, 'k1', cfg(), 0, 0);
-        const pB = $retry(adp, map, 'k1', cfg(), 0, 0);
+        const pA = $start(adp, map, 'k1', cfg());
+        const pB = $start(adp, map, 'k1', cfg());
         pending[0].reject(new Error('boom'));
         await expect(pA).rejects.toThrow('boom');
         await expect(pB).rejects.toThrow('boom');
@@ -121,10 +118,10 @@ describe('$retry as start (retries=0)', () => {
     it('完成后：相同 key 的新请求重新发 HTTP', async () => {
         const map = new Map();
         const { adp, pending } = deferredAdapter();
-        const p1 = $retry(adp, map, 'k1', cfg(), 0, 0);
+        const p1 = $start(adp, map, 'k1', cfg());
         pending[0].resolve(mockResp('first'));
         await p1;
-        const p2 = $retry(adp, map, 'k1', cfg(), 0, 0);
+        const p2 = $start(adp, map, 'k1', cfg());
         expect(adp).toHaveBeenCalledTimes(2);
         pending[1].resolve(mockResp('second'));
         await expect(p2).resolves.toMatchObject({ data: 'second' });
@@ -133,8 +130,8 @@ describe('$retry as start (retries=0)', () => {
     it('不同 key：互不干扰，独立 HTTP', async () => {
         const map = new Map();
         const { adp, pending } = deferredAdapter();
-        const pA = $retry(adp, map, 'k1', cfg(), 0, 0);
-        const pB = $retry(adp, map, 'k2', cfg(), 0, 0);
+        const pA = $start(adp, map, 'k1', cfg());
+        const pB = $start(adp, map, 'k2', cfg());
         expect(adp).toHaveBeenCalledTimes(2);
         pending[0].resolve(mockResp('A'));
         pending[1].resolve(mockResp('B'));
@@ -295,162 +292,5 @@ describe('$race', () => {
         const p = $race(adp, map, 'k1', cfg());
         pending[0].resolve(mockResp('alone'));
         await expect(p).resolves.toMatchObject({ data: 'alone' });
-    });
-});
-
-
-// ───────────────────────────────────────────────────────────────────────────
-//  $resolveInterval
-// ───────────────────────────────────────────────────────────────────────────
-
-describe('$resolveInterval', () => {
-    it('请求级对象 interval 优先', () => {
-        expect($resolveInterval({ share: { interval: 500 } } as any, { interval: 100 })).toBe(500);
-    });
-    it('请求级未指定 interval → 插件级', () => {
-        expect($resolveInterval({} as any, { interval: 200 })).toBe(200);
-    });
-    it('两级都没设 → 0', () => {
-        expect($resolveInterval({} as any, {})).toBe(0);
-    });
-});
-
-
-describe('$resolveRetries', () => {
-    it('请求级对象 retries 优先', () => {
-        expect($resolveRetries({ share: { retries: 5 } } as any, { retries: 1 })).toBe(5);
-    });
-    it('请求级未指定 retries → 插件级', () => {
-        expect($resolveRetries({} as any, { retries: 7 })).toBe(7);
-    });
-    it('两级都没设 → 默认 3', () => {
-        expect($resolveRetries({} as any, {})).toBe(3);
-    });
-    it('retries=0 显式禁用重试', () => {
-        expect($resolveRetries({ share: { retries: 0 } } as any, { retries: 5 })).toBe(0);
-    });
-});
-
-
-// ───────────────────────────────────────────────────────────────────────────
-//  $retry：相同 key 共享 promise + 内部重试
-// ───────────────────────────────────────────────────────────────────────────
-
-describe('$retry', () => {
-    it('单 caller 首发成功：直接返回', async () => {
-        const map = new Map();
-        const { adp, pending } = deferredAdapter();
-        const p = $retry(adp, map, 'k1', cfg(), 3, 0);
-        pending[0].resolve(mockResp('ok'));
-        await expect(p).resolves.toMatchObject({ data: 'ok' });
-        expect(adp).toHaveBeenCalledOnce();
-    });
-
-    it('两 caller 同 key：始终只发一次 HTTP（首个成功）', async () => {
-        const map = new Map();
-        const { adp, pending } = deferredAdapter();
-        const pA = $retry(adp, map, 'k1', cfg(), 3, 0);
-        const pB = $retry(adp, map, 'k1', cfg(), 3, 0);
-        // 永远只一次 adp 调用，B 直接复用 promise
-        expect(adp).toHaveBeenCalledOnce();
-        pending[0].resolve(mockResp('shared'));
-        const [a, b] = await Promise.all([pA, pB]);
-        expect(a).toBe(b);  // 同一个 response 引用
-        expect(a.data).toBe('shared');
-    });
-
-    it('首发失败 → 自动重试到成功（caller 不感知）', async () => {
-        const map = new Map();
-        const { adp, pending } = deferredAdapter();
-        const p = $retry(adp, map, 'k1', cfg(), 3, 0);
-        pending[0].reject(new Error('try 1'));
-        await new Promise((r) => setTimeout(r, 0));
-        expect(adp).toHaveBeenCalledTimes(2);
-        pending[1].reject(new Error('try 2'));
-        await new Promise((r) => setTimeout(r, 0));
-        expect(adp).toHaveBeenCalledTimes(3);
-        pending[2].resolve(mockResp('finally ok'));
-        await expect(p).resolves.toMatchObject({ data: 'finally ok' });
-    });
-
-    it('全部 retries 用尽仍失败 → 用最后一次 error reject', async () => {
-        const map = new Map();
-        const { adp, pending } = deferredAdapter();
-        const p = $retry(adp, map, 'k1', cfg(), 2, 0);  // 最多 2 次重试 = 共 3 次尝试
-        pending[0].reject(new Error('t1'));
-        await new Promise((r) => setTimeout(r, 0));
-        pending[1].reject(new Error('t2'));
-        await new Promise((r) => setTimeout(r, 0));
-        pending[2].reject(new Error('t3 final'));
-        await expect(p).rejects.toThrow('t3 final');
-        expect(adp).toHaveBeenCalledTimes(3);
-    });
-
-    it('retries=0：失败立即 reject，不重试', async () => {
-        const map = new Map();
-        const { adp, pending } = deferredAdapter();
-        const p = $retry(adp, map, 'k1', cfg(), 0, 0);
-        pending[0].reject(new Error('once'));
-        await expect(p).rejects.toThrow('once');
-        expect(adp).toHaveBeenCalledOnce();
-    });
-
-    it('多 caller 共享重试结果：HTTP 共享、所有 caller 拿同一最终结果', async () => {
-        const map = new Map();
-        const { adp, pending } = deferredAdapter();
-        const pA = $retry(adp, map, 'k1', cfg(), 3, 0);
-        const pB = $retry(adp, map, 'k1', cfg(), 3, 0);
-        const pC = $retry(adp, map, 'k1', cfg(), 3, 0);
-        expect(adp).toHaveBeenCalledOnce();  // 三个 caller 共享，首发只发一次
-        // 首发失败，触发内部重试
-        pending[0].reject(new Error('t1'));
-        await new Promise((r) => setTimeout(r, 0));
-        expect(adp).toHaveBeenCalledTimes(2);
-        pending[1].resolve(mockResp('retry ok'));
-        const [a, b, c] = await Promise.all([pA, pB, pC]);
-        expect(a.data).toBe('retry ok');
-        expect(b.data).toBe('retry ok');
-        expect(c.data).toBe('retry ok');
-    });
-
-    it('interval > 0：两次重试之间真正等待', async () => {
-        vi.useFakeTimers();
-        const map = new Map();
-        const { adp, pending } = deferredAdapter();
-        const p = $retry(adp, map, 'k1', cfg(), 3, 100);
-        pending[0].reject(new Error('t1'));
-        // 50ms：还在 interval 内，不应触发重试
-        await vi.advanceTimersByTimeAsync(50);
-        expect(adp).toHaveBeenCalledOnce();
-        // 110ms：超过 interval，触发第二次
-        await vi.advanceTimersByTimeAsync(60);
-        expect(adp).toHaveBeenCalledTimes(2);
-        pending[1].resolve(mockResp('after wait'));
-        await vi.runAllTimersAsync();
-        await expect(p).resolves.toMatchObject({ data: 'after wait' });
-        vi.useRealTimers();
-    });
-
-    it('归零后新一轮独立尝试', async () => {
-        const map = new Map();
-        const { adp, pending } = deferredAdapter();
-        const p1 = $retry(adp, map, 'k1', cfg(), 3, 0);
-        pending[0].resolve(mockResp('round1'));
-        await p1;
-        const p2 = $retry(adp, map, 'k1', cfg(), 3, 0);
-        pending[1].resolve(mockResp('round2'));
-        await expect(p2).resolves.toMatchObject({ data: 'round2' });
-    });
-
-    it('不同 key 互不影响', async () => {
-        const map = new Map();
-        const { adp, pending } = deferredAdapter();
-        const pA = $retry(adp, map, 'kA', cfg(), 3, 0);
-        const pB = $retry(adp, map, 'kB', cfg(), 3, 0);
-        expect(adp).toHaveBeenCalledTimes(2);
-        pending[0].resolve(mockResp('A'));
-        pending[1].resolve(mockResp('B'));
-        await expect(pA).resolves.toMatchObject({ data: 'A' });
-        await expect(pB).resolves.toMatchObject({ data: 'B' });
     });
 });

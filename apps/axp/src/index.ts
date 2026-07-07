@@ -1,8 +1,10 @@
 export type * from "./types"
 export { create, default as Core } from "./core"
+export { Axp } from "./install"
+export type { AxpPlugins, AxpHandle } from "./install"
 
 /* ── runtime model objects ─────────────────────────────────────────────── */
-export { default as ApiResponse, ApiError } from "./objects/ApiResponse"
+export { default as ApiResponse, ApiError } from "./objects/Response"
 export { default as TokenManager } from "./objects/TokenManager"
 export type { ITokenManager } from "./objects/TokenManager"
 
@@ -19,8 +21,8 @@ export {
 } from "./plugins/auth"
 export type { IAuthOptions, TAuthFunc } from "./plugins/auth"
 
-export { default as reqkey, $key } from "./plugins/reqkey"
-export type { IReqkeyOptions, IReqkeyObject, KeyOpts } from "./plugins/reqkey"
+export { default as key, $key } from "./plugins/key"
+export type { IKeyOptions, IKeyObject, KeyOpts } from "./plugins/key"
 
 export { default as cache, removeCache, clearCache } from "./plugins/cache"
 export type { ICacheOptions } from "./plugins/cache"
@@ -31,8 +33,8 @@ export type { ICancelOptions } from "./plugins/cancel"
 export { default as envs } from "./plugins/envs"
 export type { IEnvRule, IEnvsOptions } from "./plugins/envs"
 
-export { default as reqclean } from "./plugins/reqclean"
-export type { IReqcleanOptions, TPredicate } from "./plugins/reqclean"
+export { default as filter } from "./plugins/filter"
+export type { IFilterOptions, TPredicate } from "./plugins/filter"
 
 export { default as loading } from "./plugins/loading"
 export type { ILoadingOptions, TLoadingFunc } from "./plugins/loading"
@@ -40,8 +42,11 @@ export type { ILoadingOptions, TLoadingFunc } from "./plugins/loading"
 export { default as mock } from "./plugins/mock"
 export type { IMockOptions } from "./plugins/mock"
 
-export { default as normalizeResponse } from "./plugins/normalize-response"
-export type { INormalizeResponseOptions } from "./plugins/normalize-response"
+export { default as normalize } from "./plugins/normalize"
+export type { INormalizeOptions } from "./plugins/normalize"
+
+export { default as notify } from "./plugins/notify"
+export type { INotifyOptions } from "./plugins/notify"
 
 export { default as repath } from "./plugins/repath"
 export type { IRepathOptions } from "./plugins/repath"

@@ -1,5 +1,5 @@
 import axios from 'axios';
-import { create, reqclean, normalizeResponse } from '../src';
+import { create, filter, normalize } from '../src';
 
 
 
@@ -7,8 +7,8 @@ const githubApi = create<model.MethodRefs>(axios.create({ baseURL: "https://api.
 const internalApi = create<model.MethodRefs>(axios.create({ baseURL: "https://api.internal.example.com", adapter: 'fetch' }));
 
 
-githubApi.use(reqclean())
-githubApi.use(normalizeResponse())
+githubApi.use(filter())
+githubApi.use(normalize())
 
 class TestApi {
     static query = githubApi.get("/pet/findByStatus")

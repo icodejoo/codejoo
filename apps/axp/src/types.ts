@@ -9,7 +9,7 @@ import type {
   InternalAxiosRequestConfig,
   Method,
 } from 'axios';
-import type ApiResponse from './objects/ApiResponse';
+import type AxpResponse from './objects/Response';
 
 /* ═══════════════════════════════════════════════════════════════════════════
  *  Plugin system
@@ -275,7 +275,7 @@ interface HttpDispatch<T, Mt extends HttpMethodLower, P> {
       ResolvePayload<T, Mt, P, Q>,
       [config: IHttpOptions & { wrap: true }]
     >
-  ): Promise<ApiResponse<ResolveResponse<T, Mt, P, R>>>;
+  ): Promise<AxpResponse<ResolveResponse<T, Mt, P, R>>>;
   <R = unknown, Q = unknown>(
     ...args: Payload<
       ResolvePayload<T, Mt, P, Q>,

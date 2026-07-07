@@ -15,14 +15,14 @@ npm i @codejoo/axp   # peer dep: axios
 
 ```ts
 import axios from 'axios';
-import { create, cache, retry, share, reqkey } from '@codejoo/axp';
+import { create, cache, retry, share, key } from '@codejoo/axp';
 
 // model.MethodRefs is the method-major schema emitted by codegen (statically
 // pre-expanded — no type-level inversion). model.PathRefs stays path-major.
 const api = create<model.MethodRefs>(axios.create({ baseURL: '/api' }), { debug: false });
 
-// reqkey feeds cache/share with a dedup key; install in the order you want them to run
-api.use([reqkey(), cache({ expires: 30_000 }), share(), retry({ max: 2 })]);
+// key feeds cache/share with a dedup key; install in the order you want them to run
+api.use([key(), cache({ expires: 30_000 }), share(), retry({ max: 2 })]);
 
 const pets = await api.get('/pet/findByStatus')({ status: 'available' });   // → model.Pet[]
 await api.post('/pet')({ name: 'lassie', photoUrls: [] });                  // → model.Pet
@@ -86,7 +86,7 @@ Every plugin takes `{ enable?: boolean }` (default `true`; `false` = not install
 Tables below omit `enable` and list the rest. Request-level fields are set per call
 in the dispatch `config` (e.g. `api.get(p)(payload, { cache: true })`).
 
-### `reqkey(options?)` — compute a dedup/cache key onto `config.key`
+### `key(options?)` — compute a dedup/cache key onto `config.key`
 | option | type | default | purpose |
 | --- | --- | --- | --- |
 | `fastMode` | `boolean` | `true` for `key:true`, `false` for object form | simple (`method+url`) vs deep (`+params+data`) |
@@ -95,7 +95,7 @@ in the dispatch `config` (e.g. `api.get(p)(payload, { cache: true })`).
 | `sample` | `boolean` | `false` | sample strings > 64 chars instead of full hash |
 | `before` / `after` | `(config) => any` | — | hooks run before/after key generation |
 
-Request field `key`: `true` \| `'deep'` \| `number` \| `string` \| `IReqkeyObject` \| `(config) => …`. Also exports `$key`.
+Request field `key`: `true` \| `'deep'` \| `number` \| `string` \| `IKeyObject` \| `(config) => …`. Also exports `$key`.
 
 ### `cache(options?)` — TTL response cache (adapter-level short-circuit)
 | option | type | default | purpose |
@@ -109,11 +109,9 @@ Request field `cache`: `false` (off) \| `true` (on, **shared reference** — tre
 ### `share(options?)` — dedup/debounce/merge concurrent same-key requests
 | option | type | default | purpose |
 | --- | --- | --- | --- |
-| `policy` | `'start'\|'end'\|'race'\|'retry'\|'none'` | `'start'` | dedup strategy |
-| `interval` | `number` (ms) | `0` | gap between retries (`retry` policy) |
-| `retries` | `number` | `3` | max retries (`retry` policy) |
+| `policy` | `'start'\|'end'\|'race'\|'none'` | `'start'` | dedup strategy |
 
-Keys off `config.key` (install `reqkey` first). Request field `share`: `false` \| `true` \| a policy string \| `{ policy?, interval?, retries? }` \| `(config) => …`.
+Keys off `config.key` (install `key` first). Request field `share`: `false` \| `true` \| a policy string \| `{ policy? }` \| `(config) => …`. For retrying a failed request, use the `retry` plugin instead — `share` has no internal retry loop (combining it with `retry` on the same key used to multiply retry counts; removed).
 
 ### `retry(options?)` — re-issue failed requests
 | option | type | default | purpose |
@@ -172,16 +170,16 @@ onFailure: (tm, resp) => {
 
 Enable defaults to `false` (gate with `import.meta.env.DEV`). Request field `mock`: `false` \| `true` \| `{ mock?, mockUrl?, fallbackWhen? }`.
 
-### `reqclean(options?)` — strip empty params/data fields
+### `filter(options?)` — strip empty params/data fields
 | option | type | default | purpose |
 | --- | --- | --- | --- |
 | `predicate` | `(kv: [key, value]) => boolean` | drops `null`/`undefined`/`NaN`/blank string | return `true` to drop a field |
 | `ignoreKeys` | `string[]` | — | keys kept even if predicate drops |
 | `ignoreValues` | `any[]` | — | values kept even if predicate drops |
 
-Request field `filter`: `false`/falsy (skip) \| `true` \| `IReqcleanOptions` \| `(config) => …`. (The request-level trigger stays `filter` — `normalize` is taken by `normalizeResponse`.)
+Request field `filter`: `false`/falsy (skip) \| `true` \| `IFilterOptions` \| `(config) => …`. (The request-level trigger field is named `filter`, not `normalize` — `config.normalize` is already claimed by the `normalize` plugin below.)
 
-### `normalizeResponse(options?)` — strict business-success check
+### `normalize(options?)` — strict business-success check
 On `ApiResponse.fromResponse(res).successful === false`, rejects an `ApiError` (carrying a structured `ApiResponse`); on the error path attaches `error.api`. Does not rewrite successful `response.data`. Option: `nullable?: boolean`.
 
 ### `repath(options?)` — substitute path variables from params/data
@@ -207,7 +205,7 @@ Injects a `signal` for requests without one (respects user-provided `signal`/`ca
 `ApiResponse.isSuccessful(status, code)` is the success hook (default: HTTP 2xx and
 `code` ∈ `{0, '0000'}`, or no `code` → pure HTTP); reassign to customize.
 
-**`ApiError<T>`** — `Error` with `.response: ApiResponse<T>`; what `normalizeResponse` rejects on business failure.
+**`ApiError<T>`** — `Error` with `.response: ApiResponse<T>`; what `normalize` rejects on business failure.
 
 **`TokenManager`** (`implements ITokenManager`) — `canRefresh`, `accessToken`
 (getter returns `Bearer <token>`; setter stores the bare token), `refreshToken`,

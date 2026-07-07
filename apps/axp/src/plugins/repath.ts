@@ -73,5 +73,5 @@ export default function repath(
     };
 }
 
-// 见 normalize-response：严格模式 ESM 下 fn.name 须用 defineProperty 重定义
+// 见 normalize：严格模式 ESM 下 fn.name 须用 defineProperty 重定义
 Object.defineProperty(repath, 'name', { value: name })

@@ -1,9 +1,9 @@
 import { describe, it, expect } from 'vitest';
-import reqclean, {
+import filter, {
     $resolveOptions,
     $filter,
     defaultPredicate,
-} from '../src/plugins/reqclean';
+} from '../src/plugins/filter';
 
 
 function makeMockCtx() {
@@ -11,7 +11,7 @@ function makeMockCtx() {
     const runWhens: Array<(config: any) => boolean> = [];
     const ctx: any = {
         axios: { defaults: {} },
-        name: 'reqclean',
+        name: 'filter',
         logger: { log: () => { }, warn: () => { }, error: () => { } },
         request: (f: any, _r: any, opts: any) => { reqHandlers.push(f); if (opts?.runWhen) runWhens.push(opts.runWhen); },
         response: () => { },
@@ -99,10 +99,10 @@ describe('$resolveOptions — 请求级/插件级合并', () => {
 });
 
 
-describe('reqclean — 集成（拦截器 + runWhen）', () => {
+describe('filter — 集成（拦截器 + runWhen）', () => {
     it('过滤 params 与 data，并 delete config.filter', () => {
         const { ctx, reqHandlers } = makeMockCtx();
-        reqclean().install(ctx);
+        filter().install(ctx);
         const config: any = { url: '/x', filter: true, params: { a: 1, b: '' }, data: { c: null, d: 2 } };
         reqHandlers[0](config);
         expect(config.params).toEqual({ a: 1 });
@@ -112,13 +112,13 @@ describe('reqclean — 集成（拦截器 + runWhen）', () => {
 
     it('runWhen：enable:false → 恒不运行', () => {
         const { ctx, runWhens } = makeMockCtx();
-        reqclean({ enable: false }).install(ctx);
+        filter({ enable: false }).install(ctx);
         expect(runWhens[0]({ filter: true })).toBe(false);
     });
 
     it('runWhen：config.filter 为假值 → 不运行', () => {
         const { ctx, runWhens } = makeMockCtx();
-        reqclean().install(ctx);
+        filter().install(ctx);
         expect(runWhens[0]({ filter: false })).toBe(false);
         expect(runWhens[0]({ filter: '' })).toBe(false);
         expect(runWhens[0]({ filter: true })).toBe(true);
