@@ -210,9 +210,10 @@ export function proxy<S extends SyncStore | AsyncStorage>(storage: S, memo: Memo
     if (isExpired(entity, now)) return chain(del(k), () => fallback); // 懒过期：双删
     const shared = fromMemo || cache; // 值对象与 memo 共享引用（cloned 开启时对这类返回做深拷贝）
     if (sliding && entity.ttl != null && entity.expireAt != null && entity.expireAt - now <= entity.ttl * 0.9) {
-      entity.expireAt = now + entity.ttl; // 滑动续期回写；剩余寿命 >90% 时跳过（消除高频读写放大，最多提前 ttl 的 10% 过期）
-      return chain(persist(k, dump(entity)), (ok) => {
-        if (ok && cache) memo.set(k, entity); // 与 write() 一致：仅落盘成功才写 memo，避免 memo 显示已续期而后端仍是旧值
+      // 续期写到副本而非原地改 entity——entity 可能是 memo 里的共享引用，原地改会在 persist 落盘前就污染 memo
+      const renewed: StorageEntity = { ...entity, expireAt: now + entity.ttl }; // 剩余寿命 >90% 时跳过（消除高频读写放大，最多提前 ttl 的 10% 过期）
+      return chain(persist(k, dump(renewed)), (ok) => {
+        if (ok && cache) memo.set(k, renewed); // 与 write() 一致：仅落盘成功才写 memo，避免 memo 显示已续期而后端仍是旧值
         return shared ? dup(entity.value) : entity.value;
       });
     }
@@ -304,7 +305,12 @@ export function proxy<S extends SyncStore | AsyncStorage>(storage: S, memo: Memo
 
     const write = (): Maybe<void> => {
       if (isRaw) {
-        return chain(persist(k, value as string), (ok) => {
+        // raw 模式直存裸值，无 entity 信封校验；非字符串会被后端 setItem 隐式 ToString 成 "[object Object]"，故此处显式拦截
+        if (typeof value !== "string") {
+          console.warn(`[storage] raw mode requires a string value for "${key}", got ${typeof value}; skipped`);
+          return;
+        }
+        return chain(persist(k, value), (ok) => {
           if (ok && memoized) memo.set(k, value);
         });
       }

@@ -11,7 +11,6 @@ import type { Codec } from "./interface";
 // | codecAtob | 全程 TextEncoder + atob/btoa | 行为处处一致（无特性检测分支）；与 codecBase64 同格式可互解 |
 
 const DEFAULT_PW = "@codejoo/storage";
-const D16 = new TextDecoder("utf-16le", { ignoreBOM: true }); // JS 引擎均为小端，与 Uint16Array 内存序一致
 const E = new TextEncoder();
 const D = new TextDecoder();
 const B64 = { alphabet: "base64url", omitPadding: true } as const;
@@ -25,6 +24,13 @@ const toB64Poly = (b: Uint8Array): string => {
   let s = "";
   for (let i = 0; i < b.length; i += 8192) s += String.fromCharCode(...b.subarray(i, i + 8192)); // 分块防参数栈溢出
   return btoa(s).replaceAll("+", "-").replaceAll("/", "_").replace(/=+$/, "");
+};
+// Uint16Array → string，逐码元原样还原（不同 TextDecoder：不做 UTF-16 合法性校验/替换，落单代理码元也原样保留，
+// 因为 XOR 只保证合法输入 XOR 后仍合法，不保证输入本就合法——TextDecoder 会把不合法的落单代理换成 U+FFFD 破坏往返）
+const u16ToStr = (buf: Uint16Array): string => {
+  let s = "";
+  for (let i = 0; i < buf.length; i += 8192) s += String.fromCharCode(...buf.subarray(i, i + 8192)); // 分块防参数栈溢出
+  return s;
 };
 const fromB64Poly = (s: string): Uint8Array => {
   const bin = atob(s.replaceAll("-", "+").replaceAll("_", "/")); // atob 宽容无 padding；非法字符抛错由 decode 捕获
@@ -51,7 +57,7 @@ const b64Codec = (pw: string, to: (b: Uint8Array) => string, from: (s: string) =
  * 旧运行时自动回退 atob/btoa polyfill——两条路径输出逐字符一致、可互解。大体量 ASCII 吞吐最高。
  */
 export function codecBase64(password?: string): Codec {
-  const pw = password || DEFAULT_PW;
+  const pw = password ?? DEFAULT_PW; // ?? 而非 ||——显式传入的空字符串密码须被当作真实密码，不能被静默换成默认值
   return typeof Uint8Array.prototype.toBase64 === "function"
     ? b64Codec(
         pw,
@@ -63,7 +69,7 @@ export function codecBase64(password?: string): Codec {
 
 /** 2. 全程 TextEncoder + atob/btoa：无特性检测分支、行为处处一致；与 codecBase64 同格式可互解 */
 export function codecAtob(password?: string): Codec {
-  return b64Codec(password || DEFAULT_PW, toB64Poly, fromB64Poly);
+  return b64Codec(password ?? DEFAULT_PW, toB64Poly, fromB64Poly); // ?? 而非 ||——同 codecBase64，空字符串密码须被当作真实密码
 }
 
 /**
@@ -77,7 +83,7 @@ export function codecAtob(password?: string): Codec {
  */
 export function codec(password?: string): Codec {
   // password 经 FNV-1a 折叠成 10 位 XOR 值；兜底非 0（0 会退化成明文直存）
-  const pw = password || DEFAULT_PW;
+  const pw = password ?? DEFAULT_PW; // ?? 而非 ||——显式传入的空字符串密码须被当作真实密码，不能被静默换成默认值
   let k = 0x811c9dc5;
   for (let i = 0; i < pw.length; i++) k = Math.imul(k ^ pw.charCodeAt(i), 0x01000193);
   k = (k ^ (k >>> 10) ^ (k >>> 20)) & 0x3ff || 0x155;
@@ -89,14 +95,14 @@ export function codec(password?: string): Codec {
       const buf = new Uint16Array(n + 1);
       buf[0] = MAGIC;
       for (let i = 0; i < n; i++) buf[i + 1] = value.charCodeAt(i) ^ k;
-      return D16.decode(buf);
+      return u16ToStr(buf);
     },
     decode(value) {
       const n = value.length;
       if (n < 1 || value.charCodeAt(0) !== MAGIC) return null; // 标记不符：错 password/外部数据
       const buf = new Uint16Array(n - 1);
       for (let i = 1; i < n; i++) buf[i - 1] = value.charCodeAt(i) ^ k;
-      return D16.decode(buf);
+      return u16ToStr(buf);
     },
   };
 }

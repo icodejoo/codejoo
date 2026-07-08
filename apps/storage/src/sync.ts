@@ -29,9 +29,16 @@ interface Wrapped {
  * ```
  * @returns 停止函数：关闭通道并还原被包装的方法
  */
+/** 同进程内 channel 名 → 已挂载的 handler，用于识别「不同 handler 共用同一 channel」的误用（见下方 owners 检查） */
+const owners = new Map<string, Wrapped>();
+
 export function crossTab(handler: Handlers<SyncStore>, channel = "@codejoo/storage:sync"): () => void {
   const h = handler as unknown as Wrapped;
   if (supported.storage || typeof BroadcastChannel === "undefined" || h.__crossTab) return () => {};
+  // 同一 channel 已被另一 handler（如 ls 和 ss）占用：两者会互相回放对方的写入——此处仅告警，不阻止（BroadcastChannel 允许多方监听）
+  const owner = owners.get(channel);
+  if (owner && owner !== h) console.warn(`[storage] crossTab: channel "${channel}" is already used by another handler; their writes will cross-replay onto each other. Pass a distinct channel per handler.`);
+  owners.set(channel, h);
   h.__crossTab = true;
   const bc = new BroadcastChannel(channel);
   // 原始引用：回放远端操作时直接调用，不再二次广播。处理器方法均为闭包实现、不依赖 this，取引用安全
@@ -71,6 +78,7 @@ export function crossTab(handler: Handlers<SyncStore>, channel = "@codejoo/stora
   return () => {
     bc.close();
     h.__crossTab = false;
+    if (owners.get(channel) === h) owners.delete(channel); // 释放占用，避免误判后续接手同 channel 的新 handler
     Object.assign(h, { set, remove, clear });
   };
 }

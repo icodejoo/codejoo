@@ -13,8 +13,10 @@ interface Tagged {
   value: unknown;
 }
 
+// 严格外壳形状（恰好 flag+value 两键）而非仅存在性判断——降低与业务数据里恰好带同名字段的对象误撞的概率，
+// 且能保证误判命中时不会静默丢掉外壳外的兄弟字段（形状不符则整体原样返回，见 replacer/reviver 的 default 分支）
 function isTagged(v: unknown): v is Tagged {
-  return typeof v === "object" && v !== null && flag in v;
+  return typeof v === "object" && v !== null && flag in v && "value" in v && Object.keys(v).length === 2;
 }
 
 /**
