@@ -31,6 +31,21 @@ export default defineConfig({
       deps: {
         neverBundle: ['axios']
       }
+    },
+    {
+      // 每个插件产出独立 esm 文件,支持按需 subpath 导入 (dist/esm/plugins/*.mjs)
+      entry: ['src/index.ts', 'src/plugins/*.ts'],
+      format: 'esm',
+      platform: 'browser',
+      target: 'es2015',
+      fixedExtension: true,
+      unbundle: true,
+      outDir: 'dist/esm',
+      dts: { tsgo: true },
+      clean: true,
+      deps: {
+        neverBundle: ['axios']
+      }
     }
   ]
 })

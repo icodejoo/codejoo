@@ -3,22 +3,9 @@ import type { AxiosAdapter, AxiosRequestConfig, AxiosResponse } from 'axios';
 import cache, { $resolveCache, $resolveKey, $resolveCloneFn, $shallowClone, clearCache, removeCache } from '../src/plugins/cache';
 
 
-function makeMockCtx() {
-    let installedAdapter: AxiosAdapter | null = null;
+function makeMockAxios() {
     const ax: any = { defaults: { adapter: vi.fn() } };
-    const cleanups: Array<() => void> = [];
-    const ctx: any = {
-        axios: ax,
-        name: 'cache',
-        logger: { log: () => { }, warn: () => { }, error: () => { } },
-        request: () => { },
-        response: () => { },
-        adapter: (a: AxiosAdapter) => { installedAdapter = a; ax.defaults.adapter = a; },
-        transformRequest: () => { },
-        transformResponse: () => { },
-        cleanup: (fn: any) => cleanups.push(fn),
-    };
-    return { ctx, ax, get adapter() { return installedAdapter!; }, cleanups };
+    return ax;
 }
 
 const mockResp = (data: any, config: any = {}): AxiosResponse =>
@@ -66,9 +53,9 @@ describe('cache 集成 — adapter 包装', () => {
     beforeEach(() => { originalAdapter = vi.fn(); });
 
     it('未启用缓存：直接走原 adapter', async () => {
-        const { ctx, ax, adapter: _ } = makeMockCtx();
+        const ax = makeMockAxios();
         ax.defaults.adapter = originalAdapter;
-        cache({ expires: 1000 }).install(ctx);
+        cache({ expires: 1000 }).install(ax);
         const wrapped = ax.defaults.adapter as AxiosAdapter;
         const config: any = { url: '/x' };  // 无 cache
         originalAdapter.mockResolvedValueOnce(mockResp('first', config));
@@ -77,9 +64,9 @@ describe('cache 集成 — adapter 包装', () => {
     });
 
     it('首次：未命中 → 调原 adapter；二次同 key：命中 → 不调 adapter', async () => {
-        const { ctx, ax } = makeMockCtx();
+        const ax = makeMockAxios();
         ax.defaults.adapter = originalAdapter;
-        cache({ expires: 1000 }).install(ctx);
+        cache({ expires: 1000 }).install(ax);
         const wrapped = ax.defaults.adapter as AxiosAdapter;
         const cfg = (): any => ({ url: '/x', cache: true, key: 'k1' });
 
@@ -96,9 +83,9 @@ describe('cache 集成 — adapter 包装', () => {
 
     it('TTL 过期 → 重新发起请求', async () => {
         vi.useFakeTimers();
-        const { ctx, ax } = makeMockCtx();
+        const ax = makeMockAxios();
         ax.defaults.adapter = originalAdapter;
-        cache({ expires: 100 }).install(ctx);
+        cache({ expires: 100 }).install(ax);
         const wrapped = ax.defaults.adapter as AxiosAdapter;
         const cfg = (): any => ({ url: '/x', cache: true, key: 'k' });
 
@@ -117,9 +104,9 @@ describe('cache 集成 — adapter 包装', () => {
 
     it('请求级 expires 覆盖插件级', async () => {
         vi.useFakeTimers();
-        const { ctx, ax } = makeMockCtx();
+        const ax = makeMockAxios();
         ax.defaults.adapter = originalAdapter;
-        cache({ expires: 60_000 }).install(ctx);
+        cache({ expires: 60_000 }).install(ax);
         const wrapped = ax.defaults.adapter as AxiosAdapter;
         const cfg = (): any => ({ url: '/x', cache: { expires: 50 }, key: 'k' });
 
@@ -134,9 +121,9 @@ describe('cache 集成 — adapter 包装', () => {
     });
 
     it('config.cache 在拦截后被 delete（避免污染下游）', async () => {
-        const { ctx, ax } = makeMockCtx();
+        const ax = makeMockAxios();
         ax.defaults.adapter = originalAdapter;
-        cache().install(ctx);
+        cache().install(ax);
         const wrapped = ax.defaults.adapter as AxiosAdapter;
         const config: any = { url: '/x', cache: true, key: 'k' };
         originalAdapter.mockResolvedValueOnce(mockResp('x'));
@@ -185,9 +172,9 @@ describe('cache 集成 — clone 策略', () => {
     const mkAdapter = (data: any) => vi.fn().mockResolvedValue(mockResp(data));
 
     it('默认 / cache:true → 命中返回共享引用，就地改会污染后续命中', async () => {
-        const { ctx, ax } = makeMockCtx();
+        const ax = makeMockAxios();
         ax.defaults.adapter = mkAdapter({ list: [1] });
-        cache().install(ctx);
+        cache().install(ax);
         const wrapped = ax.defaults.adapter as AxiosAdapter;
         const r1 = await wrapped({ url: '/x', cache: true, key: 'k' } as any);
         (r1.data as any).list.push(2);                 // 调用方就地改
@@ -197,9 +184,9 @@ describe('cache 集成 — clone 策略', () => {
     });
 
     it("clone:'shallow' → 顶层隔离，嵌套仍共享", async () => {
-        const { ctx, ax } = makeMockCtx();
+        const ax = makeMockAxios();
         ax.defaults.adapter = mkAdapter({ a: 1, nested: { b: 2 } });
-        cache().install(ctx);
+        cache().install(ax);
         const wrapped = ax.defaults.adapter as AxiosAdapter;
         const cfg = (): any => ({ url: '/x', cache: { clone: 'shallow' }, key: 'k' });
         const r1 = await wrapped(cfg());
@@ -211,9 +198,9 @@ describe('cache 集成 — clone 策略', () => {
     });
 
     it("clone:'deep' → 完整隔离，就地改任意层都不污染缓存", async () => {
-        const { ctx, ax } = makeMockCtx();
+        const ax = makeMockAxios();
         ax.defaults.adapter = mkAdapter({ nested: { b: 2 } });
-        cache().install(ctx);
+        cache().install(ax);
         const wrapped = ax.defaults.adapter as AxiosAdapter;
         const cfg = (): any => ({ url: '/x', cache: { clone: 'deep' }, key: 'k' });
         const r1 = await wrapped(cfg());
@@ -223,9 +210,9 @@ describe('cache 集成 — clone 策略', () => {
     });
 
     it('clone:function → 调用自定义拷贝', async () => {
-        const { ctx, ax } = makeMockCtx();
+        const ax = makeMockAxios();
         ax.defaults.adapter = mkAdapter({ a: 1 });
-        cache().install(ctx);
+        cache().install(ax);
         const wrapped = ax.defaults.adapter as AxiosAdapter;
         const custom = vi.fn((d: any) => ({ ...d, cloned: true }));
         const r = await wrapped({ url: '/x', cache: { clone: custom }, key: 'k' } as any);
@@ -237,10 +224,10 @@ describe('cache 集成 — clone 策略', () => {
 
 describe('removeCache / clearCache', () => {
     it('removeCache 删除单条', async () => {
-        const { ctx, ax } = makeMockCtx();
+        const ax = makeMockAxios();
         const adp = vi.fn().mockResolvedValue(mockResp('a'));
         ax.defaults.adapter = adp;
-        cache().install(ctx);
+        cache().install(ax);
         const wrapped = ax.defaults.adapter as AxiosAdapter;
         await wrapped({ cache: true, key: 'k1' } as any);
         expect(removeCache(ax, 'k1')).toBe(true);
@@ -251,10 +238,10 @@ describe('removeCache / clearCache', () => {
     });
 
     it('clearCache 清空全部', async () => {
-        const { ctx, ax } = makeMockCtx();
+        const ax = makeMockAxios();
         const adp = vi.fn().mockResolvedValue(mockResp('a'));
         ax.defaults.adapter = adp;
-        cache().install(ctx);
+        cache().install(ax);
         const wrapped = ax.defaults.adapter as AxiosAdapter;
         await wrapped({ cache: true, key: 'k1' } as any);
         await wrapped({ cache: true, key: 'k2' } as any);

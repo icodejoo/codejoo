@@ -1,11 +1,12 @@
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect } from 'vitest';
 import axios from 'axios';
-import { create, Axp, notify, retry, normalize } from '../src';
+import { Axp, axpNotify as notify, axpRetry as retry, axpNormalize as normalize } from '../src';
 import { makeNetwork } from './helpers/network';
+import { use } from './helpers/install';
 
 function mkApi() {
   const net = makeNetwork();
-  const api = create(axios.create({ adapter: net.adapter }));
+  const api = Axp.create(axios.create({ adapter: net.adapter }));
   return { net, api };
 }
 
@@ -17,7 +18,7 @@ describe('notify', () => {
     const { net, api } = mkApi();
     net.fallback(() => ({ data: { code: 0, data: { v: 1 }, message: 'all good' } }));
     const messages: string[] = [];
-    api.use([notify<any>({
+    use(api, [notify<any>({
       notify: (m) => messages.push(m),
       stringify: (data) => `ok: ${data?.message} v=${data?.data?.v}`,
     })]);
@@ -31,7 +32,7 @@ describe('notify', () => {
     const { net, api } = mkApi();
     net.fallback(() => ({ data: { code: 0, data: null, message: '' } }));
     const messages: string[] = [];
-    api.use([notify({ notify: (m) => messages.push(m), stringify: () => '' })]);
+    use(api, [notify({ notify: (m) => messages.push(m), stringify: () => '' })]);
 
     await api.axios.get('/data');
     expect(messages).toEqual([]);
@@ -46,7 +47,7 @@ describe('notify', () => {
     const { net, api } = mkApi();
     net.fallback(() => ({ status: 500, data: { code: 1, data: null, message: 'server exploded' } }));
     const messages: string[] = [];
-    api.use([notify<any>({
+    use(api, [notify<any>({
       notify: (m) => messages.push(m),
       stringify: (data, message, status) => `err ${status}: ${message} (body says: ${data?.message})`,
     })]);
@@ -59,7 +60,7 @@ describe('notify', () => {
     const { net, api } = mkApi();
     net.fallback(() => { throw new Error('ECONNREFUSED'); });
     const calls: Array<{ data: unknown; message: string; status: number }> = [];
-    api.use([notify({
+    use(api, [notify({
       notify: () => {},
       stringify: (data, message, status) => { calls.push({ data, message, status }); return 'x'; },
     })]);
@@ -72,7 +73,7 @@ describe('notify', () => {
   it('stringify or notify throwing does not corrupt an otherwise-successful response', async () => {
     const { net, api } = mkApi();
     net.fallback(() => ({ data: { code: 0, data: { v: 1 } } }));
-    api.use([notify({
+    use(api, [notify({
       notify: () => { throw new Error('notify sink is down'); },
       stringify: () => 'boom',
     })]);
@@ -85,7 +86,7 @@ describe('notify', () => {
     const { net, api } = mkApi();
     net.fallback(() => ({ data: { code: 1, data: null, message: 'business fail' } }));
     const seen: unknown[] = [];
-    Axp.install(api, {
+    Axp.install(api.axios, {
       notify: notify({ notify: () => {}, stringify: (data) => { seen.push(data); return ''; } }),
       normalize: normalize(),
     });
@@ -99,24 +100,7 @@ describe('notify', () => {
     expect(seen).toHaveLength(1);
   });
 
-  it('KNOWN CAVEAT: a retry-recovered response fires notify TWICE, not once', async () => {
-    // Root cause (verified, not assumed): retry's onRejected handler returns
-    // `ctx.axios.request(config)` — a fresh top-level dispatch. Axios's
-    // response chain is a flat `.then()` sequence built once per top-level
-    // call; when a rejected-handler RECOVERS (returns a value instead of
-    // re-throwing), that value becomes the input to the NEXT pair in the
-    // SAME chain, not a short-circuit. So the recovered response is seen by:
-    //   1. the redispatch's OWN complete internal chain-walk (retry →
-    //      notify runs once here), AND
-    //   2. the ORIGINAL chain's continuation past retry's recovery point
-    //      (notify, registered after retry, runs a second time here)
-    // Any response interceptor registered AFTER `retry` (or `auth`, which
-    // recovers a refreshed replay the same way) is affected — `normalize`
-    // is silently double-invoked too, just harmlessly (checking
-    // `successful` twice on the same successful response has no visible
-    // effect). `notify` is where this becomes user-visible: a real toast
-    // would show twice. This is a retry.ts/auth.ts structural property, not
-    // something specific to `notify` — documented here, not fixed here.
+  it('a retry-recovered response fires notify exactly ONCE (retry.ts resends through a bare, interceptor-less axios instance that never re-enters this chain — unlike auth.ts, which still double-fires; see notify.ts\'s doc comment)', async () => {
     const { net, api } = mkApi();
     let attempts = 0;
     net.fallback(() => {
@@ -124,13 +108,13 @@ describe('notify', () => {
       return attempts < 2 ? { status: 500, data: { code: 1, data: null } } : { data: { code: 0, data: { v: 1 } } };
     });
     const messages: string[] = [];
-    Axp.install(api, {
-      retry: retry({ max: 2 }),
-      notify: notify<any>({ notify: (m) => messages.push(m), stringify: (data, _m, status) => `status=${status}` }),
+    Axp.install(api.axios, {
+      retry: retry({ max: 2, delay: 0 }),
+      notify: notify<any>({ notify: (m) => messages.push(m), stringify: (_data, _m, status) => `status=${status}` }),
     });
 
     const r = await api.axios.get('/data');
     expect((r.data as any).data.v).toBe(1);
-    expect(messages).toEqual(['status=200', 'status=200']); // duplicated — see comment above
+    expect(messages).toEqual(['status=200']);
   });
 });

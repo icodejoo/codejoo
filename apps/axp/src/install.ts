@@ -1,71 +1,33 @@
-import type { Plugin as AxpPlugin } from './types';
-import type Core from './core';
+import type { Plugin, PluginCleanup } from './types';
+import type { AxiosInstance } from 'axios';
+import { create } from './core';
 
 /**
- * One-call wiring for the axp plugin set in a canonical, hand-verified
- * order — mirrors dioman's `Dioman.install`. Pass the plugins you want
- * (already constructed via their factories); omitted ones are skipped.
+ * 以规范化、经人工验证过的顺序一次性装配 axp 插件集——对应 dioman 的 `Dioman.install`。传入你想要的插件（已用各自工厂函数构造好）；省略的插件会被跳过。插件彼此独立——`Axp.install` 只是按顺序调用每个选中插件的 `install(axios)` 并收集返回的 `PluginCleanup`，没有共享编排器代为跟踪拦截器 id；每个插件像 dioman 的 `DiomanPlugin` 一样管理自己的 teardown。
  *
- * Order is a hard constraint, harder to get right than in dioman: axios
- * splits request/response interceptors into LIFO/FIFO (see plugin.ts's
- * class doc), so the `.use()` array order needed to reach a sane EXECUTION
- * order is not just "list them in the order you want them to run" — some
- * pairs need to be registered *backwards* from their intended execution
- * order. `Axp.install` hard-codes the array so callers never have to
- * reason about this.
+ * 顺序仍是硬性约束：axios 把 request/response 拦截器分成 LIFO/FIFO（见 README "顺序语义"），所以 `install()` 调用顺序不是简单地"按想要的执行顺序列出"——有些插件必须按与预期执行顺序*相反*的顺序安装。`Axp.install` 把数组硬编码好，调用方无需自己推理：
  *
- * Canonical registration order (this array) → resulting execution order:
+ *   - **`logger` 永远最先**——它没有拦截器，只在安装时同步设置 `axios.defaults.debug`/`.logger`，让其他插件安装期的日志已能读到这个开关。
+ *   - **Request**（LIFO）：安装 `[auth, cancel, key, filter, repath]` 执行顺序为 `repath → filter → key → cancel → auth`。`repath` 先替换路径变量；`filter` 要在 `key` 哈希前剔除空字段（顺序装反是最容易犯的错，详见 key.ts/filter.ts）；`auth` 最后注入 token。
+ *   - **Response**（FIFO）：安装 `[auth, cancel, retry, notify, normalize]` 即按此顺序执行。`auth` 早于 `retry` 看到 401，刷新+重放先于 `retry` 消耗次数；`notify` 在 `normalize` 前运行，汇报原始 HTTP 结果而非已 reject 的 `ApiError`；`normalize` 最后评判最终响应。
+ *   - **Adapter 组合**（后装的包在最外层）：`[cache, share, mock, loading]`——`mock` 包住 `cache`/`share`，让自己的探测与 fallback dispatch 仍经过它们；`loading` 包住一切，每个逻辑操作只触发一对 show/hide。
  *
- *   - **Request** (LIFO — last registered runs first): registering
- *     `[auth, cancel, key, filter, repath]` executes as
- *     `repath → filter → key → cancel → auth`. `repath` substitutes
- *     path vars before anything reads params/data; `filter` strips empty
- *     fields before `key` hashes them (getting this pair backwards is
- *     the single easiest mistake — see the file's own class docs); `auth`
- *     injects the token last, after everything else has shaped the request.
+ * `envs` 同样没有拦截器，位置除了要在 `logger` 之后都无关紧要。
  *
- *   - **Response** (FIFO — first registered runs first): registering
- *     `[auth, cancel, retry, notify, normalize]` executes in that same
- *     order. `auth` sees a 401 before `retry` does, so a refresh+replay
- *     happens *before* `retry` would otherwise burn attempts resending a
- *     request with a token already known to be stale. `notify` runs before
- *     `normalize` (mirroring dioman's `retry, log, normalize` order) so it
- *     reports the raw HTTP-level outcome, not `normalize`'s already-rejected
- *     `ApiError`. `normalize` runs last of all so it judges the truly final
- *     response, after `retry`/`auth` have resolved everything they're
- *     going to resolve.
+ * One-call wiring for the axp plugin set in a canonical, hand-verified order — mirrors dioman's `Dioman.install`. Pass the plugins you want (already constructed via their factories); omitted ones are skipped. Plugins are independent — `Axp.install` just calls each selected plugin's `install(axios)` in order and collects the returned `PluginCleanup`; there's no shared orchestrator tracking interceptor ids, each plugin manages its own teardown like dioman's `DiomanPlugin`.
  *
- *   - **Adapter composition** (last-registered wraps outermost):
- *     `[cache, share, mock, loading]` — `mock` wraps `cache`/`share` so its
- *     own probe *and* fallback dispatches still pass through them (it
- *     already neutralizes `cache`/`share` for its own probe via config
- *     flags, but needs them present in the chain to do that); `loading`
- *     wraps everything so it fires exactly one show/hide pair per logical
- *     operation instead of one per internal step (a cache hit, a mock
- *     probe-then-fallback, a share dedup wait all read as a single span).
+ * Order is still a hard constraint: axios splits request/response interceptors into LIFO/FIFO (see README "顺序语义"), so the `install()` call order isn't just "list them in the order you want them to run" — some pairs must be installed *backwards* from their intended execution order. `Axp.install` hard-codes the array so callers never have to reason about this:
  *
- * `envs` has no interceptors at all — it only touches `axios.defaults` at
- * install time — so its position is irrelevant; kept first for readability.
+ *   - **`logger` always first** — no interceptors, just sets `axios.defaults.debug`/`.logger` synchronously so other plugins' install-time logs can already see it.
+ *   - **Request** (LIFO): installing `[auth, cancel, key, filter, repath]` executes as `repath → filter → key → cancel → auth`. `repath` substitutes path vars first; `filter` strips empty fields before `key` hashes them (getting this pair backwards is the easiest mistake, see key.ts/filter.ts); `auth` injects the token last.
+ *   - **Response** (FIFO): installing `[auth, cancel, retry, notify, normalize]` executes in that order. `auth` sees a 401 before `retry`, so refresh+replay happens before `retry` burns attempts; `notify` runs before `normalize` so it reports the raw HTTP outcome, not `normalize`'s already-rejected `ApiError`; `normalize` judges the truly final response last.
+ *   - **Adapter composition** (last-installed wraps outermost): `[cache, share, mock, loading]` — `mock` wraps `cache`/`share` so its own probe/fallback dispatches still pass through them; `loading` wraps everything so each logical operation fires exactly one show/hide pair.
  *
- * Returns an `AxpHandle`, not the bare `Core` — mirrors `Dioman.install`
- * returning a `DiomanHandle` rather than the bare `Dio`, including
- * `insertBefore`/`insertAfter`/`prepend`/`append` for slotting extra
- * plugins into the chain without hand-managing `Core.use()` calls.
- *
- * Caveat `DiomanHandle` doesn't have: `Core`'s plugin list is append-only
- * (`use()` always adds to the *end* of `Core`'s current list — there is no
- * index-based insert the way `dio.interceptors` supports). `prepend` /
- * `insertBefore` / `insertAfter` are implemented by ejecting this handle's
- * OWN tracked plugins and re-`use()`-ing them in the new order — which
- * reorders them correctly *relative to each other*, but the whole group
- * lands back at the end of `Core`'s list, potentially after some other,
- * unrelated plugin installed directly via `api.use(...)` outside this
- * handle. `append` doesn't have this problem (appending was already a
- * plain `use()` call). If you never mix `Axp.install` with direct
- * `api.use(...)` calls on the same `Core`, this caveat never surfaces.
+ * `envs` also has no interceptors; its position is irrelevant besides being after `logger`.
  *
  * @example
- *   const handle = Axp.install(api, {
+ *   const handle = Axp.install(axiosInstance, {
+ *     logger: logger({ debug: true }),
  *     key: key(),
  *     cache: cache({ expires: 30_000 }),
  *     auth: auth({ tokenManager: tm, onRefresh, onAccessExpired }),
@@ -75,8 +37,25 @@ import type Core from './core';
  *   handle.dispose();         // ejects everything Axp.install installed
  */
 export const Axp = {
-  install<T>(api: Core<T>, plugins: AxpPlugins): AxpHandle<T> {
-    const ordered: Array<AxpPlugin | null | undefined | false> = [
+  /**
+   * 把 `axios` 实例包装成 `Core<T>`，仅用于拿到带类型的 `.get/.post/...` 分发形状；`Axp.install` 从不要求 `Core`。`T` 可以是任意形状匹配 `MethodSchema`（见 `types.ts`）的 schema，省略则得到无类型客户端。
+   *
+   * Wraps an `axios` instance into a `Core<T>`, purely for the typed `.get/.post/...` dispatch shapes — `Axp.install` never requires a `Core`. `T` is any schema shaped like `MethodSchema` (see `types.ts`); omit for an untyped client.
+   */
+  create,
+
+  /**
+   * `axios` 是普通的 `AxiosInstance`；Core 在这里只是便利，从不是必需品。
+   *
+   * `axios` is a plain `AxiosInstance`; Core is convenience here, never a requirement.
+   *
+   * @param axios 要装配插件的目标 axios 实例 / target axios instance to wire plugins onto
+   * @param plugins 本次要装配的插件集合，省略或传 falsy 值即跳过某个插件 / plugins to wire up; omit or pass falsy to skip one
+   * @returns `AxpHandle`，用于查询/增删本次装配的插件及整体 `dispose()` / an `AxpHandle` for querying/mutating/disposing this batch
+   */
+  install(axios: AxiosInstance, plugins: AxpPlugins): AxpHandle {
+    const ordered: Array<Plugin | null | undefined | false> = [
+      plugins.logger,
       plugins.envs,
       plugins.auth,
       plugins.cancel,
@@ -91,48 +70,65 @@ export const Axp = {
       plugins.mock,
       plugins.loading,
     ];
-    const list: AxpPlugin[] = ordered.filter((p): p is AxpPlugin => !!p);
-    if (list.length) api.use(list);
+    const list: Plugin[] = ordered.filter((p): p is Plugin => !!p);
+    const cleanups = new Map<Plugin, PluginCleanup | undefined>();
 
-    const checkAnchor = (anchor: AxpPlugin): number => {
+    const installAll = (): void => {
+      for (const p of list) cleanups.set(p, p.install(axios) ?? undefined);
+    };
+    // 按倒序拆卸，使包装 adapter 的插件在恢复时正好还原到前一个插件保存的状态，与安装顺序对称。
+    //
+    // Reverse order so an adapter-wrapping plugin's restore unwinds onto whatever its predecessor saved, mirroring install order symmetrically.
+    const teardownAll = (): void => {
+      for (const p of [...list].reverse()) {
+        cleanups.get(p)?.();
+        cleanups.delete(p);
+      }
+    };
+    const checkAnchor = (anchor: Plugin): number => {
       const idx = list.indexOf(anchor);
       if (idx === -1) {
         throw new Error(`[Axp.install] anchor "${anchor.name}" is not installed on this handle`);
       }
       return idx;
     };
-    // Ejects every plugin currently in `list`, then re-`use()`s it as-is —
-    // the caller mutates `list` (splice/unshift/push) BEFORE calling this,
-    // so the re-install picks up the new order.
+    // 整体拆卸后按新的 `list` 顺序重装，直接操作各插件自己的 install()/cleanup()（不经过 Core.use()/eject()）；原因见文件头部文档。
+    //
+    // Full teardown + reinstall in the new `list` order, operating directly on each plugin's own install()/cleanup() (not via Core.use()/eject()); see the file doc for why.
     const reinstall = (): void => {
-      for (const p of list) api.eject(p);
-      if (list.length) api.use(list);
+      teardownAll();
+      installAll();
     };
 
+    installAll();
+
     return {
-      api,
+      axios,
       get plugins() { return list.slice(); },
-      plugin(name: string): AxpPlugin | undefined {
+      plugin(name: string): Plugin | undefined {
         return list.find((p) => p.name === name);
       },
       dispose(): void {
-        for (const p of list) api.eject(p);
+        teardownAll();
         list.length = 0;
       },
-      prepend(p: AxpPlugin): void {
+      prepend(p: Plugin): void {
         list.unshift(p);
         reinstall();
       },
-      append(p: AxpPlugin): void {
+      append(p: Plugin): void {
+        // 纯追加不需要重排——普通的 install() 调用，就像 axios 原生只能追加的拦截器注册。
+        //
+        // Pure append needs no reordering — a plain install() call, same as axios's own append-only interceptor registration.
         list.push(p);
-        api.use(p);
+        cleanups.set(p, p.install(axios) ?? undefined);
       },
-      insertBefore(anchor: AxpPlugin, p: AxpPlugin): void {
+      insertBefore(anchor: Plugin, p: Plugin): void {
         const idx = checkAnchor(anchor);
         list.splice(idx, 0, p);
         reinstall();
       },
-      insertAfter(anchor: AxpPlugin, p: AxpPlugin): void {
+      insertAfter(anchor: Plugin, p: Plugin): void {
         const idx = checkAnchor(anchor);
         list.splice(idx + 1, 0, p);
         reinstall();
@@ -141,60 +137,76 @@ export const Axp = {
   },
 };
 
-/** Returned by `Axp.install` — the installed plugins plus lookup/teardown/
- *  insertion, scoped to exactly the batch `install` wired up. */
-export interface AxpHandle<T = unknown> {
-  /** The `Core` instance `install` was called on. */
-  readonly api: Core<T>;
-  /** Snapshot of the plugins currently tracked by this handle, in
-   *  registration order. A fresh array each read — mutate via
-   *  `prepend`/`append`/`insertBefore`/`insertAfter`, not this array. */
-  readonly plugins: readonly AxpPlugin[];
-  /** Look up a tracked plugin by its `.name` (e.g. `'cache'`, `'auth'`).
-   *  Unlike `DiomanHandle.plugin<T>()`, this is by name, not by type — axp
-   *  plugins are plain `{name, install}` objects from factory functions,
-   *  not class instances, so there's no runtime type to `instanceof`-check
-   *  the way Dio's plugin classes support. */
-  plugin(name: string): AxpPlugin | undefined;
-  /** Ejects every plugin this `install` call (plus any since added via
-   *  `prepend`/`append`/`insertBefore`/`insertAfter`) installed. Does not
-   *  touch any plugin installed separately via `api.use(...)`. */
+/**
+ * `Axp.install` 的返回值——本次安装的插件集合，加上查询/拆卸/插入操作，作用范围严格限定在这一批 `install` 装配的插件上。
+ *
+ * Returned by `Axp.install` — the installed plugins plus lookup/teardown/insertion, scoped to exactly the batch `install` wired up.
+ */
+export interface AxpHandle {
+  /** `install` 被调用时传入的 `AxiosInstance`。 / The `AxiosInstance` `install` was called on. */
+  readonly axios: AxiosInstance;
+  /** 当前跟踪的插件快照（注册顺序），每次读取是新数组——改动请用 `prepend`/`append`/`insertBefore`/`insertAfter`。
+   *
+   *  Snapshot of tracked plugins (registration order), a fresh array each read — mutate via `prepend`/`append`/`insertBefore`/`insertAfter`, not this array. */
+  readonly plugins: readonly Plugin[];
+  /** 按 `.name` 查找被跟踪的插件；插件是工厂函数产出的普通对象而非类实例，故按名称而非类型查找。
+   *
+   *  Look up a tracked plugin by `.name`; plugins are plain objects from factories, not class instances, so lookup is by name, not type. */
+  plugin(name: string): Plugin | undefined;
+  /** 按安装顺序反序调用每个被跟踪插件的 cleanup；不影响以其他方式装配的插件。
+   *
+   *  Calls every tracked plugin's cleanup in reverse install order; doesn't touch plugins wired up outside this handle. */
   dispose(): void;
-  /** Adds `p` before every plugin this handle tracks. See the file doc's
-   *  caveat — reorders relative to this handle's own plugins correctly,
-   *  but the whole group re-lands at the end of `Core`'s list. */
-  prepend(p: AxpPlugin): void;
-  /** Adds `p` after every plugin this handle tracks (and after anything
-   *  else already in `Core`'s list — a plain `api.use(p)`, no reordering
-   *  needed for a pure append). */
-  append(p: AxpPlugin): void;
-  /** Inserts `p` immediately before `anchor` among this handle's tracked
-   *  plugins. Throws if `anchor` isn't tracked by this handle. Same
-   *  re-landing-at-the-end caveat as `prepend`. */
-  insertBefore(anchor: AxpPlugin, p: AxpPlugin): void;
-  /** Inserts `p` immediately after `anchor` among this handle's tracked
-   *  plugins. Throws if `anchor` isn't tracked by this handle. Same
-   *  re-landing-at-the-end caveat as `prepend`. */
-  insertAfter(anchor: AxpPlugin, p: AxpPlugin): void;
+  /** 把 `p` 加到所有已跟踪插件之前；实现为整体拆卸+按新顺序重装，不影响此 handle 之外的装配。
+   *
+   *  Adds `p` before every tracked plugin; implemented as a full teardown + reinstall, doesn't affect anything wired up outside this handle. */
+  prepend(p: Plugin): void;
+  /** 把 `p` 加到所有已跟踪插件之后——普通 install 调用，纯追加无需重排。
+   *
+   *  Adds `p` after every tracked plugin — a plain install call, no reordering needed. */
+  append(p: Plugin): void;
+  /** 把 `p` 插入到 `anchor` 之前；`anchor` 不在此 handle 中则抛错。
+   *
+   *  Inserts `p` immediately before `anchor`; throws if `anchor` isn't tracked by this handle. */
+  insertBefore(anchor: Plugin, p: Plugin): void;
+  /** 把 `p` 插入到 `anchor` 之后；`anchor` 不在此 handle 中则抛错。
+   *
+   *  Inserts `p` immediately after `anchor`; throws if `anchor` isn't tracked by this handle. */
+  insertAfter(anchor: Plugin, p: Plugin): void;
 }
 
-/** Named slots for `Axp.install` — one per bundled plugin, in no particular
- *  order here (the canonical order lives in `install`'s own implementation,
- *  not in this interface's field order). Pass a constructed `Plugin` (call
- *  the factory yourself, e.g. `cache({ expires: 30_000 })`); omit or pass a
- *  falsy value to skip. */
+/**
+ * `Axp.install` 的具名插槽，每个内置插件一个字段（字段顺序无特殊含义，规范安装顺序在 `install` 实现里）。传入构造好的 `Plugin`；省略或传 falsy 值即跳过。
+ *
+ * Named slots for `Axp.install`, one per bundled plugin (field order here is arbitrary — canonical order lives in `install`'s implementation). Pass a constructed `Plugin`; omit or pass falsy to skip.
+ */
 export interface AxpPlugins {
-  envs?: AxpPlugin | null | false;
-  repath?: AxpPlugin | null | false;
-  filter?: AxpPlugin | null | false;
-  key?: AxpPlugin | null | false;
-  cache?: AxpPlugin | null | false;
-  share?: AxpPlugin | null | false;
-  mock?: AxpPlugin | null | false;
-  cancel?: AxpPlugin | null | false;
-  loading?: AxpPlugin | null | false;
-  auth?: AxpPlugin | null | false;
-  retry?: AxpPlugin | null | false;
-  notify?: AxpPlugin | null | false;
-  normalize?: AxpPlugin | null | false;
+  /** 日志插件插槽。 Logger plugin slot. */
+  logger?: Plugin | null | false;
+  /** 环境变量插件插槽。 Envs plugin slot. */
+  envs?: Plugin | null | false;
+  /** 路径变量替换插件插槽。 Path-variable substitution (repath) plugin slot. */
+  repath?: Plugin | null | false;
+  /** 空字段过滤插件插槽。 Empty-field filtering (filter) plugin slot. */
+  filter?: Plugin | null | false;
+  /** 请求指纹/哈希键插件插槽。 Request key/hash (key) plugin slot. */
+  key?: Plugin | null | false;
+  /** 响应缓存插件插槽。 Response cache plugin slot. */
+  cache?: Plugin | null | false;
+  /** 请求去重/共享插件插槽。 Request dedup/share plugin slot. */
+  share?: Plugin | null | false;
+  /** Mock/降级插件插槽。 Mock/fallback plugin slot. */
+  mock?: Plugin | null | false;
+  /** 取消/中断插件插槽。 Cancel plugin slot. */
+  cancel?: Plugin | null | false;
+  /** 加载态提示插件插槽。 Loading-indicator plugin slot. */
+  loading?: Plugin | null | false;
+  /** 鉴权/token 刷新插件插槽。 Auth/token-refresh plugin slot. */
+  auth?: Plugin | null | false;
+  /** 失败重试插件插槽。 Retry plugin slot. */
+  retry?: Plugin | null | false;
+  /** 通知/提示插件插槽。 Notify plugin slot. */
+  notify?: Plugin | null | false;
+  /** 响应/错误归一化插件插槽。 Normalize plugin slot. */
+  normalize?: Plugin | null | false;
 }

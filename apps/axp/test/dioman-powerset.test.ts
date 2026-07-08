@@ -35,9 +35,15 @@
 // 2^12 - 1 = 4095 non-empty combinations per sweep (vs. dioman's 8191).
 import { describe, it } from 'vitest';
 import axios from 'axios';
-import { create, envs, repath, filter, key, cache, share, mock, cancel, loading, auth, retry, normalize } from '../src';
+import {
+  Axp,
+  axpEnvs as envs, axpRepath as repath, axpFilter as filter, axpKey as key, axpCache as cache,
+  axpShare as share, axpMock as mock, axpCancel as cancel, axpLoading as loading, axpAuth as auth,
+  axpRetry as retry, axpNormalize as normalize,
+} from '../src';
 import type { ITokenManager } from '../src';
 import { makeNetwork } from './helpers/network';
+import { use } from './helpers/install';
 
 class MutableTokenManager implements ITokenManager {
   canRefresh = true;
@@ -82,7 +88,7 @@ function _describe(mask: number): string {
  *  the exception-path phases stay deterministic and fast. */
 function _install(adapter: any, mask: number, tm: MutableTokenManager) {
   const has = (bit: number) => _hasBit(mask, bit);
-  const api = create(axios.create({ adapter }));
+  const api = Axp.create(axios.create({ adapter }));
   const plugins = [];
   if (has(0)) plugins.push(envs([]));
   if (has(1)) plugins.push(repath());
@@ -100,9 +106,9 @@ function _install(adapter: any, mask: number, tm: MutableTokenManager) {
       onAccessExpired: async () => {},
     }));
   }
-  if (has(10)) plugins.push(retry({ max: 1 }));
+  if (has(10)) plugins.push(retry({ max: 1, delay: 0 }));
   if (has(11)) plugins.push(normalize());
-  api.use(plugins);
+  use(api, plugins);
   return api;
 }
 

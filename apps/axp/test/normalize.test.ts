@@ -1,27 +1,25 @@
 import { describe, it, expect } from 'vitest';
 import normalize from '../src/plugins/normalize';
-import AxpResponse, { ApiError } from '../src/objects/Response';
+import AxpResponse, { AxpError } from '../src/objects/Response';
 
 
-function makeMockCtx() {
+function makeMockAxios() {
     const resHandlers: Array<{ f?: (r: any) => any; r?: (e: any) => any }> = [];
-    const ctx: any = {
-        axios: { defaults: {} },
-        name: 'normalize',
-        logger: { log: () => { }, warn: () => { }, error: () => { } },
-        request: () => { },
-        response: (f: any, r: any) => { resHandlers.push({ f, r }); },
-        adapter: () => { },
-        transformRequest: () => { },
-        transformResponse: () => { },
-        cleanup: () => { },
+    const axios: any = {
+        defaults: {},
+        interceptors: {
+            response: {
+                use: (f: any, r: any) => { resHandlers.push({ f, r }); return resHandlers.length - 1; },
+                eject: () => { },
+            },
+        },
     };
-    return { ctx, resHandlers };
+    return { axios, resHandlers };
 }
 
 function install() {
-    const { ctx, resHandlers } = makeMockCtx();
-    normalize().install(ctx);
+    const { axios, resHandlers } = makeMockAxios();
+    normalize().install(axios);
     return resHandlers[0];
 }
 
@@ -52,11 +50,11 @@ describe('normalize — 业务失败路径', () => {
     it('code 非成功码 → reject 一个 ApiError（携带结构化 ApiResponse）', async () => {
         const h = install();
         const response = { status: 200, data: { code: 1, message: 'bad biz' } };
-        await expect(h.f!(response)).rejects.toBeInstanceOf(ApiError);
+        await expect(h.f!(response)).rejects.toBeInstanceOf(AxpError);
         try {
             await h.f!(response);
         } catch (e) {
-            const err = e as ApiError;
+            const err = e as AxpError;
             expect(err.response).toBeInstanceOf(AxpResponse);
             expect(err.response.code).toBe(1);
             expect(err.response.message).toBe('bad biz');
@@ -67,7 +65,7 @@ describe('normalize — 业务失败路径', () => {
     it('HTTP 2xx 但 code 失败 → 仍判失败', async () => {
         const h = install();
         const response = { status: 200, data: { code: 'ERR' } };
-        await expect(h.f!(response)).rejects.toBeInstanceOf(ApiError);
+        await expect(h.f!(response)).rejects.toBeInstanceOf(AxpError);
     });
 });
 
@@ -95,12 +93,12 @@ describe('normalize — 错误路径（onRejected）', () => {
 
 describe('normalize — 元信息', () => {
     it('enable:false → 不安装响应拦截器', () => {
-        const { ctx, resHandlers } = makeMockCtx();
-        normalize({ enable: false }).install(ctx);
+        const { axios, resHandlers } = makeMockAxios();
+        normalize({ enable: false }).install(axios);
         expect(resHandlers).toHaveLength(0);
     });
 
-    it("工厂 .name 对齐插件名 'normalize'（支持 eject(normalize)）", () => {
-        expect(normalize.name).toBe('normalize');
+    it("工厂 .name 对齐插件名 'axp:normalize'", () => {
+        expect(normalize.name).toBe('axp:normalize');
     });
 });

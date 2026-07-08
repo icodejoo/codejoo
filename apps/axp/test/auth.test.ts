@@ -26,16 +26,21 @@ function makeTM(token?: string): ITokenManager {
 function makeMockCtx(axiosRequest?: any) {
   const reqHandlers: Array<(c: any) => any> = [];
   const resHandlers: Array<{ f?: (r: any) => any; r?: (e: any) => any }> = [];
-  const ax: any = { request: axiosRequest ?? vi.fn(), defaults: {} };
-  const ctx: any = {
-    axios: ax,
-    name: 'auth',
-    logger: { log: () => { }, warn: () => { }, error: () => { } },
-    request: (f: any) => reqHandlers.push(f),
-    response: (f: any, r: any) => resHandlers.push({ f, r }),
-    adapter: () => { }, transformRequest: () => { }, transformResponse: () => { }, cleanup: () => { },
+  const ax: any = {
+    request: axiosRequest ?? vi.fn(),
+    defaults: {},
+    interceptors: {
+      request: {
+        use: (f: any) => { reqHandlers.push(f); return reqHandlers.length - 1; },
+        eject: () => { },
+      },
+      response: {
+        use: (f: any, r: any) => { resHandlers.push({ f, r }); return resHandlers.length - 1; },
+        eject: () => { },
+      },
+    },
   };
-  return { ctx, ax, reqHandlers, resHandlers };
+  return { ax, reqHandlers, resHandlers };
 }
 
 
@@ -111,8 +116,8 @@ describe('authFailureFactory（默认 onFailure）', () => {
 describe('auth 集成 — 请求侧', () => {
   it('受保护 + 有 token → 默认 ready 注入 Authorization 头', async () => {
     const tm = makeTM('x');
-    const { ctx, reqHandlers } = makeMockCtx();
-    auth({ tokenManager: tm, onRefresh: () => true, onAccessExpired: () => { } }).install(ctx);
+    const { ax, reqHandlers } = makeMockCtx();
+    auth({ tokenManager: tm, onRefresh: () => true, onAccessExpired: () => { } }).install(ax);
     const config: any = { url: '/api', method: 'get', headers: {} };
     await reqHandlers[0](config);
     expect(config.headers.Authorization).toBe('Bearer x');
@@ -121,8 +126,8 @@ describe('auth 集成 — 请求侧', () => {
   it('受保护 + 无 token → onAccessDenied 调用并抛错', async () => {
     const tm = makeTM();  // 无 token
     const onAccessDenied = vi.fn();
-    const { ctx, reqHandlers } = makeMockCtx();
-    auth({ tokenManager: tm, onRefresh: () => true, onAccessExpired: () => { }, onAccessDenied }).install(ctx);
+    const { ax, reqHandlers } = makeMockCtx();
+    auth({ tokenManager: tm, onRefresh: () => true, onAccessExpired: () => { }, onAccessDenied }).install(ax);
     const config: any = { url: '/api', method: 'get', headers: {} };
     await expect(reqHandlers[0](config)).rejects.toThrow(/access denied/);
     expect(onAccessDenied).toHaveBeenCalledTimes(1);
@@ -130,8 +135,8 @@ describe('auth 集成 — 请求侧', () => {
 
   it('config.protected=false → 不受保护，直接放行（不注入）', async () => {
     const tm = makeTM('x');
-    const { ctx, reqHandlers } = makeMockCtx();
-    auth({ tokenManager: tm, onRefresh: () => true, onAccessExpired: () => { } }).install(ctx);
+    const { ax, reqHandlers } = makeMockCtx();
+    auth({ tokenManager: tm, onRefresh: () => true, onAccessExpired: () => { } }).install(ax);
     const config: any = { url: '/api', method: 'get', headers: {}, protected: false };
     await reqHandlers[0](config);
     expect(config.headers.Authorization).toBeUndefined();
@@ -142,8 +147,8 @@ describe('auth 集成 — 请求侧', () => {
 describe('auth 集成 — 响应侧路由', () => {
   it('业务成功 → 原样透传', async () => {
     const tm = makeTM('x');
-    const { ctx, reqHandlers, resHandlers } = makeMockCtx();
-    auth({ tokenManager: tm, onRefresh: () => true, onAccessExpired: () => { } }).install(ctx);
+    const { ax, reqHandlers, resHandlers } = makeMockCtx();
+    auth({ tokenManager: tm, onRefresh: () => true, onAccessExpired: () => { } }).install(ax);
     const config: any = { url: '/api', method: 'get', headers: {} };
     await reqHandlers[0](config);
     const response = { status: 200, data: { code: 0 }, config };
@@ -155,8 +160,8 @@ describe('auth 集成 — 响应侧路由', () => {
     const reissued = { status: 200, data: { code: 0 } };
     const axiosRequest = vi.fn().mockResolvedValue(reissued);
     const onRefresh = vi.fn(async () => { tm.set('y'); return true; });
-    const { ctx, reqHandlers, resHandlers } = makeMockCtx(axiosRequest);
-    auth({ tokenManager: tm, onRefresh, onAccessExpired: () => { } }).install(ctx);
+    const { ax, reqHandlers, resHandlers } = makeMockCtx(axiosRequest);
+    auth({ tokenManager: tm, onRefresh, onAccessExpired: () => { } }).install(ax);
     const config: any = { url: '/api', method: 'get', headers: {} };
     await reqHandlers[0](config);
     const error: any = { config, response: { status: 401, config: { headers: { Authorization: 'Bearer x' } } } };
@@ -170,8 +175,8 @@ describe('auth 集成 — 响应侧路由', () => {
     const tm = makeTM('x');
     const onAccessExpired = vi.fn();
     const onRefresh = vi.fn(async () => false);  // 刷新失败
-    const { ctx, reqHandlers, resHandlers } = makeMockCtx();
-    auth({ tokenManager: tm, onRefresh, onAccessExpired }).install(ctx);
+    const { ax, reqHandlers, resHandlers } = makeMockCtx();
+    auth({ tokenManager: tm, onRefresh, onAccessExpired }).install(ax);
     const config: any = { url: '/api', method: 'get', headers: {} };
     await reqHandlers[0](config);
     const error: any = { config, response: { status: 401, config: { headers: { Authorization: 'Bearer x' } } } };
@@ -184,11 +189,11 @@ describe('auth 集成 — 响应侧路由', () => {
     const tm = makeTM('x');
     const onAccessExpired = vi.fn();
     const onRefresh = vi.fn(async () => true);
-    const { ctx, reqHandlers, resHandlers } = makeMockCtx(vi.fn().mockResolvedValue({ status: 200, data: { code: 0 } }));
-    auth({ tokenManager: tm, onRefresh, onAccessExpired }).install(ctx);
+    const { ax, reqHandlers, resHandlers } = makeMockCtx(vi.fn().mockResolvedValue({ status: 200, data: { code: 0 } }));
+    auth({ tokenManager: tm, onRefresh, onAccessExpired }).install(ax);
     const config: any = { url: '/api', method: 'get', headers: {} };
     await reqHandlers[0](config);
-    config.__auth_refreshed = true;  // 模拟已重放
+    config['axp:auth:refreshed'] = true;  // 模拟已重放
     const error: any = { config, response: { status: 401, config: { headers: { Authorization: 'Bearer x' } } } };
     await expect(resHandlers[0].r!(error)).rejects.toBe(error);
     expect(onAccessExpired).toHaveBeenCalledTimes(1);
@@ -202,8 +207,8 @@ describe('auth 集成 — 响应侧路由', () => {
     const refreshPromise = new Promise<boolean>((res) => { resolveRefresh = res; });
     const onRefresh = vi.fn(() => refreshPromise);
     const axiosRequest = vi.fn().mockResolvedValue({ status: 200, data: { code: 0 } });
-    const { ctx, reqHandlers, resHandlers } = makeMockCtx(axiosRequest);
-    auth({ tokenManager: tm, onRefresh, onAccessExpired: () => { } }).install(ctx);
+    const { ax, reqHandlers, resHandlers } = makeMockCtx(axiosRequest);
+    auth({ tokenManager: tm, onRefresh, onAccessExpired: () => { } }).install(ax);
 
     const err = (config: any) => ({ config, response: { status: 401, config: { headers: { Authorization: 'Bearer x' } } } });
     const c1: any = { url: '/api', method: 'get', headers: {} };
@@ -222,12 +227,12 @@ describe('auth 集成 — 响应侧路由', () => {
 
 describe('auth — enable / 元信息', () => {
   it('enable:false → 不安装拦截器', () => {
-    const { ctx, reqHandlers, resHandlers } = makeMockCtx();
-    auth({ tokenManager: makeTM(), onRefresh: () => true, onAccessExpired: () => { }, enable: false }).install(ctx);
+    const { ax, reqHandlers, resHandlers } = makeMockCtx();
+    auth({ tokenManager: makeTM(), onRefresh: () => true, onAccessExpired: () => { }, enable: false }).install(ax);
     expect(reqHandlers).toHaveLength(0);
     expect(resHandlers).toHaveLength(0);
   });
-  it("工厂 .name === 'auth'（支持 eject(auth)）", () => {
-    expect(auth.name).toBe('auth');
+  it("工厂 .name === 'axp:auth'", () => {
+    expect(auth.name).toBe('axp:auth');
   });
 });

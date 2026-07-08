@@ -26,20 +26,21 @@
 //   - DiomanAuth's raw-token-stash vs header-fallback nuance — axp's
 //     `authFailureFactory` always reads the header directly; there's no
 //     separate stashed-raw-token code path to exercise.
-//   - DiomanRetry's default `retryIf` status-code selectivity (e.g. "404
-//     doesn't retry") — axp's retry has no such gate: any rejected request
-//     retries unconditionally up to `max`. This is a genuine behavior
-//     difference from Dio, not a missing feature — see the test below that
-//     documents axp's actual (unconditional) behavior instead.
+//   - (removed) DiomanRetry's default `retryIf` selectivity is no longer a gap —
+//     axp's retry now defaults `shouldRetry` to status >= 500, same exclusion
+//     of 404 as Dio's default `retryIf`; see the test below.
 import { describe, it, expect, vi } from 'vitest';
 import axios from 'axios';
 import {
-  create, envs, repath, filter, key, cache, share, mock, cancel, auth,
-  retry, normalize, clearCache, ApiError,
+  Axp,
+  axpEnvs as envs, axpRepath as repath, axpFilter as filter, axpKey as key, axpCache as cache,
+  axpShare as share, axpMock as mock, axpCancel as cancel, axpAuth as auth,
+  axpRetry as retry, axpNormalize as normalize, clearCache, ApiError,
 } from '../src';
 import { authFailureFactory, AuthFailureAction } from '../src/plugins/auth';
 import { $shouldFallback } from '../src/plugins/mock';
 import { makeNetwork } from './helpers/network';
+import { use } from './helpers/install';
 
 class FakeTokenManager {
   canRefresh = true;
@@ -53,7 +54,7 @@ class FakeTokenManager {
 
 function mkApi() {
   const net = makeNetwork();
-  const api = create(axios.create({ adapter: net.adapter }));
+  const api = Axp.create(axios.create({ adapter: net.adapter }));
   return { net, api };
 }
 
@@ -62,9 +63,9 @@ function mkApi() {
 describe('envs', () => {
   it('the first matching rule wins and its config is shallow-merged into axios.defaults; a later, also-matching rule is never even evaluated', () => {
     const ax = axios.create();
-    const api = create(ax);
+    const api = Axp.create(ax);
     let secondRuleEvaluated = false;
-    api.use(envs([
+    use(api, envs([
       { rule: () => true, config: { baseURL: 'https://prod.example.com', timeout: 5000, headers: { 'X-Env': 'prod' } } },
       { rule: () => { secondRuleEvaluated = true; return true; }, config: { baseURL: 'https://staging.example.com' } },
     ]));
@@ -79,17 +80,17 @@ describe('envs', () => {
 
   it('no matching rule leaves axios.defaults untouched', () => {
     const ax = axios.create({ baseURL: 'https://default.example.com' });
-    const api = create(ax);
-    api.use(envs([{ rule: () => false, config: { baseURL: 'https://x' } }]));
+    const api = Axp.create(ax);
+    use(api, envs([{ rule: () => false, config: { baseURL: 'https://x' } }]));
     expect(ax.defaults.baseURL).toBe('https://default.example.com');
   });
 
-  it('eject() reverts the applied config via the auto-registered cleanup snapshot', () => {
+  it('the cleanup install() returns reverts the applied config snapshot', () => {
     const ax = axios.create({ baseURL: 'https://default.example.com' });
-    const api = create(ax);
-    api.use(envs([{ rule: () => true, config: { baseURL: 'https://x' } }]));
+    const api = Axp.create(ax);
+    const cleanup = envs([{ rule: () => true, config: { baseURL: 'https://x' } }]).install(api.axios);
     expect(ax.defaults.baseURL).toBe('https://x');
-    api.eject('envs');
+    cleanup?.();
     expect(ax.defaults.baseURL).toBe('https://default.example.com');
   });
 });
@@ -101,7 +102,7 @@ describe('repath', () => {
     const { net, api } = mkApi();
     let seenUrl = '';
     net.on('GET', '/user/42/posts/7', (config) => { seenUrl = config.url ?? ''; return { data: { code: 0, data: null } }; });
-    api.use([repath()]);
+    use(api, [repath()]);
 
     const r = await api.axios.get('/user/{id}/posts/:postId', { params: { id: 42, postId: 7, page: 1 } });
     expect(seenUrl).toBe('/user/42/posts/7');
@@ -112,7 +113,7 @@ describe('repath', () => {
     const { net, api } = mkApi();
     let seenUrl = '';
     net.on('POST', '/user/99', (config) => { seenUrl = config.url ?? ''; return { data: { code: 0, data: null } }; });
-    api.use([repath({ removeKey: false })]);
+    use(api, [repath({ removeKey: false })]);
 
     const r = await api.axios.post('/user/{id}', { id: 99 });
     expect(seenUrl).toBe('/user/99');
@@ -125,7 +126,7 @@ describe('repath', () => {
     const { net, api } = mkApi();
     let seenUrl = '';
     net.on('POST', '/user/99', (config) => { seenUrl = config.url ?? ''; return { data: { code: 0, data: null } }; });
-    api.use([repath()]);
+    use(api, [repath()]);
 
     const r = await api.axios.post('/user/{id}', { id: 99 });
     expect(seenUrl).toBe('/user/99');
@@ -136,7 +137,7 @@ describe('repath', () => {
     const { net, api } = mkApi();
     let seenUrl = '';
     net.fallback((config) => { seenUrl = config.url ?? ''; return { data: { code: 0, data: null } }; });
-    api.use([repath()]);
+    use(api, [repath()]);
 
     await api.axios.get('/user/{id}');
     expect(seenUrl).toBe('/user/{id}');
@@ -146,7 +147,7 @@ describe('repath', () => {
     const { net, api } = mkApi();
     let seenUrl = '';
     net.fallback((config) => { seenUrl = config.url ?? ''; return { data: { code: 0, data: null } }; });
-    api.use([repath({ enable: false })]);
+    use(api, [repath({ enable: false })]);
 
     await api.axios.get('/user/{id}', { params: { id: 42 } });
     expect(seenUrl).toBe('/user/{id}');
@@ -164,7 +165,7 @@ describe('filter', () => {
     let seenData: any;
     net.on('GET', '/data', (config) => { seenParams = config.params; return { data: { code: 0, data: null } }; });
     net.on('POST', '/data', (config) => { seenData = config.data; return { data: { code: 0, data: null } }; });
-    api.use([filter()]);
+    use(api, [filter()]);
 
     await api.axios.get('/data', { params: { keep: 'x', blank: '   ', empty: '' }, filter: true } as any);
     expect(seenParams).toEqual({ keep: 'x' });
@@ -180,7 +181,7 @@ describe('filter', () => {
     const { net, api } = mkApi();
     let seenParams: any;
     net.on('GET', '/data', (config) => { seenParams = config.params; return { data: { code: 0, data: null } }; });
-    api.use([filter()]);
+    use(api, [filter()]);
 
     await api.axios.get('/data', { params: { blank: '' } });
     expect(seenParams).toEqual({ blank: '' });
@@ -194,7 +195,7 @@ describe('key', () => {
     const { net, api } = mkApi();
     let calls = 0;
     net.on('GET', '/data', () => { calls++; return { data: { code: 0, data: null } }; });
-    api.use([key(), cache()]);
+    use(api, [key(), cache()]);
 
     await api.axios.get('/data', { cache: true } as any);
     await api.axios.get('/data', { cache: true } as any);
@@ -208,7 +209,7 @@ describe('key', () => {
     const { net, api } = mkApi();
     let calls = 0;
     net.on('POST', '/data', () => { calls++; return { data: { code: 0, data: null } }; });
-    api.use([key({ fastMode: false }), cache()]);
+    use(api, [key({ fastMode: false }), cache()]);
 
     await api.axios.post('/data', { x: 1 }, { params: { b: 2, a: 1 }, key: true, cache: true } as any);
     await api.axios.post('/data', { x: 1 }, { params: { a: 1, b: 2 }, key: true, cache: true } as any);
@@ -222,7 +223,7 @@ describe('key', () => {
     const { net, api } = mkApi();
     let calls = 0;
     net.on('POST', '/data', () => { calls++; return { data: { code: 0, data: null } }; });
-    api.use([key({ fastMode: false }), cache()]);
+    use(api, [key({ fastMode: false }), cache()]);
 
     await api.axios.post('/data', 'raw-body', { key: true, cache: true } as any);
     await api.axios.post('/data', 'raw-body', { key: true, cache: true } as any);
@@ -237,7 +238,7 @@ describe('key', () => {
     const { net, api } = mkApi();
     let calls = 0;
     net.on('GET', '/data', () => { calls++; return { data: { code: 0, data: null } }; });
-    api.use([key({ fastMode: false }), cache()]);
+    use(api, [key({ fastMode: false }), cache()]);
 
     await api.axios.get('/data', { params: { x: new Unencodable() }, key: true, cache: true } as any);
     await api.axios.get('/data', { params: { x: new Unencodable() }, key: true, cache: true } as any);
@@ -251,7 +252,7 @@ describe('cache management API', () => {
   it('removeCache()/clearCache() operate on the live per-instance store (no removeWhere/.size in axp — see file doc)', async () => {
     const { net, api } = mkApi();
     net.fallback(() => ({ data: { code: 0, data: null } }));
-    api.use([key(), cache()]);
+    use(api, [key(), cache()]);
 
     await api.axios.get('/a', { key: true, cache: true } as any);
     await api.axios.get('/b', { key: true, cache: true } as any);
@@ -277,7 +278,7 @@ describe('cache management API', () => {
       const { net, api } = mkApi();
       let calls = 0;
       net.on('GET', '/data', () => { calls++; return { data: { code: 0, data: { v: calls } } }; });
-      api.use([key(), cache({ expires: 1000 })]);
+      use(api, [key(), cache({ expires: 1000 })]);
 
       const p1 = api.axios.get('/data', { key: true, cache: true } as any);
       await vi.advanceTimersByTimeAsync(0);
@@ -302,7 +303,7 @@ describe('cache management API', () => {
     // $resolveCache's `v === true` branch omitting `clone` entirely.
     const { net, api } = mkApi();
     net.fallback(() => ({ data: { code: 0, data: { nested: { v: 1 } } } }));
-    api.use([key(), cache({ clone: 'shallow' })]);
+    use(api, [key(), cache({ clone: 'shallow' })]);
 
     const r1 = await api.axios.get('/data', { key: true, cache: {} } as any);
     const r2 = await api.axios.get('/data', { key: true, cache: {} } as any);
@@ -314,7 +315,7 @@ describe('cache management API', () => {
   it('clone:"deep" recursively copies nested objects, so mutating one hit never affects another', async () => {
     const { net, api } = mkApi();
     net.fallback(() => ({ data: { code: 0, data: { nested: { v: 1 } } } }));
-    api.use([key(), cache({ clone: 'deep' })]);
+    use(api, [key(), cache({ clone: 'deep' })]);
 
     const r1 = await api.axios.get('/data', { key: true, cache: {} } as any);
     const r2 = await api.axios.get('/data', { key: true, cache: {} } as any);
@@ -340,7 +341,7 @@ describe('share: end policy', () => {
     net.on('GET', '/data', (_config, hit) => hit === 1
       ? { data: { code: 0, data: { v: 'a-stale' } } }
       : { data: { code: 0, data: { v: 'b-latest' } } });
-    api.use([key(), share({ policy: 'end' })]);
+    use(api, [key(), share({ policy: 'end' })]);
 
     const a = api.axios.get('/data', { key: true, share: 'end', latency: 30 } as any);
     await new Promise((r) => setTimeout(r, 5)); // ensure a dispatches first
@@ -354,7 +355,7 @@ describe('share: end policy', () => {
   it('a solo caller (no supersession) just settles with its own result', async () => {
     const { net, api } = mkApi();
     net.fallback(() => ({ data: { code: 0, data: { v: 1 } } }));
-    api.use([key(), share({ policy: 'end' })]);
+    use(api, [key(), share({ policy: 'end' })]);
     const r: any = await api.axios.get('/data', { key: true, share: 'end' } as any);
     expect(r.data.data.v).toBe(1);
   });
@@ -362,7 +363,7 @@ describe('share: end policy', () => {
   it('a solo caller whose own request fails settles the entry with that failure', async () => {
     const { net, api } = mkApi();
     net.fallback(() => ({ status: 500, data: { code: 1, data: null } }));
-    api.use([key(), share({ policy: 'end' })]);
+    use(api, [key(), share({ policy: 'end' })]);
     await expect(api.axios.get('/data', { key: true, share: 'end' } as any)).rejects.toBeTruthy();
   });
 });
@@ -373,7 +374,7 @@ describe('share: race policy', () => {
     net.on('GET', '/data', (_config, hit) => hit === 1
       ? { data: { code: 0, data: { v: 'slow' } } }
       : { data: { code: 0, data: { v: 'fast' } } });
-    api.use([key(), share({ policy: 'race' })]);
+    use(api, [key(), share({ policy: 'race' })]);
 
     const slow = api.axios.get('/data', { key: true, share: 'race', latency: 30 } as any);
     await new Promise((r) => setTimeout(r, 5)); // ensure slow dispatches first
@@ -387,7 +388,7 @@ describe('share: race policy', () => {
   it('only once every in-flight attempt has failed does the race settle as a failure for everyone', async () => {
     const { net, api } = mkApi();
     net.fallback(() => ({ status: 500, data: { code: 1, data: null } }));
-    api.use([key(), share({ policy: 'race' })]);
+    use(api, [key(), share({ policy: 'race' })]);
     await expect(api.axios.get('/data', { key: true, share: 'race' } as any)).rejects.toBeTruthy();
   });
 });
@@ -397,7 +398,7 @@ describe('share: none policy and no-key no-op', () => {
     const { net, api } = mkApi();
     let calls = 0;
     net.on('GET', '/data', () => { calls++; return { data: { code: 0, data: null } }; });
-    api.use([share({ policy: 'start' })]);
+    use(api, [share({ policy: 'start' })]);
     await Promise.all([api.axios.get('/data'), api.axios.get('/data')]);
     expect(calls).toBe(2);
   });
@@ -406,7 +407,7 @@ describe('share: none policy and no-key no-op', () => {
     const { net, api } = mkApi();
     let calls = 0;
     net.on('GET', '/data', () => { calls++; return { status: 500, data: { code: 1, data: null } }; });
-    api.use([key(), share({ policy: 'none' })]);
+    use(api, [key(), share({ policy: 'none' })]);
     await expect(api.axios.get('/data', { key: true, share: 'none' } as any)).rejects.toBeTruthy();
     await expect(api.axios.get('/data', { key: true, share: 'none' } as any)).rejects.toBeTruthy();
     expect(calls).toBe(2);
@@ -418,7 +419,7 @@ describe.skip('share: registerDownstreamSettler / hasMultipleDownstreamSettlers 
 // ───────────────────────────────────────────────────────────────────────────
 
 describe('retry: business-failure loop exhaustion and error-path behavior', () => {
-  it('when every retry attempt still looks like a business failure (isExceptionRequest), the loop exhausts and propagates the LAST attempt as-is', async () => {
+  it('when every retry attempt still looks like a business failure (shouldRetry), the loop exhausts and propagates the LAST attempt as-is', async () => {
     // Unlike Dio (which gives up and RESOLVES with the last, still-failing
     // attempt), axp's retry wraps an exhausted business-failure in a
     // synthetic AxiosError and REJECTS with it — the last attempt's data is
@@ -426,11 +427,11 @@ describe('retry: business-failure loop exhaustion and error-path behavior', () =
     const { net, api } = mkApi();
     let attempts = 0;
     net.fallback(() => { attempts++; return { data: { code: 1, data: { attempt: attempts } } }; });
-    api.use([retry({ max: 2, isExceptionRequest: (r) => (r.data as any).code !== 0 })]);
+    use(api, [retry({ max: 2, delay: 0, shouldRetry: (r) => (r?.data as any)?.code !== 0 })]);
 
     let caught: any;
     try {
-      await api.axios.get('/data', { retry: { max: 2, isExceptionRequest: (r: any) => r.data.code !== 0 } } as any);
+      await api.axios.get('/data', { retry: { max: 2, shouldRetry: (r: any) => r?.data?.code !== 0 } } as any);
       expect.unreachable();
     } catch (e) {
       caught = e;
@@ -443,18 +444,18 @@ describe('retry: business-failure loop exhaustion and error-path behavior', () =
     const { net, api } = mkApi();
     let attempts = 0;
     net.fallback(() => { attempts++; return { status: 500, data: { code: 1, data: null } }; });
-    api.use([retry({ max: 2, enable: false })]);
+    use(api, [retry({ max: 2, delay: 0, enable: false })]);
     await expect(api.axios.get('/data', { retry: 2 } as any)).rejects.toBeTruthy();
     expect(attempts).toBe(1);
   });
 
-  it('unlike Dio\'s default retryIf (which excludes 404), axp\'s retry has no status-code selectivity — a 404 retries unconditionally up to max (see file doc)', async () => {
+  it('aligned with Dio\'s default retryIf (which excludes 404): the default shouldRetry only retries >=500, so a 404 is never retried', async () => {
     const { net, api } = mkApi();
     let attempts = 0;
     net.fallback(() => { attempts++; return { status: 404, data: { code: 1, data: null } }; });
-    api.use([retry({ max: 2 })]);
+    use(api, [retry({ max: 2, delay: 0 })]);
     await expect(api.axios.get('/data', { retry: 2 } as any)).rejects.toBeTruthy();
-    expect(attempts).toBe(3); // original + 2 retries — no retryIf gate to stop it
+    expect(attempts).toBe(1); // default shouldRetry excludes 404 — no retries fired
   });
 });
 
@@ -492,7 +493,7 @@ describe('auth: additional realistic branches', () => {
     net.fallback(() => ({ status: 401, data: { code: 1, data: null } }));
     const tm = new FakeTokenManager('t0');
     let refreshCalls = 0;
-    api.use([auth({
+    use(api, [auth({
       tokenManager: tm as any,
       onRefresh: async () => { refreshCalls++; await new Promise((r) => setTimeout(r, 20)); throw new Error('refresh failed'); },
       onAccessExpired: async () => {},
@@ -513,7 +514,7 @@ describe('auth: additional realistic branches', () => {
     const tm = new FakeTokenManager(undefined);
     let denied = 0;
     let expired = 0;
-    api.use([auth({
+    use(api, [auth({
       tokenManager: tm as any,
       onRefresh: async () => {},
       onAccessExpired: async () => { expired++; },
@@ -529,7 +530,7 @@ describe('auth: additional realistic branches', () => {
     const { net, api } = mkApi();
     net.fallback(() => { throw new Error('ECONNREFUSED'); });
     const tm = new FakeTokenManager('t0');
-    api.use([auth({ tokenManager: tm as any, onRefresh: async () => {}, onAccessExpired: async () => {} })]);
+    use(api, [auth({ tokenManager: tm as any, onRefresh: async () => {}, onAccessExpired: async () => {} })]);
     await expect(api.axios.get('/data')).rejects.toBeTruthy();
   });
 
@@ -547,7 +548,7 @@ describe('auth: additional realistic branches', () => {
     const tm = new FakeTokenManager('t0');
     let refreshCalls = 0;
     let expiredCalls = 0;
-    api.use([auth({
+    use(api, [auth({
       tokenManager: tm as any,
       onRefresh: async () => { refreshCalls++; tm.set('t1'); },
       onAccessExpired: async () => { expiredCalls++; },
@@ -564,7 +565,7 @@ describe('auth: additional realistic branches', () => {
     net.fallback(() => ({ status: 401, data: { code: 1, data: null } }));
     const tm1 = new FakeTokenManager('t0');
     let denied = 0;
-    api.use([auth({
+    use(api, [auth({
       tokenManager: tm1 as any,
       onRefresh: async () => {},
       onAccessExpired: async () => {},
@@ -579,7 +580,7 @@ describe('auth: additional realistic branches', () => {
     const { net, api } = mkApi();
     net.fallback(() => ({ data: { code: 0, data: null } }));
     const tm = new FakeTokenManager(undefined);
-    api.use([auth({
+    use(api, [auth({
       tokenManager: tm as any,
       onRefresh: async () => {},
       onAccessExpired: async () => {},
@@ -603,7 +604,7 @@ describe('cancel: cancelAll bookkeeping', () => {
     const { net, api } = mkApi();
     const { cancelAll } = await import('../src/plugins/cancel');
     net.fallback(() => ({ data: { code: 0, data: null } }));
-    api.use([cancel()]);
+    use(api, [cancel()]);
 
     const p = api.axios.get('/data', { latency: 200 } as any); // still in flight below
     await new Promise((r) => setTimeout(r, 10));
@@ -634,7 +635,7 @@ describe('mock: mockUrl redirect path', () => {
     const { net, api } = mkApi();
     net.on('GET', '/mockbase/data', () => ({ data: { code: 0, data: { v: 'mocked' } } }));
     net.on('GET', '/data', () => ({ data: { code: 0, data: { v: 'real' } } }));
-    api.use([mock({ enable: true, mockUrl: '/mockbase' })]);
+    use(api, [mock({ enable: true, mockUrl: '/mockbase' })]);
 
     const r1: any = await api.axios.get('/data', { mock: true } as any);
     expect(r1.data.data.v).toBe('mocked');
@@ -642,7 +643,7 @@ describe('mock: mockUrl redirect path', () => {
     const { net: net2, api: api2 } = mkApi();
     net2.on('GET', '/mockbase/data', () => ({ data: { code: 0, data: { v: 'mocked' } } }));
     net2.on('GET', '/data', () => ({ data: { code: 0, data: { v: 'real' } } }));
-    api2.use([mock({ enable: true, mockUrl: '/mockbase', fallbackWhen: () => true })]);
+    use(api2, [mock({ enable: true, mockUrl: '/mockbase', fallbackWhen: () => true })]);
     const r2: any = await api2.axios.get('/data', { mock: true } as any);
     expect(r2.data.data.v).toBe('real');
   });
@@ -651,13 +652,13 @@ describe('mock: mockUrl redirect path', () => {
     const { net, api } = mkApi();
     net.on('GET', '/data', () => ({ data: { code: 0, data: { v: 'real' } } }));
     net.on('GET', '/deadmock/data', () => { throw new Error('ECONNREFUSED'); });
-    api.use([mock({ enable: true, mockUrl: '/deadmock', fallbackWhen: () => true })]);
+    use(api, [mock({ enable: true, mockUrl: '/deadmock', fallbackWhen: () => true })]);
     const r1: any = await api.axios.get('/data', { mock: true } as any);
     expect(r1.data.data.v).toBe('real');
 
     const { net: net2, api: api2 } = mkApi();
     net2.on('GET', '/deadmock/data', () => { throw new Error('ECONNREFUSED'); });
-    api2.use([mock({ enable: true, mockUrl: '/deadmock', fallbackWhen: () => false })]);
+    use(api2, [mock({ enable: true, mockUrl: '/deadmock', fallbackWhen: () => false })]);
     await expect(api2.axios.get('/data', { mock: true } as any)).rejects.toBeTruthy();
   });
 
@@ -670,7 +671,7 @@ describe('normalize', () => {
   it('a business failure (code !== 0) rejects with an ApiError carrying a structured ApiResponse', async () => {
     const { net, api } = mkApi();
     net.fallback(() => ({ data: { code: 1, data: null, message: 'boom' } }));
-    api.use([normalize()]);
+    use(api, [normalize()]);
     await expect(api.axios.get('/data')).rejects.toThrow('boom');
     try {
       await api.axios.get('/data');
@@ -684,7 +685,7 @@ describe('normalize', () => {
   it('a successful envelope passes through untouched — normalize does not unwrap (Core.dispatch does that unconditionally, independent of this plugin)', async () => {
     const { net, api } = mkApi();
     net.fallback(() => ({ data: { code: 0, data: { v: 1 }, message: '' } }));
-    api.use([normalize()]);
+    use(api, [normalize()]);
     const r = await api.axios.get('/data');
     expect(r.data).toEqual({ code: 0, data: { v: 1 }, message: '' });
   });

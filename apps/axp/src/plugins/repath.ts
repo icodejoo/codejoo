@@ -1,35 +1,32 @@
 import type { Plugin } from '../types';
-import { isObject, isPrimitive, __DEV__ } from '../helper';
+import { isObject, isPrimitive, pluginLog } from '../helper';
 
 export interface IRepathOptions {
-    /**
-     * 是否启用插件
-     */
+    /** 是否启用插件 / whether to enable this plugin */
     enable?: boolean,
-    /**
-     * 自定义url变量匹配规则
-     */
+    /** 自定义 url 变量匹配规则 / custom regex for matching URL path variables */
     pattern?: RegExp;
-    /**
-     * 当params,data命中url参数时，替换url参数的同时是否要从params,data中删除字段，默认true
-     */
+    /** params/data 命中 url 参数时，替换的同时是否从 params/data 中删除该字段，默认 true / whether to also delete the field from params/data after substitution, default true */
     removeKey?: boolean
 }
 
-const name = 'repath'
+const name = 'axp:repath'
 
 /**
- * 将路径变量替换成真实值（`{id}` / `:id` / `[id]` ← params / data）
+ * 将路径变量替换成真实值（`{id}` / `:id` / `[id]` ← params / data）。
+ *
+ * Substitutes path variables (`{id}` / `:id` / `[id]`) in the URL with values from `params`/`data`.
  */
-export default function repath(
+export default function axpRepath(
     { enable = true, removeKey = true, pattern = /{([^}]+)}|\[([^\]]+)]|:([^/\s]+)/g }: IRepathOptions = {},
 ): Plugin {
     return {
         name: name,
-        install(ctx) {
-            if (__DEV__) ctx.logger.log(`${name} enabled:${enable}`)
+        install(axios) {
+            pluginLog(axios.defaults, `[${name}] enabled:${enable}`)
             if (!enable) return;  // enable:false → 整个插件不安装拦截器（与 cache/share/filter 等一致）
-            ctx.request(
+            const id = axios.interceptors.request.use(
+                /** 用 pattern 匹配 url 中的变量，从 params/data 取值替换 / matches url variables via `pattern`, substituting values from params/data */
                 function $normalize(config) {
                     const { params, data } = config
                     config.url = config.url?.replace(pattern, (match, x, y, z) => {
@@ -61,17 +58,17 @@ export default function repath(
                                 }
                             }
                         }
-
-
+                        
                         return value ?? match;
                     });
 
                     return config;
                 },
             );
+            return () => { axios.interceptors.request.eject(id); };
         },
     };
 }
 
 // 见 normalize：严格模式 ESM 下 fn.name 须用 defineProperty 重定义
-Object.defineProperty(repath, 'name', { value: name })
+Object.defineProperty(axpRepath, 'name', { value: name })

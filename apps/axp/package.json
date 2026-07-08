@@ -1,6 +1,6 @@
 {
   "name": "@codejoo/axp",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "type": "module",
   "keywords": [
     "axios",
@@ -42,6 +42,76 @@
     "./min": {
       "types": "./dist/index.d.mts",
       "default": "./dist/index.min.js"
+    },
+    "./auth": {
+      "types": "./dist/esm/plugins/auth.d.mts",
+      "import": "./dist/esm/plugins/auth.mjs",
+      "default": "./dist/esm/plugins/auth.mjs"
+    },
+    "./cache": {
+      "types": "./dist/esm/plugins/cache.d.mts",
+      "import": "./dist/esm/plugins/cache.mjs",
+      "default": "./dist/esm/plugins/cache.mjs"
+    },
+    "./cancel": {
+      "types": "./dist/esm/plugins/cancel.d.mts",
+      "import": "./dist/esm/plugins/cancel.mjs",
+      "default": "./dist/esm/plugins/cancel.mjs"
+    },
+    "./envs": {
+      "types": "./dist/esm/plugins/envs.d.mts",
+      "import": "./dist/esm/plugins/envs.mjs",
+      "default": "./dist/esm/plugins/envs.mjs"
+    },
+    "./filter": {
+      "types": "./dist/esm/plugins/filter.d.mts",
+      "import": "./dist/esm/plugins/filter.mjs",
+      "default": "./dist/esm/plugins/filter.mjs"
+    },
+    "./key": {
+      "types": "./dist/esm/plugins/key.d.mts",
+      "import": "./dist/esm/plugins/key.mjs",
+      "default": "./dist/esm/plugins/key.mjs"
+    },
+    "./loading": {
+      "types": "./dist/esm/plugins/loading.d.mts",
+      "import": "./dist/esm/plugins/loading.mjs",
+      "default": "./dist/esm/plugins/loading.mjs"
+    },
+    "./logger": {
+      "types": "./dist/esm/plugins/logger.d.mts",
+      "import": "./dist/esm/plugins/logger.mjs",
+      "default": "./dist/esm/plugins/logger.mjs"
+    },
+    "./mock": {
+      "types": "./dist/esm/plugins/mock.d.mts",
+      "import": "./dist/esm/plugins/mock.mjs",
+      "default": "./dist/esm/plugins/mock.mjs"
+    },
+    "./normalize": {
+      "types": "./dist/esm/plugins/normalize.d.mts",
+      "import": "./dist/esm/plugins/normalize.mjs",
+      "default": "./dist/esm/plugins/normalize.mjs"
+    },
+    "./notify": {
+      "types": "./dist/esm/plugins/notify.d.mts",
+      "import": "./dist/esm/plugins/notify.mjs",
+      "default": "./dist/esm/plugins/notify.mjs"
+    },
+    "./repath": {
+      "types": "./dist/esm/plugins/repath.d.mts",
+      "import": "./dist/esm/plugins/repath.mjs",
+      "default": "./dist/esm/plugins/repath.mjs"
+    },
+    "./retry": {
+      "types": "./dist/esm/plugins/retry.d.mts",
+      "import": "./dist/esm/plugins/retry.mjs",
+      "default": "./dist/esm/plugins/retry.mjs"
+    },
+    "./share": {
+      "types": "./dist/esm/plugins/share.d.mts",
+      "import": "./dist/esm/plugins/share.mjs",
+      "default": "./dist/esm/plugins/share.mjs"
     },
     "./package.json": "./package.json"
   },

@@ -2,10 +2,9 @@
 
 [中文](./README.zh-CN.md) | English
 
-A typed, **plugin-based** HTTP client on top of `axios`. Wrap an axios instance,
-bind your OpenAPI-derived schema (`model.MethodRefs`) for end-to-end inference of
-path / payload / response, and compose single-purpose plugins whose side-effects
-are auto-tracked and reverted on eject.
+Plugin-based HTTP client on top of `axios`. `Axp.install` wires plugins onto
+any `AxiosInstance`; `Axp.create`/`Core` are an optional typed dispatch layer
+on top — the type system is entirely yours to opt into, never required.
 
 ```bash
 npm i @codejoo/axp   # peer dep: axios
@@ -15,223 +14,363 @@ npm i @codejoo/axp   # peer dep: axios
 
 ```ts
 import axios from 'axios';
-import { create, cache, retry, share, key } from '@codejoo/axp';
+import { Axp, axpKey, axpCache, axpShare, axpRetry } from '@codejoo/axp';
 
-// model.MethodRefs is the method-major schema emitted by codegen (statically
-// pre-expanded — no type-level inversion). model.PathRefs stays path-major.
-const api = create<model.MethodRefs>(axios.create({ baseURL: '/api' }), { debug: false });
+const axiosInstance = axios.create({ baseURL: '/api' });
 
-// key feeds cache/share with a dedup key; install in the order you want them to run
-api.use([key(), cache({ expires: 30_000 }), share(), retry({ max: 2 })]);
+Axp.install(axiosInstance, {
+  key: axpKey(),
+  cache: axpCache({ expires: 30_000 }),
+  share: axpShare(),
+  retry: axpRetry({ max: 2 }),
+});
 
-const pets = await api.get('/pet/findByStatus')({ status: 'available' });   // → model.Pet[]
-await api.post('/pet')({ name: 'lassie', photoUrls: [] });                  // → model.Pet
+const res = await axiosInstance.get('/pet/findByStatus', { params: { status: 'available' }, key: true, cache: true });
 ```
 
-## Schema typing (`model.MethodRefs`)
+Want typed `path`/`payload`/`response` inference instead of plain `axios` calls?
+Wrap the same instance in `Axp.create` (see below) — `Axp.install` works
+identically either way, since it only ever needs a raw `AxiosInstance`.
 
-Codegen (`@codejoo/openapi2lang`) emits two views of your spec into the global `model` namespace:
-
-- **`model.PathRefs`** — path-major `{ [path]: { [method]: [response, request] } }`. Consumed by openapi2lang's own `Request`/`OpenApi` helpers.
-- **`model.MethodRefs`** — method-major `{ [method]: { [path]: [response, request] } }`, **statically pre-expanded** by codegen (not a `type X = Invert<PathRefs>` computation). `Core<T>` consumes this: each call is a direct `T[method][path]` literal lookup — no type-level inversion, IDE-friendly even at ~1000 paths.
-
-`create<model.MethodRefs>()` makes unlisted method/path combinations a **compile error**. To add ad-hoc routes during integration, declaration-merge into `MethodRefs` (method-major — note the nesting) in a local `.d.ts`:
+## `Axp.create` — optional typed dispatch layer
 
 ```ts
-declare namespace model {
-  interface MethodRefs {
-    get: { '/internal/ping': [response: { ok: boolean }, request: []] };
-  }
-}
+import { Axp } from '@codejoo/axp';
+
+const api = Axp.create<MySchema>(axios.create({ baseURL: '/api' }));
+const pets = await api.get('/pet/findByStatus')({ status: 'available' });  // → MySchema['get']['/pet/findByStatus'][0]
+await api.post('/pet')({ name: 'lassie', photoUrls: [] });
 ```
 
-`create()` (no generic) relaxes paths to `string` for untyped/dynamic use.
+`Axp.create<T = unknown>(axiosInstance = axios.create(), options?): Core<T>`.
+`T` can be **any** type shaped like `MethodSchema` (see `src/types.ts`) —
+hand-written, your own codegen, `@codejoo/openapi2lang`'s emitted type,
+whatever you want; axp only checks the structural shape, there's no required
+global namespace. Omit `T` (or the whole `Axp.create` wrapper) for an untyped
+client — every path is then just `string`.
 
-## Response shapes (chosen per call)
+Each HTTP verb (`get` `post` `put` `patch` `delete` `head` `options`) is called
+as `api.<verb>(path, methodConfig?)(payload?, callConfig?)`. Body verbs send
+`payload` as `data`, others as `params`.
 
 | call | returns |
 | --- | --- |
-| `get(path)(payload)` | **unwrapped** business data — the `data` of a `{ code, data, message }` envelope; non-envelope bodies pass through as-is |
-| `get(path)(payload, { raw: true })` | the **whole envelope** `{ code, data, message }` |
-| `get(path)(payload, { wrap: true })` | an `ApiResponse<R>` instance |
+| `verb(path)(payload)` | unwrapped business data (the `data` of a `{ code, data, message }` envelope; non-envelope bodies pass through as-is) |
+| `verb(path)(payload, { raw: true })` | the whole envelope `{ code, data, message }` |
+| `verb(path)(payload, { wrap: true })` | an `AxpResponse<R>` instance |
 
-Verbs: `get` `post` `put` `patch` `delete` `head` `options`. Body verbs send
-`payload` as `data`, others as `params`.
+`api.axios` is the underlying `AxiosInstance` — pass it to `Axp.install`.
+`api.extends(overrides?)` derives a child `Core` with cloned `axios.defaults` +
+`overrides` merged on top; it does not carry over plugins — call `Axp.install`
+again on `child.axios` if the derived instance needs them.
 
-## Core API
+## `Axp.install` — plugin orchestration
 
-`create<T = unknown>(axiosInstance = axios.create(), options?): Core<T>`
+```ts
+const handle = Axp.install(axiosInstance, { key: axpKey(), cache: axpCache() });
+```
 
-| `CoreOptions` | type | default | purpose |
-| --- | --- | --- | --- |
-| `debug` | `boolean` | `false` | verbose plugin/interceptor logging |
-| `logger` | `PluginLogger` | `console.*` | log sink (`log`/`warn`/`error`) |
+Takes a plain `AxiosInstance` — `axios.create()`'s return value, or
+`api.axios` if you also used `Axp.create`. Installs the given plugins onto it
+in a fixed order and returns an `AxpHandle`:
 
-| `Core<T>` method | purpose |
-| --- | --- |
-| `use(plugin \| plugin[])` | install one/many (batch = single refresh); chainable |
-| `eject(name \| plugin \| factory)` | uninstall by `.name`; reverts all tracked side-effects |
-| `plugins()` | `readonly PluginRecord[]` snapshot |
-| `extends(overrides?)` | derive a child `Core` (cloned defaults + same plugin set) |
+| member | signature | purpose |
+| --- | --- | --- |
+| `axios` | `AxiosInstance` | the instance passed in |
+| `plugins` | `readonly Plugin[]` | snapshot, current order |
+| `plugin(name)` | `(string) => Plugin \| undefined` | look up by `.name` |
+| `dispose()` | `() => void` | uninstall everything this handle tracks |
+| `prepend(p)` / `append(p)` | `(Plugin) => void` | install one more, before/after the tracked set |
+| `insertBefore(anchor, p)` / `insertAfter(anchor, p)` | `(Plugin, Plugin) => void` | slot relative to a tracked plugin; throws if `anchor` isn't tracked |
 
-**Ordering** is the caller's responsibility (no priority field): request
-interceptors run LIFO, response interceptors FIFO, transformers in append order,
-adapter = last-installed wins.
+```ts
+import { Axp, axpKey, axpCache, axpLogger } from '@codejoo/axp';
+
+const handle = Axp.install(axiosInstance, { key: axpKey(), cache: axpCache() });
+
+handle.plugin('axp:cache');           // → the axpCache() Plugin object passed in above
+handle.append(axpLogger({ debug: true }));       // adds after everything this handle tracks
+handle.prepend(myOwnPlugin);                     // adds before everything this handle tracks
+
+const cachePlugin = handle.plugin('axp:cache')!;
+handle.insertBefore(cachePlugin, myOwnPlugin2);  // slot relative to a tracked plugin
+
+handle.dispose();                     // ejects every plugin this handle tracks
+```
+
+`AxpPlugins` slots: `logger` `envs` `key` `filter` `repath` `auth` `cancel`
+`retry` `notify` `normalize` `cache` `share` `mock` `loading`. Omit a slot (or
+pass a falsy value) to skip that plugin.
 
 ---
 
 ## Plugins
 
-Every plugin takes `{ enable?: boolean }` (default `true`; `false` = not installed).
-Tables below omit `enable` and list the rest. Request-level fields are set per call
-in the dispatch `config` (e.g. `api.get(p)(payload, { cache: true })`).
+Every plugin takes `{ enable?: boolean }` (default `true`). Tables below omit
+`enable`. "Request field" is set per call, e.g. `api.get(p)(payload, { cache: true })`.
 
-### `key(options?)` — compute a dedup/cache key onto `config.key`
-| option | type | default | purpose |
-| --- | --- | --- | --- |
-| `fastMode` | `boolean` | `true` for `key:true`, `false` for object form | simple (`method+url`) vs deep (`+params+data`) |
-| `ignoreKeys` | `any[]` | — | keys exempt from empty-value filtering (deep) |
-| `ignoreValues` | `any[]` | — | values exempt from empty-value filtering (deep) |
-| `sample` | `boolean` | `false` | sample strings > 64 chars instead of full hash |
-| `before` / `after` | `(config) => any` | — | hooks run before/after key generation |
+### `axpLogger(options?)`
+Turns on debug logging for every other plugin.
 
-Request field `key`: `true` \| `'deep'` \| `number` \| `string` \| `IKeyObject` \| `(config) => …`. Also exports `$key`.
-
-### `cache(options?)` — TTL response cache (adapter-level short-circuit)
-| option | type | default | purpose |
-| --- | --- | --- | --- |
-| `expires` | `number` (ms) | `60_000` | default TTL |
-| `key` | `(config) => string \| undefined` | — | key source; falls back to `config.key` |
-| `clone` | `'shallow' \| 'deep' \| (data) => any` | — (shared ref) | hit-return copy strategy |
-
-Request field `cache`: `false` (off) \| `true` (on, **shared reference** — treat as read-only) \| `{ expires?, key?, clone? }`. `clone:'deep'` uses `structuredClone` (throws if unavailable; pass a function for non-cloneable data). Also exports `removeCache(ax, key)`, `clearCache(ax)`.
-
-### `share(options?)` — dedup/debounce/merge concurrent same-key requests
-| option | type | default | purpose |
-| --- | --- | --- | --- |
-| `policy` | `'start'\|'end'\|'race'\|'none'` | `'start'` | dedup strategy |
-
-Keys off `config.key` (install `key` first). Request field `share`: `false` \| `true` \| a policy string \| `{ policy? }` \| `(config) => …`. For retrying a failed request, use the `retry` plugin instead — `share` has no internal retry loop (combining it with `retry` on the same key used to multiply retry counts; removed).
-
-### `retry(options?)` — re-issue failed requests
-| option | type | default | purpose |
-| --- | --- | --- | --- |
-| `max` | `number` | `0` | max retries (0 = off) |
-| `isExceptionRequest` | `(response) => boolean` | — | treat a "successful" response as a failure to retry |
-
-Request field `retry`: `number` \| `{ max?, isExceptionRequest? }`. Note: a full-chain re-issue does **not** re-trigger adapter plugins (cache/share/loading/mock) consumed on the first attempt.
-
-### `loading(options?)` — global request-count loading toggle
-| option | type | default | purpose |
-| --- | --- | --- | --- |
-| `loading` | `(visible: boolean) => any` | — | fallback toggle callback |
-
-Counts all participating requests: `0→1` calls `loading(true)`, `N→0` calls `loading(false)`. Request field `loading`: `false` (skip) \| `true` (use plugin callback) \| `(visible) => any` (per-request override).
-
-### `auth(options)` — token guard + single-flight refresh
-| option | type | default | purpose |
-| --- | --- | --- | --- |
-| `tokenManager` | `ITokenManager` | **required** | token source |
-| `onRefresh` | `(tm, resp) => any` | **required** | refresh impl; `false`/throw = failed; concurrent calls share one run |
-| `onAccessExpired` | `(tm, resp) => void` | **required** | expiry callback (Expired / refresh-fail / replay-then-fail); `tm.clear()` already done |
-| `methods` | `string \| string[]` | `'*'` | protected method whitelist (∩ `urlPattern`) |
-| `urlPattern` | `string \| string[]` | `'*'` | protected URL patterns (URLPattern; `!` = negate) |
-| `isProtected` | `(config) => boolean \| void` | — | functional protection check (above methods/url) |
-| `onFailure` | `(tm, resp) => AuthFailureAction \| void` | `DEFAULT_ON_AUTH_FAILURE` | failure router → 5 actions |
-| `onAccessDenied` | `(tm, resp) => void` | → `onAccessExpired` | denied-access callback |
-| `ready` | `(tm, config) => void` | inject `Authorization` | attach credentials before send |
-| `accessDeniedCode` | `string` | `'ACCESS_DENIED'` | business code for synthetic denied response |
-
-Request field `protected`: `boolean` \| `(config) => boolean \| void` (per-call override). Also exports `AuthFailureAction` (`Refresh`/`Replay`/`Deny`/`Expired`/`Others`), `authFailureFactory(headerName?)`, `DEFAULT_ON_AUTH_FAILURE`, `ACCESS_DENIED_CODE`. The default router is HTTP-status based (401/403); envelope-code projects supply their own `onFailure`.
-
-**Refresh semantics (default).** Refresh is single-flight (concurrent failures share one `onRefresh`); new protected requests during the window are suspended; non-protected requests pass through untouched. Each request gets **at most one** refresh-and-replay, then `onAccessExpired` — so it always converges (no loop, no storm). On a 401:
-
-- **carried token ≠ current** (a stale in-flight request) → **replay** with the current token, *no* refresh.
-- **carried token = current** → the request still has its one refresh budget → **refresh once, then replay**; if it still 401s → expired. This deliberately keeps the recovery path open for the case where the token was rotated elsewhere (another tab/device) and a fresh refresh can still succeed.
-
-If your backend contract is instead "a 401 on a just-refreshed token means the session is dead, never refresh again", make it expire immediately via a custom `onFailure`:
+| option | type | default |
+| --- | --- | --- |
+| `debug` | `boolean` | `false` |
+| `logger` | `PluginLogger` (`log`/`warn`/`error`) | `console` |
 
 ```ts
-import { AuthFailureAction, DEFAULT_ON_AUTH_FAILURE } from '@codejoo/axp';
-
-onFailure: (tm, resp) => {
-  const carried = (resp.config?.headers as any)?.Authorization;
-  if (resp.status === 401 && carried === tm.accessToken) return AuthFailureAction.Expired; // strict: no second refresh
-  return DEFAULT_ON_AUTH_FAILURE(tm, resp);
-}
+axpLogger({ debug: true })
 ```
 
-### `mock(options?)` — route to a mock server, fall back to real on miss
-| option | type | default | purpose |
-| --- | --- | --- | --- |
-| `mock` | `boolean` | `false` | mock all requests by default |
-| `mockUrl` | `string` | — | mock server base URL |
-| `fallbackWhen` | `(info) => boolean` | 404 / unreachable | "mock missing" predicate → fall back to real |
+### `axpKey(options?)`
+Computes a dedup/cache key onto `config.key`. Feeds `axpCache`/`axpShare`.
 
-Enable defaults to `false` (gate with `import.meta.env.DEV`). Request field `mock`: `false` \| `true` \| `{ mock?, mockUrl?, fallbackWhen? }`.
+| option | type | default |
+| --- | --- | --- |
+| `fastMode` | `boolean` | `true` for `key:true`, `false` for object form |
+| `ignores` | `any[]` | — (exempt these key names or values from empty-value filtering; mirrors dioman's `DiomanKey.ignores`) |
+| `sample` | `boolean` | `false` (sample strings > 64 chars) |
+| `before` / `after` | `(config) => any` | — |
 
-### `filter(options?)` — strip empty params/data fields
-| option | type | default | purpose |
-| --- | --- | --- | --- |
-| `predicate` | `(kv: [key, value]) => boolean` | drops `null`/`undefined`/`NaN`/blank string | return `true` to drop a field |
-| `ignoreKeys` | `string[]` | — | keys kept even if predicate drops |
-| `ignoreValues` | `any[]` | — | values kept even if predicate drops |
+Request field `key`: `true` \| `'deep'` \| `number` \| `string` \| `IKeyObject` \| `(config) => …`.
 
-Request field `filter`: `false`/falsy (skip) \| `true` \| `IFilterOptions` \| `(config) => …`. (The request-level trigger field is named `filter`, not `normalize` — `config.normalize` is already claimed by the `normalize` plugin below.)
+```ts
+axpKey({ fastMode: false })
+api.get('/list')(undefined, { key: true })
+```
 
-### `normalize(options?)` — strict business-success check
-On `ApiResponse.fromResponse(res).successful === false`, rejects an `ApiError` (carrying a structured `ApiResponse`); on the error path attaches `error.api`. Does not rewrite successful `response.data`. Option: `nullable?: boolean`.
+### `axpCache(options?)`
+TTL response cache, adapter-level short-circuit (no HTTP on hit).
 
-### `repath(options?)` — substitute path variables from params/data
-| option | type | default | purpose |
-| --- | --- | --- | --- |
-| `pattern` | `RegExp` | matches `{id}` / `:id` / `[id]` | placeholder matcher |
-| `removeKey` | `boolean` | `true` | delete the consumed key from params/data after substitution |
+| option | type | default |
+| --- | --- | --- |
+| `expires` | `number` (ms) | `60_000` |
+| `key` | `(config) => string \| undefined` | falls back to `config.key` |
+| `clone` | `'shallow' \| 'deep' \| (data) => any` | — (shared reference) |
 
-Substitutes `/{id}` / `:id` / `[id]` from `params` (then `data`). No request-level field.
+Request field `cache`: `false` \| `true` \| `{ expires?, key?, clone? }`. Also
+exports `removeCache(ax, key)`, `clearCache(ax)`.
 
-### `envs(rules)` — pick env config at install time
-`rules: { rule: () => boolean; config: CreateAxiosDefaults }[]`. The first rule whose `rule()` is truthy shallow-merges its `config` into `axios.defaults`. Zero runtime overhead (no interceptors).
+```ts
+axpCache({ expires: 30_000 })
+api.get('/list')(undefined, { key: true, cache: true })
+removeCache(api.axios, 'some-key')
+clearCache(api.axios)
+```
 
-### `cancel(options?)` — auto-inject AbortController per request
-Injects a `signal` for requests without one (respects user-provided `signal`/`cancelToken`). Exports `cancelAll(ax, reason?)` to abort all in-flight requests of an instance (returns the count aborted).
+### `axpShare(options?)`
+Dedup/debounce/merge concurrent requests with the same `config.key`.
+
+| option | type | default |
+| --- | --- | --- |
+| `policy` | `'start' \| 'end' \| 'race' \| 'none'` | `'start'` |
+
+Request field `share`: `false` \| `true` \| a policy string \| `{ policy? }` \| `(config) => …`.
+
+```ts
+axpShare({ policy: 'start' })
+api.get('/list')(undefined, { key: true, share: true })
+```
+
+### `axpRetry(options?)`
+Waits `delay`, then resends — up to `max` times — on failure or a response judged a business exception. The resend goes through a bare, interceptor-less standalone axios instance, so it never re-enters the plugin chain and downstream plugins (notify/normalize) never fire twice for one logical request.
+
+| option | type | default |
+| --- | --- | --- |
+| `max` | `number` | `0` (off) |
+| `methods` | `string[]` | `['get','put','head','delete','options','trace']` — a hard veto, `shouldRetry` can't override it |
+| `shouldRetry` | `(response?, err?) => boolean \| undefined` | — (no default; an exact `true`/`false` wins, `undefined` falls through to `statusCodes`) |
+| `statusCodes` | `number[]` | `[408, 429, 500, 502, 503, 504]` |
+| `delay` | `number \| (current, max, response?, err?) => number \| false \| void \| null` | `3000` (a non-number function return counts as `0`) |
+| `jitter` | `true \| (delay: number) => number` | — (no jitter) |
+| `delayMax` | `number` | `Infinity` |
+| `respectRetryAfter` | `boolean` | `true` |
+| `afterStatusCodes` | `number[]` | `[413, 429, 503]` — only these statuses trust a `Retry-After` header |
+| `retryAfterMax` | `number` | `Infinity` |
+
+Request field `retry`: `number` (max retries) \| `false` (disable, highest-priority veto) \| `true` (respect plugin defaults) \| `IRetryOptions` (per-request override of any field above, plus `enable: false` as an alternative to `false`).
+
+Priority, each level can veto early: (1) `retry: false` / `{ enable: false }` → never retry; (2) `methods` whitelist → a method outside it is never retried, even if `shouldRetry` says otherwise; (3) `shouldRetry?.(response?, err?) ?? statusCodes.includes(status) ?? false`.
+
+While waiting, the delay listens on `config.signal` — canceling the request (e.g. via `axpCancel`) stops the wait immediately instead of idling until the timer fires. A response's `Retry-After` header (seconds, or an HTTP-date) wins over the computed `delay` when its status is covered by `afterStatusCodes`; the result is capped by `retryAfterMax` and skips `jitter`/`delayMax` (those only apply to the plugin's own computed delay).
+
+```ts
+axpRetry({ max: 3, statusCodes: [500, 502, 503, 504], jitter: true, delayMax: 10_000 })
+api.get('/flaky')(undefined, { retry: 3 })
+api.get('/flaky')(undefined, { retry: { max: 2, shouldRetry: (r) => r?.data?.code !== 0 } })
+api.get('/flaky')(undefined, { retry: false }) // never retry this one call
+```
+
+### `axpNotify(options)`
+Stringifies a response/error and passes it to a callback (e.g. a toast).
+
+| option | type | default |
+| --- | --- | --- |
+| `notify` | `(message: string) => void` | **required** |
+| `stringify` | `(data, message, status, config) => string` | **required** (return `''` to skip) |
+
+```ts
+axpNotify({
+  notify: (msg) => toast.error(msg),
+  stringify: (data, message, status) => (status >= 400 ? message : ''),
+})
+```
+
+### `axpLoading(options?)`
+Global request-count loading toggle.
+
+| option | type | default |
+| --- | --- | --- |
+| `loading` | `(visible: boolean) => any` | — |
+| `delay` | `number` | `0` — defers showing past a 0→1 edge; canceled outright if the count falls back to 0 first (a fast request never shows loading at all) |
+| `delayClose` | `number` | `0` — defers hiding past a 1→0 edge; canceled if a new request bumps the count back to 1 first (back-to-back requests don't flicker) |
+
+Request field `loading`: `false` (skip) \| `true` \| `(visible) => any` \| `{ enable?, loading?, delay?, delayClose? }` (per-field override; `enable: false` is equivalent to the top-level `false`).
+
+```ts
+axpLoading({ loading: (v) => setSpinner(v), delay: 200, delayClose: 200 })
+api.get('/list')(undefined, { loading: true })
+api.get('/quiet')(undefined, { loading: { delay: 0 } }) // this call skips the anti-flicker delay
+```
+
+### `axpAuth(options)`
+Token guard + single-flight refresh-and-replay on 401/403.
+
+| option | type | default |
+| --- | --- | --- |
+| `tokenManager` | `ITokenManager` | **required** |
+| `onRefresh` | `(tm, resp) => any` | **required** (`false`/throw = failed) |
+| `onAccessExpired` | `(tm, resp) => void` | **required** |
+| `methods` / `urlPattern` | `string \| string[]` | `'*'` |
+| `isProtected` | `(config) => boolean \| void` | — |
+| `onFailure` | `(tm, resp) => AuthFailureAction \| void` | `DEFAULT_ON_AUTH_FAILURE` |
+| `onAccessDenied` | `(tm, resp) => void` | → `onAccessExpired` |
+| `ready` | `(tm, config) => void` | injects `Authorization` header |
+| `accessDeniedCode` | `string` | `'ACCESS_DENIED'` |
+
+Request field `protected`: `boolean` \| `(config) => boolean \| void`. Also
+exports `AuthFailureAction`, `authFailureFactory(headerName?)`,
+`DEFAULT_ON_AUTH_FAILURE`, `ACCESS_DENIED_CODE`, `TokenManager`.
+
+```ts
+axpAuth({
+  tokenManager: new TokenManager(),
+  urlPattern: ['/api/*', '!/api/public/*'],
+  onRefresh: (tm) => refreshToken(tm),
+  onAccessExpired: (tm) => redirectToLogin(),
+})
+```
+
+### `axpMock(options?)`
+Routes to a mock server; falls back to the real one when the mock misses.
+
+| option | type | default |
+| --- | --- | --- |
+| `mock` | `boolean` | `false` (mock all requests by default) |
+| `mockUrl` | `string` | — |
+| `fallbackWhen` | `(info) => boolean` | 404 / unreachable |
+
+Request field `mock`: `false` \| `true` \| `{ mock?, mockUrl?, fallbackWhen? }`.
+
+```ts
+axpMock({ enable: import.meta.env.DEV, mockUrl: 'http://localhost:4000' })
+api.get('/pet/1')(undefined, { mock: true })
+```
+
+### `axpFilter(options?)`
+Strips empty `params`/`data` fields before send.
+
+| option | type | default |
+| --- | --- | --- |
+| `predicate` | `(kv: [key, value]) => boolean` | drops `null`/`undefined`/`NaN`/blank string |
+| `ignoreKeys` / `ignoreValues` | `array` | — |
+
+Request field `filter`: `false` \| `true` \| `IFilterOptions` \| `(config) => …`.
+
+```ts
+axpFilter()
+api.get('/search')(undefined, { filter: true, params: { q: 'x', page: '' } })
+```
+
+### `axpNormalize(options?)`
+Rejects with `ApiError` when `AxpResponse.fromResponse(res).successful === false`.
+
+| option | type | default |
+| --- | --- | --- |
+| `nullable` | `boolean` | — |
+
+```ts
+axpNormalize()
+```
+
+### `axpRepath(options?)`
+Substitutes `{id}` / `:id` / `[id]` path placeholders from `params` (then `data`).
+
+| option | type | default |
+| --- | --- | --- |
+| `pattern` | `RegExp` | matches `{id}` / `:id` / `[id]` |
+| `removeKey` | `boolean` | `true` (delete the consumed key after substitution) |
+
+```ts
+axpRepath()
+api.get('/pet/:id')(undefined, { params: { id: 5 } })  // → GET /pet/5
+```
+
+### `axpEnvs(rules)`
+Picks env config at install time (no interceptors).
+
+```ts
+axpEnvs([
+  { rule: () => import.meta.env.DEV, config: { baseURL: 'http://dev' } },
+  { rule: () => import.meta.env.PROD, config: { baseURL: 'http://prod' } },
+])
+```
+
+### `axpCancel(options?)`
+Auto-injects an `AbortController` per request (skips requests with their own
+`signal`/`cancelToken`). Exports `cancelAll(ax, reason?) => number`.
+
+```ts
+axpCancel()
+cancelAll(api.axios, 'navigated away')
+```
 
 ---
 
 ## Model objects
 
-**`ApiResponse<T>`** — `{ status, code, message, data, successful }`.
-`ApiResponse.fromResponse(res)` builds one defensively (null-safe).
-`ApiResponse.isSuccessful(status, code)` is the success hook (default: HTTP 2xx and
-`code` ∈ `{0, '0000'}`, or no `code` → pure HTTP); reassign to customize.
+**`AxpResponse<T>`** — `{ status, code, message, data, successful }`.
+`AxpResponse.fromResponse(res)` builds one defensively (null-safe).
+`AxpResponse.isSuccessful(status, code)` is the success hook — reassign to customize.
 
-**`ApiError<T>`** — `Error` with `.response: ApiResponse<T>`; what `normalize` rejects on business failure.
+**`ApiError<T>`** — `Error` with `.response: AxpResponse<T>`; what `axpNormalize` rejects with.
 
 **`TokenManager`** (`implements ITokenManager`) — `canRefresh`, `accessToken`
-(getter returns `Bearer <token>`; setter stores the bare token), `refreshToken`,
-`set(access?, refresh?)`, `clear()`. Persists bare tokens to `localStorage` (SSR-safe).
+(getter returns `Bearer <token>`), `refreshToken`, `set(access?, refresh?)`,
+`clear()`. Persists bare tokens to `localStorage`.
 
 ## Authoring a plugin
 
 ```ts
 import type { Plugin } from '@codejoo/axp';
+import { pluginLog } from '@codejoo/axp';
 
 const logging: Plugin = {
-  name: 'logging',                       // unique id; used by eject
-  install(ctx) {
-    ctx.request((cfg) => { ctx.logger.log('→', cfg.method, cfg.url); return cfg; });
-    ctx.response((res) => res, (err) => Promise.reject(err));
-    // ctx.adapter / ctx.transformRequest / ctx.transformResponse / ctx.cleanup
-    return () => {/* optional: release non-axios resources */};
+  name: 'logging',
+  install(axios) {
+    const id = axios.interceptors.request.use((cfg) => {
+      pluginLog(cfg, '→', cfg.method, cfg.url);
+      return cfg;
+    });
+    return () => { axios.interceptors.request.eject(id); };  // omit if nothing to undo
   },
 };
 ```
 
-Everything registered through `ctx` is tracked and reverted on `eject` — no manual
-cleanup. For state, close over it in `install`.
+Request interceptors run LIFO (last-registered runs first), response
+interceptors run FIFO (first-registered runs first) — plain `axios` semantics.
 
 ## Build & test
 
 - `npm test` / `npx vitest run` — unit + integration suites (`test/**`).
-- `npm run build` — `vp pack` → `dist/index.mjs`, `dist/index.min.js`, `dist/index.d.mts`.
+- `npm run build` — `dist/index.mjs`, `dist/index.min.js`, `dist/index.d.mts`.
 - `npm run e2e` — Playwright-driven real-browser suite (`e2e/`).

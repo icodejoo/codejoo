@@ -2,27 +2,25 @@ import { describe, it, expect } from 'vitest';
 import repath from '../src/plugins/repath';
 
 
-/** 捕获 request 拦截器的极简 ctx */
-function makeMockCtx() {
+/** 捕获 request 拦截器的极简 axios */
+function makeMockAxios() {
     const reqHandlers: Array<(config: any) => any> = [];
-    const ctx: any = {
-        axios: { defaults: {} },
-        name: 'repath',
-        logger: { log: () => { }, warn: () => { }, error: () => { } },
-        request: (f: any) => { reqHandlers.push(f); },
-        response: () => { },
-        adapter: () => { },
-        transformRequest: () => { },
-        transformResponse: () => { },
-        cleanup: () => { },
+    const axios: any = {
+        defaults: {},
+        interceptors: {
+            request: {
+                use: (f: any) => { reqHandlers.push(f); return reqHandlers.length - 1; },
+                eject: () => { },
+            },
+        },
     };
-    return { ctx, reqHandlers };
+    return { axios, reqHandlers };
 }
 
 /** 安装插件并返回其 request 拦截器（已断言存在） */
 function install(opts?: Parameters<typeof repath>[0]) {
-    const { ctx, reqHandlers } = makeMockCtx();
-    repath(opts).install(ctx);
+    const { axios, reqHandlers } = makeMockAxios();
+    repath(opts).install(axios);
     return { run: reqHandlers[0], reqHandlers };
 }
 

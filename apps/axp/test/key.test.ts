@@ -69,11 +69,11 @@ describe('$parse — key 字段处理', () => {
 
     it('key 为对象 → 默认 deep + 透传 ignore 选项', () => {
         const r = $parse({
-            key: { ignoreKeys: ['ts'] },
+            key: { ignores: ['ts'] },
             url: '/u', method: 'GET',
             params: { x: 1, ts: null },
         } as IHttpOptions);
-        console.log(`  [${r}] key:{ignoreKeys:['ts']}`);
+        console.log(`  [${r}] key:{ignores:['ts']}`);
         expect(r).not.toBe(null);
     });
 });
@@ -196,12 +196,12 @@ describe('$key — falsy 默认过滤策略', () => {
         for (const v of variants) expect(k(v)).toBe(none);
     });
 
-    it('用 ignoreValues:[""] 可恢复空串作为有效值', () => {
+    it('用 ignores:[""] 可恢复空串作为有效值', () => {
         const noData = k({ url: '/u', method: 'POST' });
-        const withEmpty = k({ url: '/u', method: 'POST', data: { a: '' } }, 'deep', { ignoreValues: [''] });
+        const withEmpty = k({ url: '/u', method: 'POST', data: { a: '' } }, 'deep', { ignores: [''] });
         expect(withEmpty).not.toBe(noData);
         // 同时不与 null 撞 key（safeStr 区分 'e' / 'n'）
-        const withNull = k({ url: '/u', method: 'POST', data: { a: null } }, 'deep', { ignoreValues: ['', null] });
+        const withNull = k({ url: '/u', method: 'POST', data: { a: null } }, 'deep', { ignores: ['', null] });
         expect(withEmpty).not.toBe(withNull);
     });
 });
@@ -366,75 +366,75 @@ describe('$key — 已知行为', () => {
 });
 
 
-describe('$key — ignoreKeys（key 豁免空值过滤）', () => {
+describe('$key — ignores 按键名豁免', () => {
     it('指定 key 即使 value 为 null 也参与 hash', () => {
         // 默认：ts:null 会被过滤，与无 ts 等价
         const baseline = k({ url: '/u', method: 'POST', data: { x: 1, ts: null } });
         const noTs = k({ url: '/u', method: 'POST', data: { x: 1 } });
         expect(baseline).toBe(noTs);
-        // 启用 ignoreKeys: ts 强制保留 → 与无 ts 不同
-        const preserved = k({ url: '/u', method: 'POST', data: { x: 1, ts: null } }, 'deep', { ignoreKeys: ['ts'] });
+        // 启用 ignores: ts 强制保留 → 与无 ts 不同
+        const preserved = k({ url: '/u', method: 'POST', data: { x: 1, ts: null } }, 'deep', { ignores: ['ts'] });
         expect(preserved).not.toBe(noTs);
     });
 
     it('被保留的 key 即使 value 为空容器也参与 hash', () => {
-        const a = k({ url: '/u', method: 'POST', data: { x: 1, filter: {} } }, 'deep', { ignoreKeys: ['filter'] });
+        const a = k({ url: '/u', method: 'POST', data: { x: 1, filter: {} } }, 'deep', { ignores: ['filter'] });
         const b = k({ url: '/u', method: 'POST', data: { x: 1 } });
         expect(a).not.toBe(b);
     });
 
-    it('value 非空时 ignoreKeys 不影响（与无 opts 等价）', () => {
-        const withOpts = k({ url: '/u', method: 'POST', data: { x: 1, ts: 100 } }, 'deep', { ignoreKeys: ['ts'] });
+    it('value 非空时 ignores 不影响（与无 opts 等价）', () => {
+        const withOpts = k({ url: '/u', method: 'POST', data: { x: 1, ts: 100 } }, 'deep', { ignores: ['ts'] });
         const withoutOpts = k({ url: '/u', method: 'POST', data: { x: 1, ts: 100 } });
         expect(withOpts).toBe(withoutOpts);
     });
 
-    it('未在对象中的 ignoreKeys 项无副作用', () => {
-        // ignoreKeys 包含 'missing'，但对象里没有 missing
-        const a = k({ url: '/u', method: 'POST', data: { x: 1 } }, 'deep', { ignoreKeys: ['missing'] });
+    it('未在对象中的 ignores 键名项无副作用', () => {
+        // ignores 包含 'missing'，但对象里没有 missing
+        const a = k({ url: '/u', method: 'POST', data: { x: 1 } }, 'deep', { ignores: ['missing'] });
         const b = k({ url: '/u', method: 'POST', data: { x: 1 } });
         expect(a).toBe(b);
     });
 
-    it('多个 ignoreKeys 都生效', () => {
-        const a = k({ url: '/u', method: 'POST', data: { x: 1, a: null, b: undefined } }, 'deep', { ignoreKeys: ['a', 'b'] });
+    it('多个键名同时生效', () => {
+        const a = k({ url: '/u', method: 'POST', data: { x: 1, a: null, b: undefined } }, 'deep', { ignores: ['a', 'b'] });
         const b = k({ url: '/u', method: 'POST', data: { x: 1 } });
-        const c = k({ url: '/u', method: 'POST', data: { x: 1, a: null } }, 'deep', { ignoreKeys: ['a'] });
+        const c = k({ url: '/u', method: 'POST', data: { x: 1, a: null } }, 'deep', { ignores: ['a'] });
         expect(a).not.toBe(b);
         expect(a).not.toBe(c);  // 多保留一个 b → 与只保留 a 不同
     });
 });
 
 
-describe('$key — ignoreValues（值豁免空值过滤）', () => {
+describe('$key — ignores 按值豁免', () => {
     it('保留 null 值，使 {x:null} ≠ 无 data', () => {
         const baseline = k({ url: '/u', method: 'POST', data: { x: null } });
         const noData = k({ url: '/u', method: 'POST' });
         expect(baseline).toBe(noData);  // 默认：null 被过滤
-        const preserved = k({ url: '/u', method: 'POST', data: { x: null } }, 'deep', { ignoreValues: [null] });
+        const preserved = k({ url: '/u', method: 'POST', data: { x: null } }, 'deep', { ignores: [null] });
         expect(preserved).not.toBe(noData);
     });
 
     it('保留 null 时 key 名仍参与 hash', () => {
-        const a = k({ url: '/u', method: 'POST', data: { x: null } }, 'deep', { ignoreValues: [null] });
-        const b = k({ url: '/u', method: 'POST', data: { y: null } }, 'deep', { ignoreValues: [null] });
+        const a = k({ url: '/u', method: 'POST', data: { x: null } }, 'deep', { ignores: [null] });
+        const b = k({ url: '/u', method: 'POST', data: { y: null } }, 'deep', { ignores: [null] });
         expect(a).not.toBe(b);
     });
 
     it('保留 NaN（NaN-aware 比较）', () => {
-        const a = k({ url: '/u', method: 'POST', data: { x: NaN } }, 'deep', { ignoreValues: [NaN] });
+        const a = k({ url: '/u', method: 'POST', data: { x: NaN } }, 'deep', { ignores: [NaN] });
         const noData = k({ url: '/u', method: 'POST' });
         expect(a).not.toBe(noData);
     });
 
     it('保留 undefined', () => {
-        const a = k({ url: '/u', method: 'POST', data: { x: undefined } }, 'deep', { ignoreValues: [undefined] });
+        const a = k({ url: '/u', method: 'POST', data: { x: undefined } }, 'deep', { ignores: [undefined] });
         const noData = k({ url: '/u', method: 'POST' });
         expect(a).not.toBe(noData);
     });
 
     it('保留多个值类型并存', () => {
-        const opts = { ignoreValues: [null, undefined, NaN] } satisfies KeyOpts;
+        const opts = { ignores: [null, undefined, NaN] } satisfies KeyOpts;
         const a = k({ url: '/u', method: 'POST', data: { x: null, y: undefined, z: NaN } }, 'deep', opts);
         const noData = k({ url: '/u', method: 'POST' });
         expect(a).not.toBe(noData);
@@ -443,40 +443,40 @@ describe('$key — ignoreValues（值豁免空值过滤）', () => {
         expect(a).not.toBe(b);
     });
 
-    it('数组中的 null 在 ignoreValues:[null] 下保留', () => {
+    it('数组中的 null 在 ignores:[null] 下保留', () => {
         const filtered = k({ url: '/u', method: 'POST', data: [1, null, 2] });
         const compact = k({ url: '/u', method: 'POST', data: [1, 2] });
         expect(filtered).toBe(compact);  // 默认：null 在数组中被过滤
-        const preserved = k({ url: '/u', method: 'POST', data: [1, null, 2] }, 'deep', { ignoreValues: [null] });
+        const preserved = k({ url: '/u', method: 'POST', data: [1, null, 2] }, 'deep', { ignores: [null] });
         expect(preserved).not.toBe(compact);
     });
 
-    it('未命中 ignoreValues 的 falsy 值仍被过滤', () => {
-        // ignoreValues 只包含 null，undefined 仍被过滤
-        const a = k({ url: '/u', method: 'POST', data: { x: undefined } }, 'deep', { ignoreValues: [null] });
+    it('未命中 ignores 的 falsy 值仍被过滤', () => {
+        // ignores 只包含 null，undefined 仍被过滤
+        const a = k({ url: '/u', method: 'POST', data: { x: undefined } }, 'deep', { ignores: [null] });
         const noData = k({ url: '/u', method: 'POST' });
         expect(a).toBe(noData);
     });
 });
 
 
-describe('$key — ignoreKeys + ignoreValues 组合', () => {
-    it('两个选项同时生效', () => {
-        const opts: KeyOpts = { ignoreKeys: ['ts'], ignoreValues: [null] };
+describe('$key — ignores 混合键名/值', () => {
+    it('同一个 ignores 数组里键名和值两种豁免同时生效', () => {
+        const opts: KeyOpts = { ignores: ['ts', null] };
         const a = k({ url: '/u', method: 'POST', data: { ts: undefined, x: null } }, 'deep', opts);
         const b = k({ url: '/u', method: 'POST' });
-        expect(a).not.toBe(b);  // ts 由 ignoreKeys 保留、x 由 ignoreValues 保留
+        expect(a).not.toBe(b);  // ts 命中键名豁免保留、x 命中值豁免保留
     });
 
     it('对象形式 key 默认走 deep + 透传 opts', () => {
         // 通过 $parse 验证整条链路
         const r1 = $parse({
-            key: { ignoreKeys: ['ts'] },
+            key: { ignores: ['ts'] },
             url: '/u', method: 'POST',
             data: { x: 1, ts: null },
         } as IHttpOptions);
         const r2 = $parse({
-            key: { ignoreKeys: ['ts'] },
+            key: { ignores: ['ts'] },
             url: '/u', method: 'POST',
             data: { x: 1 },
         } as IHttpOptions);
@@ -513,17 +513,17 @@ describe('$parse — 插件级 defaults 与请求级合并', () => {
         expect(r1).not.toBe(rSimple1);
     });
 
-    it('插件级 ignoreKeys 在 key:true + fastMode:false 时生效', () => {
-        const defaults = { fastMode: false, ignoreKeys: ['ts'] };
+    it('插件级 ignores 键名在 key:true + fastMode:false 时生效', () => {
+        const defaults = { fastMode: false, ignores: ['ts'] };
         const r1 = $parse({ ...reqWithTs }, defaults);
         const r2 = $parse({ ...reqNoTs }, defaults);
-        // ts 被插件级 ignoreKeys 强制保留 → r1 ≠ r2
+        // ts 被插件级 ignores 强制保留 → r1 ≠ r2
         expect(r1).not.toBe(r2);
-        console.log(`  [${r1}] plugin ignoreKeys:['ts'] preserves ts:null`);
+        console.log(`  [${r1}] plugin ignores:['ts'] preserves ts:null`);
     });
 
-    it('插件级 ignoreValues 在 key:"deep" 时生效', () => {
-        const defaults = { ignoreValues: [null] };
+    it('插件级 ignores 按值在 key:"deep" 时生效', () => {
+        const defaults = { ignores: [null] };
         const r1 = $parse({
             key: 'deep' as any,
             url: '/u', method: 'POST',
@@ -535,37 +535,37 @@ describe('$parse — 插件级 defaults 与请求级合并', () => {
             data: { x: 1 },
         } as IHttpOptions, defaults);
         expect(r1).not.toBe(r2);
-        console.log(`  [${r1}] plugin ignoreValues:[null] preserves y:null`);
+        console.log(`  [${r1}] plugin ignores:[null] preserves y:null`);
     });
 
     it('请求级对象优先于插件级', () => {
-        const defaults = { fastMode: false, ignoreKeys: ['plugin-key'] };
-        // 请求级 ignoreKeys:['req-key'] 应当完全覆盖插件级（不合并）
+        const defaults = { fastMode: false, ignores: ['plugin-key'] };
+        // 请求级 ignores:['req-key'] 应当完全覆盖插件级（不合并）
         const r = $parse({
-            key: { ignoreKeys: ['req-key'] },
+            key: { ignores: ['req-key'] },
             url: '/u', method: 'POST',
             data: { x: 1, 'req-key': null, 'plugin-key': null },
         } as IHttpOptions, defaults);
         // req-key 被保留、plugin-key 被过滤 → 与"只有 req-key 保留"等价
         const expected = $parse({
-            key: { ignoreKeys: ['req-key'] },
+            key: { ignores: ['req-key'] },
             url: '/u', method: 'POST',
             data: { x: 1, 'req-key': null },
         } as IHttpOptions);
         expect(r).toBe(expected);
-        console.log(`  [${r}] req ignoreKeys overrides plugin ignoreKeys`);
+        console.log(`  [${r}] req ignores overrides plugin ignores`);
     });
 
     it('请求级未指定的字段回退到插件级', () => {
-        // 请求 key:{} 既没 fastMode 也没 ignoreKeys → 全用插件级
-        const defaults = { fastMode: false, ignoreKeys: ['ts'] };
+        // 请求 key:{} 既没 fastMode 也没 ignores → 全用插件级
+        const defaults = { fastMode: false, ignores: ['ts'] };
         const r1 = $parse({
             key: {},
             url: '/u', method: 'POST',
             data: { x: 1, ts: null },
         } as IHttpOptions, defaults);
         const r2 = $parse({
-            key: { fastMode: false, ignoreKeys: ['ts'] },
+            key: { fastMode: false, ignores: ['ts'] },
             url: '/u', method: 'POST',
             data: { x: 1, ts: null },
         } as IHttpOptions);

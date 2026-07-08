@@ -1,6 +1,6 @@
 import { describe, it, expect, vi } from 'vitest';
 import type { AxiosAdapter, AxiosRequestConfig } from 'axios';
-import { $resolveLoading, $wrap, type ILoadingOptions, type TLoadingFunc } from '../src/plugins/loading';
+import { $resolveLoading, $resolveDelay, $resolveDelayClose, $wrap, type ILoadingOptions, type TLoadingFunc } from '../src/plugins/loading';
 
 
 // ───────────────────────────────────────────────────────────────────────────
@@ -34,6 +34,46 @@ describe('$resolveLoading', () => {
 
     it('插件级也没回调 + config 未指定 → null', () => {
         expect($resolveLoading({} as AxiosRequestConfig, {})).toBe(null);
+    });
+
+    it('config.loading 是对象且 enable:false → null（跳过，等价于顶层 false）', () => {
+        expect($resolveLoading({ loading: { enable: false } } as any, defaults)).toBe(null);
+    });
+
+    it('config.loading 是对象且给了 loading 字段 → 用它', () => {
+        const custom: TLoadingFunc = () => { };
+        expect($resolveLoading({ loading: { loading: custom } } as any, defaults)).toBe(custom);
+    });
+
+    it('config.loading 是对象但没给 loading 字段 → 走插件级回退', () => {
+        expect($resolveLoading({ loading: { delay: 100 } } as any, defaults)).toBe(fallback);
+    });
+});
+
+
+// ───────────────────────────────────────────────────────────────────────────
+//  $resolveDelay / $resolveDelayClose：请求级对象 → 插件级 → 0 兜底
+// ───────────────────────────────────────────────────────────────────────────
+
+describe('$resolveDelay / $resolveDelayClose', () => {
+    it('都未指定 → 默认 0', () => {
+        expect($resolveDelay({} as AxiosRequestConfig, {})).toBe(0);
+        expect($resolveDelayClose({} as AxiosRequestConfig, {})).toBe(0);
+    });
+
+    it('插件级设置 → 用插件级', () => {
+        expect($resolveDelay({} as AxiosRequestConfig, { delay: 200 })).toBe(200);
+        expect($resolveDelayClose({} as AxiosRequestConfig, { delayClose: 300 })).toBe(300);
+    });
+
+    it('请求级对象覆盖插件级', () => {
+        expect($resolveDelay({ loading: { delay: 50 } } as any, { delay: 200 })).toBe(50);
+        expect($resolveDelayClose({ loading: { delayClose: 50 } } as any, { delayClose: 300 })).toBe(50);
+    });
+
+    it('请求级是函数（非对象）→ 走插件级', () => {
+        const fn: TLoadingFunc = () => { };
+        expect($resolveDelay({ loading: fn } as any, { delay: 200 })).toBe(200);
     });
 });
 
@@ -219,5 +259,157 @@ describe('$wrap — 并发计数器', () => {
         expect(customA).toHaveBeenCalledTimes(1);
         expect(customB).toHaveBeenCalledTimes(1);
         expect(customB).toHaveBeenLastCalledWith(false);
+    });
+});
+
+
+// ───────────────────────────────────────────────────────────────────────────
+//  $wrap — delay / delayClose 防闪烁
+// ───────────────────────────────────────────────────────────────────────────
+
+describe('$wrap — delay 防闪烁（快请求从不显示）', () => {
+    it('delay 期间请求就结束了 → fn 从未被调用', async () => {
+        vi.useFakeTimers();
+        try {
+            const fn: TLoadingFunc = vi.fn();
+            const { adp, pending } = deferredAdapter();
+            const wrapped = $wrap(adp, { loading: fn, delay: 100 });
+            const p = wrapped({ url: '/x' } as any);
+            expect(fn).not.toHaveBeenCalled();
+            pending[0].resolve({});
+            await p;
+            await vi.advanceTimersByTimeAsync(200);
+            expect(fn).not.toHaveBeenCalled();
+        } finally {
+            vi.useRealTimers();
+        }
+    });
+
+    it('delay 到点了、请求还没完 → fn(true) 触发；结束后 fn(false)', async () => {
+        vi.useFakeTimers();
+        try {
+            const fn: TLoadingFunc = vi.fn();
+            const { adp, pending } = deferredAdapter();
+            const wrapped = $wrap(adp, { loading: fn, delay: 100 });
+            const p = wrapped({ url: '/x' } as any);
+            await vi.advanceTimersByTimeAsync(100);
+            expect(fn).toHaveBeenCalledTimes(1);
+            expect(fn).toHaveBeenLastCalledWith(true);
+            pending[0].resolve({});
+            await p;
+            expect(fn).toHaveBeenCalledTimes(2);
+            expect(fn).toHaveBeenLastCalledWith(false);
+        } finally {
+            vi.useRealTimers();
+        }
+    });
+
+    it('delay 为 0（默认）→ 立刻显示，跟旧行为一致', async () => {
+        const fn: TLoadingFunc = vi.fn();
+        const { adp, pending } = deferredAdapter();
+        const wrapped = $wrap(adp, { loading: fn });
+        wrapped({ url: '/x' } as any);
+        expect(fn).toHaveBeenCalledTimes(1);
+        expect(fn).toHaveBeenLastCalledWith(true);
+        pending[0].resolve({});
+    });
+});
+
+describe('$wrap — delayClose 防闪烁（连续请求不闪一下）', () => {
+    it('delayClose 期间又来了新请求 → 取消隐藏，保持显示', async () => {
+        vi.useFakeTimers();
+        try {
+            const fn: TLoadingFunc = vi.fn();
+            const { adp, pending } = deferredAdapter();
+            const wrapped = $wrap(adp, { loading: fn, delayClose: 100 });
+            const p1 = wrapped({ url: '/a' } as any);
+            expect(fn).toHaveBeenCalledTimes(1);
+            pending[0].resolve({});
+            await p1;
+            expect(fn).toHaveBeenCalledTimes(1); // 还没到 delayClose，没触发 false
+
+            const p2 = wrapped({ url: '/b' } as any);
+            await vi.advanceTimersByTimeAsync(200); // 早就过了 delayClose 的时间点
+            expect(fn).toHaveBeenCalledTimes(1); // 一直没有额外的 true/false —— 全程保持显示
+
+            pending[1].resolve({});
+            await p2;
+            await vi.advanceTimersByTimeAsync(200);
+            expect(fn).toHaveBeenCalledTimes(2);
+            expect(fn).toHaveBeenLastCalledWith(false);
+        } finally {
+            vi.useRealTimers();
+        }
+    });
+
+    it('delayClose 到点、期间没有新请求 → 正常触发 fn(false)', async () => {
+        vi.useFakeTimers();
+        try {
+            const fn: TLoadingFunc = vi.fn();
+            const { adp, pending } = deferredAdapter();
+            const wrapped = $wrap(adp, { loading: fn, delayClose: 100 });
+            const p = wrapped({ url: '/x' } as any);
+            pending[0].resolve({});
+            await p;
+            expect(fn).toHaveBeenCalledTimes(1);
+            await vi.advanceTimersByTimeAsync(100);
+            expect(fn).toHaveBeenCalledTimes(2);
+            expect(fn).toHaveBeenLastCalledWith(false);
+        } finally {
+            vi.useRealTimers();
+        }
+    });
+
+    it('delayClose 为 0（默认）→ 立刻隐藏，跟旧行为一致', async () => {
+        const fn: TLoadingFunc = vi.fn();
+        const { adp, pending } = deferredAdapter();
+        const wrapped = $wrap(adp, { loading: fn });
+        const p = wrapped({ url: '/x' } as any);
+        pending[0].resolve({});
+        await p;
+        expect(fn).toHaveBeenCalledTimes(2);
+        expect(fn).toHaveBeenLastCalledWith(false);
+    });
+});
+
+describe('$wrap — 请求级对象覆盖 delay/delayClose/loading/enable', () => {
+    it('请求级对象的 delay 覆盖插件级', async () => {
+        vi.useFakeTimers();
+        try {
+            const fn: TLoadingFunc = vi.fn();
+            const { adp, pending } = deferredAdapter();
+            const wrapped = $wrap(adp, { loading: fn, delay: 1000 });
+            const p = wrapped({ url: '/x', loading: { delay: 10 } } as any);
+            await vi.advanceTimersByTimeAsync(10);
+            expect(fn).toHaveBeenCalledTimes(1);
+            expect(fn).toHaveBeenLastCalledWith(true);
+            pending[0].resolve({});
+            await p;
+        } finally {
+            vi.useRealTimers();
+        }
+    });
+
+    it('请求级对象的 loading 回调覆盖插件级', async () => {
+        const fallback: TLoadingFunc = vi.fn();
+        const custom: TLoadingFunc = vi.fn();
+        const { adp, pending } = deferredAdapter();
+        const wrapped = $wrap(adp, { loading: fallback });
+        const p = wrapped({ loading: { loading: custom } } as any);
+        expect(custom).toHaveBeenCalledWith(true);
+        expect(fallback).not.toHaveBeenCalled();
+        pending[0].resolve({});
+        await p;
+    });
+
+    it('请求级对象 enable:false → 跳过（等价于顶层 false）', async () => {
+        const fn: TLoadingFunc = vi.fn();
+        const { adp, pending } = deferredAdapter();
+        const wrapped = $wrap(adp, { loading: fn });
+        const p = wrapped({ loading: { enable: false } } as any);
+        expect(fn).not.toHaveBeenCalled();
+        pending[0].resolve({});
+        await p;
+        expect(fn).not.toHaveBeenCalled();
     });
 });

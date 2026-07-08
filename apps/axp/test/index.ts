@@ -1,14 +1,15 @@
 import axios from 'axios';
-import { create, filter, normalize } from '../src';
+import { Axp, axpFilter as filter, axpNormalize as normalize } from '../src';
+import { use } from './helpers/install';
 
 
 
-const githubApi = create<model.MethodRefs>(axios.create({ baseURL: "https://api.github.com", adapter: 'fetch' }));
-const internalApi = create<model.MethodRefs>(axios.create({ baseURL: "https://api.internal.example.com", adapter: 'fetch' }));
+const githubApi = Axp.create<model.MethodRefs>(axios.create({ baseURL: "https://api.github.com", adapter: 'fetch' }));
+const internalApi = Axp.create<model.MethodRefs>(axios.create({ baseURL: "https://api.internal.example.com", adapter: 'fetch' }));
 
 
-githubApi.use(filter())
-githubApi.use(normalize())
+use(githubApi, filter())
+use(githubApi, normalize())
 
 class TestApi {
     static query = githubApi.get("/pet/findByStatus")

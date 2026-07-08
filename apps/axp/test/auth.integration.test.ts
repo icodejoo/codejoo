@@ -1,10 +1,11 @@
 import { describe, it, expect, vi } from 'vitest';
 import axios from 'axios';
 import type { InternalAxiosRequestConfig } from 'axios';
-import { create } from '../src';
+import { Axp } from '../src';
 import auth from '../src/plugins/auth';
 import type { ITokenManager } from '../src/objects/TokenManager';
 import { makeNetwork } from './helpers/network';
+import { use } from './helpers/install';
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 const lat = (ms: number) => ({ latency: ms } as any);
@@ -51,7 +52,7 @@ describe('auth 集成 — 并发刷新单飞', () => {
   it('30 个并发受保护请求过期 → onRefresh 只触发一次，全部用新 token 重发成功', async () => {
     const net = authBackend('srv-1');
     const tm = makeTM('stale');  // 客户端持过期 token
-    const api = create(axios.create({ adapter: net.adapter }));
+    const api = Axp.create(axios.create({ adapter: net.adapter }));
 
     const onRefresh = vi.fn(async (TM: ITokenManager) => {
       const r: any = await api.post('/refresh')(undefined, { protected: false, ...lat(15) });
@@ -59,7 +60,7 @@ describe('auth 集成 — 并发刷新单飞', () => {
       return true;
     });
     const onAccessExpired = vi.fn();
-    api.use(auth({ tokenManager: tm, urlPattern: ['/me'], onRefresh, onAccessExpired }));
+    use(api, auth({ tokenManager: tm, urlPattern: ['/me'], onRefresh, onAccessExpired }));
 
     const reqs = Array.from({ length: 30 }, () => api.get('/me')(undefined, lat(10)));
     const out = await Promise.all(reqs);
@@ -78,10 +79,10 @@ describe('auth 集成 — 刷新失败', () => {
   it('onRefresh 失败 → 全部 reject + onAccessExpired + tm 清空', async () => {
     const net = authBackend('srv-1');
     const tm = makeTM('stale');
-    const api = create(axios.create({ adapter: net.adapter }));
+    const api = Axp.create(axios.create({ adapter: net.adapter }));
     const onRefresh = vi.fn(async () => { await sleep(15); return false; });  // 刷新失败
     const onAccessExpired = vi.fn();
-    api.use(auth({ tokenManager: tm, urlPattern: ['/me'], onRefresh, onAccessExpired }));
+    use(api, auth({ tokenManager: tm, urlPattern: ['/me'], onRefresh, onAccessExpired }));
 
     const results = await Promise.allSettled(
       Array.from({ length: 10 }, () => api.get('/me')(undefined, lat(8))),
@@ -98,9 +99,9 @@ describe('auth 集成 — 刷新窗口内新请求', () => {
   it('刷新进行中到达的新受保护请求 → 等待刷新完成后用新 token 成功（不再触发二次刷新）', async () => {
     const net = authBackend('srv-1');
     const tm = makeTM('stale');
-    const api = create(axios.create({ adapter: net.adapter }));
+    const api = Axp.create(axios.create({ adapter: net.adapter }));
     const onRefresh = vi.fn(async (TM: ITokenManager) => { await sleep(40); TM.set('srv-1'); return true; });
-    api.use(auth({ tokenManager: tm, urlPattern: ['/me'], onRefresh, onAccessExpired: () => { } }));
+    use(api, auth({ tokenManager: tm, urlPattern: ['/me'], onRefresh, onAccessExpired: () => { } }));
 
     const p1 = api.get('/me')(undefined, lat(5));  // 首发 → 401 → 触发刷新
     await sleep(20);                                // 刷新进行中
@@ -118,9 +119,9 @@ describe('auth 集成 — 受保护/公开混合 + 乱序', () => {
   it('公开请求不受刷新影响，受保护请求并发乱序刷新后成功', async () => {
     const net = authBackend('srv-1');
     const tm = makeTM('stale');
-    const api = create(axios.create({ adapter: net.adapter }));
+    const api = Axp.create(axios.create({ adapter: net.adapter }));
     const onRefresh = vi.fn(async (TM: ITokenManager) => { await sleep(10); TM.set('srv-1'); return true; });
-    api.use(auth({ tokenManager: tm, urlPattern: ['/me'], onRefresh, onAccessExpired: () => { } }));
+    use(api, auth({ tokenManager: tm, urlPattern: ['/me'], onRefresh, onAccessExpired: () => { } }));
 
     const protectedReqs = Array.from({ length: 8 }, (_, i) => api.get('/me')(undefined, lat((i * 3) % 7 + 2)));
     const publicReqs = Array.from({ length: 5 }, (_, i) =>
@@ -140,7 +141,7 @@ describe('auth 集成 — 高并发 + 乱序 + 混合（a/b/c/d/e 时序）', ()
   it('过期突发：401 乱序到达 + 窗口内新请求挂起 + 非鉴权放行 → 单飞刷新一次，受保护全部最终成功', async () => {
     const net = authBackend('srv-1');
     const tm = makeTM('stale');
-    const api = create(axios.create({ adapter: net.adapter }));
+    const api = Axp.create(axios.create({ adapter: net.adapter }));
     let refreshCalls = 0;
     const onRefresh = vi.fn(async (TM: ITokenManager) => {
       refreshCalls++;
@@ -149,7 +150,7 @@ describe('auth 集成 — 高并发 + 乱序 + 混合（a/b/c/d/e 时序）', ()
       TM.set(r.token);
       return true;
     });
-    api.use(auth({ tokenManager: tm, urlPattern: ['/me'], onRefresh, onAccessExpired: () => { } }));
+    use(api, auth({ tokenManager: tm, urlPattern: ['/me'], onRefresh, onAccessExpired: () => { } }));
 
     // 8 个受保护请求，交错延迟 → 401 在刷新前/中/后乱序返回（前者 join 刷新、后者 token 不一致走 Replay）
     const protectedReqs = Array.from({ length: 8 }, (_, i) => api.get('/me')(undefined, lat(i * 12)));
@@ -173,10 +174,10 @@ describe('auth 集成 — 高并发 + 乱序 + 混合（a/b/c/d/e 时序）', ()
   it('刷新失败：乱序 401 + 窗口内新请求 → 受保护全部 reject、无重放、过期回调；非鉴权仍放行', async () => {
     const net = authBackend('srv-1');
     const tm = makeTM('stale');
-    const api = create(axios.create({ adapter: net.adapter }));
+    const api = Axp.create(axios.create({ adapter: net.adapter }));
     let refreshCalls = 0, expired = 0;
     const onRefresh = vi.fn(async () => { refreshCalls++; await sleep(30); return false; });
-    api.use(auth({ tokenManager: tm, urlPattern: ['/me'], onRefresh, onAccessExpired: () => { expired++; } }));
+    use(api, auth({ tokenManager: tm, urlPattern: ['/me'], onRefresh, onAccessExpired: () => { expired++; } }));
 
     const protectedReqs = Array.from({ length: 6 }, (_, i) =>
       api.get('/me')(undefined, lat(i * 10)).then(() => 'ok', () => 'rej'));
@@ -201,7 +202,7 @@ describe('auth 集成 — 极端：带当前 token 的 401 有界收敛（不死
     net.on('GET', '/me', () => ({ status: 401 }));        // 服务端始终拒绝（连刷新后的 token 也拒）
     net.on('POST', '/refresh', () => ({ data: { code: 0, data: { token: 'srv-token-2' } } }));
     const tm = makeTM('srv-token');                       // 客户端已持「当前」token（carried===cur 场景）
-    const api = create(axios.create({ adapter: net.adapter }));
+    const api = Axp.create(axios.create({ adapter: net.adapter }));
     let refreshCalls = 0, expired = 0;
     const onRefresh = vi.fn(async (TM: ITokenManager) => {
       refreshCalls++;
@@ -209,7 +210,7 @@ describe('auth 集成 — 极端：带当前 token 的 401 有界收敛（不死
       TM.set(r.token);                                    // 刷新「成功」但换来的 token 仍被拒
       return true;
     });
-    api.use(auth({ tokenManager: tm, urlPattern: ['/me'], onRefresh, onAccessExpired: () => { expired++; } }));
+    use(api, auth({ tokenManager: tm, urlPattern: ['/me'], onRefresh, onAccessExpired: () => { expired++; } }));
 
     const settled = await Promise.allSettled(Array.from({ length: 10 }, () => api.get('/me')(undefined, lat(10))));
 
@@ -227,10 +228,10 @@ describe('auth 集成 — 重放后仍失败防回环', () => {
     const net = makeNetwork();
     net.on('GET', '/me', (c) => authHeader(c) === 'Bearer real' ? { data: { code: 0, data: 'ok' } } : { status: 401 });
     const tm = makeTM('stale');
-    const api = create(axios.create({ adapter: net.adapter }));
+    const api = Axp.create(axios.create({ adapter: net.adapter }));
     const onRefresh = vi.fn(async (TM: ITokenManager) => { TM.set('still-wrong'); return true; });  // 刷成错的
     const onAccessExpired = vi.fn();
-    api.use(auth({ tokenManager: tm, urlPattern: ['/me'], onRefresh, onAccessExpired }));
+    use(api, auth({ tokenManager: tm, urlPattern: ['/me'], onRefresh, onAccessExpired }));
 
     await expect(api.get('/me')(undefined, lat(5))).rejects.toBeTruthy();
     expect(onRefresh).toHaveBeenCalledTimes(1);     // 只刷新一次
