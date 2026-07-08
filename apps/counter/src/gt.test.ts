@@ -463,6 +463,14 @@ describe("countup", () => {
     expect(el.textContent).toBe("60");
   });
 
+
+  it("renders fmt(from) immediately on add when lazy:false, before first tick", () => {
+    const el = document.createElement("div");
+    const fmt = vi.fn((v: number) => `₱${v}元`);
+    countup({ to: 100, el, lazy: false, fmt, duration: 1000, fps: 0, easing: (t: number) => t });
+    expect(el.textContent).toBe("₱0元"); // 加入任务即渲染，无需等 tick
+  });
+
   it("continues from the last finished value when count-up is called again after done", () => {
     const el = document.createElement("div");
     const id1 = countup({ to: 100, el, ...linear });

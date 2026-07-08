@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { createRingRender } from "./ring";
+import type { IRingRender } from "./ring";
 import countdown, { tick as countdownTick } from "../count-down/count-down";
 import type { ICountdownContext, ICountdownFormatter, TCountdownParser, TCountdownValue } from "../count-down/types";
 
@@ -9,6 +10,30 @@ const parser: TCountdownParser = () => [0, 0, 0, 0, 0];
 function makeCtx(text: string): ICountdownContext {
   const fmt: ICountdownFormatter = () => text;
   return { el: document.createElement("div"), id: 0, deadline: 0, remaining: 0, value: val, active: true, paused: false, fmt, parser } as ICountdownContext;
+}
+
+/** 将 IRingRender 生命周期包装为旧式函数调用，方便单元测试直接驱动。 */
+function makeRingInvoker(r: IRingRender) {
+  const stateMap = new Map<Element, ReturnType<IRingRender["mount"]>>();
+  const invoke = (host: Element, remaining: number, value: TCountdownValue, rCtx: ICountdownContext) => {
+    let state = stateMap.get(host);
+    if (!state) {
+      state = r.mount(host, { ...rCtx, remaining });
+      stateMap.set(host, state);
+    }
+    r.update(state, remaining, value, rCtx);
+  };
+  invoke.destroy = (el?: Element) => {
+    if (el) {
+      const s = stateMap.get(el);
+      if (s) r.destroy(s);
+      stateMap.delete(el);
+    } else {
+      stateMap.forEach((s) => r.destroy(s));
+      stateMap.clear();
+    }
+  };
+  return invoke;
 }
 
 const svg = (host: Element, prefix = "rg-") => host.querySelector("." + prefix + "root") as SVGElement;
@@ -33,7 +58,7 @@ const rot = (g: Element) => Number(/rotate\(([-\d.]+)/.exec(g.getAttribute("tran
 describe("createRingRender 结构与显隐（分组配置）", () => {
   it("默认 60 刻度 + 七段数码管(g+polygon) + 内圈 + 双弧", () => {
     const host = document.createElement("div");
-    createRingRender()(host, 5000, val, makeCtx("00:05"));
+    makeRingInvoker(createRingRender())(host, 5000, val, makeCtx("00:05"));
     expect(svg(host).tagName.toLowerCase()).toBe("svg");
     expect(ticks(host).length).toBe(60);
     expect(segs(host).length).toBe(4 * 7); // 4 数字位 × 7 段
@@ -45,38 +70,38 @@ describe("createRingRender 结构与显隐（分组配置）", () => {
 
   it("ticks.count 控制刻度数", () => {
     const host = document.createElement("div");
-    createRingRender({ ticks: { count: 12 } })(host, 5000, val, makeCtx("00:05"));
+    makeRingInvoker(createRingRender({ ticks: { count: 12 } }))(host, 5000, val, makeCtx("00:05"));
     expect(ticks(host).length).toBe(12);
   });
 
   it("各部件可 false / display:false 隐藏（不生成 SVG）", () => {
     const a = document.createElement("div");
-    createRingRender({ ticks: false })(a, 5000, val, makeCtx("00:05"));
+    makeRingInvoker(createRingRender({ ticks: false }))(a, 5000, val, makeCtx("00:05"));
     expect(ticks(a).length).toBe(0);
 
     const b = document.createElement("div");
-    createRingRender({ arcA: false, arcB: false })(b, 5000, val, makeCtx("00:05"));
+    makeRingInvoker(createRingRender({ arcA: false, arcB: false }))(b, 5000, val, makeCtx("00:05"));
     expect(b.querySelector(".rg-arc")).toBeNull();
 
     const c = document.createElement("div");
-    createRingRender({ inner: false })(c, 5000, val, makeCtx("00:05"));
+    makeRingInvoker(createRingRender({ inner: false }))(c, 5000, val, makeCtx("00:05"));
     expect(c.querySelector(".rg-track")).toBeNull();
     expect(fills(c).length).toBe(0);
 
     const d = document.createElement("div");
-    createRingRender({ digit: { display: false } })(d, 5000, val, makeCtx("00:05"));
+    makeRingInvoker(createRingRender({ digit: { display: false } }))(d, 5000, val, makeCtx("00:05"));
     expect(d.querySelector(".rg-digits")).toBeNull();
     expect(ticks(d).length).toBe(60); // 其余仍在
   });
 
   it("发光默认关（无 rg-glow），glow:true 才加；自定义前缀", () => {
     const off = document.createElement("div");
-    createRingRender({ prefix: "xx-" })(off, 5000, val, makeCtx("00:05"));
+    makeRingInvoker(createRingRender({ prefix: "xx-" }))(off, 5000, val, makeCtx("00:05"));
     expect(svg(off, "xx-")).not.toBeNull();
     expect(ticks(off, "xx-").every((t) => !t.classList.contains("xx-glow"))).toBe(true); // 默认不发光
 
     const on = document.createElement("div");
-    createRingRender({ glow: true })(on, 5000, val, makeCtx("00:05"));
+    makeRingInvoker(createRingRender({ glow: true }))(on, 5000, val, makeCtx("00:05"));
     expect(ticks(on).some((t) => t.classList.contains("rg-glow"))).toBe(true); // 显式开启才有
   });
 });
@@ -84,7 +109,7 @@ describe("createRingRender 结构与显隐（分组配置）", () => {
 describe("createRingRender 点亮与档位", () => {
   it("点亮刻度数 = 秒位本身（向上取整，归零不多走一格）", () => {
     const host = document.createElement("div");
-    const r = createRingRender();
+    const r = makeRingInvoker(createRingRender());
     r(host, 5000, val, makeCtx("00:05"));
     expect(onTicks(host).length).toBe(5); // 5s → 5 格
     r(host, 4200, val, makeCtx("00:05")); // 4.2s 仍显示 5（ceil）→ 5 格
@@ -97,14 +122,14 @@ describe("createRingRender 点亮与档位", () => {
 
   it("remaining<=0 全灭，刻度 off 档", () => {
     const host = document.createElement("div");
-    createRingRender()(host, 0, val, makeCtx("00:00"));
+    makeRingInvoker(createRingRender())(host, 0, val, makeCtx("00:00"));
     expect(onTicks(host).length).toBe(0);
     expect(zoneOf(ticks(host)[0])).toBe("off");
   });
 
   it("最后一分钟按档位（≤3 红 / ≤10 黄 / 其余绿）", () => {
     const host = document.createElement("div");
-    createRingRender()(host, 59000, val, makeCtx("00:59"));
+    makeRingInvoker(createRingRender())(host, 59000, val, makeCtx("00:59"));
     const ts = ticks(host);
     expect(zoneOf(ts[0])).toBe("red");
     expect(zoneOf(ts[3])).toBe("yellow");
@@ -113,7 +138,7 @@ describe("createRingRender 点亮与档位", () => {
 
   it("分钟>0：点亮 normal、熄灭 off；数码区随档位", () => {
     const host = document.createElement("div");
-    createRingRender()(host, 125000, val, makeCtx("02:05"));
+    makeRingInvoker(createRingRender())(host, 125000, val, makeCtx("02:05"));
     expect(zoneOf(ticks(host)[0])).toBe("normal");
     expect(zoneOf(ticks(host)[10])).toBe("off");
     expect(zoneOf(host.querySelector(".rg-digits") as Element)).toBe("normal");
@@ -121,7 +146,7 @@ describe("createRingRender 点亮与档位", () => {
 
   it("七段映射：8 亮 7 段，1 亮 2 段（仅切 rg-on，不重建 DOM）", () => {
     const host = document.createElement("div");
-    const r = createRingRender();
+    const r = makeRingInvoker(createRingRender());
     r(host, 8000, val, makeCtx("8"));
     const segNodes = segs(host);
     expect(segNodes.filter((s) => s.classList.contains("rg-on")).length).toBe(7);
@@ -136,7 +161,7 @@ describe("createRingRender 最内圈", () => {
 
   it("灰底 + 末分钟三色 + 逐分钟段", () => {
     const host = document.createElement("div");
-    createRingRender()(host, 300000, val, makeCtx("05:00"));
+    makeRingInvoker(createRingRender())(host, 300000, val, makeCtx("05:00"));
     expect(host.querySelector(".rg-track")).not.toBeNull();
     expect(host.querySelectorAll(".rg-fill.rg-zone-normal").length).toBe(4);
     expect(zoneFill(host, "red")).not.toBeNull();
@@ -145,7 +170,7 @@ describe("createRingRender 最内圈", () => {
 
   it("排空：绿先空、黄次之、红最后", () => {
     const host = document.createElement("div");
-    const r = createRingRender();
+    const r = makeRingInvoker(createRingRender());
     r(host, 300000, val, makeCtx("05:00"));
     expect(dOf(zoneFill(host, "green"))).not.toBe("");
     r(host, 5000, val, makeCtx("00:05"));
@@ -160,7 +185,7 @@ describe("createRingRender 最内圈", () => {
 describe("createRingRender 外2圈/外3圈", () => {
   it("默认复用：源弧 3 段，arcA/arcB 均为 <use>，归零回基准位重合", () => {
     const host = document.createElement("div");
-    const r = createRingRender();
+    const r = makeRingInvoker(createRingRender());
     r(host, 300000, val, makeCtx("05:00"));
     const src = host.querySelector("[id^='rg-arcsrc']") as Element;
     expect(src.querySelectorAll("path").length).toBe(3); // 源只建一份
@@ -181,7 +206,7 @@ describe("createRingRender 外2圈/外3圈", () => {
 
   it("段数不同则各自独立绘制（不复用）；clockwise 翻转旋向", () => {
     const host = document.createElement("div");
-    createRingRender({ arcA: { segments: 4 }, arcB: { segments: 5 } })(host, 5000, val, makeCtx("00:05"));
+    makeRingInvoker(createRingRender({ arcA: { segments: 4 }, arcB: { segments: 5 } }))(host, 5000, val, makeCtx("00:05"));
     const b = host.querySelector(".rg-arcA") as Element;
     const c = host.querySelector(".rg-arcB") as Element;
     expect(b.tagName.toLowerCase()).toBe("g"); // 独立 <g>
@@ -189,9 +214,9 @@ describe("createRingRender 外2圈/外3圈", () => {
     expect(c.querySelectorAll("path").length).toBe(5);
 
     const cwHost = document.createElement("div");
-    createRingRender({ clockwise: true })(cwHost, 290000, val, makeCtx("04:50"));
+    makeRingInvoker(createRingRender({ clockwise: true }))(cwHost, 290000, val, makeCtx("04:50"));
     const ccwHost = document.createElement("div");
-    createRingRender({ clockwise: false })(ccwHost, 290000, val, makeCtx("04:50"));
+    makeRingInvoker(createRingRender({ clockwise: false }))(ccwHost, 290000, val, makeCtx("04:50"));
     const rb = (h: Element) => rot(h.querySelector(".rg-arcA") as Element);
     expect(Math.sign(rb(cwHost))).toBe(-Math.sign(rb(ccwHost)));
   });
@@ -200,7 +225,7 @@ describe("createRingRender 外2圈/外3圈", () => {
 describe("createRingRender 客制化（分组 + CSS 变量 + 回调）", () => {
   it("ticks 几何用属性；arc/inner 线宽与颜色写 CSS 变量", () => {
     const host = document.createElement("div");
-    createRingRender({ ticks: { radius: 40, width: 4, length: 6 }, arcA: { width: 5 }, inner: { width: 9, track: "#222" }, colors: { normal: "#0000ff" } })(host, 5000, val, makeCtx("00:05"));
+    makeRingInvoker(createRingRender({ ticks: { radius: 40, width: 4, length: 6 }, arcA: { width: 5 }, inner: { width: 9, track: "#222" }, colors: { normal: "#0000ff" } }))(host, 5000, val, makeCtx("00:05"));
     const t = ticks(host)[0];
     expect(t.getAttribute("width")).toBe("4");
     expect(t.getAttribute("height")).toBe("6");
@@ -215,14 +240,14 @@ describe("createRingRender 客制化（分组 + CSS 变量 + 回调）", () => {
 
   it("digit.colorAt / arcA.colorAt 内联覆盖当前主题色", () => {
     const host = document.createElement("div");
-    createRingRender({ digit: { colorAt: () => "#123456" }, arcA: { colorAt: () => "#654321" } })(host, 125000, val, makeCtx("02:05"));
+    makeRingInvoker(createRingRender({ digit: { colorAt: () => "#123456" }, arcA: { colorAt: () => "#654321" } }))(host, 125000, val, makeCtx("02:05"));
     expect(colorOf(host.querySelector(".rg-digits") as Element)).toBe(norm("#123456"));
     expect(colorOf(host.querySelector(".rg-arcA") as Element)).toBe(norm("#654321"));
   });
 
   it("ticks.colorAt 逐刻度覆盖；返回 undefined 用档位", () => {
     const host = document.createElement("div");
-    createRingRender({ ticks: { colorAt: ({ index }) => (index === 0 ? "#abcdef" : undefined) } })(host, 59000, val, makeCtx("00:59"));
+    makeRingInvoker(createRingRender({ ticks: { colorAt: ({ index }) => (index === 0 ? "#abcdef" : undefined) } }))(host, 59000, val, makeCtx("00:59"));
     expect(colorOf(ticks(host)[0])).toBe(norm("#abcdef"));
     expect(zoneOf(ticks(host)[3])).toBe("yellow");
   });
@@ -230,14 +255,14 @@ describe("createRingRender 客制化（分组 + CSS 变量 + 回调）", () => {
   it("inner.colorAt 逐分钟上色（下发总分钟数）", () => {
     const host = document.createElement("div");
     const seen: Array<{ index: number; count: number }> = [];
-    createRingRender({
+    makeRingInvoker(createRingRender({
       inner: {
         colorAt: ({ index, count }) => {
           seen.push({ index, count });
           return "#777777";
         },
       },
-    })(host, 180000, val, makeCtx("03:00"));
+    }))(host, 180000, val, makeCtx("03:00"));
     expect(seen.map((s) => s.count)).toEqual([3, 3]);
     expect(seen.map((s) => s.index).sort()).toEqual([1, 2]);
     expect(colorOf(fills(host).find((f) => colorOf(f)) as Element)).toBe(norm("#777777"));
@@ -245,7 +270,7 @@ describe("createRingRender 客制化（分组 + CSS 变量 + 回调）", () => {
 
   it('digit.mode:"text" 用文字节点', () => {
     const host = document.createElement("div");
-    createRingRender({ digit: { mode: "text" } })(host, 125000, val, makeCtx("02:05"));
+    makeRingInvoker(createRingRender({ digit: { mode: "text" } }))(host, 125000, val, makeCtx("02:05"));
     expect(segs(host).length).toBe(0);
     const t = host.querySelector(".rg-dtext") as SVGElement;
     expect(t.textContent).toBe("02:05");
@@ -256,14 +281,14 @@ describe("createRingRender 自定义 render 钩子（含算好的参数与 host�
   it("digit.render 接管数码区", () => {
     const host = document.createElement("div");
     let f: { text: string; color: string; sec: number } | undefined;
-    createRingRender({
+    makeRingInvoker(createRingRender({
       digit: {
         render: (fr) => {
           f = { text: fr.text, color: fr.color, sec: fr.sec };
           fr.host.setAttribute("data-x", "1");
         },
       },
-    })(host, 5000, val, makeCtx("00:05"));
+    }))(host, 5000, val, makeCtx("00:05"));
     expect(f?.text).toBe("00:05");
     expect(f?.sec).toBe(5);
     expect(segs(host).length).toBe(0);
@@ -273,7 +298,7 @@ describe("createRingRender 自定义 render 钩子（含算好的参数与 host�
   it("ticks.render 接管刻度（给出 lit / zoneAt / host）", () => {
     const host = document.createElement("div");
     let f: { count: number; lit: number; z0: string } | undefined;
-    createRingRender({ ticks: { render: (fr) => (f = { count: fr.count, lit: fr.lit, z0: fr.zoneAt(0) }) } })(host, 5000, val, makeCtx("00:05"));
+    makeRingInvoker(createRingRender({ ticks: { render: (fr) => (f = { count: fr.count, lit: fr.lit, z0: fr.zoneAt(0) }) } }))(host, 5000, val, makeCtx("00:05"));
     expect(ticks(host).length).toBe(0); // 未建默认 rect
     expect(f).toEqual({ count: 60, lit: 5, z0: "red" });
   });
@@ -282,10 +307,10 @@ describe("createRingRender 自定义 render 钩子（含算好的参数与 host�
     const host = document.createElement("div");
     let arcF: { rotation: number; color: string } | undefined;
     let innerF: { total: number; r0: number } | undefined;
-    createRingRender({
+    makeRingInvoker(createRingRender({
       arcA: { render: (fr) => (arcF = { rotation: fr.rotation, color: fr.color }) },
       inner: { render: (fr) => (innerF = { total: fr.total, r0: fr.angleAt(0) }) },
-    })(host, 290000, val, makeCtx("04:50"));
+    }))(host, 290000, val, makeCtx("04:50"));
     expect(arcF?.rotation).toBe(-290 * 6); // -cw·secRem·6
     expect(arcF?.color).toBe("#ff6a5a"); // 分钟>0 常态
     expect(innerF?.total).toBe(290000);
@@ -296,7 +321,7 @@ describe("createRingRender 自定义 render 钩子（含算好的参数与 host�
 describe("createRingRender 重建与隔离", () => {
   it("mask 变化重建，仅数字变化复用同一 svg", () => {
     const host = document.createElement("div");
-    const r = createRingRender();
+    const r = makeRingInvoker(createRingRender());
     r(host, 5000, val, makeCtx("00:05"));
     const first = svg(host);
     r(host, 4000, val, makeCtx("00:04"));
@@ -308,7 +333,7 @@ describe("createRingRender 重建与隔离", () => {
   it("按元素隔离状态", () => {
     const a = document.createElement("div");
     const b = document.createElement("div");
-    const r = createRingRender();
+    const r = makeRingInvoker(createRingRender());
     r(a, 5000, val, makeCtx("00:05"));
     r(b, 2000, val, makeCtx("00:02"));
     expect(onTicks(a).length).toBe(5);
@@ -317,7 +342,7 @@ describe("createRingRender 重建与隔离", () => {
 
   it("同一整秒内多次回调（毫秒精度任务每帧都会调用）跳过重绘，连 ctx.fmt 都不再调用", () => {
     const host = document.createElement("div");
-    const r = createRingRender();
+    const r = makeRingInvoker(createRingRender());
     const fmtSpy = vi.fn(() => "00:05");
     const ctx = { ...makeCtx("00:05"), fmt: fmtSpy };
     r(host, 5000, val, ctx); // 首次
@@ -355,7 +380,7 @@ describe("createRingRender × countdown", () => {
 describe("createRingRender destroy", () => {
   it("destroy(el) 断开状态引用，不改动宿主子节点；再渲染则重建", () => {
     const host = document.createElement("div");
-    const r = createRingRender();
+    const r = makeRingInvoker(createRingRender());
     r(host, 5000, val, makeCtx("00:05"));
     const svgEl = svg(host);
     r.destroy(host);
@@ -366,7 +391,7 @@ describe("createRingRender destroy", () => {
 
   it("destroy() 丢弃整张状态表", () => {
     const host = document.createElement("div");
-    const r = createRingRender();
+    const r = makeRingInvoker(createRingRender());
     r(host, 5000, val, makeCtx("00:05"));
     const svgEl = svg(host);
     r.destroy();

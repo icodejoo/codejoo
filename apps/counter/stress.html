@@ -1,4 +1,4 @@
-<!doctype html>
+﻿<!doctype html>
 <html lang="zh-CN">
   <head>
     <meta charset="UTF-8" />
@@ -62,6 +62,13 @@
     </style>
   </head>
   <body>
+  <nav style="position:sticky;top:0;z-index:999;display:flex;gap:6px;flex-wrap:wrap;padding:6px 10px;background:rgba(255,255,255,.92);backdrop-filter:blur(8px);border-bottom:1px solid #e0e0e6;font-size:12px;">
+    <a href="/index.html" style="padding:3px 8px;border-radius:5px;text-decoration:none;background:#f0f0f5;color:#1d1d1f;">src 手动测试台</a>
+    <a href="/test.html" style="padding:3px 8px;border-radius:5px;text-decoration:none;background:#f0f0f5;color:#1d1d1f;">API 断言测试台</a>
+    <a href="/stress.html" style="padding:3px 8px;border-radius:5px;text-decoration:none;background:#f0f0f5;color:#1d1d1f;">压测</a>
+    <a href="/ring-demo.html" style="padding:3px 8px;border-radius:5px;text-decoration:none;background:#f0f0f5;color:#1d1d1f;">Ring Demo</a>
+    <a href="/ring-stress.html" style="padding:3px 8px;border-radius:5px;text-decoration:none;background:#f0f0f5;color:#1d1d1f;">Ring 压测</a>
+  </nav>
     <div id="bar">
       数量<select id="count">
         <option>50</option>
@@ -114,7 +121,7 @@
           const isDown = kind === "flip" || kind === "slide" || kind === "calendar" || (kind === "mix" && Math.random() < 0.5);
           if (isDown) {
             const eff = kind === "mix" ? ["flip", "slide", "calendar"][rand(3)] : kind;
-            countdown(10000 + rand(80000), el, { formatter: "mm:ss", render: createCardRender({ effect: eff }) });
+            countdown(10000 + rand(80000), el, { fmt: "mm:ss", render: createCardRender({ effect: eff }) });
           } else {
             const strip = kind === "odo-full" ? "full" : kind === "odo-min" ? "minimal" : Math.random() < 0.5 ? "minimal" : "full";
             const label = "g" + i;

@@ -1,9 +1,21 @@
 import type { IPlugin } from "../core/types";
 import { start, use } from "../core";
 import { $ } from "../helper";
-import { createGroupStore, defaultLabel, destroyRender, scheduleStart } from "../groups";
+import {
+  createGroupStore,
+  defaultLabel,
+  destroyRender,
+  isLifecycleRenderer,
+  scheduleStart,
+} from "../groups";
 import { buildCountupFormatter, ease } from "./helper";
-import type { ICountupBaseOptions, ICountupRenderContext, ICountupTask, ICountupFullOptions } from "./type";
+import type {
+  ICountupBaseOptions,
+  ICountupRenderContext,
+  ICountupTask,
+  ICountupFullOptions,
+  ICountupRenderer,
+} from "./type";
 
 // 全局自增任务 id
 let uid = 0;
@@ -16,6 +28,18 @@ const elTask = new WeakMap<Element, ICountupTask>();
 
 // fps → 节流间隔(ms)；0 表示每帧
 const fpsToMs = (fps: number) => (fps > 0 ? (1000 / fps) | 0 : 0);
+
+function isLifecycleRender(r: unknown): r is ICountupRenderer {
+  return isLifecycleRenderer(r);
+}
+
+function bindLifecycle<S>(r: ICountupRenderer<S>, el: Element, ctx: ICountupRenderContext) {
+  const state = r.mount(el, ctx);
+  return {
+    update: (v: number, c: ICountupRenderContext) => r.update(state, v, c),
+    destroy: () => r.destroy(state),
+  };
+}
 
 // 自举：首次 add 时把自身作为插件注册进核心，省去调用方手动 use()，避免"漏 use → 静默不动"
 let registered = false;
@@ -50,7 +74,8 @@ function disposeAll() {
 const store = createGroupStore<ICountupTask, ICountupBaseOptions>({
   onRemove: (t) => {
     t.cancel?.();
-    destroyRender(t.el, t.render); // 释放渲染器(如插件)对该元素的内部引用
+    if (t.renderBound !== undefined) t.renderBound?.destroy();
+    else destroyRender(t.el, t.render);
     if (t.el) {
       lastValue.set(t.el, t.value);
       elTask.delete(t.el);
@@ -65,7 +90,7 @@ export const remove = store.remove;
 
 export function pause(id: number, label = defaultLabel) {
   const t = groups.get(label)?.queue.get(id);
-  if (!t || t.paused) return;
+  if (!t || t.paused || t.done) return;
   t.paused = true;
   t.ctx.paused = true;
   t.pausedElapsed = lastElapsed;
@@ -104,15 +129,16 @@ export function tick(elapsed: number, dt: number): boolean {
       }
 
       // duration<=0 视为瞬时完成，避免除零/负时长导致 NaN 或永不结束
-      const progress = task.duration > 0 ? Math.min(1, (elapsed - task.startAt) / task.duration) : 1;
+      const progress =
+        task.duration > 0 ? Math.min(1, (elapsed - task.startAt) / task.duration) : 1;
 
       if (progress < 1) {
         busy = true;
         if (task.interval > 0) {
           task.accum += dt;
           if (task.accum < task.interval) continue;
-          // 保留余量而非清零，避免节流相位漂移
-          task.accum -= task.interval;
+          // 取模而非逐帧减一：大 dt（后台标签页回来）时不会积累余量造成连续多帧突破节流
+          task.accum %= task.interval;
         }
         task.value = task.from + (task.to - task.from) * task.easing(progress);
         task.ctx.value = task.value;
@@ -157,8 +183,9 @@ function addTask(options: ICountupFullOptions): number {
   if (el) {
     const existing = elTask.get(el);
     if (existing) {
-      const merged = { ...defaults, ...groups.get(existing.label!)?.config, ...options };
+      const merged = { ...defaults, ...g.config, ...options };
       const prevRender = existing.render;
+      const prevRenderBound = existing.renderBound;
       existing.from = options.from ?? existing.value; // 缺省从当前值起，无跳变
       existing.value = existing.from;
       existing.to = merged.to;
@@ -167,8 +194,6 @@ function addTask(options: ICountupFullOptions): number {
       existing.fps = merged.fps;
       existing.interval = fpsToMs(merged.fps);
       existing.fmt = merged.fmt;
-      existing.render = merged.render;
-      if (prevRender !== existing.render) destroyRender(el, prevRender); // 换渲染器前先释放旧渲染器对该元素的内部引用
       existing.lazy = merged.lazy;
       existing.lazyTimeout = merged.lazyTimeout;
       existing.onStart = options.onStart;
@@ -182,11 +207,30 @@ function addTask(options: ICountupFullOptions): number {
       existing.done = false; // 复活保留的已完成实例
       existing.paused = false;
       existing.resuming = false;
+      // ctx 先同步，再切换渲染器——确保 lifecycle mount() 拿到最新的 from/to/fmt
       existing.ctx.paused = false;
       existing.ctx.from = existing.from;
       existing.ctx.to = existing.to;
       existing.ctx.value = existing.value;
       existing.ctx.fmt = existing.fmt;
+      // 渲染器切换：lifecycle ↔ function 都需先释放旧绑定，再挂新适配器
+      const newLifecycle = isLifecycleRender(merged.render) ? merged.render : null;
+      if (newLifecycle) {
+        if (prevRenderBound !== undefined) prevRenderBound?.destroy();
+        else destroyRender(el, prevRender);
+        existing.render = (_el2, v, c) => existing.renderBound?.update(v, c);
+        existing.renderBound = existing.active
+          ? bindLifecycle(newLifecycle, el, existing.ctx)
+          : null;
+      } else {
+        existing.render = (merged.render as ICountupTask["render"]) ?? countupRender;
+        if (prevRenderBound !== undefined) {
+          prevRenderBound?.destroy();
+          existing.renderBound = undefined;
+        } else if (prevRender !== existing.render) {
+          destroyRender(el, prevRender);
+        }
+      }
       if (!existing.active) {
         // 仍是待激活的懒任务（尚未进入视口）：旧的 scheduleStart 挂钩（含其 lazyTimeout 定时器）
         // 仍会用旧配置在到期后 remove(existing.id)，误杀刚被重定目标的任务，须先取消再按新配置重挂
@@ -203,10 +247,25 @@ function addTask(options: ICountupFullOptions): number {
             existing.ctx.active = true;
             existing.startAt = -1;
             existing.accum = 0;
+            if (newLifecycle && existing.renderBound === null) {
+              existing.renderBound = bindLifecycle(newLifecycle, el, existing.ctx);
+            }
           },
           merged.lazyTimeout,
           () => remove(existing.id, existing.label),
         );
+      }
+      // 若 label 发生变化，迁移任务到新分组（g 已是目标分组）
+      const newLabel = options.label ?? existing.label;
+      if (newLabel !== existing.label) {
+        const oldG = groups.get(existing.label);
+        if (oldG) {
+          oldG.queue.delete(existing.id);
+          if (oldG.queue.size === 0 && existing.label !== defaultLabel)
+            groups.delete(existing.label);
+        }
+        existing.label = newLabel;
+        g.queue.set(existing.id, existing);
       }
       start();
       return existing.id;
@@ -220,27 +279,41 @@ function addTask(options: ICountupFullOptions): number {
   const observer = options.observer ?? g.config?.observer;
   const timeout = options.lazyTimeout ?? g.config?.lazyTimeout ?? defaults.lazyTimeout;
   const active = !(lazy && el);
+  const taskId = uid;
+  const interval = fpsToMs(options.fps ?? g.config?.fps ?? defaults.fps);
+  const fmt = options.fmt ?? g.config?.fmt ?? defaults.fmt;
+  const optRender = options.render ?? g.config?.render ?? defaults.render;
+  const lifecycle = isLifecycleRender(optRender) ? optRender : null;
   const task: ICountupTask = {
     ...defaults,
     ...g.config,
     ...options,
+    render: countupRender, // lifecycle: adapter 覆写于下方；function: 同样覆写于下方
     label: options.label ?? defaultLabel,
     el,
     from: begin,
     value: begin,
-    id: uid,
+    id: taskId,
     accum: 0,
     startAt: -1,
-    interval: 0,
+    interval,
     active,
     paused: false,
     pausedElapsed: 0,
     resuming: false,
-    ctx: undefined as unknown as ICountupTask["ctx"],
+    renderBound: lifecycle ? null : undefined,
+    // 上下文复用同一对象，from/to/fmt/el/id 任务期内固定，仅 value/active/paused 变化
+    ctx: { value: begin, from: begin, to: options.to, fmt, el, id: taskId, active, paused: false },
   };
-  task.interval = fpsToMs(task.fps);
-  // 上下文复用同一对象，from/to/fmt/el/id 任务期内固定，仅 value/active/paused 变化
-  task.ctx = { value: task.value, from: task.from, to: task.to, fmt: task.fmt, el, id: task.id, active, paused: false };
+  // render 赋值统一在此，避免字面量内出现死代码分支
+  if (lifecycle) {
+    task.render = (_el2, v, c) => task.renderBound?.update(v, c);
+    if (active && el) task.renderBound = bindLifecycle(lifecycle, el, task.ctx);
+  } else {
+    task.render = (optRender as ICountupTask["render"] | undefined) ?? countupRender;
+  }
+  // 非 lazy 且有挂载元素：立即渲染初始值，不等第一帧 RAF
+  if (active && el) task.render(el, task.value, task.ctx);
   g.queue.set(uid, task);
   if (el) elTask.set(el, task); // 建立元素→任务索引，供后续 O(1) 重定
   // 进入视口才激活：重新锚定计时（startAt=-1），动画从可见那一刻开始
@@ -253,6 +326,9 @@ function addTask(options: ICountupFullOptions): number {
       task.ctx.active = true;
       task.startAt = -1;
       task.accum = 0;
+      if (lifecycle && task.renderBound === null && el) {
+        task.renderBound = bindLifecycle(lifecycle, el, task.ctx);
+      }
     },
     timeout,
     () => remove(task.id, task.label),
@@ -264,7 +340,11 @@ function add(to: number, label?: string): number;
 function add(to: number, options?: ICountupBaseOptions): number;
 function add(from: number, to: number, label?: string): number;
 function add(from: number, to: number, options?: ICountupBaseOptions): number;
-function add(a: number | ICountupFullOptions, b?: number | string | ICountupBaseOptions, c?: string | ICountupBaseOptions): number {
+function add(
+  a: number | ICountupFullOptions,
+  b?: number | string | ICountupBaseOptions,
+  c?: string | ICountupBaseOptions,
+): number {
   const len = arguments.length;
 
   if (len === 1) {

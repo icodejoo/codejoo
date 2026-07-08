@@ -1,4 +1,4 @@
-<!doctype html>
+﻿<!doctype html>
 <html lang="zh-CN">
   <head>
     <meta charset="UTF-8" />
@@ -46,6 +46,13 @@
     </style>
   </head>
   <body>
+  <nav style="position:sticky;top:0;z-index:999;display:flex;gap:6px;flex-wrap:wrap;padding:6px 10px;background:rgba(255,255,255,.92);backdrop-filter:blur(8px);border-bottom:1px solid #e0e0e6;font-size:12px;">
+    <a href="/index.html" style="padding:3px 8px;border-radius:5px;text-decoration:none;background:#f0f0f5;color:#1d1d1f;">src 手动测试台</a>
+    <a href="/test.html" style="padding:3px 8px;border-radius:5px;text-decoration:none;background:#f0f0f5;color:#1d1d1f;">API 断言测试台</a>
+    <a href="/stress.html" style="padding:3px 8px;border-radius:5px;text-decoration:none;background:#f0f0f5;color:#1d1d1f;">压测</a>
+    <a href="/ring-demo.html" style="padding:3px 8px;border-radius:5px;text-decoration:none;background:#f0f0f5;color:#1d1d1f;">Ring Demo</a>
+    <a href="/ring-stress.html" style="padding:3px 8px;border-radius:5px;text-decoration:none;background:#f0f0f5;color:#1d1d1f;">Ring 压测</a>
+  </nav>
     <div id="bar">
       <span>ring 压测</span>
       <span>实例 <b id="count">0</b></span>
@@ -70,7 +77,7 @@
       // 让 100 个实例各不相同：旋向/段数/数码模式/配色/发光/阈值/前缀都按 index 变化
       const HUES = ["#ff6a5a", "#ff8a3a", "#ffcf3a", "#9be15d", "#37d67a", "#3ac8ff", "#6b8aff", "#c86bff", "#ff5ab0", "#ff3b30"];
       const renders = [];
-      const insts = []; // { r, cell } 供同步微基准（绕开本机合成器瓶颈，纯测插件 JS 开销）
+      const insts = []; // { r, cell, state } 供同步微基准（state 由 mount() 独立预建，绕开引擎拿到句柄）
 
       function optsFor(i) {
         return {
@@ -86,6 +93,9 @@
         };
       }
 
+      const pad = (n) => String(n).padStart(2, "0");
+      const mmss = (ms) => `${pad(Math.floor(ms / 60000))}:${pad(Math.floor((ms % 60000) / 1000))}`;
+
       function mount(n = N, ms = MS) {
         for (let i = 0; i < n; i++) {
           const cell = document.createElement("div");
@@ -93,9 +103,15 @@
           grid.appendChild(cell);
           const r = createRingRender(optsFor(i));
           renders.push(r);
-          insts.push({ r, cell });
           // 时长各异且较长（2~7min），整场不归零；ms 模式每帧重绘 = 最坏负载
-          countdown(120000 + (i % 300) * 1000, cell, { render: r, showMilliseconds: ms, lazy: false, fmt: "mm:ss", label: "stress" });
+          const dur = 120000 + (i % 300) * 1000;
+          countdown(dur, cell, { render: r, showMilliseconds: ms, lazy: false, fmt: "mm:ss", label: "stress" });
+          // 微基准用独立单元（不影响倒计时展示的 DOM，纯测 JS 开销）
+          const benchEl = document.createElement("div");
+          const value = [0, 0, 0, 0, 0];
+          const initCtx = { el: benchEl, id: i, deadline: 0, remaining: dur, value, active: true, paused: false, fmt: (m) => mmss(m), parser: () => value };
+          const state = r.mount(benchEl, initCtx);
+          insts.push({ r, cell: benchEl, state });
         }
         document.getElementById("count").textContent = grid.childElementCount;
         document.getElementById("mode").textContent = ms ? "ms(每帧)" : "每秒";
@@ -103,18 +119,16 @@
 
       // 拆除：停任务 + 释放渲染器引用 + 移除 DOM（供泄漏检测）
       function teardown() {
-        clear("stress");
-        renders.forEach((r) => r.destroy());
+        clear("stress"); // 引擎的 onClearEach → renderBound?.destroy() 清掉倒计时持有的状态
+        insts.forEach(({ r, state }) => r.destroy(state)); // 清掉微基准独立持有的状态
         renders.length = 0;
         insts.length = 0;
         grid.textContent = "";
         document.getElementById("count").textContent = 0;
       }
 
-      // 同步微基准：直接连续调用所有实例的 render（文本随帧变化以触发数码管/内圈更新），
+      // 同步微基准：直接连续调用所有实例的 update（文本随帧变化以触发数码管/内圈更新），
       // 测纯 JS 渲染开销（不受本机合成器/GPU 限制）。返回 ms/帧 与 µs/实例。
-      const pad = (n) => String(n).padStart(2, "0");
-      const mmss = (ms) => `${pad(Math.floor(ms / 60000))}:${pad(Math.floor((ms % 60000) / 1000))}`;
       function bench(rounds = 600, step = 1000) {
         // step=1000：每轮跨一整秒 → 每次都真重绘（最坏）；step=16：模拟 60fps 毫秒任务 → 命中整秒跳帧
         const value = [0, 0, 0, 0, 0];
@@ -122,7 +136,12 @@
         const t0 = performance.now();
         for (let f = 0; f < rounds; f++) {
           const rem = 305000 - f * step; // 由 5min 递减，跨分钟、跨秒，触发各路径
-          for (let i = 0; i < insts.length; i++) insts[i].r(insts[i].cell, rem, value, ctx);
+          ctx.el = null;
+          for (let i = 0; i < insts.length; i++) {
+            const inst = insts[i];
+            ctx.el = inst.cell;
+            inst.r.update(inst.state, rem, value, ctx);
+          }
         }
         const dt = performance.now() - t0;
         const calls = rounds * insts.length;

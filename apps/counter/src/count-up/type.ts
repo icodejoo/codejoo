@@ -36,6 +36,12 @@ export interface ICountupRenderContext {
  */
 export type TCountupRender = (el: Element, value: number, ctx: ICountupRenderContext) => void;
 
+export interface ICountupRenderer<S = unknown> {
+  mount(el: Element, ctx: ICountupRenderContext): S;
+  update(state: S, value: number, ctx: ICountupRenderContext): void;
+  destroy(state: S): void;
+}
+
 export type TCountupHook = (value: number, ctx: ICountupRenderContext) => void;
 
 export interface ICountupHooks {
@@ -57,7 +63,7 @@ export interface ICountupBaseOptions {
   fps?: number;
   /** 数值格式化器，默认 Intl.NumberFormat */
   fmt?: TCountupFormatter;
-  render?: TCountupRender;
+  render?: TCountupRender | ICountupRenderer;
   /**
    * 懒加载，默认 true。lazy 且提供了 el 时，用 IntersectionObserver 观察 el，
    * 元素首次进入视口才真正开始计数（从那一刻起锚定动画计时）；无 el 或 lazy:false 则立即开始。
@@ -88,10 +94,14 @@ export interface ICountupTaskOptions {
 
 export interface ICountupFullOptions extends ICountupBaseOptions, ICountupHooks, ICountupTaskOptions {}
 
-export interface ICountupTask extends Required<Omit<ICountupTaskOptions, "el">>, Required<Omit<ICountupBaseOptions, "observer">>, ICountupHooks {
+export interface ICountupTask extends Required<Omit<ICountupTaskOptions, "el">>, Required<Omit<ICountupBaseOptions, "observer" | "render">>, ICountupHooks {
   el?: Element;
   id: number;
   value: number;
+  /** 实际渲染函数（lifecycle 已转为适配器，始终可直接调用） */
+  render: TCountupRender;
+  /** 有状态渲染器绑定（undefined=函数渲染，null=未 mount 的 lazy 生命周期，otherwise=已 mount） */
+  renderBound?: { update(v: number, ctx: ICountupRenderContext): void; destroy(): void } | null;
   startAt: number;
   accum: number;
   /** 预算的节流间隔(ms)：fps>0 时 = (1000/fps)|0，否则 0；建任务/重定时算一次，热路径只读 */

@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { createOdometerRender } from "./odometer";
+import type { IOdometerRender } from "./odometer";
 import type { ICountupRenderContext } from "../count-up/type";
 
 const NF = new Intl.NumberFormat();
@@ -7,6 +8,35 @@ const NF = new Intl.NumberFormat();
 /** 构造渲染上下文；默认 from=to=value、fmt 为 Intl 默认（千分位） */
 function ctx(value: number, from: number = value, to: number = value, fmt: (n: number) => string = NF.format): ICountupRenderContext {
   return { value, from, to, fmt, id: 0, active: true, paused: false };
+}
+
+/**
+ * 将 IOdometerRender 生命周期包装为旧式函数调用，方便单元测试直接驱动。
+ * 注：update() 从 ctx.el 取宿主，故包装层注入 el: host。
+ */
+function makeOdometerInvoker(r: IOdometerRender) {
+  const stateMap = new Map<Element, ReturnType<IOdometerRender["mount"]>>();
+  // _fmtOrValue：老式调用第二参为 fmt 字符串（被忽略），直接传 rCtx.value 给 update
+  const invoke = (host: Element, _fmtOrValue: unknown, rCtx: ICountupRenderContext) => {
+    const ctxWithEl = { ...rCtx, el: host };
+    let state = stateMap.get(host);
+    if (!state) {
+      state = r.mount(host, ctxWithEl);
+      stateMap.set(host, state);
+    }
+    r.update(state, rCtx.value, ctxWithEl);
+  };
+  invoke.destroy = (el?: Element) => {
+    if (el) {
+      const s = stateMap.get(el);
+      if (s) r.destroy(s);
+      stateMap.delete(el);
+    } else {
+      stateMap.forEach((s) => r.destroy(s));
+      stateMap.clear();
+    }
+  };
+  return invoke;
 }
 
 function root(host: Element) {
@@ -38,7 +68,7 @@ const MODES = ["minimal", "full"] as const;
 // ====================== 两种模式共享的结构 / 生命周期 ======================
 for (const strip of MODES) {
   describe(`createOdometerRender [strip:${strip}] 结构与生命周期`, () => {
-    const make = (o: object = {}) => createOdometerRender({ strip, ...o });
+    const make = (o: object = {}) => makeOdometerInvoker(createOdometerRender({ strip, ...o }));
     const cells = strip === "full" ? 11 : 2; // 动画中每位的格数
 
     it("构建 ul.cd-root.cd-odometer-root，每个数字位一条长条", () => {
@@ -157,7 +187,7 @@ for (const strip of MODES) {
 describe("createOdometerRender minimal 定位", () => {
   it("仅在每位步进的最后 rollWindow 段滚动，停得干净", () => {
     const host = document.createElement("div");
-    const r = createOdometerRender({ rollWindow: 0.2 }); // T = 0.8
+    const r = makeOdometerInvoker(createOdometerRender({ rollWindow: 0.2 })); // T = 0.8
     const one = (v: number) =>
       r(
         host,
@@ -179,7 +209,7 @@ describe("createOdometerRender minimal 定位", () => {
 
   it("9→0 经 bottom 格无缝（top=9, bottom=0）", () => {
     const host = document.createElement("div");
-    createOdometerRender()(
+    makeOdometerInvoker(createOdometerRender())(
       host,
       "0",
       ctx(9, 9, 0, () => "0"),
@@ -191,7 +221,7 @@ describe("createOdometerRender minimal 定位", () => {
 
   it("只改文本节点数据，不替换节点", () => {
     const host = document.createElement("div");
-    const r = createOdometerRender();
+    const r = makeOdometerInvoker(createOdometerRender());
     r(host, NF.format(0), ctx(0, 0, 9));
     const ones = strips(host)[0];
     const textNode = ones.children[0].firstChild;
@@ -202,7 +232,7 @@ describe("createOdometerRender minimal 定位", () => {
 
   it("平移以 --cd-cell-height 为单位，且只表达 roll(0~1)", () => {
     const host = document.createElement("div");
-    const r = createOdometerRender({ rollWindow: 1 }); // 全程滚动
+    const r = makeOdometerInvoker(createOdometerRender({ rollWindow: 1 })); // 全程滚动
     r(
       host,
       "0",
@@ -218,7 +248,7 @@ describe("createOdometerRender minimal 定位", () => {
 describe("createOdometerRender full 定位", () => {
   it("长条含 0-9 + 尾部补 0 共 11 格", () => {
     const host = document.createElement("div");
-    createOdometerRender({ strip: "full" })(host, NF.format(12), ctx(12, 0, 99));
+    makeOdometerInvoker(createOdometerRender({ strip: "full" }))(host, NF.format(12), ctx(12, 0, 99));
     const s = strips(host)[0];
     expect(s.children.length).toBe(11);
     expect(
@@ -230,7 +260,7 @@ describe("createOdometerRender full 定位", () => {
 
   it("整条平移到 digit+roll 的绝对位置", () => {
     const host = document.createElement("div");
-    const r = createOdometerRender({ strip: "full", rollWindow: 1 }); // 全程滚动
+    const r = makeOdometerInvoker(createOdometerRender({ strip: "full", rollWindow: 1 })); // 全程滚动
     r(
       host,
       "0",
@@ -243,7 +273,7 @@ describe("createOdometerRender full 定位", () => {
 describe("createOdometerRender × 小数", () => {
   it("处理小数位列（负位权）", () => {
     const host = document.createElement("div");
-    createOdometerRender()(host, NF.format(12.3), ctx(12.3, 0, 99.9));
+    makeOdometerInvoker(createOdometerRender())(host, NF.format(12.3), ctx(12.3, 0, 99.9));
     const ss = strips(host);
     expect(topDigit(ss[0])).toBe("1");
     expect(topDigit(ss[1])).toBe("2");
@@ -254,7 +284,7 @@ describe("createOdometerRender × 小数", () => {
 describe("createOdometerRender destroy", () => {
   it("destroy(el) 断开状态引用，不改动宿主子节点；再渲染则重建", () => {
     const host = document.createElement("div");
-    const r = createOdometerRender();
+    const r = makeOdometerInvoker(createOdometerRender());
     r(host, NF.format(12), ctx(12, 0, 99));
     const ul = root(host);
     r.destroy(host);
@@ -265,7 +295,7 @@ describe("createOdometerRender destroy", () => {
 
   it("destroy() 丢弃整张状态表", () => {
     const host = document.createElement("div");
-    const r = createOdometerRender();
+    const r = makeOdometerInvoker(createOdometerRender());
     r(host, NF.format(12), ctx(12, 0, 99));
     const ul = root(host);
     r.destroy();

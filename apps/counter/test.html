@@ -1,4 +1,4 @@
-<!doctype html>
+﻿<!doctype html>
 <html lang="zh-CN">
   <head>
     <meta charset="UTF-8" />
@@ -63,6 +63,13 @@
     </style>
   </head>
   <body>
+  <nav style="position:sticky;top:0;z-index:999;display:flex;gap:6px;flex-wrap:wrap;padding:6px 10px;background:rgba(255,255,255,.92);backdrop-filter:blur(8px);border-bottom:1px solid #e0e0e6;font-size:12px;">
+    <a href="/index.html" style="padding:3px 8px;border-radius:5px;text-decoration:none;background:#f0f0f5;color:#1d1d1f;">src 手动测试台</a>
+    <a href="/test.html" style="padding:3px 8px;border-radius:5px;text-decoration:none;background:#f0f0f5;color:#1d1d1f;">API 断言测试台</a>
+    <a href="/stress.html" style="padding:3px 8px;border-radius:5px;text-decoration:none;background:#f0f0f5;color:#1d1d1f;">压测</a>
+    <a href="/ring-demo.html" style="padding:3px 8px;border-radius:5px;text-decoration:none;background:#f0f0f5;color:#1d1d1f;">Ring Demo</a>
+    <a href="/ring-stress.html" style="padding:3px 8px;border-radius:5px;text-decoration:none;background:#f0f0f5;color:#1d1d1f;">Ring 压测</a>
+  </nav>
     <h1>@codejoo/counter — API 100% 覆盖测试台</h1>
     <p class="sub">
       黑盒导入构建产物 <code>./dist/index.mjs</code>。点击「运行全部断言」对全部公开 API（counter / countup /
@@ -126,6 +133,28 @@
 
     <script type="module">
       import { counter, countup, countdown, createCardRender, createOdometerRender } from "./dist/index.mjs";
+
+      // 生命周期渲染器 → 旧式函数调用适配（供本页断言套件直接驱动渲染器，引擎路径不变）
+      function wrapCard(r) {
+        const sm = new Map();
+        const fn = (host, remaining, value, ctx) => {
+          const c = { ...ctx, remaining, el: host };
+          let s = sm.get(host);
+          if (!s) { s = r.mount(host, c); sm.set(host, s); }
+          r.update(s, remaining, value, c);
+        };
+        fn.destroy = (el) => { if (el) { const s = sm.get(el); if (s) r.destroy(s); sm.delete(el); } };
+        return fn;
+      }
+      function wrapOdo(r) {
+        const sm = new Map();
+        return (host, _fmtStr, ctx) => {
+          const c = { ...ctx, el: host };
+          let s = sm.get(host);
+          if (!s) { s = r.mount(host, c); sm.set(host, s); }
+          r.update(s, ctx.value, c);
+        };
+      }
 
       // 暴露到控制台，便于手动验证
       Object.assign(window, { counter, countup, countdown, createCardRender, createOdometerRender });
@@ -976,7 +1005,7 @@
 
         test("默认 flip：构建 ul.cd-root.cd-flip-root > li.cd-cell，首帧不动画", () => {
           const host = el();
-          createCardRender()(host, 12, cval, cc(idFmt)); // 文本 "12"
+          wrapCard(createCardRender())(host, 12, cval, cc(idFmt)); // 文本 "12"
           const ul = root(host);
           expect(ul.tagName).toBe("UL");
           assert(ul.classList.contains("cd-root") && ul.classList.contains("cd-flip-root"), "缺 root 类");
@@ -988,13 +1017,13 @@
 
         test("不注入任何 <style>（样式走外部 card.css）", () => {
           const host = el();
-          createCardRender()(host, 5, cval, cc(idFmt));
+          wrapCard(createCardRender())(host, 5, cval, cc(idFmt));
           expect(host.querySelector("style")).toBe(null);
         });
 
         test("仅变化的字符触发动画，新值写入 .cd-next", () => {
           const host = el();
-          const r = createCardRender();
+          const r = wrapCard(createCardRender());
           r(host, 11, cval, cc(idFmt));
           r(host, 12, cval, cc(idFmt)); // 仅个位 1→2
           const cells = items(host);
@@ -1007,7 +1036,7 @@
 
         test("非数字渲染为 li.cd-sep，不是翻转结构", () => {
           const host = el();
-          createCardRender()(host, 0, cval, cc(() => "1:2")); // 含分隔符
+          wrapCard(createCardRender())(host, 0, cval, cc(() => "1:2")); // 含分隔符
           const its = items(host);
           expect(its.length).toBe(3);
           assert(its[1].classList.contains("cd-sep"), "中间应为 sep");
@@ -1016,17 +1045,17 @@
 
         test("字符数变化整体重建、不播动画", () => {
           const host = el();
-          const r = createCardRender();
-          r(host, 0, cval, cc(() => "9"));
+          const r = wrapCard(createCardRender());
+          r(host, 100, cval, cc(() => "9")); // remaining 不同才不被跳帧跳过
           const before = root(host);
-          r(host, 0, cval, cc(() => "10")); // 1 位 → 2 位
+          r(host, 99, cval, cc(() => "10")); // 1 位 → 2 位
           assert(root(host) !== before, "应重建 ul");
           expect(items(host).length).toBe(2);
         });
 
         test("自定义 prefix（prefix + effect + name 组合类）", () => {
           const host = el();
-          createCardRender({ prefix: "tk-", effect: "slide" })(host, 7, cval, cc(() => "7"));
+          wrapCard(createCardRender({ prefix: "tk-", effect: "slide" }))(host, 7, cval, cc(() => "7"));
           const ul = host.querySelector(".tk-root"); // 自定义前缀，根类为 tk-root
           assert(ul, "缺 tk-root");
           assert(ul.classList.contains("tk-slide-root"), "缺 tk-slide-root");
@@ -1034,24 +1063,24 @@
 
         test("effect 类应用到 root（calendar）", () => {
           const host = el();
-          createCardRender({ effect: "calendar" })(host, 8, cval, cc(() => "8"));
+          wrapCard(createCardRender({ effect: "calendar" }))(host, 8, cval, cc(() => "8"));
           assert(root(host).classList.contains("cd-calendar-root"), "缺 calendar root 类");
         });
 
         test("axis:y 给 flip 加 cd-flip-y 修饰类", () => {
           const host = el();
-          createCardRender({ axis: "y" })(host, 8, cval, cc(() => "8"));
+          wrapCard(createCardRender({ axis: "y" }))(host, 8, cval, cc(() => "8"));
           assert(root(host).classList.contains("cd-flip-y"), "缺 cd-flip-y");
         });
 
         test("direction:up 给 slide 加 cd-slide-up 修饰类", () => {
           const host = el();
-          createCardRender({ effect: "slide", direction: "up" })(host, 8, cval, cc(() => "8"));
+          wrapCard(createCardRender({ effect: "slide", direction: "up" }))(host, 8, cval, cc(() => "8"));
           assert(root(host).classList.contains("cd-slide-up"), "缺 cd-slide-up");
         });
 
         test("状态按元素隔离（同渲染器复用于多元素）", () => {
-          const r = createCardRender();
+          const r = wrapCard(createCardRender());
           const h1 = el(),
             h2 = el();
           r(h1, 1, cval, cc(() => "1"));
@@ -1099,7 +1128,7 @@
           const cells = strip === "full" ? 11 : 2;
           test(`[${strip}] 构建 ul.cd-root.cd-odometer-root，每位一条长条`, () => {
             const host = el();
-            createOdometerRender({ strip })(host, NF.format(12), ctx(12, 0, 99));
+            wrapOdo(createOdometerRender({ strip }))(host, NF.format(12), ctx(12, 0, 99));
             const ul = oRoot(host);
             assert(ul.classList.contains("cd-root") && ul.classList.contains("cd-odometer-root"), "缺 root 类");
             expect(strips(host).length).toBe(2);
@@ -1108,7 +1137,7 @@
 
           test(`[${strip}] 分隔符渲染为 li.cd-sep`, () => {
             const host = el();
-            createOdometerRender({ strip })(host, NF.format(1234), ctx(1234, 0, 9999));
+            wrapOdo(createOdometerRender({ strip }))(host, NF.format(1234), ctx(1234, 0, 9999));
             const its = Array.from(oRoot(host).children);
             expect(its.length).toBe(5);
             assert(its[1].classList.contains("cd-sep"), "缺 sep");
@@ -1117,7 +1146,7 @@
 
           test(`[${strip}] 按 from/to 预建最大宽度，动画中不重建`, () => {
             const host = el();
-            const r = createOdometerRender({ strip });
+            const r = wrapOdo(createOdometerRender({ strip }));
             r(host, NF.format(0), ctx(0, 0, 1234567));
             expect(strips(host).length).toBe(7);
             const r0 = oRoot(host);
@@ -1128,7 +1157,7 @@
 
           test(`[${strip}] 默认隐藏前导零，随数值显现`, () => {
             const host = el();
-            const r = createOdometerRender({ strip });
+            const r = wrapOdo(createOdometerRender({ strip }));
             r(host, NF.format(0), ctx(0, 0, 9999));
             expect(visible(host).length).toBe(1);
             r(host, NF.format(42), ctx(42, 0, 9999));
@@ -1137,7 +1166,7 @@
 
           test(`[${strip}] leadingZeros:true 保留前导零`, () => {
             const host = el();
-            const r = createOdometerRender({ strip, leadingZeros: true });
+            const r = wrapOdo(createOdometerRender({ strip, leadingZeros: true }));
             r(host, NF.format(0), ctx(0, 0, 1234567));
             r(host, NF.format(12345), ctx(12345, 0, 1234567));
             expect(visible(host).length).toBe(7);
@@ -1145,7 +1174,7 @@
 
           test(`[${strip}] 落定（value===to）裁剪宽度并塌缩为单格`, () => {
             const host = el();
-            const r = createOdometerRender({ strip });
+            const r = wrapOdo(createOdometerRender({ strip }));
             r(host, NF.format(120), ctx(120, 0, 543));
             expect(strips(host)[0].children.length).toBe(cells);
             r(host, NF.format(543), ctx(543, 0, 543));
@@ -1158,7 +1187,7 @@
 
         test("[minimal] 平移以 --cd-cell-height 为单位，仅表达 roll(0~1)", () => {
           const host = el();
-          createOdometerRender({ rollWindow: 1 })(
+          wrapOdo(createOdometerRender({ rollWindow: 1 }))(
             host,
             "0",
             { value: 7.5, from: 0, to: 99, fmt: () => "0" },
@@ -1171,7 +1200,7 @@
 
         test("[full] 长条 0-9 + 尾补 0 共 11 格", () => {
           const host = el();
-          createOdometerRender({ strip: "full" })(host, NF.format(12), ctx(12, 0, 99));
+          wrapOdo(createOdometerRender({ strip: "full" }))(host, NF.format(12), ctx(12, 0, 99));
           const s = strips(host)[0];
           expect(s.children.length).toBe(11);
           expect(Array.from(s.children).map((c) => c.textContent).join("")).toBe("01234567890");
@@ -1179,13 +1208,13 @@
 
         test("自定义 prefix 生成对应类名", () => {
           const host = el();
-          createOdometerRender({ prefix: "od-" })(host, "1", { value: 1, from: 0, to: 9, fmt: () => "1" });
+          wrapOdo(createOdometerRender({ prefix: "od-" }))(host, "1", { value: 1, from: 0, to: 9, fmt: () => "1" });
           assert(host.querySelector(".od-root.od-odometer-root"), "缺自定义 prefix root");
         });
 
         test("处理小数位列（负位权）", () => {
           const host = el();
-          createOdometerRender()(host, NF.format(12.3), ctx(12.3, 0, 99.9));
+          wrapOdo(createOdometerRender())(host, NF.format(12.3), ctx(12.3, 0, 99.9));
           const ss = strips(host);
           expect(ss[0].children[0].textContent).toBe("1");
           expect(ss[2].children[0].textContent).toBe("3");

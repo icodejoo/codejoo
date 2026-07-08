@@ -154,7 +154,7 @@ export function buildDateParser(unit: TDateUnit): TDateParser {
       const ts = Date.parse(value);
       return Number.isNaN(ts) ? invalid(value) : ts - timeOffset;
     }
-    const ts = new Date(+match[1], +(match[2] || 1) - 1, +(match[3] || 1), +(match[4] || 0), +(match[5] || 0), +(match[6] || 0), +(match[7] || "0").slice(0, 3)).getTime();
+    const ts = new Date(+match[1], +(match[2] || 1) - 1, +(match[3] || 1), +(match[4] || 0), +(match[5] || 0), +(match[6] || 0), +(match[7] || "0").padEnd(3, "0").slice(0, 3)).getTime();
     return Number.isNaN(ts) ? invalid(value) : ts - timeOffset;
   };
 }

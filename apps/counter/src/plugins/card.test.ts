@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { createCardRender } from "./card";
+import type { ICardRender } from "./card";
 import countdown, { tick as countdownTick } from "../count-down/count-down";
 import type { ICountdownContext, ICountdownFormatter, TCountdownParser, TCountdownValue } from "../count-down/types";
 
@@ -8,6 +9,35 @@ const fmt: ICountdownFormatter = (ms) => String(ms);
 // 新渲染契约：render(el, remaining, value, ctx)，formatter/parser 收敛进 ctx
 const val: TCountdownValue = [0, 0, 0, 0, 0];
 const ctx = { el: document.createElement("div"), id: 0, deadline: 0, remaining: 0, value: val, active: true, paused: false, fmt, parser } as ICountdownContext;
+
+/**
+ * 将 ICardRender 生命周期包装为旧式函数调用，方便单元测试直接驱动。
+ * state 按宿主元素索引，destroy(el?) 同步释放。
+ */
+function makeCardInvoker(r: ICardRender) {
+  const stateMap = new Map<Element, ReturnType<ICardRender["mount"]>>();
+  const invoke = (host: Element, remaining: number, value: TCountdownValue, rCtx: ICountdownContext) => {
+    // ctx.el must point at host so that rebuild paths in update() target the correct element
+    const ctxWithEl = { ...rCtx, remaining, el: host };
+    let state = stateMap.get(host);
+    if (!state) {
+      state = r.mount(host, ctxWithEl);
+      stateMap.set(host, state);
+    }
+    r.update(state, remaining, value, ctxWithEl);
+  };
+  invoke.destroy = (el?: Element) => {
+    if (el) {
+      const s = stateMap.get(el);
+      if (s) r.destroy(s);
+      stateMap.delete(el);
+    } else {
+      stateMap.forEach((s) => r.destroy(s));
+      stateMap.clear();
+    }
+  };
+  return invoke;
+}
 
 // DOM: host > ul.cd-root.cd-flip-root > li.cd-cell.cd-flip-cell
 //      > span.cd-num.cd-next.cd-flip-num.cd-flip-next + span.cd-num.cd-now.cd-flip-num.cd-flip-now
@@ -45,7 +75,7 @@ function readClock(host: Element) {
 describe("createCardRender DOM & structure", () => {
   it("builds ul.cd-root > li.cd-cell per char, no animation on first render", () => {
     const host = document.createElement("div");
-    createCardRender()(host, 123, val, ctx);
+    makeCardInvoker(createCardRender())(host, 123, val, ctx);
 
     const ul = root(host);
     expect(ul.tagName).toBe("UL");
@@ -67,7 +97,7 @@ describe("createCardRender DOM & structure", () => {
 
   it("does NOT inject any <style> (css is an external file)", () => {
     const host = document.createElement("div");
-    createCardRender()(host, 1, val, ctx);
+    makeCardInvoker(createCardRender())(host, 1, val, ctx);
     expect(document.querySelector("style#gt-card-style")).toBeNull();
     // 根上不写内联 duration（时长由 CSS 变量控制）
     expect(root(host).style.getPropertyValue("--cd-duration")).toBe("");
@@ -75,7 +105,7 @@ describe("createCardRender DOM & structure", () => {
 
   it("animates only the changed characters, writing new value to .cd-next", () => {
     const host = document.createElement("div");
-    const render = createCardRender();
+    const render = makeCardInvoker(createCardRender());
     render(host, 120, val, ctx);
     render(host, 119, val, ctx);
 
@@ -89,7 +119,7 @@ describe("createCardRender DOM & structure", () => {
 
   it("finalizes on the now face's transitionend/animationend", () => {
     const host = document.createElement("div");
-    const render = createCardRender();
+    const render = makeCardInvoker(createCardRender());
     render(host, 5, val, ctx);
     render(host, 4, val, ctx);
 
@@ -101,7 +131,7 @@ describe("createCardRender DOM & structure", () => {
 
   it("snaps the pending value when interrupted by a new change", () => {
     const host = document.createElement("div");
-    const render = createCardRender();
+    const render = makeCardInvoker(createCardRender());
     render(host, 5, val, ctx);
     render(host, 4, val, ctx); // 结束事件未触发（如后台标签页）
     render(host, 3, val, ctx); // 中断 → 上一目标值立即落定
@@ -114,7 +144,7 @@ describe("createCardRender DOM & structure", () => {
 
   it("rebuilds without animation when the text length changes", () => {
     const host = document.createElement("div");
-    const render = createCardRender();
+    const render = makeCardInvoker(createCardRender());
     render(host, 100, val, ctx);
     render(host, 99, val, ctx);
 
@@ -126,7 +156,7 @@ describe("createCardRender DOM & structure", () => {
 
   it("supports a custom class prefix (prefix + effect + name)", () => {
     const host = document.createElement("div");
-    createCardRender({ effect: "calendar", prefix: "fc-" })(host, 7, val, ctx);
+    makeCardInvoker(createCardRender({ effect: "calendar", prefix: "fc-" }))(host, 7, val, ctx);
 
     const ul = host.querySelector(".fc-root") as HTMLElement;
     expect(ul).not.toBeNull();
@@ -140,33 +170,33 @@ describe("createCardRender DOM & structure", () => {
 
   it("applies the requested effect class on root and cells", () => {
     const host = document.createElement("div");
-    createCardRender({ effect: "slide" })(host, 7, val, ctx);
+    makeCardInvoker(createCardRender({ effect: "slide" }))(host, 7, val, ctx);
     expect(root(host).classList.contains("cd-slide-root")).toBe(true);
     expect(items(host)[0].classList.contains("cd-slide-cell")).toBe(true);
   });
 
   it("adds direction modifier classes (axis/direction), default none", () => {
     const x = document.createElement("div");
-    createCardRender({ effect: "flip" })(x, 7, val, ctx);
+    makeCardInvoker(createCardRender({ effect: "flip" }))(x, 7, val, ctx);
     expect(root(x).classList.contains("cd-flip-y")).toBe(false); // 默认绕 X 轴，无修饰类
 
     const y = document.createElement("div");
-    createCardRender({ effect: "flip", axis: "y" })(y, 7, val, ctx);
+    makeCardInvoker(createCardRender({ effect: "flip", axis: "y" }))(y, 7, val, ctx);
     expect(root(y).classList.contains("cd-flip-y")).toBe(true);
 
     const down = document.createElement("div");
-    createCardRender({ effect: "slide" })(down, 7, val, ctx);
+    makeCardInvoker(createCardRender({ effect: "slide" }))(down, 7, val, ctx);
     expect(root(down).classList.contains("cd-slide-up")).toBe(false); // 默认向下
 
     const up = document.createElement("div");
-    createCardRender({ effect: "slide", direction: "up" })(up, 7, val, ctx);
+    makeCardInvoker(createCardRender({ effect: "slide", direction: "up" }))(up, 7, val, ctx);
     expect(root(up).classList.contains("cd-slide-up")).toBe(true);
   });
 
   it("renders non-digit characters as li.cd-sep without flip structure", () => {
     const host = document.createElement("div");
     const colonFmt: ICountdownFormatter = () => "1:2";
-    createCardRender()(host, 0, val, { ...ctx, fmt: colonFmt });
+    makeCardInvoker(createCardRender())(host, 0, val, { ...ctx, fmt: colonFmt });
 
     const kids = items(host);
     expect(kids.length).toBe(3);
@@ -181,7 +211,7 @@ describe("createCardRender DOM & structure", () => {
   it("skips calling ctx.fmt entirely when remaining is unchanged from the last render", () => {
     const host = document.createElement("div");
     const fmtSpy = vi.fn(() => "12");
-    const render = createCardRender();
+    const render = makeCardInvoker(createCardRender());
     render(host, 5000, val, { ...ctx, fmt: fmtSpy });
     expect(fmtSpy).toHaveBeenCalledTimes(1);
     render(host, 5000, val, { ...ctx, fmt: fmtSpy }); // 同一个 remaining 再渲染一次
@@ -193,7 +223,7 @@ describe("createCardRender DOM & structure", () => {
   it("isolates state per element", () => {
     const a = document.createElement("div");
     const b = document.createElement("div");
-    const render = createCardRender();
+    const render = makeCardInvoker(createCardRender());
     render(a, 11, val, ctx);
     render(b, 22, val, ctx);
     render(a, 12, val, ctx);
@@ -206,7 +236,7 @@ describe("createCardRender DOM & structure", () => {
 describe("createCardRender calendar flip flow", () => {
   it("writes new value into next span before flip, settles now after end", () => {
     const host = document.createElement("div");
-    const render = createCardRender({ effect: "calendar" });
+    const render = makeCardInvoker(createCardRender({ effect: "calendar" }));
     render(host, 5, val, ctx);
     render(host, 4, val, ctx);
 
@@ -260,7 +290,7 @@ describe("createCardRender × countdown", () => {
 describe("createCardRender destroy", () => {
   it("destroy(el) 断开状态与事件监听，不改动宿主子节点；再渲染则重建", () => {
     const host = document.createElement("div");
-    const render = createCardRender();
+    const render = makeCardInvoker(createCardRender());
     render(host, 5, val, ctx);
     const ul = root(host);
     render.destroy(host);
@@ -271,7 +301,7 @@ describe("createCardRender destroy", () => {
 
   it("destroy() 丢弃整张状态表", () => {
     const host = document.createElement("div");
-    const render = createCardRender();
+    const render = makeCardInvoker(createCardRender());
     render(host, 5, val, ctx);
     const ul = root(host);
     render.destroy();

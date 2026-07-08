@@ -61,6 +61,19 @@ export type TCountdownParser = (duration: number, ctx?: ICountdownContext) => TC
  */
 export type TCountdownRender = (el: Element, remaining: number, value: TCountdownValue, ctx: ICountdownContext) => void;
 
+/**
+ * 有状态渲染器生命周期。引擎在 add() 时调用 mount()，每次变化时调用 update()，remove/clear 时调用 destroy()。
+ * mount() 返回的状态对象由引擎持有，透传给后续 update/destroy，渲染器无需自维护 WeakMap。
+ */
+export interface ICountdownRenderer<S = unknown> {
+  /** 预建 DOM，返回状态；lazy 任务在进入视口时调用 */
+  mount(el: Element, ctx: ICountdownContext): S;
+  /** 按需增量更新 DOM，不应 createElement/appendChild */
+  update(state: S, remaining: number, value: TCountdownValue, ctx: ICountdownContext): void;
+  /** 断开事件监听、释放引用 */
+  destroy(state: S): void;
+}
+
 export interface ICountdownOptions {
   /** 服务器时间与客户端时间的差值（server - client，毫秒），用于校正客户端时钟 */
   timeOffset?: number;
@@ -75,7 +88,7 @@ export interface ICountdownOptions {
   /** 解析器：剩余毫秒 → [d, h, m, s, ms] 元组；缺省用内置解析器（按 showDays 决定时/天拆分） */
   parser?: TCountdownParser;
   /** 渲染函数 */
-  render?: TCountdownRender;
+  render?: TCountdownRender | ICountdownRenderer;
   /**
    * 懒加载，默认 true。lazy 且 el 存在时，用 IntersectionObserver 观察 el，
    * 元素首次进入视口才真正开始倒计时（相对时长从那一刻锚定截止时间；绝对时间戳/Date 不变）；
@@ -126,6 +139,8 @@ export interface ICountdownTask extends IHooks {
   parser: TCountdownParser;
   /** 渲染函数 */
   render: TCountdownRender;
+  /** 有状态渲染器绑定（undefined=函数渲染，null=未 mount 的 lazy 生命周期，otherwise=已 mount） */
+  renderBound?: { update(r: number, v: TCountdownValue, ctx: ICountdownContext): void; destroy(): void } | null;
   /** 归零时是否自动销毁，默认 true */
   autoKill: boolean;
   /** 已归零并保留（autoKill:false）：tick 跳过，不再重绘/重触 onDone */
