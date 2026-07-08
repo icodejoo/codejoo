@@ -37,9 +37,16 @@
       "types": "./dist/ring.d.mts",
       "default": "./dist/ring.mjs"
     },
+    "./vue": {
+      "types": "./dist/vue.d.mts",
+      "default": "./dist/vue.mjs"
+    },
     "./card.css": "./dist/card.css",
     "./ring.css": "./dist/ring.css",
     "./package.json": "./package.json"
+  },
+  "peerDependencies": {
+    "vue": ">=3.0.0"
   },
   "publishConfig": {
     "access": "public"
@@ -58,6 +65,7 @@
     "@typescript/native-preview": "catalog:",
     "jsdom": "^25.0.1",
     "vite-plus": "catalog:",
-    "vitest": "catalog:"
+    "vitest": "catalog:",
+    "vue": "catalog:"
   }
 }

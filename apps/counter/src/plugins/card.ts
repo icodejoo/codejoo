@@ -1,4 +1,4 @@
-import type { TCountdownRender } from "../count-down/types";
+import type { ICountdownRenderer } from "../count-down/types";
 import { isDigit } from "./shared";
 
 export type TCardEffect = "flip" | "slide" | "calendar";
@@ -56,6 +56,11 @@ interface ICardState {
   cells: ICell[];
   /** 上次渲染时传入的原始 remaining，值未变时连 ctx.fmt 都不必调用 */
   lastRemaining?: number;
+}
+
+/** update() 重建时需要替换 inner 而不改变引擎持有的句柄，故多包一层 */
+interface ICardHolder {
+  inner: ICardState;
 }
 
 function el(tag: string, className: string): HTMLElement {
@@ -181,58 +186,54 @@ export function createCardRender(options: ICardRenderOptions = {}): ICardRender 
     return { text, cells };
   }
 
-  // 状态按元素隔离，同一个渲染器实例可被多个任务/分组复用
-  let states = new WeakMap<Element, ICardState>();
+  return {
+    mount(host, ctx): ICardHolder {
+      const fmtValue = ctx.fmt(ctx.remaining, ctx);
+      const inner = build(host as HTMLElement, fmtValue);
+      inner.lastRemaining = ctx.remaining;
+      return { inner };
+    },
 
-  const render = (host: Element, remaining: number, _value: unknown, ctx: Parameters<TCountdownRender>[3]) => {
-    let state = states.get(host);
-    if (state && state.lastRemaining === remaining) return; // 原始剩余毫秒未变，连 ctx.fmt 都不必调用
-    const fmtValue = ctx.fmt(remaining, ctx);
-    // 首次渲染或字符数变化（如天数进位）→ 重建卡片，不播动画
-    if (!state || state.cells.length !== fmtValue.length) {
-      state?.cells.forEach((c) => c.dispose?.()); // 重建前断开旧监听
-      state = build(host as HTMLElement, fmtValue);
-      state.lastRemaining = remaining;
-      states.set(host, state);
-      return;
-    }
-    state.lastRemaining = remaining;
-    if (state.text === fmtValue) return;
-    for (let i = 0; i < fmtValue.length; i++) {
-      const cell = state.cells[i];
-      const ch = fmtValue[i];
-      if (cell.value === ch) continue;
-      // 种类一致才原地更新；数字↔分隔符切换（极少见，如格式变更）则整体重建
-      if (cell.sep === !isDigit(ch)) {
-        if (cell.sep) {
-          cell.applyPost(ch);
-          cell.value = ch;
-        } else {
-          animate(cell, ch);
-        }
-      } else {
+    update(holder, remaining, _value, ctx) {
+      const state = holder.inner;
+      if (state.lastRemaining === remaining) return;
+      const fmtValue = ctx.fmt(remaining, ctx);
+      // 字符数变化（如天数进位）→ 重建卡片，不播动画
+      if (state.cells.length !== fmtValue.length) {
         state.cells.forEach((c) => c.dispose?.());
-        state = build(host as HTMLElement, fmtValue);
-        state.lastRemaining = remaining;
-        states.set(host, state);
+        holder.inner = build(ctx.el as HTMLElement, fmtValue);
+        holder.inner.lastRemaining = remaining;
         return;
       }
-    }
-    state.text = fmtValue;
-  };
+      state.lastRemaining = remaining;
+      if (state.text === fmtValue) return;
+      for (let i = 0; i < fmtValue.length; i++) {
+        const cell = state.cells[i];
+        const ch = fmtValue[i];
+        if (cell.value === ch) continue;
+        // 种类一致才原地更新；数字↔分隔符切换（极少见，如格式变更）则整体重建
+        if (cell.sep === !isDigit(ch)) {
+          if (cell.sep) {
+            cell.applyPost(ch);
+            cell.value = ch;
+          } else {
+            animate(cell, ch);
+          }
+        } else {
+          state.cells.forEach((c) => c.dispose?.());
+          holder.inner = build(ctx.el as HTMLElement, fmtValue);
+          holder.inner.lastRemaining = remaining;
+          return;
+        }
+      }
+      state.text = fmtValue;
+    },
 
-  /** 释放引用、断开事件监听，防内存泄漏（不改动宿主子节点）。destroy(el) 清单个元素；destroy() 丢弃整张状态表 */
-  render.destroy = (el?: Element): void => {
-    if (el) {
-      states.get(el)?.cells.forEach((c) => c.dispose?.());
-      states.delete(el);
-    } else {
-      states = new WeakMap();
-    }
+    destroy(holder) {
+      holder.inner.cells.forEach((c) => c.dispose?.());
+    },
   };
-
-  return render;
 }
 
-/** createCardRender 返回值：渲染函数 + destroy */
-export type ICardRender = TCountdownRender & { destroy: (el?: Element) => void };
+/** createCardRender 返回值：有状态渲染器生命周期 */
+export type ICardRender = ICountdownRenderer<ICardHolder>;

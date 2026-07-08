@@ -1,4 +1,4 @@
-<!doctype html>
+﻿<!doctype html>
 <html lang="zh-CN">
   <head>
     <meta charset="UTF-8" />
@@ -109,6 +109,13 @@
     </style>
   </head>
   <body>
+  <nav style="position:sticky;top:0;z-index:999;display:flex;gap:6px;flex-wrap:wrap;padding:6px 10px;background:rgba(255,255,255,.92);backdrop-filter:blur(8px);border-bottom:1px solid #e0e0e6;font-size:12px;">
+    <a href="/index.html" style="padding:3px 8px;border-radius:5px;text-decoration:none;background:#f0f0f5;color:#1d1d1f;">src 手动测试台</a>
+    <a href="/test.html" style="padding:3px 8px;border-radius:5px;text-decoration:none;background:#f0f0f5;color:#1d1d1f;">API 断言测试台</a>
+    <a href="/stress.html" style="padding:3px 8px;border-radius:5px;text-decoration:none;background:#f0f0f5;color:#1d1d1f;">压测</a>
+    <a href="/ring-demo.html" style="padding:3px 8px;border-radius:5px;text-decoration:none;background:#f0f0f5;color:#1d1d1f;">Ring Demo</a>
+    <a href="/ring-stress.html" style="padding:3px 8px;border-radius:5px;text-decoration:none;background:#f0f0f5;color:#1d1d1f;">Ring 压测</a>
+  </nav>
     <h1>createRingRender — 圆形数码倒计时</h1>
     <p class="sub">外圈 60 刻度 = 当前分钟剩余秒，每秒灭一格；最后一分钟按秒变 绿 → 黄 → 红。</p>
 
@@ -207,9 +214,10 @@
         const mmss = (ms) => `${pad(Math.floor(ms / 60000))}:${pad(Math.floor((ms % 60000) / 1000))}`;
         const value = [0, 0, 0, 0, 0];
         const ctxAt = (ms) => ({ el: stage, id: 0, deadline: 0, remaining: ms, value, active: true, paused: false, fmt: mmss, parser: () => value });
+        // 生命周期 API：mount 以 total 作为总时长锚点，再 update 到目标剩余
         const r = createRingRender(ringOpts());
-        r(stage, total, value, ctxAt(total)); // 首帧锚定 total
-        r(stage, remaining, value, ctxAt(remaining)); // 再画剩余
+        const state = r.mount(stage, ctxAt(total));
+        if (remaining < total) r.update(state, remaining, value, ctxAt(remaining));
       } else {
         startRing(); // 进页面就跑一轮
       }

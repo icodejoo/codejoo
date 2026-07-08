@@ -4,6 +4,11 @@ import { lazyStart } from "./helper";
 /** 分组的默认标签；该分组常驻（清空也不删除），其余分组空了即删 */
 export const defaultLabel = "default";
 
+/** 判断 render 选项是否为有状态生命周期渲染器（含 mount 方法的对象）*/
+export function isLifecycleRenderer(r: unknown): r is { mount(...args: unknown[]): unknown } {
+  return !!r && typeof r === "object" && typeof (r as { mount?: unknown }).mount === "function";
+}
+
 /** 若渲染器带 destroy（如 card/odometer/ring 插件），在任务移除时调用它释放该元素的内部引用 */
 export function destroyRender(el: Element | undefined, render: unknown): void {
   const destroy = (render as { destroy?: (el?: Element) => void } | undefined)?.destroy;
@@ -85,18 +90,19 @@ export function createGroupStore<T, C>(hooks?: { onRemove?: (task: T) => void; o
     const g = groups.get(label);
     if (!g) return;
     const t = g.queue.get(id);
-    if (t) hooks?.onRemove?.(t);
     if (!g.queue.delete(id)) return;
     if (g.queue.size === 0 && label !== defaultLabel) groups.delete(label);
+    if (t) hooks?.onRemove?.(t);
   }
 
   function clear(label = defaultLabel) {
     const g = groups.get(label);
     if (!g) return;
     const each = hooks?.onClearEach ?? hooks?.onRemove;
-    if (each) g.queue.forEach(each);
+    const tasks = each ? Array.from(g.queue.values()) : undefined;
     g.queue.clear();
     if (label !== defaultLabel) groups.delete(label);
+    if (tasks) tasks.forEach(each!);
   }
 
   return { groups, group, remove, clear };

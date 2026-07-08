@@ -1,4 +1,4 @@
-import type { TCountdownRender, ICountdownContext } from "../count-down/types";
+import type { ICountdownRenderer } from "../count-down/types";
 import { isDigit, maskOf } from "./shared";
 
 // ============================ 对外类型 ============================
@@ -158,8 +158,8 @@ export interface IRingDigit extends IPartBase {
 /** 部件字段：false/null 隐藏；对象则按其配置（与默认合并） */
 type TPart<T> = false | null | T;
 
-/** createRingRender 返回值：渲染函数 + destroy（释放引用、防泄漏） */
-export type IRingRender = TCountdownRender & { destroy: (el?: Element) => void };
+/** createRingRender 返回值：有状态渲染器生命周期 */
+export type IRingRender = ICountdownRenderer<IRingState>;
 
 export interface IRingRenderOptions {
   // —— 公用 ——
@@ -175,6 +175,8 @@ export interface IRingRenderOptions {
   glow?: boolean;
   /** 主题色（同时写成 CSS 变量；options 优先级高于样式表默认） */
   colors?: Partial<IRingColors>;
+  /** 倒计时总时长（ms）。传入后内圈进度环按此时长比例绘制；不传则以首帧剩余时间推算（lazy 任务中途可见时会偏小） */
+  total?: number;
 
   // —— 各部件（分组；false/null 隐藏） ——
   /** 最外圈刻度 */
@@ -228,7 +230,7 @@ const setHref = (n: SVGElement, id: string) => {
 let SID = 0; // 外圈弧复用源 id 自增，避免同页多实例/多元素的 id 冲突
 
 // 渲染元素上挂的「上次写入值」缓存：未变化则跳过 DOM 写入（省样式重算 + 重光栅）
-type TCacheEl = SVGElement & { style: CSSStyleDeclaration; __z?: TRingZone; __on?: boolean; __d?: string; __t?: string };
+type TCacheEl = SVGElement & { style: CSSStyleDeclaration; __z?: TRingZone; __on?: boolean; __d?: string; __t?: string; __hi?: number };
 
 /** 以 (cx,cy) 为圆心、半径 r，画 a0→a1（弧度）的圆弧 path d */
 function arcPath(cx: number, cy: number, r: number, a0: number, a1: number): string {
@@ -354,7 +356,7 @@ export function createRingRender(options: IRingRenderOptions = {}): IRingRender 
     off: prefix + "zone-off",
   };
   const ALL_ZONES = [zCls.normal, zCls.green, zCls.yellow, zCls.red, zCls.off];
-  let states = new WeakMap<Element, IRingState>();
+  const optTotal = options.total;
 
   function zoneName(secOrIndex: number): TRingZone {
     if (secOrIndex < redAt) return "red";
@@ -574,11 +576,12 @@ export function createRingRender(options: IRingRenderOptions = {}): IRingRender 
         const rem = Math.max(0, Math.min(remaining, total));
         const drawSeg = (path: TCacheEl, t0: number, t1: number) => {
           const hi = Math.min(t1, rem);
+          // hi 完全决定弧形（t0/radius/angleAt 均为常量），以 hi 作缓存键跳过 arcPath trig+字符串分配
+          if (path.__hi === hi) return;
+          path.__hi = hi;
           const d = hi <= t0 ? "" : arcPath(50, 50, innerCfg.radius, angleAt(t0), angleAt(hi));
-          if (path.__d !== d) {
-            path.setAttribute("d", d); // d 未变则跳过，避免重光栅
-            path.__d = d;
-          }
+          path.setAttribute("d", d);
+          path.__d = d;
         };
         for (let i = 0; i < state.minutes.length; i++) drawSeg(state.minutes[i].el, state.minutes[i].from, state.minutes[i].to);
         drawSeg(state.zones.red, 0, redAt * 1000);
@@ -638,35 +641,40 @@ export function createRingRender(options: IRingRenderOptions = {}): IRingRender 
     state.text = text;
   }
 
-  const render = (host: Element, remaining: number, _value: unknown, ctx: ICountdownContext) => {
-    // 向上取整到整秒：5s 倒计时一开始就显示 5（而非 4），且文本/刻度/内圈/弧全程一致，
-    // 在数码管读到 0 的同一刻一起归零——既不会少 1（起始）也不会多走一格（结尾）。
-    const remMs = Math.ceil(Math.max(0, remaining) / 1000) * 1000;
-    // 调用频率交给 count-down：非毫秒任务它本就只在秒位变化时回调；
-    // 但毫秒精度任务每帧都会回调，remMs 量化到整秒后同一秒内会重复——直接跳过，连 ctx.fmt/maskOf 都不必调用
-    let state = states.get(host);
-    if (state && state.lastRemMs === remMs) return;
-    const text = ctx.fmt(remMs, ctx);
-    const mask = maskOf(text);
-    if (!state || state.mask !== mask) {
-      const total = state && state.total > 0 ? state.total : Math.max(remMs, 1);
-      state = build(host as HTMLElement, text, total);
-      states.set(host, state);
-    }
-    state.lastRemMs = remMs;
-    const remSec = remMs / 1000;
-    paint(state, text, Math.floor(remSec / 60), remSec % 60, remMs);
-  };
+  return {
+    mount(host, ctx): IRingState {
+      // mount 在 add() 时调用（非 lazy）或进入视口时调用（lazy）。
+      // 非 lazy 时 ctx.remaining ≈ 总时长，故用它作 total 基准；lazy 任务请通过 options.total 传入真实总时长。
+      const total = optTotal ?? Math.max(ctx.remaining, 1);
+      const remMs = Math.ceil(Math.max(0, ctx.remaining) / 1000) * 1000;
+      const text = ctx.fmt(remMs, ctx);
+      const state = build(host as HTMLElement, text, total);
+      state.lastRemMs = remMs;
+      // build() 只建结构，不上色/不点亮；首帧 paint 在此触发，确保 update() 收到同一 remMs 时能跳过
+      const remSec = remMs / 1000;
+      paint(state, text, Math.floor(remSec / 60), remSec % 60, remMs);
+      return state;
+    },
 
-  /**
-   * 释放引用、防内存泄漏（不改动宿主子节点，DOM 去留交调用方）：
-   * - destroy(el)：断开该元素的状态引用（其 DOM/内部引用随之可回收）
-   * - destroy()：丢弃整张状态表（释放渲染器对所有已渲染元素状态的引用）
-   */
-  render.destroy = (el?: Element): void => {
-    if (el) states.delete(el);
-    else states = new WeakMap();
-  };
+    update(state, remaining, _value, ctx) {
+      // 向上取整到整秒：5s 倒计时一开始就显示 5（而非 4），且文本/刻度/内圈/弧全程一致，
+      // 在数码管读到 0 的同一刻一起归零——既不会少 1（起始）也不会多走一格（结尾）。
+      const remMs = Math.ceil(Math.max(0, remaining) / 1000) * 1000;
+      // 调用频率交给 count-down：非毫秒任务它本就只在秒位变化时回调；
+      // 但毫秒精度任务每帧都会回调，remMs 量化到整秒后同一秒内会重复——直接跳过，连 ctx.fmt/maskOf 都不必调用
+      if (state.lastRemMs === remMs) return;
+      const text = ctx.fmt(remMs, ctx);
+      const mask = maskOf(text);
+      if (state.mask !== mask) {
+        Object.assign(state, build(ctx.el as HTMLElement, text, state.total));
+      }
+      state.lastRemMs = remMs;
+      const remSec = remMs / 1000;
+      paint(state, text, Math.floor(remSec / 60), remSec % 60, remMs);
+    },
 
-  return render;
+    destroy(_state) {
+      // ring 的 SVG 元素无需断开事件监听
+    },
+  };
 }

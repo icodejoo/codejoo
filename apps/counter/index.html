@@ -1,4 +1,4 @@
-<!doctype html>
+﻿<!doctype html>
 <html lang="zh-CN">
   <head>
     <meta charset="UTF-8" />
@@ -208,6 +208,13 @@
     </style>
   </head>
   <body>
+  <nav style="position:sticky;top:0;z-index:999;display:flex;gap:6px;flex-wrap:wrap;padding:6px 10px;background:rgba(255,255,255,.92);backdrop-filter:blur(8px);border-bottom:1px solid #e0e0e6;font-size:12px;">
+    <a href="/index.html" style="padding:3px 8px;border-radius:5px;text-decoration:none;background:#f0f0f5;color:#1d1d1f;">src 手动测试台</a>
+    <a href="/test.html" style="padding:3px 8px;border-radius:5px;text-decoration:none;background:#f0f0f5;color:#1d1d1f;">API 断言测试台</a>
+    <a href="/stress.html" style="padding:3px 8px;border-radius:5px;text-decoration:none;background:#f0f0f5;color:#1d1d1f;">压测</a>
+    <a href="/ring-demo.html" style="padding:3px 8px;border-radius:5px;text-decoration:none;background:#f0f0f5;color:#1d1d1f;">Ring Demo</a>
+    <a href="/ring-stress.html" style="padding:3px 8px;border-radius:5px;text-decoration:none;background:#f0f0f5;color:#1d1d1f;">Ring 压测</a>
+  </nav>
     <h1>@codejoo/counter — <code>src</code> 全量 API 手动测试台</h1>
     <p class="sub">
       直接从 <code>./src/*</code> 源码导入（vite 转译）。每个 API 都有按钮手动触发，配合实时渲染与右侧日志肉眼验证。 用 <code>npx vite</code> 打开根路径 <code>/</code>。<span class="pill"
@@ -961,11 +968,17 @@
           e.remove();
         }, 1000);
       };
+      const eCuEl = document.getElementById("eCu");
+      function eCuOpts() {
+        return { el: eCuEl, fmt: buildCountupFormatter(new Intl.NumberFormat("en-US"), { prefix: str("bcfPre"), suffix: str("bcfSuf") }), render: countupRender, lazy: false };
+      }
+      // 页面初始化：addTask 立即触发，engine fix 同步写入格式化初始值
+      countup({ ...eCuOpts(), from: 0, to: 0, duration: 0, autoKill: true });
+
       document.getElementById("e_runcu").onclick = () => {
         start();
         setDrv("running");
-        const f = buildCountupFormatter(new Intl.NumberFormat("en-US"), { prefix: str("bcfPre"), suffix: str("bcfSuf") });
-        countup({ el: document.getElementById("eCu"), from: 0, to: 9999, duration: 2500, easing: easeAsymmetricS(num("eSkew")), fmt: f, render: countupRender, lazy: false });
+        countup({ ...eCuOpts(), from: 0, to: 9999, duration: 2500, easing: easeAsymmetricS(num("eSkew")) });
         log(`用 easeAsymmetricS(${num("eSkew")}) 跑 countup(0→9999) → eCu`, "ev");
       };
 

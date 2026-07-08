@@ -20,3 +20,5 @@ export type {
   IRingInnerFrame,
   IRingDigitFrame,
 } from "./ring";
+export type { ICountdownRenderer } from "../count-down/types";
+export type { ICountupRenderer } from "../count-up/type";

@@ -1,12 +1,24 @@
-import type { ICountdownOptions, ICountdownContext, ICountdownTask, ICountdownTaskOptions, TCountdownDeadline } from "./types";
+import type { ICountdownOptions, ICountdownContext, ICountdownTask, ICountdownTaskOptions, ICountdownRenderer, TCountdownDeadline, TCountdownValue } from "./types";
 import { copyCountdownValue, countdownRender, resolveConfig, resolveDateParser, resolveFormatter, resolveParser, snapshotValue } from "./helper";
 
 import { start, use } from "../core";
 import type { IPlugin } from "../core/types";
 import { $ } from "../helper";
-import { createGroupStore, defaultLabel, destroyRender, scheduleStart } from "../groups";
+import { createGroupStore, defaultLabel, destroyRender, isLifecycleRenderer, scheduleStart } from "../groups";
 
 const MS_SECOND = 1000;
+
+function isLifecycleRender(r: unknown): r is ICountdownRenderer {
+  return isLifecycleRenderer(r);
+}
+
+function bindLifecycle<S>(r: ICountdownRenderer<S>, el: Element, ctx: ICountdownContext) {
+  const state = r.mount(el, ctx);
+  return {
+    update: (rem: number, v: TCountdownValue, c: ICountdownContext) => r.update(state, rem, v, c),
+    destroy: () => r.destroy(state),
+  };
+}
 
 export const defaults: Required<Omit<ICountdownOptions, "parser" | "observer">> = {
   // 服务器时间与客户端时间的差值（server - client），用于校正客户端时钟
@@ -44,15 +56,17 @@ function ensureRegistered() {
 const store = createGroupStore<ICountdownTask, ICountdownOptions>({
   onRemove: (t) => {
     t.cancel?.();
-    destroyRender(t.el, t.render); // 释放渲染器(如插件)对该元素的内部引用
+    if (t.renderBound !== undefined) t.renderBound?.destroy();
+    else destroyRender(t.el, t.render);
     elTask.delete(t.el);
   },
   onClearEach: (t) => {
     t.cancel?.();
-    destroyRender(t.el, t.render);
+    if (t.renderBound !== undefined) t.renderBound?.destroy();
+    else destroyRender(t.el, t.render);
     elTask.delete(t.el);
-    // 未激活的 lazy 任务尚未锚定 deadline，剩余时间未知 → 传 0
-    const remaining = t.active ? t.deadline - Date.now() : 0;
+    // 未激活的 lazy 任务尚未锚定 deadline，剩余时间未知 → 传 0；active 但已过期时钳到 0
+    const remaining = t.active ? Math.max(0, t.deadline - Date.now()) : 0;
     t.ctx.remaining = remaining;
     snapshotValue(t.ctx.oldValue, t.ctx.value);
     t.ctx.value = t.parser(remaining, t.ctx);
@@ -100,6 +114,8 @@ function add(deadline: TCountdownDeadline, el: string | Element, options?: strin
     parser: parserFn,
   };
 
+  const lifecycle = isLifecycleRender(render) ? render : null;
+
   const task: ICountdownTask = {
     el: elRef,
     deadline: active ? anchor() : 0,
@@ -111,12 +127,22 @@ function add(deadline: TCountdownDeadline, el: string | Element, options?: strin
     showMs: showMilliseconds,
     fmt: fmtFn,
     parser: parserFn,
-    render,
+    render: lifecycle ? countdownRender : (render as ICountdownTask["render"]) ?? countdownRender,
+    renderBound: lifecycle ? null : undefined,
     autoKill,
     ctx,
     ...hooks,
   };
+  // adapter 引用 task.renderBound（运行时），必须在 task 建好后设置，避免 TDZ 陷阱
+  if (lifecycle) task.render = (_el, rem, val, c) => task.renderBound?.update(rem, val, c);
   ctx.deadline = task.deadline;
+
+  if (lifecycle && active) {
+    // lifecycle：ctx 就绪，立即 mount（mount 内部完成首帧渲染）
+    ctx.remaining = Math.max(0, task.deadline - Date.now());
+    task.renderBound = bindLifecycle(lifecycle, elRef, ctx);
+  }
+
   const id = uid;
   g.queue.set(id, task);
   elTask.set(elRef, { id, label: lbl });
@@ -131,12 +157,20 @@ function add(deadline: TCountdownDeadline, el: string | Element, options?: strin
       if (task.paused) {
         // 懒任务在暂停期间进入视口：此刻不落定 deadline（避免暂停期间截止时间静默流逝），
         // 只记下"此刻开始的剩余时长"，真正的 deadline 留到 resume() 时按 frozen 重锚
-        task.frozen = anchor() - Date.now();
+        task.frozen = Math.max(0, anchor() - Date.now());
+        if (lifecycle && task.renderBound === null) {
+          task.ctx.remaining = task.frozen;
+          task.renderBound = bindLifecycle(lifecycle, elRef, task.ctx);
+        }
         return;
       }
       task.deadline = anchor();
       task.ctx.deadline = task.deadline;
       task.last = -1;
+      if (lifecycle && task.renderBound === null) {
+        task.ctx.remaining = Math.max(0, task.deadline - Date.now());
+        task.renderBound = bindLifecycle(lifecycle, elRef, task.ctx);
+      }
     },
     lazyTimeout,
     () => remove(id, lbl),
@@ -146,8 +180,8 @@ function add(deadline: TCountdownDeadline, el: string | Element, options?: strin
 
 export function pause(id: number, label = defaultLabel) {
   const t = groups.get(label)?.queue.get(id);
-  if (!t || t.paused) return;
-  t.frozen = t.active ? t.deadline - Date.now() : 0;
+  if (!t || t.paused || t.done) return;
+  t.frozen = t.active ? Math.max(0, t.deadline - Date.now()) : 0;
   t.paused = true;
   t.ctx.paused = true;
   t.onPause?.(t.frozen, t.ctx);

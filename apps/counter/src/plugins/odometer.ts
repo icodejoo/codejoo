@@ -1,4 +1,4 @@
-import type { ICountupRenderContext, TCountupRender } from "../count-up/type";
+import type { ICountupRenderer, ICountupRenderContext } from "../count-up/type";
 import { maskOf } from "./shared";
 
 export interface IOdometerRenderOptions {
@@ -109,8 +109,6 @@ export function createOdometerRender(options: IOdometerRenderOptions = {}): IOdo
   };
   const T = 1 - Math.min(Math.max(rollWindow, 0.01), 1);
   const full = options.strip === "full";
-  let states = new WeakMap<Element, IOState>();
-
   /** 按掩码构建 DOM（一次性）。掩码里的 # 是数字位、其余是分隔符字面量。 */
   function build(host: HTMLElement, mask: string): IOState {
     host.textContent = "";
@@ -252,53 +250,58 @@ export function createOdometerRender(options: IOdometerRenderOptions = {}): IOdo
     }
   }
 
-  function rebuild(host: HTMLElement, mask: string, ctx: ICountupRenderContext): IOState {
-    const state = build(host, mask);
-    state.from = ctx.from;
-    state.to = ctx.to;
-    states.set(host, state);
-    return state;
-  }
+  return {
+    mount(host, ctx): IOState {
+      const mask = planMask(ctx);
+      const state = build(host as HTMLElement, mask);
+      state.from = ctx.from;
+      state.to = ctx.to;
+      return state;
+    },
 
-  const render = (host: Element, _value: number, ctx: Parameters<TCountupRender>[2]) => {
-    const el = host as HTMLElement;
-    let state = states.get(host);
-    const settle = ctx.value === ctx.to;
+    update(state, _value, ctx) {
+      const el = ctx.el as HTMLElement;
+      const settle = ctx.value === ctx.to;
 
-    // 结构只由 from/to 决定（一次预建）。动画中绝不按每帧 fmtValue 重建：
-    // 中间值是缓动浮点，Intl 默认会带上变动的小数位，结构会抖动——但那些小数本就不该显示，
-    // 定位用 ctx.value 现算（整数位滚动 + 小数驱动 roll）。新动画/塌缩后重滚才重建。
-    if (!state || state.from !== ctx.from || state.to !== ctx.to || (state.collapsed && !settle)) {
-      state = rebuild(el, planMask(ctx), ctx);
-    }
+      // 结构只由 from/to 决定（一次预建）。动画中绝不按每帧 fmtValue 重建：
+      // 中间值是缓动浮点，Intl 默认会带上变动的小数位，结构会抖动——但那些小数本就不该显示，
+      // 定位用 ctx.value 现算（整数位滚动 + 小数驱动 roll）。新动画/塌缩后重滚才重建。
+      if (state.from !== ctx.from || state.to !== ctx.to || (state.collapsed && !settle)) {
+        Object.assign(state, build(el, planMask(ctx)));
+        state.from = ctx.from;
+        state.to = ctx.to;
+        state.lastSign = undefined; // build() 不含 lastSign，重建后须手动清缓存，否则 updateSign 会提前跳过
+      }
 
-    const visibleLen = leadingZeros ? Infinity : intLen(ctx.value);
-    const negative = ctx.value < 0;
+      const visibleLen = leadingZeros ? Infinity : intLen(ctx.value);
+      const negative = ctx.value < 0;
 
-    if (settle) {
-      // 落定：按目标值裁剪到实际宽度（倒数 9999→5 会移除多余前导位），再塌缩为单格静态。
-      // 仅此一帧才需要格式化字符串 → 按需调用 ctx.formatter，动画期完全不格式化（见 TCountupRender）
-      const live = maskOf(ctx.fmt(ctx.value, ctx));
-      if (state.mask !== live) state = rebuild(el, live, ctx);
+      if (settle) {
+        // 落定：按目标值裁剪到实际宽度（倒数 9999→5 会移除多余前导位），再塌缩为单格静态。
+        // 仅此一帧才需要格式化字符串 → 按需调用 ctx.formatter，动画期完全不格式化
+        const live = maskOf(ctx.fmt(ctx.value, ctx));
+        if (state.mask !== live) {
+          Object.assign(state, build(el, live));
+          state.from = ctx.from;
+          state.to = ctx.to;
+          state.lastSign = undefined; // 同上，落定路径的重建也须清缓存
+        }
+        updateSign(state, negative);
+        reflow(state, visibleLen);
+        if (!state.collapsed) collapse(state, ctx.value);
+        return;
+      }
+
       updateSign(state, negative);
       reflow(state, visibleLen);
-      if (!state.collapsed) collapse(state, ctx.value);
-      return;
-    }
+      paint(state, ctx.value, visibleLen);
+    },
 
-    updateSign(state, negative);
-    reflow(state, visibleLen);
-    paint(state, ctx.value, visibleLen);
+    destroy(_state) {
+      // odometer 无需断开事件监听
+    },
   };
-
-  /** 释放引用、防内存泄漏。destroy(el) 断开该元素状态引用；destroy() 丢弃整张状态表。不改动宿主子节点。 */
-  render.destroy = (el?: Element): void => {
-    if (el) states.delete(el);
-    else states = new WeakMap();
-  };
-
-  return render;
 }
 
-/** createOdometerRender 返回值：渲染函数 + destroy */
-export type IOdometerRender = TCountupRender & { destroy: (el?: Element) => void };
+/** createOdometerRender 返回值：有状态渲染器生命周期 */
+export type IOdometerRender = ICountupRenderer<IOState>;
