@@ -1,0 +1,38 @@
+name: Subproject Issue
+description: Report a bug or request a feature for a subproject in this monorepo
+title: ""
+labels: []
+body:
+  - type: dropdown
+    id: subproject
+    attributes:
+      label: Subproject
+      description: Which subproject is this issue about?
+      options:
+        - axp
+        - counter
+        - layerman
+        - mocker
+        - openapi
+        - stomp
+        - storage
+        - utils
+        - other
+    validations:
+      required: true
+
+  - type: textarea
+    id: description
+    attributes:
+      label: Description
+      description: What happened? What did you expect?
+    validations:
+      required: true
+
+  - type: textarea
+    id: repro
+    attributes:
+      label: Steps to reproduce / environment
+      description: Reproduction steps, Node/browser version, etc.
+    validations:
+      required: false
