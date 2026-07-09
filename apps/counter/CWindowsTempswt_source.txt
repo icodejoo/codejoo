@@ -1,0 +1,16 @@
+Get-Content : 找不到路径“C:\Windows\Temp\swt_b64.txt”，因为该路径不存在。
+所在位置 行:1 字符: 76
++ ... t]::FromBase64String((Get-Content C:\Windows\Temp\swt_b64.txt -Raw)))
++                           ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : ObjectNotFound: (C:\Windows\Temp\swt_b64.txt:String) [Get-Content], ItemNotFoundExceptio 
+   n
+    + FullyQualifiedErrorId : PathNotFound,Microsoft.PowerShell.Commands.GetContentCommand
+ 
+使用“1”个参数调用“FromBase64String”时发生异常:“值不能为 null。
+参数名: s”
+所在位置 行:1 字符: 1
++ [System.Text.Encoding]::UTF8.GetString([System.Convert]::FromBase64St ...
++ ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : NotSpecified: (:) [], MethodInvocationException
+    + FullyQualifiedErrorId : ArgumentNullException
+ 
