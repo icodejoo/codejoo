@@ -1,6 +1,5 @@
 name: Subproject Issue
 description: Report a bug or request a feature for a subproject in this monorepo
-title: ""
 labels: []
 body:
   - type: dropdown
