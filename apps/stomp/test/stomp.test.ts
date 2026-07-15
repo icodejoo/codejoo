@@ -113,6 +113,20 @@ describe("@codejoo/stomp Stompsocket", () => {
     expect(broker.framesOf("UNSUBSCRIBE").length).toBe(1);
   });
 
+  it("自动归并键不含 NUL：SUBSCRIBE 的 id 头是 wire 安全的", async () => {
+    // 回归：曾用 \x00 作分隔符，NUL 是 STOMP 帧终止符，放进 id 头会把帧从中间截断，
+    // 服务端报 "malformed frame: missing header/body separator"。
+    const c = make();
+    c.activate();
+    await pump(() => c.connected);
+    c.subscribe("/topic/nulcheck", () => {});
+    await pump(() => broker.subscriptionCount === 1);
+
+    const id = broker.framesOf("SUBSCRIBE").at(-1)?.headers.id ?? "";
+    expect(id).not.toContain("\x00");
+    expect(id).toContain("/topic/nulcheck");
+  });
+
   it("subscribe（传 id）：显式 id 与自动归并键完全独立", async () => {
     const c = make();
     c.activate();

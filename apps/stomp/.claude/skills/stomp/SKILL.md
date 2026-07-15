@@ -33,9 +33,13 @@ live in `test/stomp.test.ts` driven by an in-repo minimal broker `test/broker.ts
   `SUBSCRIBE` is sent. STOMP subscription id is set explicitly to our key (`openOnWire`) so
   stompjs's auto `sub-N` ids can't break id-based unsubscribe/dedup.
   Key derivation: when the user passes no `id`, the key is
-  `"auto#dest\x00{destination}\x00{ack}\x00{onParseError}"` (deterministic for the same
+  `"auto#dest\x1f{destination}\x1f{ack}\x1f{onParseError}"` (deterministic for the same
   options triple — this is the auto-dedup path). When an explicit `id` is passed, the key is
-  exactly that `id` (separate namespace because user ids can't contain `\x00`).
+  exactly that `id` (separate namespace because user ids can't contain `\x1f`).
+  **The separator MUST NOT be `\x00`** — this key is sent verbatim as the STOMP `id` header,
+  and NUL is the STOMP frame terminator, so a NUL in a header truncates the whole frame on the
+  wire (server rejects with "malformed frame: missing header/body separator"). `\x1f` (unit
+  separator) is wire-safe and never appears in real destinations/ids.
 - **Ref-counted unsubscribe** — the handle's `unsubscribe()` (`cancelReg`) removes one
   `CallbackReg`; the wire `UNSUBSCRIBE` only fires when the last callback for an id is gone.
   Also `unsubscribe({ id | destination })` and `clear()`.

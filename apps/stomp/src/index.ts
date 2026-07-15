@@ -200,8 +200,11 @@ interface Subscription {
 }
 
 /** 不传 id 时按 (destination, ack, onParseError) 生成确定性归并键的前缀。
- * `\x00` 作分隔符——STOMP destination 不含空字节，与用户显式 id 不会碰撞。 */
-const AUTO_DEST_PREFIX = "auto#dest\x00";
+ * 用 `\x1f`（单元分隔符）作分隔符：这个键会被当作 STOMP 的 `id` 头发上线，**绝不能用
+ * `\x00`**——NUL 是 STOMP 的帧终止符，放进 header 会把整帧从中间截断。`\x1f` 是非
+ * NUL/CR/LF 的控制字符，几乎不可能出现在 destination 或用户显式 id 里，不会碰撞。 */
+const AUTO_DEST_SEP = "\x1f";
+const AUTO_DEST_PREFIX = `auto#dest${AUTO_DEST_SEP}`;
 
 /**
  * 对 `@stomp/stompjs` 的框架无关二次封装。
@@ -439,8 +442,8 @@ export class Stompsocket {
   subscribe(destination: string, callback: JsonCallback, options: { id?: string; ack?: AckMode; onParseError?: ParseFailureAck } = {}): StompSub {
     const ack = options.ack ?? AckMode.auto;
     const onParseError = options.onParseError ?? ParseFailureAck.nack;
-    // 不传 id → 三元组确定性键；传了 id → 直接用，与自动键命名空间隔离（自动键含 \x00）
-    const id = options.id ?? `${AUTO_DEST_PREFIX}${destination}\x00${ack}\x00${onParseError}`;
+    // 不传 id → 三元组确定性键；传了 id → 直接用，与自动键命名空间隔离（自动键含 \x1f）
+    const id = options.id ?? `${AUTO_DEST_PREFIX}${destination}${AUTO_DEST_SEP}${ack}${AUTO_DEST_SEP}${onParseError}`;
 
     let sub = this.subscriptions.get(id);
     if (sub && sub.destination !== destination) {
