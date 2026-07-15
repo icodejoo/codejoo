@@ -9,3 +9,4 @@
 - 新增:APNG walker(acTL 判定、默认图像首帧重组)
 - 新增:动画 WebP walker(VP8X 判定、首帧重打包,尝试档)
 - 新增:统一魔数嗅探入口 sniff,分派三格式 walker
+- 新增:占位生成(SVG 色块 + 首帧位图渲染)
