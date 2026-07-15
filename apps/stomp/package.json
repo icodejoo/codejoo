@@ -52,14 +52,9 @@
     "build": "vp pack",
     "dev": "vp pack --watch",
     "test": "vp test",
-    "prepublishOnly": "pnpm run check && vp pack",
-    "example:basic": "node examples/01-basic-pubsub.ts",
-    "example:auth": "node examples/02-auth-secure-topic.ts",
-    "example:ack": "node examples/03-ack-nack.ts",
-    "example:binary": "node examples/04-binary-compressed-topics.ts"
+    "prepublishOnly": "pnpm run check && vp pack"
   },
   "devDependencies": {
-    "@msgpack/msgpack": "^3.0.0",
     "@stomp/stompjs": "^7.0.0",
     "@types/node": "catalog:",
     "@types/ws": "^8.5.12",

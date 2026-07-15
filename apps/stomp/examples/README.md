@@ -1,52 +1,29 @@
 # 示例
 
 对接开源测试服务器 [api-ws-demo](https://github.com/icodejoo/api-ws-demo)（线上：
-`wss://api-ws-demo-latest.onrender.com`），演示 `@codejoo/stomp` 的几个关键能力，也用作
-真实服务端场景下的集成测试用例。
+`wss://api-ws-demo-latest.onrender.com`），演示 `@codejoo/stomp` 的浏览器端用法
+（`@codejoo/stomp` 是给客户端/浏览器用的，不是 Node 服务端库——想在本仓库里用真实代码
+（未发布的最新构建）交互式试各种功能，看 [`../example/`](../example/)，那边是
+`workspace:*` 链接本地构建、走 Vite dev server 的完整版）。
 
-## 准备
+## `05-browser-demo.html`
 
-```bash
-pnpm install
-pnpm run build   # 示例从包名 @codejoo/stomp 导入，需要先构建出 dist/
-```
+浏览器可视化 demo：连接状态、订阅 topic、消息日志、输入框发消息。**不需要装依赖/构建/起
+dev server**——直接双击用浏览器打开这个 HTML 文件就能跑（通过 CDN 以 ES module 方式加载
+`@codejoo/stomp`，只需要联网）。定位是"完全不用 clone 仓库、随手下载这一个文件就能试"，
+跟 `../example/` 的本地开发场景是两个不同的用途。
 
-默认连接线上部署的 api-ws-demo（`https://api-ws-demo-latest.onrender.com`，Render 免费实例，
-闲置会休眠，首次请求可能要等几十秒冷启动；这个实例也可能被其他人同时拿来测试，公共 topic 的
-数据会互相影响）。要连自己本地跑的实例（`cargo run`，默认端口 8080），设置环境变量：
-
-```bash
-API_WS_DEMO_HTTP=http://localhost:8080 API_WS_DEMO_WS=ws://localhost:8080 node examples/01-basic-pubsub.ts
-```
-
-## 示例列表
-
-| 文件 | 演示内容 |
-| --- | --- |
-| `01-basic-pubsub.ts` | 基本连接/订阅/发送；api-ws-demo 的"订阅 3 秒后必定推送一次"和 SEND 广播的 JSON 包装行为。 |
-| `02-auth-secure-topic.ts` | `beforeConnect` token 注入，对照匿名连接 vs 鉴权连接访问 `/topic/secure/*` 的差异。 |
-| `03-ack-nack.ts` | `AckMode.smart` 对接 `ack:client-individual`，服务端确认回执。 |
-| `04-binary-compressed-topics.ts` | 关键示例：`binaryDecoder` 处理 gzip/zstd 压缩的 JSON 以及 msgpack——即便 content-type 是 `application/json`/`application/msgpack` 而不是 `application/octet-stream`，也能正确路由到二进制解码（见下）。 |
-| `05-browser-demo.html` | 浏览器可视化 demo：连接状态、订阅 topic、消息日志、输入框发消息。**不需要装依赖/构建/起 dev server**——直接双击用浏览器打开这个 HTML 文件就能跑（通过 CDN 以 ES module 方式加载 `@codejoo/stomp`，只需要联网）。 |
-
-```bash
-pnpm run example:basic
-pnpm run example:auth
-pnpm run example:ack
-pnpm run example:binary
-```
-
-`05-browser-demo.html` 不走上面这些命令，直接在文件管理器里双击打开、或者浏览器里
-`Ctrl+O` 选中这个文件即可。
+直接在文件管理器里双击打开、或者浏览器里 `Ctrl+O` 选中这个文件即可。
 
 > 这个 HTML demo 用的是 CDN 上已发布的 `@codejoo/stomp@0.2.0`，还没包含仓库里这次改的
 > binaryDecoder 健壮性修复和 onUnhandled* 崩溃修复（这两个还没发版）——所以 demo 特意只用
 > 默认 `auto` ack 模式的普通 JSON topic，不涉及这两处修复覆盖的场景。等发布新版本后可以
-> 把 CDN 地址里的版本号去掉（`@codejoo/stomp` 不带版本号会解析到最新版）。
+> 把 CDN 地址里的版本号去掉（`@codejoo/stomp` 不带版本号会解析到最新版），并考虑跟
+> `../example/` 一样加上压缩 topic 的 binaryDecoder 演示。
 
-## 背景：这几个示例验证过的两个真实 bug
+## 背景：这个过程中验证过的两个真实 bug
 
-写这几个示例的过程中，跑起来对接真实服务端时发现并修复了两个此前没暴露出来的问题（本地用
+写这个 demo 的过程中，跑起来对接真实服务端时发现并修复了两个此前没暴露出来的问题（本地用
 手写的裸 WebSocket 脚本测试时不会触发，只有接真正的 `@stomp/stompjs` 客户端才会遇到）：
 
 1. **api-ws-demo 没有协商 WebSocket 子协议**：`@stomp/stompjs` 会在握手时请求
