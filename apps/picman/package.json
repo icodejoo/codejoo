@@ -50,6 +50,7 @@
   "devDependencies": {
     "@types/node": "catalog:",
     "@typescript/native-preview": "catalog:",
+    "happy-dom": "^20.10.6",
     "vite-plus": "catalog:",
     "vitest": "catalog:"
   }

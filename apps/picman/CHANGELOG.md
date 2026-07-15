@@ -12,3 +12,4 @@
 - 新增:占位生成(SVG 色块 + 首帧位图渲染)
 - 新增:缓存层 PicmanCache(Cache Storage + LRU 淘汰)
 - 新增:SW 管线(阈值/嗅探状态机、占位响应、后台下载去重)+ setupPicman 自装/托管入口
+- 新增:页面端显式 API load()(阶段事件+对账)与 registerPicmanSW
