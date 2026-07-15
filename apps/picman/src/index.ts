@@ -5,5 +5,7 @@
  */
 export * from "./page/load";
 export * from "./page/register";
+export * from "./page/auto";
+export * from "./page/types";
 export * from "./shared/types";
 export * from "./shared/protocol";
