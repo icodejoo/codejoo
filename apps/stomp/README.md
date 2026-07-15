@@ -14,7 +14,7 @@ pnpm add @codejoo/stomp @stomp/stompjs
 
 `@stomp/stompjs` reconnects the transport but does **not** restore your subscriptions. This wrapper adds the missing "product" layer on top:
 
-- **Shared-parse callback queue** — multiple callbacks under the same `id` share one parsed payload (parsed once, dispatched to all); no duplicate `SUBSCRIBE`.
+- **Automatic deduplication by destination** — multiple `subscribe()` calls to the same destination (with the same options, no `id` given) share one wire `SUBSCRIBE`, one parse, one reference. Ref-counted: the last unsubscribe sends `UNSUBSCRIBE`.
 - **Three ways to unsubscribe** — the returned handle's `unsubscribe()` (ref-counted), `unsubscribe({ id | destination })`, and `clear()`.
 - **Auto re-subscribe on reconnect** — replays local subscriptions in `onConnect`.
 - **Offline send buffering** — `send()` while disconnected buffers and flushes on connect.

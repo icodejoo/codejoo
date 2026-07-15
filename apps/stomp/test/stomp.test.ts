@@ -68,6 +68,62 @@ describe("@codejoo/stomp Stompsocket", () => {
     expect(a).toBe(b); // 同一对象引用
   });
 
+  it("subscribe（不传 id）：同 destination + 同选项自动归并，消息只解析一次", async () => {
+    const c = make();
+    c.activate();
+    await pump(() => c.connected);
+
+    let a: ParsedMessage | undefined;
+    let b: ParsedMessage | undefined;
+    c.subscribe("/topic/merge", (j) => (a = j));
+    c.subscribe("/topic/merge", (j) => (b = j));
+    await pump(() => broker.subscriptionCount === 1); // 只产生一条 wire 订阅
+
+    broker.sendMessage("/topic/merge", '{"v":9}');
+    await pump(() => a !== undefined && b !== undefined);
+    expect(a).toBe(b); // 同一对象引用（只解析一次）
+  });
+
+  it("subscribe（不传 id）：同 destination 但 ack 不同时独立订阅，互不干扰", async () => {
+    const c = make();
+    c.activate();
+    await pump(() => c.connected);
+
+    c.subscribe("/topic/split", () => {}, { ack: AckMode.auto });
+    c.subscribe("/topic/split", () => {}, { ack: AckMode.smart });
+    await pump(() => broker.subscriptionCount === 2); // 两条独立的 wire 订阅
+  });
+
+  it("subscribe（不传 id）：引用计数正确——两个订阅者都取消后才发 UNSUBSCRIBE", async () => {
+    const c = make();
+    c.activate();
+    await pump(() => c.connected);
+
+    const s1 = c.subscribe("/topic/rc", () => {});
+    const s2 = c.subscribe("/topic/rc", () => {});
+    await pump(() => broker.subscriptionCount === 1);
+
+    s1.unsubscribe();
+    await new Promise((r) => setTimeout(r, 50));
+    expect(broker.subscriptionCount).toBe(1); // s2 还在，不发 UNSUBSCRIBE
+    expect(broker.framesOf("UNSUBSCRIBE").length).toBe(0);
+
+    s2.unsubscribe();
+    await pump(() => broker.subscriptionCount === 0);
+    expect(broker.framesOf("UNSUBSCRIBE").length).toBe(1);
+  });
+
+  it("subscribe（传 id）：显式 id 与自动归并键完全独立", async () => {
+    const c = make();
+    c.activate();
+    await pump(() => c.connected);
+
+    // 一个自动归并、一个显式 id——即使 destination 相同也是两条独立订阅
+    c.subscribe("/topic/explicit", () => {});
+    c.subscribe("/topic/explicit", () => {}, { id: "my-id" });
+    await pump(() => broker.subscriptionCount === 2);
+  });
+
   it("unsubscribe：按 id 取消", async () => {
     const c = make();
     c.activate();

@@ -199,7 +199,9 @@ interface Subscription {
   wire?: StompSubscription;
 }
 
-const AUTO_ID_PREFIX = "auto#sub-";
+/** 不传 id 时按 (destination, ack, onParseError) 生成确定性归并键的前缀。
+ * `\x00` 作分隔符——STOMP destination 不含空字节，与用户显式 id 不会碰撞。 */
+const AUTO_DEST_PREFIX = "auto#dest\x00";
 
 /**
  * 对 `@stomp/stompjs` 的框架无关二次封装。
@@ -216,7 +218,6 @@ export class Stompsocket {
   private readonly opts: Required<Pick<StompsocketOptions, "queueWhileDisconnected" | "maxQueuedMessages" | "debug" | "reconnectDelay" | "resumeOnForeground">> & StompsocketOptions;
 
   private readonly subscriptions = new Map<string, Subscription>();
-  private autoId = 0;
   private readonly outbox: Outbound[] = [];
   private wantConnection = false;
   private connectHeaders: Record<string, string>;
@@ -427,27 +428,27 @@ export class Stompsocket {
 
   /**
    * 订阅一个 topic。
-   * - 传入相同 id 时，回调追加到同一订阅的队列，多个回调共用一份解析数据，不重复 SUBSCRIBE。
-   * - 不传 id 时自动生成唯一 id，作为独立订阅。
-   * - ack 非 auto 时，处理成功自动 ACK、任一回调抛异常 NACK；逐条确认建议 clientIndividual。
-   * - onParseError 控制解析失败时 NACK（默认，重投）还是 ACK（丢弃）。
-   * - ack/onParseError 只在该 id 首次订阅时生效；未连接时先登记、连上后自动重放。
+   * - **不传 id**（常见用法）：按 `(destination, ack, onParseError)` 三元组自动归并。相同三元组
+   *   的多次 subscribe 共享**一条** wire 订阅（只发一次 SUBSCRIBE，消息只解析一次再分发给所有
+   *   回调），通过 returned handle 的 `unsubscribe()` 引用计数释放，最后一个取消才撤销订阅。
+   * - **传入 id**：精确控制归并键，与"不传 id"的自动键完全独立（不会串用）；多次传相同
+   *   id + 相同 destination 照样合并；id 不同则独立——用于需要同一 destination 存在多份
+   *   独立订阅（如不同 selector 头）的逃生门。
+   * - ack/onParseError 只在该键首次订阅时生效；未连接时先登记、连上后自动重放。
    */
   subscribe(destination: string, callback: JsonCallback, options: { id?: string; ack?: AckMode; onParseError?: ParseFailureAck } = {}): StompSub {
-    const id = options.id ?? `${AUTO_ID_PREFIX}${this.autoId++}`;
+    const ack = options.ack ?? AckMode.auto;
+    const onParseError = options.onParseError ?? ParseFailureAck.nack;
+    // 不传 id → 三元组确定性键；传了 id → 直接用，与自动键命名空间隔离（自动键含 \x00）
+    const id = options.id ?? `${AUTO_DEST_PREFIX}${destination}\x00${ack}\x00${onParseError}`;
 
     let sub = this.subscriptions.get(id);
     if (sub && sub.destination !== destination) {
+      // 只有显式传 id 时才可能触发（自动键已含 destination，不会错位）
       this.log(`subscribe: id "${id}" 已绑定 ${sub.destination}，传入的新 destination "${destination}" 被忽略（回调追加到原订阅）`);
     }
     if (!sub) {
-      sub = {
-        id,
-        destination,
-        ack: options.ack ?? AckMode.auto,
-        onParseError: options.onParseError ?? ParseFailureAck.nack,
-        callbacks: [],
-      };
+      sub = { id, destination, ack, onParseError, callbacks: [] };
       this.subscriptions.set(id, sub);
       if (this.client.connected) this.openOnWire(sub);
     }

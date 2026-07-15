@@ -28,10 +28,14 @@ live in `test/stomp.test.ts` driven by an in-repo minimal broker `test/broker.ts
 ## Architecture map (all in `src/index.ts`)
 
 - **Subscription registry** — `subscriptions: Map<string, Subscription>`. Each `Subscription`
-  holds a `callbacks: CallbackReg[]` queue. Same `id` → callbacks share ONE parsed payload
+  holds a `callbacks: CallbackReg[]` queue. Same key → callbacks share ONE parsed payload
   (parse once in `onIncoming`, dispatch to all via `runCallbacks`), and only ONE wire
-  `SUBSCRIBE` is sent. STOMP subscription id is set explicitly to our id (`openOnWire`) so
+  `SUBSCRIBE` is sent. STOMP subscription id is set explicitly to our key (`openOnWire`) so
   stompjs's auto `sub-N` ids can't break id-based unsubscribe/dedup.
+  Key derivation: when the user passes no `id`, the key is
+  `"auto#dest\x00{destination}\x00{ack}\x00{onParseError}"` (deterministic for the same
+  options triple — this is the auto-dedup path). When an explicit `id` is passed, the key is
+  exactly that `id` (separate namespace because user ids can't contain `\x00`).
 - **Ref-counted unsubscribe** — the handle's `unsubscribe()` (`cancelReg`) removes one
   `CallbackReg`; the wire `UNSUBSCRIBE` only fires when the last callback for an id is gone.
   Also `unsubscribe({ id | destination })` and `clear()`.
@@ -99,7 +103,7 @@ live in `test/stomp.test.ts` driven by an in-repo minimal broker `test/broker.ts
 
 ## Verify workflow
 
-Acceptance = **`pnpm test` green** (34 tests via vitest through `vp test`). Tests spin up a real
+Acceptance = **`pnpm test` green** (38 tests via vitest through `vp test`). Tests spin up a real
 `ws` WebSocketServer (`StompTestBroker`) on an ephemeral port and assert on captured frames
 (`broker.framesOf("ACK"|"NACK"|"SUBSCRIBE"|"SEND"|...)`, `broker.subscriptionCount`). Reconnect
 tests use `broker.dropConnections()`. Prefer extending the broker over mocking stompjs.
