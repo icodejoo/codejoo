@@ -4,10 +4,18 @@ import { Client, type IFrame, type IMessage, type StompSubscription } from "@sto
 export type JsonMessage = Record<string, unknown>;
 
 /**
+ * 订阅回调收到的消息体：body 是合法 UTF-8 文本且 `JSON.parse` 能解析成功时，就是解析后的
+ * 实际值（可能是对象、数组、字符串、数字、布尔、null——不要求顶层必须是对象）；只有
+ * `JSON.parse` 本身失败（不是合法 JSON）时，才原样传回收到的原始文本字符串，交由回调
+ * 自行判断怎么处理——不在库内部替业务猜测这段文本该怎么解释。
+ */
+export type ParsedMessage = JsonMessage | string | number | boolean | null | unknown[];
+
+/**
  * 订阅回调。第二参 [ack] 恒有值：仅在 [AckMode.manual] 下用于手动 ACK/NACK，
  * 其余模式为 no-op（可安全忽略，`(json) => ...` 或 `(json, ack) => ...` 均可）。
  */
-export type JsonCallback = (json: JsonMessage, ack: AckControl) => void;
+export type JsonCallback = (json: ParsedMessage, ack: AckControl) => void;
 
 /** 手动确认句柄，随每条消息传入回调（见 [AckMode.manual]）。可存起来在回调外任意时刻调用；
  * 仅同一连接内有效，重连后旧句柄自动失效（no-op），重复调用幂等。 */
@@ -520,7 +528,7 @@ export class Stompsocket {
       // 该订阅可能已被取消，或被同 id 重新订阅（换了新对象）
       if (this.subscriptions.get(sub.id) !== sub) return;
 
-      let json: JsonMessage | undefined;
+      let json: ParsedMessage | undefined;
       let parseError: string | undefined;
       try {
         json = this.parse(message);
@@ -560,7 +568,7 @@ export class Stompsocket {
   }
 
   /** 分发给所有回调，返回是否全部成功（任一抛异常即 false）。复制队列避免并发修改。 */
-  private runCallbacks(sub: Subscription, json: JsonMessage, ack: AckControl): boolean {
+  private runCallbacks(sub: Subscription, json: ParsedMessage, ack: AckControl): boolean {
     let ok = true;
     for (const reg of sub.callbacks.slice()) {
       try {
@@ -595,8 +603,10 @@ export class Stompsocket {
   /**
    * 解析消息体。`content-type: application/octet-stream` 直接走 binaryDecoder（快路径，
    * 明确声明了就不必再做校验）；其余一律先对原始字节做**严格 UTF-8 解码**（fatal 模式），
-   * 解码成功才当文本 JSON.parse，解码失败则判定为二进制、同样走 binaryDecoder。
-   * 解析失败抛异常，空体返回 undefined。
+   * 解码成功才当文本尝试 JSON.parse——能解析就直接返回解析后的值（对象/数组/字符串/
+   * 数字/布尔/null 都可能，不要求顶层必须是对象）；`JSON.parse` 本身失败（不是合法
+   * JSON）才原样把收到的原始文本传回给回调，由回调自行判断怎么处理。真正的解析失败
+   * （二进制但没配 binaryDecoder、或 binaryDecoder 自己抛异常）仍然抛异常。空体返回 undefined。
    *
    * 为什么不能只按 content-type 分流：STOMP 生态里各家服务端约定不一致——ActiveMQ 常见
    * 干脆不写 content-type、RabbitMQ 透传 AMQP 原始类型、也确实见过服务端把二进制数据
@@ -614,7 +624,7 @@ export class Stompsocket {
    * `message.binaryBody` 配合模块级单例 [STRICT_UTF8_DECODER]（fatal 模式），不要每次
    * `new TextDecoder(...)`。
    */
-  private parse(message: IMessage): JsonMessage | undefined {
+  private parse(message: IMessage): ParsedMessage | undefined {
     if (message.headers["content-type"] === "application/octet-stream") {
       return this.decodeBinary(message);
     }
@@ -627,11 +637,11 @@ export class Stompsocket {
     }
 
     if (!text) return undefined;
-    const parsed: unknown = JSON.parse(text);
-    if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) {
-      throw new Error(`json 顶层不是对象: ${typeof parsed}`);
+    try {
+      return JSON.parse(text) as ParsedMessage;
+    } catch {
+      return text; // 不是合法 JSON，原样传回原始文本
     }
-    return parsed as JsonMessage;
   }
 
   /** 走注入的 binaryDecoder；未配置时抛异常（由调用方按 onParseError 语义处理）。 */

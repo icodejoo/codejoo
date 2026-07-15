@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
-import { type AckControl, AckMode, ConnectionState, ParseFailureAck, type JsonMessage, type StompsocketOptions, Stompsocket } from "../src/index.ts";
+import { type AckControl, AckMode, ConnectionState, ParseFailureAck, type JsonMessage, type ParsedMessage, type StompsocketOptions, Stompsocket } from "../src/index.ts";
 import { StompTestBroker } from "./broker.ts";
 
 let broker: StompTestBroker;
@@ -167,12 +167,14 @@ describe("@codejoo/stomp Stompsocket", () => {
   });
 
   it("auto-ack：解析失败默认 NACK；onParseError=ack 时 ACK", async () => {
+    // 真正的解析失败：二进制内容但没配 binaryDecoder（纯文本、非 JSON 已经不算失败，
+    // 见下面「原样传回」的测试）。
     const c1 = make();
     c1.activate();
     await pump(() => c1.connected);
     c1.subscribe("/topic/nack", () => {}, { ack: AckMode.smart });
     await pump(() => broker.subscriptionCount === 1);
-    broker.sendMessage("/topic/nack", "not-json", { withAck: true });
+    broker.sendMessage("/topic/nack", "anything", { contentType: "application/octet-stream", binary: true, withAck: true });
     await pump(() => broker.framesOf("NACK").length > 0);
 
     const c2 = make();
@@ -180,8 +182,35 @@ describe("@codejoo/stomp Stompsocket", () => {
     await pump(() => c2.connected);
     c2.subscribe("/topic/ack", () => {}, { ack: AckMode.smart, onParseError: ParseFailureAck.ack });
     await pump(() => broker.subscriptionCount === 2);
-    broker.sendMessage("/topic/ack", "not-json", { withAck: true });
+    broker.sendMessage("/topic/ack", "anything", { contentType: "application/octet-stream", binary: true, withAck: true });
     await pump(() => broker.framesOf("ACK").length > 0);
+  });
+
+  it("body 是合法 UTF-8 但不是 JSON：原样把文本传给回调，不当成解析失败", async () => {
+    const c = make();
+    c.activate();
+    await pump(() => c.connected);
+    let got: ParsedMessage | undefined;
+    c.subscribe("/topic/raw", (j) => (got = j), { ack: AckMode.smart });
+    await pump(() => broker.subscriptionCount === 1);
+
+    broker.sendMessage("/topic/raw", "not-json", { withAck: true });
+    await pump(() => got !== undefined);
+    expect(got).toBe("not-json");
+    await pump(() => broker.framesOf("ACK").length > 0); // 回调没抛异常，视为处理成功
+  });
+
+  it("JSON 顶层不是对象（数组/数字/布尔）：能解析就给解析后的值，不是原始文本", async () => {
+    const c = make();
+    c.activate();
+    await pump(() => c.connected);
+    let got: ParsedMessage | undefined;
+    c.subscribe("/topic/arr", (j) => (got = j));
+    await pump(() => broker.subscriptionCount === 1);
+
+    broker.sendMessage("/topic/arr", "[1,2,3]");
+    await pump(() => got !== undefined);
+    expect(got).toEqual([1, 2, 3]);
   });
 
   it("auto（默认）：不发送任何 ACK/NACK", async () => {
