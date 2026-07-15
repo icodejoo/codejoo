@@ -6,3 +6,4 @@
 - 新增:shared 基础层(bytes/protocol/types)与多入口构建配置
 - 新增:测试用程序化生成微型动图 fixtures(GIF/APNG/动画 WebP)
 - 新增:GIF walker(增量扫描、动图判定、首帧截断重组)
+- 新增:APNG walker(acTL 判定、默认图像首帧重组)
