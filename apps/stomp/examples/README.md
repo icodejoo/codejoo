@@ -27,6 +27,7 @@ API_WS_DEMO_HTTP=http://localhost:8080 API_WS_DEMO_WS=ws://localhost:8080 node e
 | `02-auth-secure-topic.ts` | `beforeConnect` token 注入，对照匿名连接 vs 鉴权连接访问 `/topic/secure/*` 的差异。 |
 | `03-ack-nack.ts` | `AckMode.smart` 对接 `ack:client-individual`，服务端确认回执。 |
 | `04-binary-compressed-topics.ts` | 关键示例：`binaryDecoder` 处理 gzip/zstd 压缩的 JSON 以及 msgpack——即便 content-type 是 `application/json`/`application/msgpack` 而不是 `application/octet-stream`，也能正确路由到二进制解码（见下）。 |
+| `05-browser-demo.html` | 浏览器可视化 demo：连接状态、订阅 topic、消息日志、输入框发消息。**不需要装依赖/构建/起 dev server**——直接双击用浏览器打开这个 HTML 文件就能跑（通过 CDN 以 ES module 方式加载 `@codejoo/stomp`，只需要联网）。 |
 
 ```bash
 pnpm run example:basic
@@ -34,6 +35,14 @@ pnpm run example:auth
 pnpm run example:ack
 pnpm run example:binary
 ```
+
+`05-browser-demo.html` 不走上面这些命令，直接在文件管理器里双击打开、或者浏览器里
+`Ctrl+O` 选中这个文件即可。
+
+> 这个 HTML demo 用的是 CDN 上已发布的 `@codejoo/stomp@0.2.0`，还没包含仓库里这次改的
+> binaryDecoder 健壮性修复和 onUnhandled* 崩溃修复（这两个还没发版）——所以 demo 特意只用
+> 默认 `auto` ack 模式的普通 JSON topic，不涉及这两处修复覆盖的场景。等发布新版本后可以
+> 把 CDN 地址里的版本号去掉（`@codejoo/stomp` 不带版本号会解析到最新版）。
 
 ## 背景：这几个示例验证过的两个真实 bug
 
