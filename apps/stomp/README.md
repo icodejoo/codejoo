@@ -20,7 +20,10 @@ pnpm add @codejoo/stomp @stomp/stompjs
 - **Offline send buffering** — `send()` while disconnected buffers and flushes on connect.
 - **Ack modes** — `auto` (server acks, no client ack), `smart` (auto ACK on success / NACK on throw), `manual` (ack/nack via the `AckControl` passed to the callback, callable from outside).
 - **Injectable binary decoder** — you decide how to decode binary frames.
+- **Tolerant body parsing** — a callback gets whatever `JSON.parse` produces (object, array, string, number, boolean, `null`); only a genuine `JSON.parse` failure falls back to the raw text, so a plain-string body never gets silently dropped.
 - **Token refresh** — async `beforeConnect` returns fresh `connectHeaders` on every (re)connect.
+- **Exponential-backoff reconnect** — `reconnectTimeMode: "exponential"` + `maxReconnectDelay` (passthrough to stompjs 7.1+).
+- **Parse-failure observability** — `onParseFailure` fires when a message body can't be decoded (undecodable binary), which would otherwise be dropped silently in `auto` mode.
 - **Connection-state observation** — `state` getter + `onState(listener)` + `onStateChanged`.
 - **Foreground-resume reconnect** — reconnects immediately on `visibilitychange`/`online` to sidestep Chromium background-tab timer throttling (stompjs #335/#669).
 - **`copyWith`** and full passthrough of native `@stomp/stompjs` options.

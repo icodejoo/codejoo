@@ -65,12 +65,19 @@ live in `test/stomp.test.ts` driven by an in-repo minimal broker `test/broker.ts
    (`tsconfig.base.json`). `AckMode`/`ParseFailureAck`/`ConnectionState` are `as const` objects
    with a matching `type` alias — keep that pattern; never introduce `enum` or parameter
    properties.
-2. **Binary is detected by `content-type: application/octet-stream`, NOT `isBinaryBody`.**
-   stompjs sets `isBinaryBody=true` on almost every received frame (it lazily UTF-8 decodes
-   `message.body`), so it's useless for the decision. See `parse()`. The test broker sends binary
-   by transmitting a *binary WS frame* (`test/broker.ts` `sendFrame(..., binary)`).
-3. **JSON top level must be an object.** `parse()` throws on array/primitive/null → treated as a
-   parse failure (drives `onParseError`). `JsonMessage = Record<string, unknown>`.
+2. **Binary is detected by `content-type: application/octet-stream` (prefix match, params
+   allowed), NOT `isBinaryBody`.** stompjs sets `isBinaryBody=true` on almost every received
+   frame (it lazily UTF-8 decodes `message.body`), so it's useless for the decision. See
+   `parse()`. The test broker sends binary by transmitting a *binary WS frame* (`test/broker.ts`
+   `sendFrame(..., binary)`). A parse failure (undecodable binary) also fires the global
+   `onParseFailure` option — the only observability hook for messages dropped in `auto` mode.
+3. **JSON top level does NOT have to be an object.** `parse()` returns whatever `JSON.parse`
+   produces — object, array, string, number, boolean, `null` — as `ParsedMessage = JsonMessage |
+   string | number | boolean | null | unknown[]`. Only a genuine `JSON.parse` failure (not valid
+   JSON at all) falls back to the raw decoded text, so the callback still sees something instead
+   of the message silently NACKing. A real parse *failure* (drives `onParseError`) now only
+   happens for the binary path: `content-type: application/octet-stream` (or non-UTF-8 bytes)
+   with no `binaryDecoder` configured, or a `binaryDecoder` that itself throws.
 4. **Same-id callbacks share the exact same parsed object reference** (test asserts `a === b`).
    Don't clone per-callback.
 5. **`onIncoming` re-checks `subscriptions.get(sub.id) === sub`** before dispatching — a sub may
@@ -92,7 +99,7 @@ live in `test/stomp.test.ts` driven by an in-repo minimal broker `test/broker.ts
 
 ## Verify workflow
 
-Acceptance = **`pnpm test` green** (25 tests via vitest through `vp test`). Tests spin up a real
+Acceptance = **`pnpm test` green** (34 tests via vitest through `vp test`). Tests spin up a real
 `ws` WebSocketServer (`StompTestBroker`) on an ephemeral port and assert on captured frames
 (`broker.framesOf("ACK"|"NACK"|"SUBSCRIBE"|"SEND"|...)`, `broker.subscriptionCount`). Reconnect
 tests use `broker.dropConnections()`. Prefer extending the broker over mocking stompjs.

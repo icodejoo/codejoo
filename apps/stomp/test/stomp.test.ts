@@ -500,4 +500,60 @@ describe("@codejoo/stomp Stompsocket", () => {
     await pump(() => got.length > 0);
     expect(got.at(-1)?.v).toBe(42);
   });
+
+  it("断线期间 unsubscribe / dispose 不抛异常、也不往死 socket 发 UNSUBSCRIBE 帧", async () => {
+    const c = make({ reconnectDelay: 0 }); // 关闭自动重连，保持断线状态
+    c.activate();
+    await pump(() => c.connected);
+    const sub = c.subscribe("/topic/a", () => {});
+    await pump(() => broker.subscriptionCount === 1);
+
+    await broker.dropConnections();
+    await pump(() => !c.connected, 5000);
+
+    expect(() => sub.unsubscribe()).not.toThrow();
+    await expect(c.dispose()).resolves.toBeUndefined();
+    expect(c.state).toBe(ConnectionState.disconnected);
+  });
+
+  it("onParseFailure：解析失败（二进制无 binaryDecoder）时业务可观测", async () => {
+    let failed: unknown;
+    const c = make({
+      onParseFailure: (_message, error) => (failed = error),
+    });
+    c.activate();
+    await pump(() => c.connected);
+    c.subscribe("/topic/bad", () => {});
+    await pump(() => broker.subscriptionCount === 1);
+
+    broker.sendMessage("/topic/bad", "anything", { contentType: "application/octet-stream", binary: true });
+    await pump(() => failed !== undefined);
+    expect(String(failed)).toContain("binaryDecoder");
+  });
+
+  it("content-type 带参数（application/octet-stream;foo=bar）也走 binaryDecoder", async () => {
+    let got: JsonMessage | undefined;
+    const c = make({
+      binaryDecoder: () => ({ ok: true }),
+    });
+    c.activate();
+    await pump(() => c.connected);
+    c.subscribe("/topic/param", (j) => (got = j as JsonMessage));
+    await pump(() => broker.subscriptionCount === 1);
+
+    broker.sendMessage("/topic/param", "x", { contentType: "application/octet-stream;foo=bar", binary: true });
+    await pump(() => got !== undefined);
+    expect(got?.ok).toBe(true);
+  });
+
+  it("reconnectTimeMode/maxReconnectDelay 透传给 stompjs", () => {
+    const c = make({ reconnectTimeMode: "exponential", maxReconnectDelay: 60000 });
+    const inner = (c as unknown as { client: { reconnectTimeMode: number; maxReconnectDelay: number } }).client;
+    expect(inner.reconnectTimeMode).toBe(1); // ReconnectionTimeMode.EXPONENTIAL
+    expect(inner.maxReconnectDelay).toBe(60000);
+
+    const linear = make();
+    const linearInner = (linear as unknown as { client: { reconnectTimeMode: number } }).client;
+    expect(linearInner.reconnectTimeMode).toBe(0); // 默认 LINEAR
+  });
 });

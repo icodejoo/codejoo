@@ -1,4 +1,4 @@
-import { Client, type IFrame, type IMessage, type StompSubscription } from "@stomp/stompjs";
+import { Client, type IFrame, type IMessage, type ReconnectionTimeMode, type StompSubscription } from "@stomp/stompjs";
 
 /** 解析后的 JSON 消息（约定顶层为对象）。 */
 export type JsonMessage = Record<string, unknown>;
@@ -69,7 +69,7 @@ export type ParseFailureAck = (typeof ParseFailureAck)[keyof typeof ParseFailure
 
 /** 连接状态。 */
 export const ConnectionState = {
-  /** 未启动或已 dispose */
+  /** 未启动（[dispose] 后是 disconnected，不回到 idle） */
   idle: "idle",
   /** 正在建立首次连接 */
   connecting: "connecting",
@@ -107,6 +107,14 @@ export interface StompsocketOptions {
   connectionTimeout?: number;
   /** 自动重连间隔（ms），默认 5000；设为 0 关闭自动重连。 */
   reconnectDelay?: number;
+  /**
+   * 重连间隔模式，默认 `"linear"`（每次都等 [reconnectDelay]）。`"exponential"` 每次失败后
+   * 间隔翻倍，上限为 [maxReconnectDelay]——弱网/服务端长时间不可用时避免高频重试。
+   * 透传 stompjs 7.1+ 的 `reconnectTimeMode`；更旧的 7.0.x 会忽略该属性（等价 linear）。
+   */
+  reconnectTimeMode?: "linear" | "exponential";
+  /** 指数退避的重连间隔上限（ms），默认 15 分钟（stompjs 默认值）。仅 exponential 模式下有意义。 */
+  maxReconnectDelay?: number;
   /** 静态 CONNECT 头。 */
   connectHeaders?: Record<string, string>;
   /**
@@ -117,10 +125,12 @@ export interface StompsocketOptions {
   /**
    * 二进制消息体解码器。触发时机：`content-type: application/octet-stream` 的帧（快路径），
    * 或者严格 UTF-8 解码失败的帧（无论 content-type 怎么写——服务端不一定诚实标注）。
-   * 入参为 `message.binaryBody`，返回解析后的对象，解码失败请抛异常（按解析失败走
-   * [ParseFailureAck] 策略）。未提供时这类消息按解析失败处理。
+   * 入参为 `message.binaryBody`；返回值不做类型约束（`any`），解出什么形状由下游回调自行
+   * 决定怎么接受（对象/数组/字符串都行）。解码失败请抛异常（按解析失败走 [ParseFailureAck]
+   * 策略）。未提供时这类消息按解析失败处理。
    */
-  binaryDecoder?: (bytes: Uint8Array) => JsonMessage;
+  // oxlint-disable-next-line no-explicit-any -- 下游自行决定接受类型
+  binaryDecoder?: (bytes: Uint8Array) => any;
   /** 未连接时是否缓冲出站消息，连上后按序补发，默认 true。 */
   queueWhileDisconnected?: boolean;
   /** 出站缓冲上限，超出丢弃最旧，默认 100。 */
@@ -152,6 +162,12 @@ export interface StompsocketOptions {
   onWebSocketClose?: (event: CloseEvent) => void;
   /** 帧级流水回调，原样透传 stompjs 的 debug（与 [debug]/[onLog] 独立）。 */
   onDebugMessage?: (message: string) => void;
+  /**
+   * 消息体解析失败（二进制帧未配置 [binaryDecoder]、或 binaryDecoder 自己抛异常）时触发，
+   * 用于业务侧监控消息丢弃：auto 模式下解析失败的消息不会进任何订阅回调，没有这个钩子
+   * 的话只在 debug 日志里留一条痕迹，业务完全无感知。
+   */
+  onParseFailure?: (message: IMessage, error: unknown) => void;
   /** 未匹配任何订阅的 MESSAGE 帧。 */
   onUnhandledMessage?: (message: IMessage) => void;
   /** 未匹配的 RECEIPT 帧。 */
@@ -227,8 +243,13 @@ export class Stompsocket {
       heartbeatIncoming: options.heartbeatIncoming ?? 10000,
       heartbeatOutgoing: options.heartbeatOutgoing ?? 10000,
       connectionTimeout: options.connectionTimeout ?? 0,
-      // 交给库做固定频率自动重连（>0 无限重试；=0 关闭）。我们只负责重连后重订阅。
+      // 交给库做自动重连（>0 无限重试；=0 关闭）。我们只负责重连后重订阅。
       reconnectDelay: this.opts.reconnectDelay,
+      // 数值直接对应 stompjs 的 ReconnectionTimeMode 枚举（LINEAR=0, EXPONENTIAL=1）。
+      // 只做 type-only import + 数值断言、不做运行时 import：该枚举 7.1 才有，运行时
+      // import 会让装着 stompjs 7.0.x 的下游直接挂在模块加载上；旧版收到这个属性会忽略。
+      reconnectTimeMode: (options.reconnectTimeMode === "exponential" ? 1 : 0) as ReconnectionTimeMode,
+      maxReconnectDelay: options.maxReconnectDelay ?? 15 * 60 * 1000,
       beforeConnect: this.handleBeforeConnect,
       onConnect: this.handleConnect,
       onDisconnect: this.handleDisconnect,
@@ -387,7 +408,17 @@ export class Stompsocket {
   private flushOutbox(): void {
     if (this.outbox.length === 0) return;
     const pending = this.outbox.splice(0, this.outbox.length);
-    for (const o of pending) this.sendNow(o);
+    for (let i = 0; i < pending.length; i++) {
+      try {
+        this.sendNow(pending[i]);
+      } catch (e) {
+        // 补发中途又断线等 publish 抛异常：把没发出去的（含当前这条）塞回缓冲头部，
+        // 等下次连接成功再补发，不能让剩余消息随循环中断一起丢掉。
+        this.outbox.unshift(...pending.slice(i));
+        this.log(`补发离线消息失败，剩余 ${pending.length - i} 条已回退到缓冲`, e);
+        return;
+      }
+    }
   }
 
   // ---------------------------------------------------------------------------
@@ -406,6 +437,9 @@ export class Stompsocket {
     const id = options.id ?? `${AUTO_ID_PREFIX}${this.autoId++}`;
 
     let sub = this.subscriptions.get(id);
+    if (sub && sub.destination !== destination) {
+      this.log(`subscribe: id "${id}" 已绑定 ${sub.destination}，传入的新 destination "${destination}" 被忽略（回调追加到原订阅）`);
+    }
     if (!sub) {
       sub = {
         id,
@@ -471,7 +505,9 @@ export class Stompsocket {
     if (!sub) return false;
     this.subscriptions.delete(sub.id);
     sub.callbacks.length = 0;
-    sub.wire?.unsubscribe();
+    // 未连接时不碰 wire：断线后服务端的订阅已随会话消失，往死 socket 发 UNSUBSCRIBE
+    // 帧没有意义（stompjs 的订阅句柄不做连接检查，会静默往已关闭的 WS 上写）。
+    if (this.client.connected) sub.wire?.unsubscribe();
     sub.wire = undefined;
     return true;
   }
@@ -535,6 +571,7 @@ export class Stompsocket {
       } catch (e) {
         parseError = `解析失败: ${String(e)}`;
         this.log(parseError);
+        this.opts.onParseFailure?.(message, e);
       }
 
       switch (sub.ack) {
@@ -625,7 +662,8 @@ export class Stompsocket {
    * `new TextDecoder(...)`。
    */
   private parse(message: IMessage): ParsedMessage | undefined {
-    if (message.headers["content-type"] === "application/octet-stream") {
+    // startsWith 而非全等：兼容带参数的写法（application/octet-stream;chunked=true 之类）
+    if ((message.headers["content-type"] ?? "").startsWith("application/octet-stream")) {
       return this.decodeBinary(message);
     }
 
@@ -645,10 +683,10 @@ export class Stompsocket {
   }
 
   /** 走注入的 binaryDecoder；未配置时抛异常（由调用方按 onParseError 语义处理）。 */
-  private decodeBinary(message: IMessage): JsonMessage {
+  private decodeBinary(message: IMessage): ParsedMessage {
     const decoder = this.opts.binaryDecoder;
     if (!decoder) throw new Error("收到二进制消息但未配置 binaryDecoder");
-    return decoder(message.binaryBody);
+    return decoder(message.binaryBody) as ParsedMessage;
   }
 
   /** 帧级流水日志，原样透传给 onDebugMessage，并在 debug 开启时经 log 输出。 */

@@ -73,8 +73,10 @@ await client.dispose();
 | `heartbeatIncoming`                                              | `number`(ms)                                                                    | `10000`  | 入向心跳。                                                                                                  |
 | `heartbeatOutgoing`                                              | `number`(ms)                                                                    | `10000`  | 出向心跳。                                                                                                  |
 | `connectionTimeout`                                              | `number`(ms)                                                                    | `0`      | 连接超时（0=不超时）。                                                                                      |
-| `reconnectDelay`                                                 | `number`(ms)                                                                    | `5000`   | 固定间隔自动重连；`0` 关闭自动重连。                                                                        |
-| `binaryDecoder`                                                  | `(bytes: Uint8Array) => JsonMessage`                                            | —        | `content-type: application/octet-stream` 帧的解码器；返回对象，失败抛异常。未提供则这类消息按解析失败处理。 |
+| `reconnectDelay`                                                 | `number`(ms)                                                                    | `5000`   | 自动重连间隔；`0` 关闭自动重连。                                                                        |
+| `reconnectTimeMode`                                              | `"linear" \| "exponential"`                                                     | `"linear"` | 重连间隔模式：`linear` 每次固定等 `reconnectDelay`；`exponential` 每次失败后间隔翻倍（上限 `maxReconnectDelay`）。透传 stompjs 7.1+，旧版忽略。 |
+| `maxReconnectDelay`                                              | `number`(ms)                                                                    | `900000` | 指数退避的重连间隔上限（默认 15 分钟，同 stompjs）。仅 `exponential` 模式有意义。                            |
+| `binaryDecoder`                                                  | `(bytes: Uint8Array) => any`                                                    | —        | `content-type: application/octet-stream`（或非法 UTF-8 字节）帧的解码器；返回值不做类型约束，下游回调自行决定接受什么形状。失败抛异常。未提供则这类消息按解析失败处理。 |
 | `queueWhileDisconnected`                                         | `boolean`                                                                       | `true`   | 未连接时是否缓冲出站消息。                                                                                  |
 | `maxQueuedMessages`                                              | `number`                                                                        | `100`    | 出站缓冲上限，超出丢最旧。                                                                                  |
 | `resumeOnForeground`                                             | `boolean`                                                                       | `true`   | 回前台/网络恢复时若未连接则立即重连（非浏览器环境自动跳过）。                                               |
@@ -87,6 +89,7 @@ await client.dispose();
 | `onWebSocketError`                                               | `(event: Event) => void`                                                        | —        | WebSocket 层错误。                                                                                          |
 | `onWebSocketClose`                                               | `(event: CloseEvent) => void`                                                   | —        | WebSocket 关闭。                                                                                            |
 | `onDebugMessage`                                                 | `(message: string) => void`                                                     | —        | 原样透传 stompjs 帧级流水。                                                                                 |
+| `onParseFailure`                                                 | `(message: IMessage, error: unknown) => void`                                   | —        | 消息体解析失败（二进制没配 `binaryDecoder`、或它抛异常）时触发。auto 模式下这类消息不进任何回调，没这个钩子业务完全无感知。 |
 | `onUnhandledMessage` / `onUnhandledReceipt` / `onUnhandledFrame` | 见类型                                                                          | —        | 未匹配的帧。                                                                                                |
 
 ### 方法
@@ -159,7 +162,12 @@ client.onState((s) => (state.value = s));
 | `smart`        | `ack:client-individual` | 按处理结果**自动** ACK（回调全成功）/ NACK（任一抛异常）。解析失败按 `onParseError`。 |
 | `manual`       | `ack:client-individual` | **不自动应答**，回调第二参给 `AckControl` 手动 ack/nack。                             |
 
-回调签名：`type JsonCallback = (json: JsonMessage, ack: AckControl) => void;`（非 manual 下 `ack` 为 no-op，可写 `(json) => ...`）。
+回调签名：`type JsonCallback = (json: ParsedMessage, ack: AckControl) => void;`（非 manual 下 `ack` 为 no-op，可写 `(json) => ...`）。
+
+`json` 的实际类型是 `ParsedMessage = JsonMessage | string | number | boolean | null | unknown[]`：body 是合法 UTF-8
+文本、且 `JSON.parse` 能解析成功，就是解析后的实际值（对象、数组、字符串、数字、布尔、`null` 都可能，不要求
+顶层必须是对象）；只有 `JSON.parse` 本身失败（不是合法 JSON）时，才原样传回收到的原始文本字符串，交由回调
+自行判断怎么处理——库内部不替业务猜测/丢弃这段文本。
 
 **手动确认（可在回调外调用）**：`AckControl` 可存起来，异步完成后再 ack：
 
@@ -187,7 +195,8 @@ function onTaskDone(taskId: string) {
 
 ```ts
 type JsonMessage = Record<string, unknown>;
-type JsonCallback = (json: JsonMessage, ack: AckControl) => void;
+type ParsedMessage = JsonMessage | string | number | boolean | null | unknown[];
+type JsonCallback = (json: ParsedMessage, ack: AckControl) => void;
 interface AckControl {
   ack: () => void;
   nack: () => void;
@@ -208,6 +217,9 @@ const ConnectionState = { idle, connecting, connected, reconnecting, disconnecte
 - **重连不会内存膨胀**：订阅表以 id 为键，重连只重放不新增；出站缓冲有上限；manual 的 `AckControl` 由调用方持有、本封装不留存。
 - **重连 vs 重订阅**：传输重连由 `reconnectDelay` 交给 stompjs；重连后重新订阅由本封装完成，业务可在 `onConnected` 里重拉快照。
 - **`isBinaryBody` 不可靠**：stompjs 对收到的帧几乎总置 `isBinaryBody=true`，本封装改按 `content-type: application/octet-stream` 判定二进制。
+- **纯字符串 body 不当成解析失败**：服务端发的 body 如果是合法 UTF-8 但不是 JSON（比如裸 `hello`），或者是合法 JSON 但顶层不是对象（数组/数字/布尔/`null`），都不会被库内部丢弃或强行报错——能被 `JSON.parse` 解析就给解析后的值，解析不了就原样给原始文本，交给回调自己判断。真正的“解析失败”（走 `onParseError` / `onParseFailure`）现在只剩二进制内容但没配 `binaryDecoder` 这一种。
+- **离线补发不丢消息**：连接成功后补发离线缓冲时，若中途 `publish` 抛异常（比如刚连上又断了），未发出的消息（含失败那条）会回退到缓冲头部，等下次连接成功继续补发。
+- **断线期间取消订阅只清本地**：断线后服务端订阅已随会话消失，本封装不会往已关闭的 socket 发 `UNSUBSCRIBE` 帧。
 
 ## 与 Dart 版差异
 
