@@ -91,10 +91,51 @@ export class StompTestBroker {
     return delivered;
   }
 
+  /**
+   * 向订阅了 destination 的所有连接推送一条 MESSAGE，body 为**原始字节**（可以是非法 UTF-8），
+   * 用于测试"content-type 声称是文本/JSON，但实际是二进制"这类服务端误标场景——
+   * `sendMessage` 的 body 只能是 JS 字符串，无法构造出真正非法的 UTF-8 序列。
+   *
+   * 与 `sendMessage` 不同：这里 `contentType` **不设默认值**——不传就真的不带这个头
+   * （用于测试"服务端压根没给 content-type"这种场景），需要 `application/json` 请显式传。
+   */
+  sendRawMessage(destination: string, body: Uint8Array, opts: { contentType?: string } = {}): number {
+    let delivered = 0;
+    for (const c of this.conns) {
+      for (const [subId, dest] of c.subs) {
+        if (dest !== destination) continue;
+        const mid = `msg-${this.messageId++}`;
+        const headers: Record<string, string> = {
+          subscription: subId,
+          "message-id": mid,
+          destination,
+          // 没有这个头的话，帧按 NUL 结尾扫描；真正的二进制 body 里可能本来就含 0x00
+          // 字节，会被提前截断（这也是真实 STOMP 二进制帧必须带这个头的原因）。
+          "content-length": String(body.length),
+        };
+        if (opts.contentType !== undefined) headers["content-type"] = opts.contentType;
+        this.sendRawFrame(c.ws, "MESSAGE", headers, body);
+        delivered++;
+      }
+    }
+    return delivered;
+  }
+
   /** 向所有连接发送一帧 STOMP ERROR。 */
   sendError(message: string, body = ""): void {
     for (const c of this.conns) {
       this.sendFrame(c.ws, "ERROR", { message, "content-type": "text/plain" }, body, false);
+    }
+  }
+
+  /**
+   * 向所有连接发送一帧**不对应任何客户端已知请求**的 RECEIPT（用于模拟 api-ws-demo
+   * 对 ACK/NACK 的确认回执——那个 receipt-id 只是服务端自己生成的 ack id，stompjs
+   * 并没有以 `receipt` 头主动请求过，所以在它自己的簿记里这是一条"unhandled receipt"）。
+   */
+  sendUnsolicitedReceipt(receiptId: string, body = ""): void {
+    for (const c of this.conns) {
+      this.sendFrame(c.ws, "RECEIPT", { "receipt-id": receiptId }, body, false);
     }
   }
 
@@ -106,6 +147,19 @@ export class StompTestBroker {
       // 以二进制 WS 帧发送时，stompjs 会把 isBinaryBody 置 true
       if (binary) ws.send(Buffer.from(s, "utf8"), { binary: true });
       else ws.send(s);
+    } catch {
+      // 连接正在关闭，忽略
+    }
+  }
+
+  /** 同 sendFrame，但 body 是原始字节而非 JS 字符串，可以构造非法 UTF-8 序列。 */
+  private sendRawFrame(ws: WebSocket, command: string, headers: Record<string, string>, body: Uint8Array): void {
+    let headerPart = command;
+    for (const [k, v] of Object.entries(headers)) headerPart += `\n${k}:${v}`;
+    headerPart += "\n\n";
+    const full = Buffer.concat([Buffer.from(headerPart, "utf8"), Buffer.from(body), Buffer.from([0])]);
+    try {
+      ws.send(full, { binary: true });
     } catch {
       // 连接正在关闭，忽略
     }

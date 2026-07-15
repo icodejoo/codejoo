@@ -34,6 +34,21 @@ export type AckMode = (typeof AckMode)[keyof typeof AckMode];
 const NOOP_ACK: AckControl = { ack: () => {}, nack: () => {} };
 
 /**
+ * 通用空回调。stompjs 的 `Client.configure()` 内部用 `Object.assign(this, conf)` 应用配置——
+ * 即便某个 key 的值是 `undefined`，只要 key 存在于 conf 里就会覆盖掉 stompjs 自己预设的
+ * no-op 默认值，调用时直接 `TypeError: xxx is not a function`。所以 onUnhandledMessage /
+ * onUnhandledReceipt / onUnhandledFrame 这类可选回调，未提供时必须显式兜底成 NOOP，
+ * 不能把 `undefined` 原样传给 stompjs。
+ */
+const NOOP = (): void => {};
+
+/**
+ * 严格 UTF-8 解码器（fatal 模式），模块级单例、所有 parse() 调用复用，不逐帧新建。
+ * 用于 [Stompsocket]'s parse 里判断消息体是否为合法文本——见该方法注释。
+ */
+const STRICT_UTF8_DECODER = new TextDecoder("utf-8", { fatal: true });
+
+/**
  * 消息体解析失败时的自动确认动作（仅在 [AckMode] 非 auto 时生效）。
  * - nack：通常触发重投（毒消息会反复重投，依赖 broker 死信/上限兜底）
  * - ack：确认并丢弃坏消息，避免死循环
@@ -92,7 +107,8 @@ export interface StompsocketOptions {
    */
   beforeConnect?: () => Promise<Record<string, string> | void> | Record<string, string> | void;
   /**
-   * 二进制消息体解码器：收到 `content-type: application/octet-stream` 的帧时调用，
+   * 二进制消息体解码器。触发时机：`content-type: application/octet-stream` 的帧（快路径），
+   * 或者严格 UTF-8 解码失败的帧（无论 content-type 怎么写——服务端不一定诚实标注）。
    * 入参为 `message.binaryBody`，返回解析后的对象，解码失败请抛异常（按解析失败走
    * [ParseFailureAck] 策略）。未提供时这类消息按解析失败处理。
    */
@@ -211,9 +227,9 @@ export class Stompsocket {
       onStompError: this.handleStompError,
       onWebSocketError: this.handleWebSocketError,
       onWebSocketClose: this.handleWebSocketClose,
-      onUnhandledMessage: options.onUnhandledMessage,
-      onUnhandledReceipt: options.onUnhandledReceipt,
-      onUnhandledFrame: options.onUnhandledFrame,
+      onUnhandledMessage: options.onUnhandledMessage ?? NOOP,
+      onUnhandledReceipt: options.onUnhandledReceipt ?? NOOP,
+      onUnhandledFrame: options.onUnhandledFrame ?? NOOP,
       debug: this.handleDebug,
     });
   }
@@ -577,25 +593,52 @@ export class Stompsocket {
   }
 
   /**
-   * 解析消息体：`content-type: application/octet-stream` 走 binaryDecoder，其余按文本 JSON。
+   * 解析消息体。`content-type: application/octet-stream` 直接走 binaryDecoder（快路径，
+   * 明确声明了就不必再做校验）；其余一律先对原始字节做**严格 UTF-8 解码**（fatal 模式），
+   * 解码成功才当文本 JSON.parse，解码失败则判定为二进制、同样走 binaryDecoder。
    * 解析失败抛异常，空体返回 undefined。
    *
+   * 为什么不能只按 content-type 分流：STOMP 生态里各家服务端约定不一致——ActiveMQ 常见
+   * 干脆不写 content-type、RabbitMQ 透传 AMQP 原始类型、也确实见过服务端把二进制数据
+   * （比如 gzip/msgpack）标成 `application/json`。不能假设对方一定诚实标注。
+   *
+   * 为什么不能靠"JSON.parse 抛没抛异常"判断二进制：那只是语义层面的猜测——万一二进制
+   * 数据凑巧被解释出一段能通过 JSON.parse 的字符串，就会把损坏数据当成合法结果静默交给
+   * 业务代码，比直接报错更危险。严格 UTF-8 解码是字节结构层面的确定性校验（多字节序列
+   * 规则违反就是违反，没有"凑巧通过"的空间），压缩/二进制数据几乎必然在极短字节内就
+   * 违反这个规则，可靠得多。
+   *
    * 注意：不能用 `message.isBinaryBody` 判断——stompjs 的解析器对**收到的**帧统一产出字节流，
-   * 该标志几乎总为 true（`message.body` 会按 UTF-8 惰性解码字节）。因此以 content-type 为准。
+   * 该标志几乎总为 true。也不能用惰性的 `message.body`——它对无效 UTF-8 字节做的是非 fatal
+   * 解码（用替换字符吞掉错误、不抛异常），无法据此判断"这是不是二进制"。必须直接用
+   * `message.binaryBody` 配合模块级单例 [STRICT_UTF8_DECODER]（fatal 模式），不要每次
+   * `new TextDecoder(...)`。
    */
   private parse(message: IMessage): JsonMessage | undefined {
     if (message.headers["content-type"] === "application/octet-stream") {
-      const decoder = this.opts.binaryDecoder;
-      if (!decoder) throw new Error("收到二进制消息但未配置 binaryDecoder");
-      return decoder(message.binaryBody);
+      return this.decodeBinary(message);
     }
-    const body = message.body; // stompjs 会把字节按 UTF-8 解码成字符串
-    if (!body) return undefined;
-    const parsed: unknown = JSON.parse(body);
+
+    let text: string;
+    try {
+      text = STRICT_UTF8_DECODER.decode(message.binaryBody);
+    } catch {
+      return this.decodeBinary(message);
+    }
+
+    if (!text) return undefined;
+    const parsed: unknown = JSON.parse(text);
     if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) {
       throw new Error(`json 顶层不是对象: ${typeof parsed}`);
     }
     return parsed as JsonMessage;
+  }
+
+  /** 走注入的 binaryDecoder；未配置时抛异常（由调用方按 onParseError 语义处理）。 */
+  private decodeBinary(message: IMessage): JsonMessage {
+    const decoder = this.opts.binaryDecoder;
+    if (!decoder) throw new Error("收到二进制消息但未配置 binaryDecoder");
+    return decoder(message.binaryBody);
   }
 
   /** 帧级流水日志，原样透传给 onDebugMessage，并在 debug 开启时经 log 输出。 */

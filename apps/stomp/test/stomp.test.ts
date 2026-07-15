@@ -344,6 +344,43 @@ describe("@codejoo/stomp Stompsocket", () => {
     await pump(() => broker.framesOf("NACK").length > 0);
   });
 
+  it("binaryDecoder：content-type 误标为 application/json 的非法 UTF-8 二进制仍能正确路由到 binaryDecoder", async () => {
+    // 服务端不诚实标注的场景：真实二进制数据（这里模拟 gzip 魔数开头），却把 content-type
+    // 写成 application/json。旧实现会直接尝试 JSON.parse，新实现应该先严格 UTF-8 解码失败、
+    // 再兜底走 binaryDecoder，而不是静默出错或直接 NACK。
+    const raw = new Uint8Array([0x1f, 0x8b, 0x08, 0x00, 0xff, 0xfe, 0xfd, 0x00, 0x01, 0x02]);
+    let decodedBytes: Uint8Array | undefined;
+    const c = make({
+      binaryDecoder: (bytes) => {
+        decodedBytes = bytes;
+        return { ok: true };
+      },
+    });
+    c.activate();
+    await pump(() => c.connected);
+    let got: JsonMessage | undefined;
+    c.subscribe("/topic/mislabeled", (j) => (got = j));
+    await pump(() => broker.subscriptionCount === 1);
+
+    broker.sendRawMessage("/topic/mislabeled", raw, { contentType: "application/json" });
+    await pump(() => got !== undefined);
+    expect(got?.ok).toBe(true);
+    expect(decodedBytes).toEqual(raw);
+  });
+
+  it("content-type 缺失但 body 是合法 UTF-8 JSON：仍按文本正常解析", async () => {
+    const c = make();
+    c.activate();
+    await pump(() => c.connected);
+    let got: JsonMessage | undefined;
+    c.subscribe("/topic/nohdr", (j) => (got = j));
+    await pump(() => broker.subscriptionCount === 1);
+
+    broker.sendRawMessage("/topic/nohdr", new TextEncoder().encode('{"n":1}'));
+    await pump(() => got !== undefined);
+    expect(got?.n).toBe(1);
+  });
+
   it("onStompError：服务端 ERROR 帧回调", async () => {
     let msg: string | undefined;
     const c = make({ onStompError: (f) => (msg = f.headers.message) });
@@ -352,6 +389,20 @@ describe("@codejoo/stomp Stompsocket", () => {
     broker.sendError("bad-destination");
     await pump(() => msg !== undefined);
     expect(msg).toBe("bad-destination");
+  });
+
+  it("未提供 onUnhandledReceipt 时，收到未关联的 RECEIPT 不应抛异常（回归：曾经因为把 undefined 原样传给 stompjs 的 configure() 覆盖掉它自身的 no-op 默认值而崩溃）", async () => {
+    const c = make(); // 故意不传 onUnhandledReceipt / onUnhandledMessage / onUnhandledFrame
+    c.activate();
+    await pump(() => c.connected);
+
+    // 模拟 api-ws-demo 对 ACK/NACK 的确认回执：receipt-id 是服务端自己生成的 ack id，
+    // stompjs 自己并没有以 `receipt` 头请求过，所以这是一条 unhandled receipt。
+    broker.sendUnsolicitedReceipt("some-ack-id");
+    await new Promise((r) => setTimeout(r, 100));
+
+    // 只要连接还活着（没有因为上面那条帧崩掉）就说明修复生效
+    expect(c.connected).toBe(true);
   });
 
   it("引用计数：同 id 两回调，取消一个仍在线，取消最后一个才 UNSUBSCRIBE", async () => {

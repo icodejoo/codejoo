@@ -1,6 +1,6 @@
 {
   "name": "@codejoo/stomp",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "description": "Framework-agnostic STOMP-over-WebSocket client wrapper over @stomp/stompjs: shared-parse callback queue, ref-counted/id/topic unsubscribe, auto re-subscribe on reconnect, offline send buffering, auto ack/nack, injectable binary decoder, token-refresh beforeConnect, connection-state observation and foreground-resume reconnect.",
   "keywords": [
     "ack",
@@ -52,9 +52,14 @@
     "build": "vp pack",
     "dev": "vp pack --watch",
     "test": "vp test",
-    "prepublishOnly": "pnpm run check && vp pack"
+    "prepublishOnly": "pnpm run check && vp pack",
+    "example:basic": "node examples/01-basic-pubsub.ts",
+    "example:auth": "node examples/02-auth-secure-topic.ts",
+    "example:ack": "node examples/03-ack-nack.ts",
+    "example:binary": "node examples/04-binary-compressed-topics.ts"
   },
   "devDependencies": {
+    "@msgpack/msgpack": "^3.0.0",
     "@stomp/stompjs": "^7.0.0",
     "@types/node": "catalog:",
     "@types/ws": "^8.5.12",
