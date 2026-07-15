@@ -26,7 +26,7 @@ function makeDeps(over: Partial<PipelineDeps> = {}): PipelineDeps & { bg: Promis
     cache: { matchStage: vi.fn().mockResolvedValue(undefined), putStage: vi.fn().mockResolvedValue(true), deleteUrl: vi.fn() },
     notify: vi.fn(),
     makeFirstFrame: vi.fn().mockResolvedValue(new Blob(["png"], { type: "image/png" })),
-    waitUntil: p => bg.push(p),
+    waitUntil: (p) => bg.push(p),
     options: resolveSWOptions({ threshold: 10, headBytes: 16 }), // 小阈值便于测试
     bg,
     ...over,
@@ -64,7 +64,7 @@ describe("handleImageRequest", () => {
     expect(resp.headers.get("Content-Type")).toContain("svg");
     expect(resp.headers.get("Cache-Control")).toBe("no-store");
     expect(resp.headers.get(HEADER_MARK)).toBe("placeholder");
-    expect((await resp.text())).toContain("<svg");
+    expect(await resp.text()).toContain("<svg");
     await drain(d);
     expect(d.cache.putStage).toHaveBeenCalledWith(GIF_URL, "ff", expect.any(Response));
     expect(d.cache.putStage).toHaveBeenCalledWith(GIF_URL, "1", expect.any(Response));
@@ -112,9 +112,7 @@ describe("handleImageRequest", () => {
   it("fetch 抛异常:onError 后透传重试不抛", async () => {
     const onError = vi.fn();
     const d = makeDeps({ options: resolveSWOptions({ threshold: 10, onError }) });
-    (d.fetchImpl as ReturnType<typeof vi.fn>)
-      .mockRejectedValueOnce(new Error("boom"))
-      .mockResolvedValueOnce(new Response("retry"));
+    (d.fetchImpl as ReturnType<typeof vi.fn>).mockRejectedValueOnce(new Error("boom")).mockResolvedValueOnce(new Response("retry"));
     const resp = await handleImageRequest(new Request(GIF_URL), d);
     expect(await resp.text()).toBe("retry");
     expect(onError).toHaveBeenCalled();
@@ -123,12 +121,9 @@ describe("handleImageRequest", () => {
     const gif = makeGif({ frames: 3, loop: true });
     const d = makeDeps();
     (d.fetchImpl as ReturnType<typeof vi.fn>).mockResolvedValue(streamResponse(gif, 7));
-    const [r1, r2] = await Promise.all([
-      handleImageRequest(new Request(GIF_URL), d),
-      handleImageRequest(new Request(GIF_URL), d),
-    ]);
+    const [r1, r2] = await Promise.all([handleImageRequest(new Request(GIF_URL), d), handleImageRequest(new Request(GIF_URL), d)]);
     expect(d.fetchImpl).toHaveBeenCalledTimes(1);
-    expect((await r1.text())).toContain("<svg");
-    expect((await r2.text())).toContain("<svg");
+    expect(await r1.text()).toContain("<svg");
+    expect(await r2.text()).toContain("<svg");
   });
 });

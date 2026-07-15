@@ -26,6 +26,7 @@
 ### Task 1: 清场 + shared 基础(bytes / protocol / types)+ 多入口构建
 
 **Files:**
+
 - Delete: `src/index.ts`(旧 Picman 类)、`test/picman.test.ts`
 - Create: `src/shared/bytes.ts`、`src/shared/protocol.ts`、`src/shared/types.ts`
 - Modify: `package.json`(exports/scripts)、`vite.config.ts`;Create: `vite.sw.config.ts`
@@ -33,6 +34,7 @@
 - Create: `CHANGELOG.md`
 
 **Interfaces (Produces):**
+
 - `bytes.ts`: `concatBytes(parts: Uint8Array[]): Uint8Array`、`readLE16/readLE24(buf, off): number`、`readBE32(buf, off): number`、`asciiEquals(buf, off, text): boolean`、`class ByteAccumulator { append(chunk: Uint8Array): void; get length(): number; view(): Uint8Array }`
 - `protocol.ts`: `CACHE_NAME = 'picman-v1'`、`PARAM_FULL = '__picman_full__'`、`PARAM_BYPASS = '__picman_bypass__'`、`HEADER_MARK = 'X-Picman'`、`type PicmanStage = 'ff' | '1'`、`type PicmanMessage`(见 spec §6)、`stripPicmanParams(url: string): string`、`withStageParam(url: string, stage: PicmanStage): string`、`isPicmanMessage(data: unknown): data is PicmanMessage`
 - `types.ts`: `PicmanSWOptions`、`PicmanAutoOptions`、`PicmanErrorContext = { url: string; stage: string; error: unknown }`、`ResolvedSWOptions = Required<...>`(spec §3 默认值)+ `resolveSWOptions(o?: PicmanSWOptions): ResolvedSWOptions`
@@ -265,10 +267,7 @@ export type PicmanStage = "ff" | "1";
  *
  * SW 发往页面的消息。
  */
-export type PicmanMessage =
-  | { picman: 1; type: "first-frame"; url: string }
-  | { picman: 1; type: "complete"; url: string }
-  | { picman: 1; type: "error"; url: string; stage: "download" | "first-frame"; message: string };
+export type PicmanMessage = { picman: 1; type: "first-frame"; url: string } | { picman: 1; type: "complete"; url: string } | { picman: 1; type: "error"; url: string; stage: "download" | "first-frame"; message: string };
 
 /**
  * Type guard for {@link PicmanMessage}.
@@ -444,14 +443,14 @@ export function resolveSWOptions(o: PicmanSWOptions = {}): ResolvedSWOptions {
   "module": "./dist/esm/index.mjs",
   "types": "./dist/esm/index.d.mts",
   "exports": {
-    ".":         { "types": "./dist/esm/index.d.mts",  "import": "./dist/esm/index.mjs",  "default": "./dist/esm/index.mjs" },
-    "./sw":      { "types": "./dist/esm/sw.d.mts",     "import": "./dist/esm/sw.mjs" },
-    "./element": { "types": "./dist/esm/element.d.mts","import": "./dist/esm/element.mjs" },
-    "./shared":  { "types": "./dist/esm/shared.d.mts", "import": "./dist/esm/shared.mjs" },
+    ".": { "types": "./dist/esm/index.d.mts", "import": "./dist/esm/index.mjs", "default": "./dist/esm/index.mjs" },
+    "./sw": { "types": "./dist/esm/sw.d.mts", "import": "./dist/esm/sw.mjs" },
+    "./element": { "types": "./dist/esm/element.d.mts", "import": "./dist/esm/element.mjs" },
+    "./shared": { "types": "./dist/esm/shared.d.mts", "import": "./dist/esm/shared.mjs" },
     "./picman-sw.js": "./dist/picman-sw.js",
-    "./package.json": "./package.json"
+    "./package.json": "./package.json",
   },
-  "scripts": { "build": "vp pack && vp pack -c vite.sw.config.ts" }
+  "scripts": { "build": "vp pack && vp pack -c vite.sw.config.ts" },
 }
 ```
 
@@ -552,13 +551,16 @@ git commit -m "refactor: replace metadata manager with progressive-loading scaff
 （被 gate 拦截则按 Global Constraints 的 review 流程走,下同,不再重复。）
 
 ---
+
 ### Task 2: 测试 fixtures(程序化生成微型动图)
 
 **Files:**
+
 - Create: `test/fixtures.ts`
 - Test: `test/fixtures.test.ts`
 
 **Interfaces (Produces):**
+
 - `crc32(bytes: Uint8Array): number`
 - `pngChunk(type: string, data: Uint8Array): Uint8Array`(len+type+data+CRC)
 - `makeGif(opts: { frames: number; loop?: boolean; width?: number; height?: number }): Uint8Array` — 含 GCT(4 色)、可选 Netscape 循环扩展、每帧 GCE+ImageDescriptor+伪 LZW 数据(结构合法即可,不要求可解码)
@@ -566,6 +568,7 @@ git commit -m "refactor: replace metadata manager with progressive-loading scaff
 - `makeWebp(opts: { animated: boolean; alpha?: boolean }): Uint8Array` — RIFF+VP8X(+ANIM+ANMF[VP8/VP8L(+ALPH)])或简单格式
 
 **要点(实现按此写):**
+
 - GIF:头 `GIF89a`;LSD 宽高 LE;packed `0x91`(GCT 存在,4 色→大小位 1);GCT 12 字节取 4 个显眼色(`#000/#fff/#f00/#0f0`);loop 时插 `21 FF 0B "NETSCAPE2.0" 03 01 00 00 00`;每帧:GCE `21 F9 04 00 00 00 00 00` + `2C` + 9B 描述符(无 LCT)+ LZW 最小码 `02` + 1 个数据子块(长 4,内容任意)+ `00` 终止;尾 `3B`。
 - APNG:`pngChunk` CRC 覆盖 type+data;IHDR 宽高 BE 2×2、bitDepth 8、colorType 3;acTL data = numFrames+numPlays 各 4B BE;fcTL 26B 数据;IDAT data 任意 4B;fdAT = 序号 4B+任意数据。
 - WebP:VP8X data 10B(flags 动画 `0x02`/alpha `0x10`;canvas 24bit LE 存 实际-1);ANIM 6B;ANMF data = 16B 帧头(x,y=0;w-1,h-1 各 3B;duration 3B;flags 1B)+ 子 chunk(`VP8 `/`VP8L`,data 任意偶数长;alpha 时前置 `ALPH`);RIFF size = 文件长-8(LE32);奇数补 0。
@@ -625,6 +628,7 @@ git commit -m "test: add programmatic minimal animated-image fixtures (gif/apng/
 ### Task 3: GIF walker
 
 **Files:**
+
 - Create: `src/shared/walkers/gif.ts`
 - Test: `test/gif.test.ts`
 
@@ -635,14 +639,15 @@ export interface GifScan {
   status: "need-more" | "static" | "animated";
   width?: number;
   height?: number;
-  palette?: [number, number, number][];   // GCT 颜色,无 GCT 为 undefined
-  firstFrameEnd?: number;                  // 首帧末字节的下一索引(含 0x00 终止符)
+  palette?: [number, number, number][]; // GCT 颜色,无 GCT 为 undefined
+  firstFrameEnd?: number; // 首帧末字节的下一索引(含 0x00 终止符)
 }
 export function scanGif(buf: Uint8Array): GifScan;
 export function gifFirstFrame(buf: Uint8Array, firstFrameEnd: number): Uint8Array; // slice(0,end)+0x3B
 ```
 
 **算法(spec §5.2 补充):**
+
 - `<13` 字节 → need-more;签名不符 → 'static'(防御,上游不会送错)。
 - 宽 `readLE16(buf,6)` 高 `readLE16(buf,8)`;packed=buf[10],GCT 大小 `packed&0x80 ? 3*2**((packed&7)+1) : 0`;GCT 未收齐 → need-more。
 - 游标三分支:`0x3B` → 返回最终态;`0x21` 扩展(label 0xFF 且首子块长≥11 且 `asciiEquals(buf,q+1,"NETSCAPE")` → animated)走子块串;`0x2C` 第 2 次出现 → animated,首帧子块串走完 → firstFrameEnd。任何推进不动的点 → need-more(带已知字段)。`animated && firstFrameEnd` 可提前返回。未知块字节 → 'static'。
@@ -701,6 +706,7 @@ git commit -m "feat: GIF walker - incremental scan, animation detection, first-f
 ### Task 4: APNG walker
 
 **Files:**
+
 - Create: `src/shared/walkers/apng.ts`
 - Test: `test/apng.test.ts`
 
@@ -782,6 +788,7 @@ git commit -m "feat: APNG walker - acTL detection, default-image first-frame rec
 ### Task 5: WebP walker(尝试档)
 
 **Files:**
+
 - Create: `src/shared/walkers/webp.ts`
 - Test: `test/webp.test.ts`
 
@@ -852,6 +859,7 @@ git commit -m "feat: animated WebP walker - VP8X detection, first-frame repack (
 ### Task 6: 嗅探统一入口 sniff.ts
 
 **Files:**
+
 - Create: `src/shared/sniff.ts`
 - Modify: `src/shared.ts`(追加 sniff 与三 walker 导出)
 - Test: `test/sniff.test.ts`
@@ -911,9 +919,11 @@ git commit -m "feat: unified magic-byte sniffer dispatching to format walkers"
 ```
 
 ---
+
 ### Task 7: 占位生成 placeholder.ts(SVG 色块 + 首帧位图)
 
 **Files:**
+
 - Create: `src/sw/placeholder.ts`
 - Test: `test/placeholder.test.ts`
 
@@ -934,21 +944,20 @@ export function svgColorBlock(input: ColorBlockInput): string;
 /** 位图解码/绘制依赖(可注入,node 测试用 mock) */
 export interface BitmapDeps {
   decode: (blob: Blob) => Promise<{ width: number; height: number; close?: () => void }>; // createImageBitmap
-  createCanvas: (w: number, h: number) => {
+  createCanvas: (
+    w: number,
+    h: number,
+  ) => {
     getContext(id: "2d"): { filter: string; drawImage(img: unknown, x: number, y: number, w: number, h: number): void } | null;
     convertToBlob(opts?: { type?: string }): Promise<Blob>;
   }; // OffscreenCanvas 工厂
 }
 /** 首帧字节 → 占位 PNG Blob;解码失败返回 null */
-export function makeFirstFramePlaceholder(
-  bytes: Uint8Array,
-  mime: string,
-  opts: { firstFrame: "sharp" | "blur"; blurRadius: number },
-  deps: BitmapDeps,
-): Promise<Blob | null>;
+export function makeFirstFramePlaceholder(bytes: Uint8Array, mime: string, opts: { firstFrame: "sharp" | "blur"; blurRadius: number }, deps: BitmapDeps): Promise<Blob | null>;
 ```
 
 **实现要点:**
+
 - `svgColorBlock`:
   - 颜色计算:palette 有值 → 平均色 `avg`;明暗两端 = 按亮度 `0.299r+0.587g+0.114b` 排序取 P10/P90 两色;无 palette → fallbackColor(gradient 时用 fallback 的 ±8% 亮度微调两端,直接字符串处理 hex)。
   - solid:`<svg xmlns="http://www.w3.org/2000/svg" width="W" height="H" viewBox="0 0 W H"><rect width="100%" height="100%" fill="COLOR"/></svg>`
@@ -964,7 +973,12 @@ import { describe, expect, it, vi } from "vitest";
 import { avgColor, lightDark, makeFirstFramePlaceholder, rgbHex, svgColorBlock } from "../src/sw/placeholder";
 
 describe("svgColorBlock", () => {
-  const palette: [number, number, number][] = [[0, 0, 0], [255, 255, 255], [255, 0, 0], [0, 255, 0]];
+  const palette: [number, number, number][] = [
+    [0, 0, 0],
+    [255, 255, 255],
+    [255, 0, 0],
+    [0, 255, 0],
+  ];
   it("solid 用平均色", () => {
     const svg = svgColorBlock({ width: 4, height: 3, palette, mode: "solid", fallbackColor: "#e0e0e0" });
     expect(svg).toContain(`fill="${rgbHex(avgColor(palette))}"`);
@@ -1024,6 +1038,7 @@ git commit -m "feat: placeholder synthesis - SVG color block and first-frame bit
 ### Task 8: 缓存层 cache.ts(LRU)
 
 **Files:**
+
 - Create: `src/sw/cache.ts`
 - Test: `test/cache.test.ts`
 
@@ -1046,6 +1061,7 @@ export class PicmanCache implements PicmanCacheLike {
 ```
 
 **实现要点:**
+
 - 缓存 key = `new Request(withStageParam(url, stage))` —— 与页面二次请求 URL 完全一致,S6 直接 `cache.match(event.request.url)` 命中。
 - LRU 索引:特殊条目 `https://picman.internal/__index__`,内容 JSON `{ [url]: { ts: number } }`;putStage('1') 与 matchStage 命中时更新 ts 并回写;`maxEntries` 超限或 `ts` 过期(maxAgeSeconds)→ 驱逐最旧,`deleteUrl` 成对删 'ff'+'1' 两个 key。索引只记全图 url,ff 条目跟随全图生命周期。
 - putStage 内部 try/catch:`cache.put` 抛(配额)→ 驱逐一半条目(按 ts 升序删前 half)重试一次;再失败 return false。
@@ -1065,7 +1081,10 @@ function memCaches(failPuts = 0): CacheStorage {
   let fails = failPuts;
   const cache = {
     async put(req: Request | string, resp: Response) {
-      if (fails > 0) { fails--; throw new DOMException("quota", "QuotaExceededError"); }
+      if (fails > 0) {
+        fails--;
+        throw new DOMException("quota", "QuotaExceededError");
+      }
       store.set(typeof req === "string" ? req : req.url, resp);
     },
     async match(req: Request | string) {
@@ -1074,7 +1093,9 @@ function memCaches(failPuts = 0): CacheStorage {
     async delete(req: Request | string) {
       return store.delete(typeof req === "string" ? req : (req as Request).url);
     },
-    async keys() { return [...store.keys()].map(u => new Request(u)); },
+    async keys() {
+      return [...store.keys()].map((u) => new Request(u));
+    },
   };
   return { open: async () => cache as unknown as Cache } as unknown as CacheStorage;
 }
@@ -1132,6 +1153,7 @@ git commit -m "feat: cache layer - stage-keyed Cache Storage with LRU eviction"
 ### Task 9: SW 管线 pipeline.ts + 装配 sw.ts / sw-standalone.ts
 
 **Files:**
+
 - Create: `src/sw/pipeline.ts`、`src/sw/index.ts`
 - Modify: `src/sw.ts`(`export * from "./sw/index"`)、`src/sw-standalone.ts`
 - Test: `test/pipeline.test.ts`
@@ -1238,7 +1260,7 @@ function makeDeps(over: Partial<PipelineDeps> = {}): PipelineDeps & { bg: Promis
     cache: { matchStage: vi.fn().mockResolvedValue(undefined), putStage: vi.fn().mockResolvedValue(true), deleteUrl: vi.fn() },
     notify: vi.fn(),
     makeFirstFrame: vi.fn().mockResolvedValue(new Blob(["png"], { type: "image/png" })),
-    waitUntil: p => bg.push(p),
+    waitUntil: (p) => bg.push(p),
     options: resolveSWOptions({ threshold: 10, headBytes: 16 }), // 小阈值便于测试
     bg,
     ...over,
@@ -1276,7 +1298,7 @@ describe("handleImageRequest", () => {
     expect(resp.headers.get("Content-Type")).toContain("svg");
     expect(resp.headers.get("Cache-Control")).toBe("no-store");
     expect(resp.headers.get(HEADER_MARK)).toBe("placeholder");
-    expect((await resp.text())).toContain("<svg");
+    expect(await resp.text()).toContain("<svg");
     await drain(d);
     expect(d.cache.putStage).toHaveBeenCalledWith(GIF_URL, "ff", expect.any(Response));
     expect(d.cache.putStage).toHaveBeenCalledWith(GIF_URL, "1", expect.any(Response));
@@ -1324,9 +1346,7 @@ describe("handleImageRequest", () => {
   it("fetch 抛异常:onError 后透传重试不抛", async () => {
     const onError = vi.fn();
     const d = makeDeps({ options: resolveSWOptions({ threshold: 10, onError }) });
-    (d.fetchImpl as ReturnType<typeof vi.fn>)
-      .mockRejectedValueOnce(new Error("boom"))
-      .mockResolvedValueOnce(new Response("retry"));
+    (d.fetchImpl as ReturnType<typeof vi.fn>).mockRejectedValueOnce(new Error("boom")).mockResolvedValueOnce(new Response("retry"));
     const resp = await handleImageRequest(new Request(GIF_URL), d);
     expect(await resp.text()).toBe("retry");
     expect(onError).toHaveBeenCalled();
@@ -1335,13 +1355,10 @@ describe("handleImageRequest", () => {
     const gif = makeGif({ frames: 3, loop: true });
     const d = makeDeps();
     (d.fetchImpl as ReturnType<typeof vi.fn>).mockResolvedValue(streamResponse(gif, 7));
-    const [r1, r2] = await Promise.all([
-      handleImageRequest(new Request(GIF_URL), d),
-      handleImageRequest(new Request(GIF_URL), d),
-    ]);
+    const [r1, r2] = await Promise.all([handleImageRequest(new Request(GIF_URL), d), handleImageRequest(new Request(GIF_URL), d)]);
     expect(d.fetchImpl).toHaveBeenCalledTimes(1);
-    expect((await r1.text())).toContain("<svg");
-    expect((await r2.text())).toContain("<svg");
+    expect(await r1.text()).toContain("<svg");
+    expect(await r2.text()).toContain("<svg");
   });
 });
 ```
@@ -1357,9 +1374,11 @@ git commit -m "feat: SW pipeline - threshold/sniff state machine, placeholder re
 ```
 
 ---
+
 ### Task 10: 页面端 load + registerPicmanSW
 
 **Files:**
+
 - Create: `src/page/load.ts`、`src/page/register.ts`、`src/page/messages.ts`
 - Modify: `src/index.ts`(导出 load/registerPicmanSW + shared 类型)
 - Test: `test/load.test.ts`(happy-dom)
@@ -1389,6 +1408,7 @@ export function registerPicmanSW(swUrl: string): Promise<{ controlled: boolean }
 ```
 
 **实现要点:**
+
 - `messages.ts`:模块级 `Map<url, Set<cb>>`;首个订阅时挂 `navigator.serviceWorker.addEventListener('message')`(`isPicmanMessage` 过滤,url 直接匹配 Map key);`_setServiceWorkerContainer` 允许测试替换/置空。
 - `load`:URL 规范化 `new URL(url, location.href).href`;无 `navigator.serviceWorker?.controller` → 微任务 emit `('complete', url)` 并 resolve done(降级);有 → 微任务 emit `('placeholder', url)`,订阅消息:first-frame → emit `('first-frame', withStageParam(url,'ff'))`;complete → emit + resolve `withStageParam(url,'1')` + 退订;error(stage download)→ reject + 退订。**对账**:创建时 `caches.match(withStageParam(url,'1'))`(window 侧,try/catch 包裹,不支持则忽略),命中 → 直接 complete。
 - `registerPicmanSW`:`register(swUrl, { type: 'module' })` → `await navigator.serviceWorker.ready` → 返回 `{ controlled: !!navigator.serviceWorker.controller }`;不自动 reload。不支持 SW → `{ controlled: false }`。
@@ -1410,7 +1430,7 @@ function fakeSW() {
     controller: {},
     addEventListener: (_: string, cb: (e: MessageEvent) => void) => listeners.add(cb),
     removeEventListener: (_: string, cb: (e: MessageEvent) => void) => listeners.delete(cb),
-    emit: (data: unknown) => listeners.forEach(cb => cb({ data } as MessageEvent)),
+    emit: (data: unknown) => listeners.forEach((cb) => cb({ data } as MessageEvent)),
   };
 }
 afterEach(() => _setServiceWorkerContainer(null));
@@ -1421,7 +1441,7 @@ describe("load", () => {
   it("SW 缺失:立即 complete + 原 URL", async () => {
     _setServiceWorkerContainer(null);
     const stages: string[] = [];
-    const task = load(URL1).onStage(s => stages.push(s));
+    const task = load(URL1).onStage((s) => stages.push(s));
     await expect(task.done).resolves.toBe(URL1);
     expect(stages).toContain("complete");
   });
@@ -1475,6 +1495,7 @@ git commit -m "feat: page-side explicit API - load() task with stage events, SW 
 ### Task 11: 页面端 auto(零改造接管)+ 对账
 
 **Files:**
+
 - Create: `src/page/auto.ts`
 - Modify: `src/index.ts`(导出 auto)
 - Test: `test/auto.test.ts`(happy-dom)
@@ -1487,6 +1508,7 @@ export function auto(options?: PicmanAutoOptions): () => void;
 ```
 
 **实现要点:**
+
 - 内部状态:`tracked = Map<canonicalUrl, Set<WeakRef<HTMLImageElement | HTMLElement>>>`;`stageOf = Map<canonicalUrl, PicmanStage>`(已知最新阶段)。
 - 启动:全量 `root.querySelectorAll('img[src]')` track;`MutationObserver`(childList subtree + attributes `src`/`data-picman-bg`)增量 track。track 时 `stripPicmanParams` 归一 key;若 `stageOf` 已有阶段(错过通知)→ 立即 swap 该元素。
 - `backgrounds: true`:track `[data-picman-bg]` 元素(值 = 图片 URL,swap 改 `el.style.backgroundImage`);初始扫描 + observer 同步。样式表扫描 v1 不做(spec 允许"可选标记"路径,YAGNI——CHANGELOG 里注明背景图仅支持 data 标记)。
@@ -1511,14 +1533,18 @@ function fakeSW() {
     controller: {},
     addEventListener: (_: string, cb: (e: MessageEvent) => void) => listeners.add(cb),
     removeEventListener: (_: string, cb: (e: MessageEvent) => void) => listeners.delete(cb),
-    emit: (data: unknown) => listeners.forEach(cb => cb({ data } as MessageEvent)),
+    emit: (data: unknown) => listeners.forEach((cb) => cb({ data } as MessageEvent)),
   };
 }
-const flush = () => new Promise(r => setTimeout(r, 0)); // 等 MutationObserver 微任务
+const flush = () => new Promise((r) => setTimeout(r, 0)); // 等 MutationObserver 微任务
 
 const URL1 = "https://a.com/x.gif";
 let stop: (() => void) | undefined;
-afterEach(() => { stop?.(); _setServiceWorkerContainer(null); document.body.innerHTML = ""; });
+afterEach(() => {
+  stop?.();
+  _setServiceWorkerContainer(null);
+  document.body.innerHTML = "";
+});
 
 describe("auto", () => {
   it("已有 <img> 收到 complete 后切到全图 URL", async () => {
@@ -1597,6 +1623,7 @@ git commit -m "feat: page-side auto takeover - img/background tracking, stage sw
 ### Task 12: `<pic-man>` Web Component
 
 **Files:**
+
 - Create: `src/element/index.ts`
 - Modify: `src/element.ts`(`export * from "./element/index"` + 顶层 `define`)
 - Test: `test/element.test.ts`(happy-dom)
@@ -1629,11 +1656,14 @@ function fakeSW() {
     controller: {},
     addEventListener: (_: string, cb: (e: MessageEvent) => void) => listeners.add(cb),
     removeEventListener: (_: string, cb: (e: MessageEvent) => void) => listeners.delete(cb),
-    emit: (data: unknown) => listeners.forEach(cb => cb({ data } as MessageEvent)),
+    emit: (data: unknown) => listeners.forEach((cb) => cb({ data } as MessageEvent)),
   };
 }
 const URL1 = "https://a.com/x.gif";
-afterEach(() => { _setServiceWorkerContainer(null); document.body.innerHTML = ""; });
+afterEach(() => {
+  _setServiceWorkerContainer(null);
+  document.body.innerHTML = "";
+});
 
 describe("<pic-man>", () => {
   it("SW 缺失:直接渲染原 URL", async () => {
@@ -1641,7 +1671,7 @@ describe("<pic-man>", () => {
     const el = document.createElement("pic-man");
     el.setAttribute("src", URL1);
     document.body.append(el);
-    await new Promise(r => setTimeout(r, 0));
+    await new Promise((r) => setTimeout(r, 0));
     const img = el.shadowRoot!.querySelector("img")!;
     expect(img.src).toBe(URL1);
   });
@@ -1653,12 +1683,12 @@ describe("<pic-man>", () => {
     el.setAttribute("src", URL1);
     el.setAttribute("alt", "demo");
     document.body.append(el);
-    await new Promise(r => setTimeout(r, 0));
+    await new Promise((r) => setTimeout(r, 0));
     const img = el.shadowRoot!.querySelector("img")!;
     expect(img.src).toBe(URL1); // placeholder 阶段 = 原 URL(SW 回占位)
     expect(img.alt).toBe("demo");
     sw.emit({ picman: 1, type: "complete", url: URL1 });
-    await new Promise(r => setTimeout(r, 0));
+    await new Promise((r) => setTimeout(r, 0));
     expect(img.src).toBe(withStageParam(URL1, "1"));
   });
   it("重复 definePicMan 幂等", () => {
@@ -1683,6 +1713,7 @@ git commit -m "feat: pic-man web component built on load()"
 ### Task 13: demo 页 + 限速服务 + README + 收尾验证
 
 **Files:**
+
 - Create: `examples/index.html`、`examples/serve.ts`(node 限速静态服务:chunk 间 setTimeout,`node --experimental-strip-types examples/serve.ts` 运行;examples 不参与构建)
 - Create: `examples/sw.ts`(`import { setupPicman } from "../src/sw"; setupPicman();` 说明用 dist/picman-sw.js 亦可)
 - Modify: `README.md`(自然语言重写:定位、三种接入方式示例、配置表、降级行为、浏览器要求;禁 AI 腔)
@@ -1709,4 +1740,3 @@ git commit -m "docs: demo page, throttled dev server, README rewrite for progres
 - **Spec 覆盖**:S0~S6(Task 9)、字节算法 §5(Task 3~6)、占位 §5.5+色块(Task 7)、协议 §6(Task 1)、缓存 §8(Task 8)、页面 §7(Task 10~12)、测试 §10(各任务+13)。偏差:auto 的 CSS 背景仅支持 `data-picman-bg` 标记(样式表扫描 YAGNI 砍掉)——Task 13 要求回写 docs。
 - **占位符扫描**:无 TBD/TODO;Task 2/3/4/5/7/8 的 Step 3 为"按算法要点实现"——算法要点与接口签名均完整给出,属可执行描述。
 - **类型一致性**:`PicmanStage`/`withStageParam`/`PicmanCacheLike`/`ResolvedSWOptions`/`subscribe` 跨任务签名已对齐;pipeline 的 `makeFirstFrame` 与 placeholder 的 `makeFirstFramePlaceholder` 通过 sw/index.ts 装配层适配(签名不同是有意的)。
-

@@ -1,6 +1,5 @@
 import { describe, expect, it } from "vitest";
 import { PicmanCache } from "../src/sw/cache";
-import { withStageParam } from "../src/shared/protocol";
 
 /** 极简内存 CacheStorage mock — 只实现用到的 open/put/match/delete/keys */
 function memCaches(failPuts = 0): CacheStorage {
@@ -8,7 +7,10 @@ function memCaches(failPuts = 0): CacheStorage {
   let fails = failPuts;
   const cache = {
     async put(req: Request | string, resp: Response) {
-      if (fails > 0) { fails--; throw new DOMException("quota", "QuotaExceededError"); }
+      if (fails > 0) {
+        fails--;
+        throw new DOMException("quota", "QuotaExceededError");
+      }
       store.set(typeof req === "string" ? req : req.url, resp);
     },
     async match(req: Request | string) {
@@ -17,7 +19,9 @@ function memCaches(failPuts = 0): CacheStorage {
     async delete(req: Request | string) {
       return store.delete(typeof req === "string" ? req : (req as Request).url);
     },
-    async keys() { return [...store.keys()].map(u => new Request(u)); },
+    async keys() {
+      return [...store.keys()].map((u) => new Request(u));
+    },
   };
   return { open: async () => cache as unknown as Cache } as unknown as CacheStorage;
 }

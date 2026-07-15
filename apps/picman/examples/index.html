@@ -1,0 +1,77 @@
+<!doctype html>
+<html lang="zh">
+  <head>
+    <meta charset="utf-8" />
+    <title>picman demo</title>
+    <style>
+      body {
+        font-family: system-ui, sans-serif;
+        max-width: 960px;
+        margin: 2rem auto;
+        padding: 0 1rem;
+      }
+      section {
+        margin-bottom: 3rem;
+      }
+      h2 {
+        font-size: 1rem;
+        color: #555;
+      }
+      img,
+      pic-man {
+        max-width: 320px;
+        border: 1px solid #ddd;
+      }
+      p.note {
+        color: #888;
+        font-size: 0.85rem;
+      }
+    </style>
+  </head>
+  <body>
+    <h1>picman 三段渐进加载 demo</h1>
+    <p class="note">
+      运行前先放一张较大的动图到 <code>examples/big.gif</code>(建议 &gt; 500KB,便于在限速下观察三段时间轴), 再执行 <code>pnpm build &amp;&amp; node --experimental-strip-types examples/serve.ts --throttle 51200</code>,
+      浏览器打开 <code>http://localhost:8787</code>。
+    </p>
+
+    <section>
+      <h2>A. 零改造接管(auto)—— &lt;img&gt; 原样写</h2>
+      <img src="/big.gif" alt="auto 模式" />
+    </section>
+
+    <section>
+      <h2>C. Web Component —— &lt;pic-man&gt;</h2>
+      <pic-man src="/big.gif" alt="pic-man 模式"></pic-man>
+    </section>
+
+    <section>
+      <h2>B. 显式 API —— load()</h2>
+      <img id="explicit-img" alt="load() 模式" />
+      <p id="explicit-stage" class="note"></p>
+    </section>
+
+    <script type="module">
+      import { registerPicmanSW } from "../dist/esm/index.mjs";
+      import { auto, load } from "../dist/esm/index.mjs";
+      import "../dist/esm/element.mjs";
+
+      const { controlled } = await registerPicmanSW("/picman-sw.js");
+      if (!controlled) {
+        // First visit — the SW isn't controlling this page yet; reload once it takes over.
+        // 首次访问——SW 尚未接管本页,注册完成后刷新一次即可生效。
+        console.log("picman SW registered, reload to activate control");
+      }
+
+      auto();
+
+      const img = document.getElementById("explicit-img");
+      const stageEl = document.getElementById("explicit-stage");
+      const task = load("/big.gif").onStage((stage, displayUrl) => {
+        stageEl.textContent = `stage: ${stage}`;
+        img.src = displayUrl;
+      });
+      task.done.catch((err) => console.error("load() failed", err));
+    </script>
+  </body>
+</html>

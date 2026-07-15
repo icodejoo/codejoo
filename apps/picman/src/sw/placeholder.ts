@@ -31,7 +31,10 @@ export interface ColorBlockInput {
  * @returns Hex color like '#a1b2c3' — 十六进制颜色,如 '#a1b2c3'
  */
 export function rgbHex([r, g, b]: [number, number, number]): string {
-  const ch = (n: number) => Math.max(0, Math.min(255, Math.round(n))).toString(16).padStart(2, "0");
+  const ch = (n: number) =>
+    Math.max(0, Math.min(255, Math.round(n)))
+      .toString(16)
+      .padStart(2, "0");
   return `#${ch(r)}${ch(g)}${ch(b)}`;
 }
 
@@ -106,10 +109,7 @@ export function svgColorBlock(input: ColorBlockInput): string {
     return `<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}" viewBox="0 0 ${width} ${height}"><rect width="100%" height="100%" fill="${color}"/></svg>`;
   }
 
-  const [light, dark] =
-    palette && palette.length > 0
-      ? lightDark(palette).map((c) => rgbHex(c))
-      : [adjustHexBrightness(fallbackColor, 0.08), adjustHexBrightness(fallbackColor, -0.08)];
+  const [light, dark] = palette && palette.length > 0 ? lightDark(palette).map((c) => rgbHex(c)) : [adjustHexBrightness(fallbackColor, 0.08), adjustHexBrightness(fallbackColor, -0.08)];
 
   return `<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}" viewBox="0 0 ${width} ${height}"><linearGradient id="g" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="${light}"/><stop offset="1" stop-color="${dark}"/></linearGradient><rect width="100%" height="100%" fill="url(#g)"/></svg>`;
 }
@@ -124,7 +124,10 @@ export interface BitmapDeps {
   /** createImageBitmap-like decoder — 类 createImageBitmap 解码器 */
   decode: (blob: Blob) => Promise<{ width: number; height: number; close?: () => void }>;
   /** OffscreenCanvas-like factory — 类 OffscreenCanvas 工厂 */
-  createCanvas: (w: number, h: number) => {
+  createCanvas: (
+    w: number,
+    h: number,
+  ) => {
     getContext(id: "2d"): { filter: string; drawImage(img: unknown, x: number, y: number, w: number, h: number): void } | null;
     convertToBlob(opts?: { type?: string }): Promise<Blob>;
   };
@@ -146,15 +149,10 @@ const MAX_SIDE = 512;
  * @example
  * const blob = await makeFirstFramePlaceholder(bytes, 'image/gif', { firstFrame: 'sharp', blurRadius: 12 }, deps)
  */
-export async function makeFirstFramePlaceholder(
-  bytes: Uint8Array,
-  mime: string,
-  opts: { firstFrame: "sharp" | "blur"; blurRadius: number },
-  deps: BitmapDeps,
-): Promise<Blob | null> {
+export async function makeFirstFramePlaceholder(bytes: Uint8Array, mime: string, opts: { firstFrame: "sharp" | "blur"; blurRadius: number }, deps: BitmapDeps): Promise<Blob | null> {
   let bitmap: { width: number; height: number; close?: () => void };
   try {
-    bitmap = await deps.decode(new Blob([bytes], { type: mime }));
+    bitmap = await deps.decode(new Blob([new Uint8Array(bytes)], { type: mime }));
   } catch {
     return null;
   }

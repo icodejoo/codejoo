@@ -118,14 +118,7 @@ function tryRecomposeFirstFrame(sr: ReturnType<typeof sniff>, bytes: Uint8Array)
  * @param origResp - Original network response, for header reuse — 原始网络响应,用于复用响应头
  * @param deps - Pipeline dependencies — 管线依赖
  */
-async function background(
-  reader: ReadableStreamDefaultReader<Uint8Array>,
-  acc: ByteAccumulator,
-  initialSniff: ReturnType<typeof sniff>,
-  url: string,
-  origResp: Response,
-  deps: PipelineDeps,
-): Promise<void> {
+async function background(reader: ReadableStreamDefaultReader<Uint8Array>, acc: ByteAccumulator, initialSniff: ReturnType<typeof sniff>, url: string, origResp: Response, deps: PipelineDeps): Promise<void> {
   let firstFrameDone = false;
   let currentSniff = initialSniff;
 

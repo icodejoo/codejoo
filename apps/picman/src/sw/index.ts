@@ -11,6 +11,38 @@ import { PicmanCache } from "./cache";
 import { handleImageRequest, shouldIntercept } from "./pipeline";
 import { makeFirstFramePlaceholder } from "./placeholder";
 
+/** Minimal ExtendableEvent surface (install/activate) — 最小 ExtendableEvent 接口(install/activate) */
+interface ExtendableEventLike {
+  waitUntil(p: Promise<unknown>): void;
+}
+
+/** Minimal FetchEvent surface — 最小 FetchEvent 接口 */
+interface FetchEventLike extends ExtendableEventLike {
+  request: Request;
+  respondWith(r: Promise<Response> | Response): void;
+}
+
+/** Minimal Client surface (a controlled page) — 最小 Client 接口(一个受控页面) */
+interface ClientLike {
+  postMessage(msg: unknown): void;
+}
+
+/**
+ * Minimal Service Worker global scope surface this module depends on — kept
+ * local instead of pulling in the "webworker" lib, which cannot coexist with
+ * "dom" in one tsconfig.
+ *
+ * 本模块依赖的最小 Service Worker 全局 scope 接口——本地定义而非引入 "webworker" lib,
+ * 因为它无法与同一 tsconfig 里的 "dom" 共存。
+ */
+interface ServiceWorkerScopeLike {
+  addEventListener(type: "install", listener: (e: ExtendableEventLike) => void): void;
+  addEventListener(type: "activate", listener: (e: ExtendableEventLike) => void): void;
+  addEventListener(type: "fetch", listener: (e: FetchEventLike) => void): void;
+  skipWaiting(): Promise<void>;
+  clients: { claim(): Promise<void>; matchAll(opts: { type: string }): Promise<ClientLike[]> };
+}
+
 /**
  * Install the picman progressive-loading pipeline on the current Service
  * Worker scope: intercepts matching image requests, degrading to a normal
@@ -27,7 +59,7 @@ import { makeFirstFramePlaceholder } from "./placeholder";
 export function setupPicman(options?: PicmanSWOptions): void {
   const o = resolveSWOptions(options);
   const cache = new PicmanCache(o.cache, caches);
-  const scope = self as unknown as ServiceWorkerGlobalScope;
+  const scope = self as unknown as ServiceWorkerScopeLike;
 
   scope.addEventListener("install", () => scope.skipWaiting());
   scope.addEventListener("activate", (e) => e.waitUntil(scope.clients.claim()));

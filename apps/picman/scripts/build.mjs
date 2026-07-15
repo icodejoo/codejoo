@@ -47,4 +47,4 @@ async function build() {
   }
 }
 
-build();
+void build();

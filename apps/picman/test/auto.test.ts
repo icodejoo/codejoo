@@ -10,14 +10,18 @@ function fakeSW() {
     controller: {},
     addEventListener: (_: string, cb: (e: MessageEvent) => void) => listeners.add(cb),
     removeEventListener: (_: string, cb: (e: MessageEvent) => void) => listeners.delete(cb),
-    emit: (data: unknown) => listeners.forEach(cb => cb({ data } as MessageEvent)),
+    emit: (data: unknown) => listeners.forEach((cb) => cb({ data } as MessageEvent)),
   };
 }
-const flush = () => new Promise(r => setTimeout(r, 0)); // 等 MutationObserver 微任务
+const flush = () => new Promise((r) => setTimeout(r, 0)); // 等 MutationObserver 微任务
 
 const URL1 = "https://a.com/x.gif";
 let stop: (() => void) | undefined;
-afterEach(() => { stop?.(); _setServiceWorkerContainer(null); document.body.innerHTML = ""; });
+afterEach(() => {
+  stop?.();
+  _setServiceWorkerContainer(null);
+  document.body.innerHTML = "";
+});
 
 describe("auto", () => {
   it("已有 <img> 收到 complete 后切到全图 URL", async () => {

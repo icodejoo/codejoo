@@ -3,13 +3,13 @@
   "version": "0.1.0",
   "description": "Service Worker progressive image loading library for animated formats (GIF/APNG/animated WebP), framework-agnostic.",
   "keywords": [
-    "image",
-    "service-worker",
-    "progressive-loading",
-    "gif",
     "apng",
-    "webp",
-    "typescript"
+    "gif",
+    "image",
+    "progressive-loading",
+    "service-worker",
+    "typescript",
+    "webp"
   ],
   "license": "MIT",
   "repository": {
@@ -28,10 +28,23 @@
   "module": "./dist/esm/index.mjs",
   "types": "./dist/esm/index.d.mts",
   "exports": {
-    ".": { "types": "./dist/esm/index.d.mts", "import": "./dist/esm/index.mjs", "default": "./dist/esm/index.mjs" },
-    "./sw": { "types": "./dist/esm/sw.d.mts", "import": "./dist/esm/sw.mjs" },
-    "./element": { "types": "./dist/esm/element.d.mts", "import": "./dist/esm/element.mjs" },
-    "./shared": { "types": "./dist/esm/shared.d.mts", "import": "./dist/esm/shared.mjs" },
+    ".": {
+      "types": "./dist/esm/index.d.mts",
+      "import": "./dist/esm/index.mjs",
+      "default": "./dist/esm/index.mjs"
+    },
+    "./sw": {
+      "types": "./dist/esm/sw.d.mts",
+      "import": "./dist/esm/sw.mjs"
+    },
+    "./element": {
+      "types": "./dist/esm/element.d.mts",
+      "import": "./dist/esm/element.mjs"
+    },
+    "./shared": {
+      "types": "./dist/esm/shared.d.mts",
+      "import": "./dist/esm/shared.mjs"
+    },
     "./picman-sw.js": "./dist/picman-sw.js",
     "./package.json": "./package.json"
   },

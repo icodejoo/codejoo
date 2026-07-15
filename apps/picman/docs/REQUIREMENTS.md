@@ -1,6 +1,6 @@
 # @codejoo/picman 需求现状
 
-> 最后更新:2026-07-15(对应 [docs/logs/2026-07-15-2.md](logs/2026-07-15-2.md))
+> 最后更新:2026-07-16(对应 [docs/logs/2026-07-16-1.md](logs/2026-07-16-1.md))
 
 ## 一句话定位
 
@@ -34,10 +34,10 @@
 
 ### 首帧截断重组(核心技巧,零解码器)
 
-| 格式 | 重组方式 | 档位 |
-|---|---|---|
-| GIF | 块结构走到首帧图像块收齐,拼 `0x3B` trailer = 合法单帧 GIF | 稳定 |
-| APNG | chunk 结构走到首帧 IDAT 收齐,补 IEND chunk = 合法静态 PNG | 稳定 |
+| 格式      | 重组方式                                                      | 档位                  |
+| --------- | ------------------------------------------------------------- | --------------------- |
+| GIF       | 块结构走到首帧图像块收齐,拼 `0x3B` trailer = 合法单帧 GIF     | 稳定                  |
+| APNG      | chunk 结构走到首帧 IDAT 收齐,补 IEND chunk = 合法静态 PNG     | 稳定                  |
 | 动画 WebP | 取首个 ANMF 内 VP8/VP8L 数据重打包静态 WebP(需改 VP8X 标志位) | 尝试性,失败停留色块档 |
 
 块边界只靠长度字段遍历,不解码内容;重组产物交浏览器原生解码。
@@ -63,7 +63,7 @@
 
 B 是底座,A、C 都建在 B 上:
 
-- **A. 零改造接管**:`picman.auto()`。业务 `<img src>` 原样写;MutationObserver 接管 `<img>`(含 `srcset`/`<picture>`)**和 CSS 背景图**;收到 SW 完成通知后,对匹配元素加 cache-bust 参数重设,二次请求命中 SW 缓存秒回全图。背景图侦测手段(扫样式表/inline style + 可选 `data-picman-bg` 标记)归设计文档细化。
+- **A. 零改造接管**:`auto()`。业务 `<img src>` 原样写;MutationObserver 接管 `<img>` 与 CSS 背景图;收到 SW 阶段通知后,对匹配元素直接把 `src`/`backgroundImage` 换成带阶段参数的 URL(二次请求命中 SW 缓存秒回)。**v1 实现范围**:背景图仅支持显式 `data-picman-bg="<url>"` 标记(不扫样式表);`<img>` 仅接管 `src` 属性,`srcset`/`<picture>` 留待后续版本(见 [docs/logs/2026-07-16-1.md](logs/2026-07-16-1.md))。
 - **B. 显式 API**:`picman.load(url)` → 占位 URL + 完成 Promise/事件(`onPlaceholder` / `done`),业务自己控制何时换 src。
 - **C. Web Component**:`<pic-man src>`,原生 Custom Elements 实现,内部用 B,保持框架无关。
 
@@ -82,17 +82,17 @@ B 是底座,A、C 都建在 B 上:
 
 原则:任何一层失败都塌向「原图正常加载」,库只增强、不劣化。
 
-| 故障点 | 处理 |
-|---|---|
-| SW 不可用(未注册/隐私模式/不支持) | `load` 退化为直接返回原 URL、`done` 立即 resolve;`auto()` 静默 no-op;`<pic-man>` 渲染裸 `<img>` |
-| 嗅探非动图/嗅探失败 | 透传 |
-| OffscreenCanvas 不可用 | 色块本就是 SVG 不受影响;跳过首帧档,色块直达全图 |
-| 首帧重组失败(createImageBitmap reject) | 停留色块档,不影响后台下载与最终切换,`onError` 上报 |
-| 后台下载中途断 | 通知页面失败;A/C 模式对元素重设原 URL + 重试标记(SW 见标记透传);B 模式 `done` reject |
-| 完成通知丢失(SW 被杀/竞态) | 兜底对账:占位响应带标记头,运行时跟踪占位中元素,`visibilitychange`/惰性查 `caches.match` 补切换 |
-| `cache.put` 配额失败 | LRU 驱逐重试一次;再败放弃落盘仍发通知,二次请求走网络流 |
-| 同 URL 并发多元素 | SW 内按 URL 去重 in-flight 下载 |
-| 元素中途移除 | 下载继续(进缓存),不取消 |
+| 故障点                                 | 处理                                                                                            |
+| -------------------------------------- | ----------------------------------------------------------------------------------------------- |
+| SW 不可用(未注册/隐私模式/不支持)      | `load` 退化为直接返回原 URL、`done` 立即 resolve;`auto()` 静默 no-op;`<pic-man>` 渲染裸 `<img>` |
+| 嗅探非动图/嗅探失败                    | 透传                                                                                            |
+| OffscreenCanvas 不可用                 | 色块本就是 SVG 不受影响;跳过首帧档,色块直达全图                                                 |
+| 首帧重组失败(createImageBitmap reject) | 停留色块档,不影响后台下载与最终切换,`onError` 上报                                              |
+| 后台下载中途断                         | 通知页面失败;A/C 模式对元素重设原 URL + 重试标记(SW 见标记透传);B 模式 `done` reject            |
+| 完成通知丢失(SW 被杀/竞态)             | 兜底对账:占位响应带标记头,运行时跟踪占位中元素,`visibilitychange`/惰性查 `caches.match` 补切换  |
+| `cache.put` 配额失败                   | LRU 驱逐重试一次;再败放弃落盘仍发通知,二次请求走网络流                                          |
+| 同 URL 并发多元素                      | SW 内按 URL 去重 in-flight 下载                                                                 |
+| 元素中途移除                           | 下载继续(进缓存),不取消                                                                         |
 
 配置钩子:`onError(ctx)`(SW 端与页面端各一)。
 

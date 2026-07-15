@@ -15,3 +15,4 @@
 - 新增:页面端显式 API load()(阶段事件+对账)与 registerPicmanSW
 - 新增:页面端零改造接管 auto()(img/背景元素跟踪、阶段切换、错过通知补偿)
 - 新增:`<pic-man>` Web Component(基于 load() 的框架无关封装)
+- 新增:demo 页 + 限速静态服务(examples/),README 按渐进加载库重写

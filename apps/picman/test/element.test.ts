@@ -10,11 +10,14 @@ function fakeSW() {
     controller: {},
     addEventListener: (_: string, cb: (e: MessageEvent) => void) => listeners.add(cb),
     removeEventListener: (_: string, cb: (e: MessageEvent) => void) => listeners.delete(cb),
-    emit: (data: unknown) => listeners.forEach(cb => cb({ data } as MessageEvent)),
+    emit: (data: unknown) => listeners.forEach((cb) => cb({ data } as MessageEvent)),
   };
 }
 const URL1 = "https://a.com/x.gif";
-afterEach(() => { _setServiceWorkerContainer(null); document.body.innerHTML = ""; });
+afterEach(() => {
+  _setServiceWorkerContainer(null);
+  document.body.innerHTML = "";
+});
 
 describe("<pic-man>", () => {
   it("SW 缺失:直接渲染原 URL", async () => {
@@ -22,7 +25,7 @@ describe("<pic-man>", () => {
     const el = document.createElement("pic-man");
     el.setAttribute("src", URL1);
     document.body.append(el);
-    await new Promise(r => setTimeout(r, 0));
+    await new Promise((r) => setTimeout(r, 0));
     const img = el.shadowRoot!.querySelector("img")!;
     expect(img.src).toBe(URL1);
   });
@@ -34,12 +37,12 @@ describe("<pic-man>", () => {
     el.setAttribute("src", URL1);
     el.setAttribute("alt", "demo");
     document.body.append(el);
-    await new Promise(r => setTimeout(r, 0));
+    await new Promise((r) => setTimeout(r, 0));
     const img = el.shadowRoot!.querySelector("img")!;
     expect(img.src).toBe(URL1); // placeholder 阶段 = 原 URL(SW 回占位)
     expect(img.alt).toBe("demo");
     sw.emit({ picman: 1, type: "complete", url: URL1 });
-    await new Promise(r => setTimeout(r, 0));
+    await new Promise((r) => setTimeout(r, 0));
     expect(img.src).toBe(withStageParam(URL1, "1"));
   });
   it("重复 definePicMan 幂等", () => {

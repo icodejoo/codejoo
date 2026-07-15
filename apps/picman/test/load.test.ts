@@ -11,7 +11,7 @@ function fakeSW() {
     controller: {},
     addEventListener: (_: string, cb: (e: MessageEvent) => void) => listeners.add(cb),
     removeEventListener: (_: string, cb: (e: MessageEvent) => void) => listeners.delete(cb),
-    emit: (data: unknown) => listeners.forEach(cb => cb({ data } as MessageEvent)),
+    emit: (data: unknown) => listeners.forEach((cb) => cb({ data } as MessageEvent)),
   };
 }
 afterEach(() => _setServiceWorkerContainer(null));
@@ -22,7 +22,7 @@ describe("load", () => {
   it("SW 缺失:立即 complete + 原 URL", async () => {
     _setServiceWorkerContainer(null);
     const stages: string[] = [];
-    const task = load(URL1).onStage(s => stages.push(s));
+    const task = load(URL1).onStage((s) => stages.push(s));
     await expect(task.done).resolves.toBe(URL1);
     expect(stages).toContain("complete");
   });

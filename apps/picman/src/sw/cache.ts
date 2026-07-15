@@ -22,11 +22,11 @@ interface IndexEntry {
  */
 export interface PicmanCacheLike {
   /** Look up a cached stage response — 查找某阶段的缓存响应 */
-  matchStage(url: string, stage: PicmanStage): Promise<Response | undefined>;
+  matchStage: (url: string, stage: PicmanStage) => Promise<Response | undefined>;
   /** Store a stage response; false when the write ultimately failed (e.g. quota) — 存储某阶段响应;写入最终失败(如配额)返回 false */
-  putStage(url: string, stage: PicmanStage, resp: Response): Promise<boolean>;
+  putStage: (url: string, stage: PicmanStage, resp: Response) => Promise<boolean>;
   /** Delete both stage entries for a URL and drop it from the LRU index — 删除一个 URL 的两阶段缓存并从 LRU 索引移除 */
-  deleteUrl(url: string): Promise<void>;
+  deleteUrl: (url: string) => Promise<void>;
 }
 
 /**

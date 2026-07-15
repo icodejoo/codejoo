@@ -2,7 +2,12 @@ import { describe, expect, it, vi } from "vitest";
 import { avgColor, lightDark, makeFirstFramePlaceholder, rgbHex, svgColorBlock } from "../src/sw/placeholder";
 
 describe("svgColorBlock", () => {
-  const palette: [number, number, number][] = [[0, 0, 0], [255, 255, 255], [255, 0, 0], [0, 255, 0]];
+  const palette: [number, number, number][] = [
+    [0, 0, 0],
+    [255, 255, 255],
+    [255, 0, 0],
+    [0, 255, 0],
+  ];
   it("solid 用平均色", () => {
     const svg = svgColorBlock({ width: 4, height: 3, palette, mode: "solid", fallbackColor: "#e0e0e0" });
     expect(svg).toContain(`fill="${rgbHex(avgColor(palette))}"`);

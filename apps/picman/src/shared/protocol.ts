@@ -29,10 +29,7 @@ export type PicmanStage = "ff" | "1";
  *
  * SW 发往页面的消息。
  */
-export type PicmanMessage =
-  | { picman: 1; type: "first-frame"; url: string }
-  | { picman: 1; type: "complete"; url: string }
-  | { picman: 1; type: "error"; url: string; stage: "download" | "first-frame"; message: string };
+export type PicmanMessage = { picman: 1; type: "first-frame"; url: string } | { picman: 1; type: "complete"; url: string } | { picman: 1; type: "error"; url: string; stage: "download" | "first-frame"; message: string };
 
 /**
  * Type guard for {@link PicmanMessage}.

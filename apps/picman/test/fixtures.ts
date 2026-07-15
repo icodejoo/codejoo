@@ -32,7 +32,7 @@ export function crc32(bytes: Uint8Array): number {
  * @returns Encoded chunk bytes — 编码后的 chunk 字节
  */
 export function pngChunk(type: string, data: Uint8Array): Uint8Array {
-  const typeBytes = Uint8Array.from([...type].map((c) => c.charCodeAt(0)));
+  const typeBytes = Uint8Array.from(type.split("").map((c) => c.charCodeAt(0)));
   const typeAndData = new Uint8Array(typeBytes.length + data.length);
   typeAndData.set(typeBytes, 0);
   typeAndData.set(data, typeBytes.length);
@@ -169,7 +169,7 @@ export function makeWebp(opts: { animated: boolean; alpha?: boolean }): Uint8Arr
   const { animated, alpha = false } = opts;
 
   const chunk = (fourcc: string, data: Uint8Array): Uint8Array => {
-    const fourccBytes = Uint8Array.from([...fourcc].map((c) => c.charCodeAt(0)));
+    const fourccBytes = Uint8Array.from(fourcc.split("").map((c) => c.charCodeAt(0)));
     const padded = data.length % 2 === 1 ? new Uint8Array(data.length + 1) : data;
     if (padded !== data) padded.set(data, 0);
     const out = new Uint8Array(4 + 4 + padded.length);

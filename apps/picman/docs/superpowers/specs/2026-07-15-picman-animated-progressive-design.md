@@ -49,11 +49,11 @@ src/
 
 ```jsonc
 {
-  ".":          "./dist/esm/index.mjs",          // page
-  "./sw":       "./dist/esm/sw.mjs",
-  "./element":  "./dist/esm/element.mjs",
-  "./shared":   "./dist/esm/shared.mjs",
-  "./picman-sw.js": "./dist/picman-sw.js"        // 托管成品,iife/单文件
+  ".": "./dist/esm/index.mjs", // page
+  "./sw": "./dist/esm/sw.mjs",
+  "./element": "./dist/esm/element.mjs",
+  "./shared": "./dist/esm/shared.mjs",
+  "./picman-sw.js": "./dist/picman-sw.js", // 托管成品,iife/单文件
 }
 ```
 
@@ -64,25 +64,25 @@ src/
 ```ts
 /** SW 端 */
 interface PicmanSWOptions {
-  threshold?: number                    // 大图阈值字节,默认 102400
-  include?: (string | RegExp)[]         // URL 粗筛,默认 [/\.(gif|png|apng|webp)(\?|$)/i]
-  exclude?: (string | RegExp)[]         // 默认 []
-  colorBlock?: 'solid' | 'gradient'     // 默认 'gradient'
-  fallbackColor?: string                // 无调色板时的色块底色,默认 '#e0e0e0'
-  firstFrame?: 'sharp' | 'blur'         // 默认 'sharp'
-  blurRadius?: number                   // firstFrame:'blur' 时的模糊半径 px,默认 12
-  headBytes?: number                    // 嗅探所需最小头部字节,默认 4096
-  firstFrameMaxBytes?: number           // 首帧重组的最大等待字节,默认 512 * 1024;超过放弃首帧档
-  cache?: { name?: string; maxEntries?: number; maxAgeSeconds?: number }
-                                        // 默认 { name: 'picman-v1', maxEntries: 200, maxAgeSeconds: 604800 }
-  onError?: (ctx: PicmanErrorContext) => void
+  threshold?: number; // 大图阈值字节,默认 102400
+  include?: (string | RegExp)[]; // URL 粗筛,默认 [/\.(gif|png|apng|webp)(\?|$)/i]
+  exclude?: (string | RegExp)[]; // 默认 []
+  colorBlock?: "solid" | "gradient"; // 默认 'gradient'
+  fallbackColor?: string; // 无调色板时的色块底色,默认 '#e0e0e0'
+  firstFrame?: "sharp" | "blur"; // 默认 'sharp'
+  blurRadius?: number; // firstFrame:'blur' 时的模糊半径 px,默认 12
+  headBytes?: number; // 嗅探所需最小头部字节,默认 4096
+  firstFrameMaxBytes?: number; // 首帧重组的最大等待字节,默认 512 * 1024;超过放弃首帧档
+  cache?: { name?: string; maxEntries?: number; maxAgeSeconds?: number };
+  // 默认 { name: 'picman-v1', maxEntries: 200, maxAgeSeconds: 604800 }
+  onError?: (ctx: PicmanErrorContext) => void;
 }
 
 /** 页面端 auto */
 interface PicmanAutoOptions {
-  root?: ParentNode                     // 默认 document
-  backgrounds?: boolean                 // 是否接管 CSS 背景图,默认 true
-  onError?: (ctx: PicmanErrorContext) => void
+  root?: ParentNode; // 默认 document
+  backgrounds?: boolean; // 是否接管 CSS 背景图,默认 true
+  onError?: (ctx: PicmanErrorContext) => void;
 }
 ```
 
@@ -134,12 +134,12 @@ S6 二次请求(PICMAN_FULL):caches.match(url) 命中回全图(剥掉标记参�
 
 ### 5.1 嗅探(sniff.ts)
 
-| 判定 | 依据 |
-|---|---|
-| GIF | 前 6 字节 `GIF87a` / `GIF89a`;是否动图:**遇 0x21 0xFF Netscape 循环扩展 → 动图;遇第 2 个 Image Descriptor(0x2C)→ 动图;首帧后即遇 0x3B → 静图**(三条按先到判定) |
-| APNG | PNG 签名 8 字节 + 在 IDAT 之前发现 `acTL` chunk → 动图;否则静图 |
-| 动画 WebP | `RIFF....WEBP` + `VP8X` chunk 且 flags bit1(Animation)=1 |
-| 其他 | 非动图,透传 |
+| 判定      | 依据                                                                                                                                                           |
+| --------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| GIF       | 前 6 字节 `GIF87a` / `GIF89a`;是否动图:**遇 0x21 0xFF Netscape 循环扩展 → 动图;遇第 2 个 Image Descriptor(0x2C)→ 动图;首帧后即遇 0x3B → 静图**(三条按先到判定) |
+| APNG      | PNG 签名 8 字节 + 在 IDAT 之前发现 `acTL` chunk → 动图;否则静图                                                                                                |
+| 动画 WebP | `RIFF....WEBP` + `VP8X` chunk 且 flags bit1(Animation)=1                                                                                                       |
+| 其他      | 非动图,透传                                                                                                                                                    |
 
 嗅探可能需要的字节数不定(acTL 在 IHDR 后但 IDAT 前),增量喂,返回三态:`'animated' | 'static' | 'need-more'`;流结束仍 `need-more` → 按 static 透传。
 
@@ -173,15 +173,15 @@ RIFF:`RIFF + size(4 LE) + WEBP` → chunk 流 [fourcc 4B + size 4B LE + data(奇
 ## 6. SW↔页面协议(protocol.ts)
 
 ```ts
-const CACHE_NAME = 'picman-v1'
-const PARAM_FULL = '__picman_full__'      // 二次请求标记(值=阶段:'ff' | '1')
-const PARAM_BYPASS = '__picman_bypass__'  // 重试透传标记
-const HEADER_MARK = 'X-Picman'            // 'placeholder' | 'first-frame' | 'full'
+const CACHE_NAME = "picman-v1";
+const PARAM_FULL = "__picman_full__"; // 二次请求标记(值=阶段:'ff' | '1')
+const PARAM_BYPASS = "__picman_bypass__"; // 重试透传标记
+const HEADER_MARK = "X-Picman"; // 'placeholder' | 'first-frame' | 'full'
 
 type PicmanMessage =
-  | { picman: 1, type: 'first-frame', url: string }   // url = 剥参原始 URL
-  | { picman: 1, type: 'complete',    url: string }
-  | { picman: 1, type: 'error',       url: string, stage: 'download' | 'first-frame', message: string }
+  | { picman: 1; type: "first-frame"; url: string } // url = 剥参原始 URL
+  | { picman: 1; type: "complete"; url: string }
+  | { picman: 1; type: "error"; url: string; stage: "download" | "first-frame"; message: string };
 ```
 
 页面切图 = 对元素重设 `src = url + PARAM_FULL=1`(或 ff),请求回到 SW 走缓存;`Cache-Control: no-store` 保证占位不污染 HTTP 缓存,全图响应保留原响应头(可正常缓存)。URL 匹配一律先剥两个标记参数。
@@ -192,11 +192,11 @@ type PicmanMessage =
 
 ```ts
 interface PicmanTask {
-  url: string
-  onStage(cb: (stage: 'placeholder' | 'first-frame' | 'complete', displayUrl: string) => void): void
-  done: Promise<string>                 // resolve 全图 displayUrl;下载失败 reject
+  url: string;
+  onStage(cb: (stage: "placeholder" | "first-frame" | "complete", displayUrl: string) => void): void;
+  done: Promise<string>; // resolve 全图 displayUrl;下载失败 reject
 }
-function load(url: string): PicmanTask
+function load(url: string): PicmanTask;
 ```
 
 实现:`navigator.serviceWorker.controller` 不存在 → 立即回 `complete` + 原 URL(降级)。存在 → 监听 `message`,过滤 `picman:1` 且 URL 匹配;返回的 displayUrl 就是带阶段参数的原 URL(浏览器自己发请求命中 SW)。
