@@ -11,10 +11,12 @@ pnpm install
 pnpm run build   # 示例从包名 @codejoo/stomp 导入，需要先构建出 dist/
 ```
 
-默认连接本地跑的 api-ws-demo（`cargo run`，默认端口 8080）。要连线上部署，设置环境变量：
+默认连接线上部署的 api-ws-demo（`https://api-ws-demo-latest.onrender.com`，Render 免费实例，
+闲置会休眠，首次请求可能要等几十秒冷启动；这个实例也可能被其他人同时拿来测试，公共 topic 的
+数据会互相影响）。要连自己本地跑的实例（`cargo run`，默认端口 8080），设置环境变量：
 
 ```bash
-API_WS_DEMO_HTTP=https://api-ws-demo-latest.onrender.com API_WS_DEMO_WS=wss://api-ws-demo-latest.onrender.com node examples/01-basic-pubsub.ts
+API_WS_DEMO_HTTP=http://localhost:8080 API_WS_DEMO_WS=ws://localhost:8080 node examples/01-basic-pubsub.ts
 ```
 
 ## 示例列表
