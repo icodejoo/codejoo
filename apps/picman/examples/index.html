@@ -40,7 +40,10 @@
       <h2>测试跨域 CDN URL</h2>
       <input id="cdn-url" type="text" placeholder="输入图片 URL" style="width: 100%; padding: 8px; margin-bottom: 8px;" />
       <button id="load-cdn" style="padding: 8px 16px;">加载</button>
-      <div id="cdn-result" style="margin-top: 16px;"></div>
+      <div id="cdn-result" style="margin-top: 16px;">
+        <div id="cdn-stage" style="margin-bottom: 8px; font-weight: bold; color: #666;"></div>
+        <img id="cdn-img" alt="CDN" style="max-width: 320px; border: 1px solid #ddd; display: none;" />
+      </div>
     </section>
 
     <section>
@@ -96,20 +99,53 @@
       // 跨域 CDN 测试
       const urlInput = document.getElementById("cdn-url");
       const loadBtn = document.getElementById("load-cdn");
-      const resultDiv = document.getElementById("cdn-result");
+      const cdnStageEl = document.getElementById("cdn-stage");
+      const cdnImgEl = document.getElementById("cdn-img");
+
+      const stageTexts = {
+        placeholder: "第一阶段：占位符（SVG 色块）",
+        "first-frame": "第二阶段：首帧（静态，不动）",
+        complete: "第三阶段：完整（动画可播放）"
+      };
 
       loadBtn.addEventListener("click", () => {
         const url = urlInput.value.trim();
         if (!url) {
-          resultDiv.textContent = "请输入 URL";
+          cdnStageEl.textContent = "请输入 URL";
+          cdnImgEl.style.display = "none";
           return;
         }
-        resultDiv.innerHTML = "<p>加载中...</p>";
+        cdnStageEl.textContent = "加载中...";
+        cdnImgEl.style.display = "none";
+
+        let completeUrl = null;
+
         const cdnTask = load(url).onStage((stage, displayUrl) => {
-          resultDiv.innerHTML = `<p>stage: ${stage}</p><img src="${displayUrl}" alt="CDN" style="max-width: 100%; border: 1px solid #ddd;" />`;
+          if (stage === "placeholder") {
+            cdnStageEl.textContent = stageTexts[stage];
+            cdnImgEl.src = displayUrl;
+            cdnImgEl.style.display = "block";
+            cdnImgEl.style.opacity = "0.3";
+            cdnImgEl.title = "占位符（SVG 色块）";
+          } else if (stage === "first-frame") {
+            cdnStageEl.textContent = stageTexts[stage];
+            cdnImgEl.src = displayUrl;
+            cdnImgEl.style.opacity = "0.6";
+            cdnImgEl.title = "这是首帧的静态版本（不动）";
+          } else if (stage === "complete") {
+            completeUrl = displayUrl;
+            // 延迟 3 秒再显示完整的动画资源，让首帧阶段更明显
+            setTimeout(() => {
+              cdnStageEl.textContent = stageTexts[stage] + " - 现在动起来！";
+              cdnImgEl.src = completeUrl;
+              cdnImgEl.style.opacity = "1";
+              cdnImgEl.title = "完整的动画资源现在在播放";
+            }, 3000);
+          }
         });
         cdnTask.done.catch((err) => {
-          resultDiv.innerHTML = `<p style="color: red;">错误: ${err.message}</p>`;
+          cdnStageEl.textContent = `❌ 加载失败: ${err.message}`;
+          cdnImgEl.style.display = "none";
           console.error("CDN load failed", err);
         });
       });
