@@ -23,4 +23,4 @@
 - 新增:页面端视频配置 `videos` / `videoFrame` / `videoRangeBytes` / `videoAutoplay` / `videoAutoplayDelay`
 - 重构:`svgColorBlock` 及色块纯函数下沉到 `src/shared/placeholder.ts`(新增 `svgDataUri`),`sw/placeholder.ts` re-export 保持兼容
 - 验证:跨域 CDN 资源加载功能——Service Worker 与缓存机制对所有 CORS 源有效,三段加载流程正常工作
-- 改进:demo 页增强 CDN 测试——首帧阶段显示静态 PNG（不动,opacity 0.6）,完整阶段延迟 3 秒才启动 WebP 动画,三段加载视觉效果清晰化
+- 改进:demo 页增强 CDN 测试——在 placeholder 阶段开始计时,保证占位符/首帧至少显示 3 秒后才切换到完整资源,三段加载视觉效果清晰化,即使浏览器不支持 OffscreenCanvas 也能延迟显示
