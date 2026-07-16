@@ -124,6 +124,7 @@
 
         const cdnTask = load(url).onStage((stage, displayUrl) => {
           if (stage === "placeholder") {
+            firstFrameTime = Date.now();
             cdnStageEl.textContent = stageTexts[stage];
             cdnImgEl.src = displayUrl;
             cdnImgEl.style.display = "block";
