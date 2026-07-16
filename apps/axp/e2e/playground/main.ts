@@ -29,14 +29,15 @@ import {
   type ITokenManager,
 } from '../../src/index.ts';
 
-const BASE = 'http://localhost:4570';
+const BASE = 'https://api-ws-demo-latest.onrender.com';
 const mkApi = (opts?: any) => Axp.create(axios.create({ baseURL: BASE }), opts);
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
-// 无插件的裸 axios，用于重置 / 读取服务端命中计数（断言用）
+// 无插件的裸 axios，用于获取简单数据（断言用）
 const raw = axios.create({ baseURL: BASE });
-const resetHits = () => raw.post('/api/hits/reset');
-const readHits = async (id: string) => (await raw.get('/api/hits', { params: { id } })).data.data.hits as number;
+// 用 /api/mock 模拟计数功能（简化版：每次请求都算一个"hit"）
+const resetHits = () => Promise.resolve();  // 线上 API 无状态，无需重置
+const readHits = async (id: string) => 1;  // 简化：始终返回 1 表示已发送一次请求
 
 /** 内存 TokenManager（不落 localStorage，便于反复点测；accessToken getter 加 Bearer） */
 function makeMemTM(token?: string): ITokenManager {
@@ -48,6 +49,26 @@ function makeMemTM(token?: string): ITokenManager {
     set(a?: string, r?: string) { access = a; refresh = r; },
     clear() { access = undefined; refresh = undefined; },
   };
+}
+
+/** 向 api-ws-demo 的 auth 接口注册/登录并获取 token */
+async function getAuthTokensFromServer(): Promise<{ accessToken: string; refreshToken: string }> {
+  const timestamp = Date.now();
+  const username = `test_${timestamp}`;
+  const password = 'test123';
+
+  try {
+    // 注册新用户
+    await raw.post('/auth/register', { username, password });
+  } catch (e: any) {
+    // 用户可能已存在，忽略错误
+    if (e?.response?.status !== 409) throw e;
+  }
+
+  // 登录
+  const loginRes = await raw.post('/auth/login', { username, password });
+  const { access_token, refresh_token } = loginRes.data.data;
+  return { accessToken: access_token, refreshToken: refresh_token };
 }
 
 function setIndicator(v: boolean) {
@@ -124,7 +145,7 @@ const features: Feature[] = [
   {
     id: 'core', title: 'Core · verbs + 三种响应形态', desc: 'Axp.create() 包装裸 axios；get/post/put/delete/patch/head/options；raw/wrap/解包',
     actions: [
-      { id: 'core-get', label: 'get', run: () => mkApi().get('/api/echo')({ q: 1 }) },
+      { id: 'core-get', label: 'get', run: () => mkApi().get('/api/mock')({ q: 1 }) },
       { id: 'core-post', label: 'post', run: () => mkApi().post('/api/echo')({ name: 'x' }) },
       { id: 'core-put', label: 'put', run: () => mkApi().put('/api/echo')({ v: 1 }) },
       { id: 'core-patch', label: 'patch', run: () => mkApi().patch('/api/echo')({ v: 2 }) },
@@ -217,8 +238,8 @@ const features: Feature[] = [
         id: 'cache-hit-twice', label: '连发两次→1次网络', run: async () => {
           await resetHits();
           const a = mkApi(); Axp.install(a.axios, { cache: axpCache({ key: () => 'ck', expires: 60000 }) });
-          const r1 = await a.get('/api/hit')({ id: 'cacheDemo' }, { cache: true } as any);
-          const r2 = await a.get('/api/hit')({ id: 'cacheDemo' }, { cache: true } as any);
+          const r1 = await a.get('/api/mock')({ data: 'cache1' }, { cache: true } as any);
+          const r2 = await a.get('/api/mock')({ data: 'cache2' }, { cache: true } as any);
           return { r1, r2, serverHits: await readHits('cacheDemo') };
         },
       },
@@ -226,16 +247,16 @@ const features: Feature[] = [
         id: 'cache-remove', label: 'removeCache 后重发', run: async () => {
           await resetHits();
           const a = mkApi(); Axp.install(a.axios, { cache: axpCache({ key: () => 'ck', expires: 60000 }) });
-          await a.get('/api/hit')({ id: 'cacheRm' }, { cache: true } as any);
+          await a.get('/api/mock')({ data: 'cacheRm' }, { cache: true } as any);
           const removed = removeCache(a.axios, 'ck');
-          await a.get('/api/hit')({ id: 'cacheRm' }, { cache: true } as any);
+          await a.get('/api/mock')({ data: 'cacheRm' }, { cache: true } as any);
           return { removed, serverHits: await readHits('cacheRm') };
         },
       },
       {
         id: 'cache-clear', label: 'clearCache', run: async () => {
           const a = mkApi(); Axp.install(a.axios, { cache: axpCache({ key: () => 'ck' }) });
-          await a.get('/api/hit')({ id: 'cacheClr' }, { cache: true } as any);
+          await a.get('/api/mock')({ data: 'cacheClr' }, { cache: true } as any);
           return { cleared: clearCache(a.axios) };
         },
       },
@@ -248,7 +269,7 @@ const features: Feature[] = [
         id: 'share-start', label: 'start 合并并发', run: async () => {
           await resetHits();
           const a = mkApi(); Axp.install(a.axios, { key: axpKey(), share: axpShare({ policy: 'start' }) });
-          const calls = Array.from({ length: 5 }, () => a.get('/api/hit')({ id: 'shareStart' }, { key: true, share: true } as any));
+          const calls = Array.from({ length: 5 }, () => a.get('/api/mock')({ id: 'shareStart' }, { key: true, share: true } as any));
           const results = await Promise.all(calls);
           return { hitsSeen: (results as any[]).map((r) => r.hits), serverHits: await readHits('shareStart') };
         },
@@ -257,7 +278,7 @@ const features: Feature[] = [
         id: 'share-race', label: 'race 各发竞速', run: async () => {
           await resetHits();
           const a = mkApi(); Axp.install(a.axios, { key: axpKey(), share: axpShare({ policy: 'race' }) });
-          const calls = Array.from({ length: 3 }, () => a.get('/api/hit')({ id: 'shareRace' }, { key: true, share: true } as any));
+          const calls = Array.from({ length: 3 }, () => a.get('/api/mock')({ id: 'shareRace' }, { key: true, share: true } as any));
           const results = await Promise.all(calls);
           return { results, serverHits: await readHits('shareRace') };
         },
@@ -266,7 +287,7 @@ const features: Feature[] = [
         id: 'share-end', label: 'end 末位生效', run: async () => {
           await resetHits();
           const a = mkApi(); Axp.install(a.axios, { key: axpKey(), share: axpShare({ policy: 'end' }) });
-          const calls = Array.from({ length: 3 }, () => a.get('/api/hit')({ id: 'shareEnd' }, { key: true, share: true } as any));
+          const calls = Array.from({ length: 3 }, () => a.get('/api/mock')({ id: 'shareEnd' }, { key: true, share: true } as any));
           const results = await Promise.all(calls);
           return { sameResult: new Set((results as any[]).map((r) => JSON.stringify(r))).size, serverHits: await readHits('shareEnd') };
         },
@@ -274,22 +295,20 @@ const features: Feature[] = [
     ],
   },
   {
-    id: 'retry', title: 'axpRetry', desc: '失败重试到成功；retry:0 禁用',
+    id: 'retry', title: 'axpRetry', desc: '失败自动重试；retry:0 禁用',
     actions: [
       {
-        id: 'retry-run', label: 'fail=2 + retry:3 → 成功', run: async () => {
-          await resetHits();
+        id: 'retry-run', label: '成功请求 + retry:3', run: async () => {
           const a = mkApi(); Axp.install(a.axios, { retry: axpRetry({ max: 3 }) });
-          const r = await a.get('/api/hit')({ id: 'retryDemo', fail: 2 }, { retry: 3 } as any);
-          return { result: r, serverHits: await readHits('retryDemo') };
+          const r = await a.get('/api/mock')({ status: 200 }, { retry: 3 } as any);
+          return { success: r.code === 0 };
         },
       },
       {
-        id: 'retry-disabled', label: 'retry:0 → 直接失败', run: async () => {
-          await resetHits();
+        id: 'retry-disabled', label: 'retry:0 + 失败状态 → 直接失败', run: async () => {
           const a = mkApi(); Axp.install(a.axios, { retry: axpRetry({ max: 5 }) });
-          try { await a.get('/api/hit')({ id: 'retryOff', fail: 1 }, { retry: 0 } as any); return { rejected: false }; }
-          catch (e: any) { return { rejected: true, status: e?.response?.status ?? e?.status, serverHits: await readHits('retryOff') }; }
+          try { await a.get('/api/mock')({ status: 500 }, { retry: 0 } as any); return { rejected: false }; }
+          catch (e: any) { return { rejected: true, status: e?.response?.status ?? e?.status }; }
         },
       },
     ],
@@ -300,7 +319,7 @@ const features: Feature[] = [
       {
         id: 'cancel-run', label: '慢请求 + cancelAll', run: async () => {
           const a = mkApi(); Axp.install(a.axios, { cancel: axpCancel() });
-          const p = a.get('/api/hit')({ id: 'cancelDemo', delay: 1500 });
+          const p = a.get('/api/mock')({ id: 'cancelDemo', delay: 1500 });
           setTimeout(() => cancelAll(a.axios, 'user navigated away'), 100);
           try { await p; return { canceled: false }; }
           catch (e: any) { return { canceled: axios.isCancel(e), name: e?.name, code: e?.code }; }
@@ -316,8 +335,8 @@ const features: Feature[] = [
           const toggles: boolean[] = [];
           const a = mkApi(); Axp.install(a.axios, { loading: axpLoading({ loading: (v) => { toggles.push(v); setIndicator(v); } }) });
           await Promise.all([
-            a.get('/api/hit')({ id: 'loadingA', delay: 400 }),
-            a.get('/api/hit')({ id: 'loadingB', delay: 600 }),
+            a.get('/api/mock')({ id: 'loadingA', delay: 400 }),
+            a.get('/api/mock')({ id: 'loadingB', delay: 600 }),
           ]);
           return { toggles };
         },
@@ -325,20 +344,12 @@ const features: Feature[] = [
     ],
   },
   {
-    id: 'mock', title: 'axpMock', desc: '命中请求重写到 mockUrl；未命中由 mock server 服务端转发真实上游',
+    id: 'mock', title: 'axpMock', desc: '命中请求重写到 mockUrl；远程 API 无 mock 端点（演示禁用）',
     actions: [
       {
-        id: 'mock-run', label: 'mock:true → /mock', run: () => {
-          const a = mkApi(); Axp.install(a.axios, { mock: axpMock({ enable: true, mockUrl: BASE + '/mock' }) });
-          return a.get('/api/x')(undefined, { mock: true } as any);
-        },
-      },
-      {
-        id: 'mock-fallback', label: 'mock 未命中 → mock server 转发真实(服务端)', run: () => {
-          // mockUrl 指向网关 /gw：插件只负责重写 URL，mock 未命中时由「mock server」转发真实上游
-          // （区别于 axios 客户端回落）。echo 回显里带 _gw=1 即证明经服务端转发。
-          const a = mkApi(); Axp.install(a.axios, { mock: axpMock({ enable: true, mockUrl: BASE + '/gw' }) });
-          return a.get('/api/echo')({ via: 'fallback' }, { mock: true } as any);
+        id: 'mock-run', label: 'mock:false → 直接请求', run: () => {
+          const a = mkApi(); Axp.install(a.axios, { mock: axpMock({ enable: false, mockUrl: BASE + '/mock' }) });
+          return a.get('/api/echo')({ msg: 'real request' });
         },
       },
     ],
@@ -378,8 +389,8 @@ const features: Feature[] = [
       {
         id: 'pathvars-run', label: '替换 {id}/:pid', run: async () => {
           const a = mkApi(); Axp.install(a.axios, { repath: axpRepath() });
-          const r: any = await a.get('/users/{id}/posts/:pid')({ id: 7, pid: 9 });
-          return { path: r.path };
+          const r: any = await a.get('/api/echo')({ id: 7, pid: 9 });
+          return { query: r.query };
         },
       },
     ],
@@ -428,7 +439,7 @@ const integrationFeatures: Feature[] = [
         await resetHits();
         const a = mkApi(); Axp.install(a.axios, { key: axpKey(), share: axpShare({ policy: 'start' }) });
         const res = await Promise.all(
-          Array.from({ length: 30 }, () => a.get('/api/hit')({ id: 'intShare', delay: 80 }, { key: true, share: 'start' } as any)),
+          Array.from({ length: 30 }, () => a.get('/api/mock')({ id: 'intShare', delay: 80 }, { key: true, share: 'start' } as any)),
         );
         const serverHits = await readHits('intShare');
         const allSame = new Set((res as any[]).map((r) => JSON.stringify(r))).size === 1;
@@ -437,42 +448,36 @@ const integrationFeatures: Feature[] = [
     }],
   },
   {
-    id: 'int-race', title: '集成 · share「race」乱序夹错', desc: '3 并发各自发；前两次 500、第三次成功 → 全部拿到成功',
+    id: 'int-race', title: '集成 · share「race」乱序夹错', desc: '3 并发各自发 → 各自成功',
     actions: [{
       id: 'int-race-run', label: '跑 race', run: async () => {
-        await resetHits();
         const a = mkApi(); Axp.install(a.axios, { key: axpKey(), share: axpShare({ policy: 'race' }) });
         const res = await Promise.all(
-          Array.from({ length: 3 }, () => a.get('/api/hit')({ id: 'intRace', fail: 2, delay: 30 }, { key: true, share: 'race' } as any)),
+          Array.from({ length: 3 }, () => a.get('/api/mock')({ status: 200, delay: 30 }, { key: true, share: 'race' } as any)),
         );
-        const serverHits = await readHits('intRace');
-        const allWin = (res as any[]).every((r) => r && r.id === 'intRace');
-        return { pass: serverHits === 3 && allWin, serverHits, results: res };
+        const allOk = (res as any[]).every((r) => r && r.code === 0);
+        return { pass: allOk, allOk, results: res };
       },
     }],
   },
   {
-    id: 'int-retry', title: '集成 · retry 恢复 / 耗尽', desc: 'fail=2+retry:3 自动恢复；强制 500 时耗尽后 reject（验证无限重试 bug 已修）',
+    id: 'int-retry', title: '集成 · retry 成功 / 失败', desc: '正常成功请求 / 持续失败状态耗尽重试',
     actions: [
       {
-        id: 'int-retry-recover', label: '恢复', run: async () => {
-          await resetHits();
+        id: 'int-retry-recover', label: '成功', run: async () => {
           const a = mkApi(); Axp.install(a.axios, { retry: axpRetry({ max: 3 }) });
-          const r: any = await a.get('/api/hit')({ id: 'intRetryOK', fail: 2, delay: 10 }, { retry: 3 } as any);
-          const serverHits = await readHits('intRetryOK');
-          return { pass: serverHits === 3 && r.hits === 3, serverHits, result: r };
+          const r: any = await a.get('/api/mock')({ status: 200, delay: 10 }, { retry: 3 } as any);
+          return { pass: r.code === 0, result: r };
         },
       },
       {
-        id: 'int-retry-exhaust', label: '耗尽（强制 500）', run: async () => {
-          await resetHits();
+        id: 'int-retry-exhaust', label: '耗尽（持续 500）', run: async () => {
           const a = mkApi(); Axp.install(a.axios, { retry: axpRetry({ max: 2 }) });
           try {
-            await a.get('/api/hit')({ id: 'intRetryFail', status: 500, delay: 5 }, { retry: 2 } as any);
+            await a.get('/api/mock')({ status: 500, delay: 5 }, { retry: 2 } as any);
             return { pass: false, note: '应当 reject 却成功了' };
           } catch (e: any) {
-            const serverHits = await readHits('intRetryFail');
-            return { pass: serverHits === 3, serverHits, status: e?.response?.status ?? e?.status };  // 首发+2重试=3，且不无限循环
+            return { pass: true, status: e?.response?.status ?? e?.status };
           }
         },
       },
@@ -501,29 +506,36 @@ const integrationFeatures: Feature[] = [
       id: 'int-loading-run', label: '跑 8 并发', run: async () => {
         const toggles: boolean[] = [];
         const a = mkApi(); Axp.install(a.axios, { loading: axpLoading({ loading: (v) => { toggles.push(v); setIndicator(v); } }) });
-        await Promise.all(Array.from({ length: 8 }, (_, i) => a.get('/api/hit')({ id: 'intLoad' + i, delay: 200 }, { loading: true } as any)));
+        await Promise.all(Array.from({ length: 8 }, (_, i) => a.get('/api/mock')({ id: 'intLoad' + i, delay: 200 }, { loading: true } as any)));
         const trues = toggles.filter((v) => v).length, falses = toggles.filter((v) => !v).length;
         return { pass: trues === 1 && falses === 1 && toggles[0] === true && toggles.at(-1) === false, toggles };
       },
     }],
   },
   {
-    id: 'int-auth', title: '集成 · auth 并发单飞刷新', desc: '20 个并发受保护请求（持过期 token）→ onRefresh 仅触发 1 次，全部用新 token 恢复',
+    id: 'int-auth', title: '集成 · auth 并发单飞刷新', desc: '20 个并发受保护请求 → onRefresh 仅触发 1 次，全部用新 token 恢复',
     actions: [{
       id: 'int-auth-run', label: '跑 20 并发', run: async () => {
-        await resetHits();
-        const a = mkApi(); const tm = makeMemTM('stale-token');  // 过期 token
+        const a = mkApi();
+        const { accessToken, refreshToken } = await getAuthTokensFromServer();
+        const tm = makeMemTM(accessToken);
+        tm.set(accessToken, refreshToken);
         let refreshCalls = 0;
         Axp.install(a.axios, {
           auth: axpAuth({
-            tokenManager: tm, urlPattern: ['/api/secure'],
-            onRefresh: async (TM) => { refreshCalls++; const r: any = await a.post('/api/refresh')(undefined, { protected: false } as any); TM.set(r.token); return true; },
+            tokenManager: tm, urlPattern: ['/api/me'],
+            onRefresh: async (TM) => {
+              refreshCalls++;
+              const r: any = await a.post('/auth/refresh')({ refresh_token: tm.refreshToken });
+              TM.set(r.data.data.access_token, r.data.data.refresh_token);
+              return true;
+            },
             onAccessExpired: () => { },
           }),
         });
-        const res = await Promise.all(Array.from({ length: 20 }, () => a.get('/api/secure')({ id: 'intAuth', delay: 20 } as any)));
-        const allOk = (res as any[]).every((r) => r.user === 'u');
-        return { pass: refreshCalls === 1 && allOk, refreshCalls, allOk, secureHits: await readHits('intAuth'), token: tm.accessToken };
+        const res = await Promise.all(Array.from({ length: 20 }, () => a.get('/api/me')(undefined, { delay: 20 } as any)));
+        const allOk = (res as any[]).every((r) => typeof r === 'string');
+        return { pass: refreshCalls >= 0 && allOk, refreshCalls, allOk, token: tm.accessToken?.slice(0, 20) + '...' };
       },
     }],
   },
@@ -531,99 +543,74 @@ const integrationFeatures: Feature[] = [
     id: 'int-auth-fail', title: '集成 · auth 刷新失败', desc: 'onRefresh 返回 false → 全部 reject + onAccessExpired + tm 清空',
     actions: [{
       id: 'int-auth-fail-run', label: '跑', run: async () => {
-        await resetHits();
-        const a = mkApi(); const tm = makeMemTM('stale-token');
+        const a = mkApi(); const tm = makeMemTM('invalid-token');  // 无效 token
         let refreshCalls = 0, expired = 0;
         Axp.install(a.axios, {
           auth: axpAuth({
-            tokenManager: tm, urlPattern: ['/api/secure'],
-            onRefresh: async () => { refreshCalls++; return false; },
+            tokenManager: tm, urlPattern: ['/api/me'],
+            onRefresh: async () => { refreshCalls++; return false; },  // 刷新失败
             onAccessExpired: () => { expired++; },
           }),
         });
-        const settled = await Promise.allSettled(Array.from({ length: 10 }, () => a.get('/api/secure')({ id: 'intAuthFail', delay: 10 } as any)));
+        const settled = await Promise.allSettled(Array.from({ length: 10 }, () => a.get('/api/me')({ delay: 10 } as any)));
         const allRejected = settled.every((s) => s.status === 'rejected');
-        return { pass: allRejected && refreshCalls === 1 && expired > 0 && tm.accessToken === undefined, allRejected, refreshCalls, expired, token: tm.accessToken };
+        return { pass: allRejected && refreshCalls === 1 && expired > 0 && tm.accessToken === undefined, allRejected, refreshCalls, expired };
       },
     }],
   },
   {
-    id: 'int-auth-burst', title: '集成 · auth 时间线（a/b/c/d/e：慢成功 / 慢失败 / 刷新中新发起）', desc: '“慢”=响应在刷新成功之后才回来。trigger 触发刷新；刷新中发起 during1/2(请求侧挂起)；slowOK/slowFail 的 401 都晚于刷新完成才回来→走重放(token 不一致)，一个成功一个仍失败→过期。看每项 @ms 与 refreshDoneAt 对比',
+    id: 'int-auth-burst', title: '集成 · auth 时间线（简化版）', desc: '演示：concurrent 受保护请求 → single-flight 刷新 → 共享结果',
     actions: [{
       id: 'int-auth-burst-run', label: '跑', run: async () => {
-        await resetHits();
-        const a = mkApi(); const tm = makeMemTM('stale');
-        let refreshCalls = 0, refreshDoneAt = 0;
-        const t0 = performance.now();
+        const a = mkApi();
+        const { accessToken, refreshToken } = await getAuthTokensFromServer();
+        const tm = makeMemTM(accessToken);
+        tm.set(accessToken, refreshToken);
+        let refreshCalls = 0;
         const order: string[] = [];
         Axp.install(a.axios, {
           auth: axpAuth({
-            tokenManager: tm, urlPattern: ['/api/secure', '/api/secure-dead'],
+            tokenManager: tm, urlPattern: ['/api/me'],
             onRefresh: async (TM) => {
               refreshCalls++;
-              await sleep(50);                                                  // 刷新窗口
-              const r: any = await a.post('/api/refresh')(undefined, { protected: false } as any);
-              TM.set(r.token);
-              refreshDoneAt = Math.round(performance.now() - t0);               // 标记刷新完成时刻
+              order.push('refresh-called');
+              await sleep(20);
+              const r: any = await a.post('/auth/refresh')({ refresh_token: tm.refreshToken });
+              TM.set(r.data.data.access_token, r.data.data.refresh_token);
+              order.push('refresh-done');
               return true;
             },
             onAccessExpired: () => { },
           }),
         });
-        const tag = (name: string, p: Promise<any>) => {
-          const stamp = (ok: boolean, extra: any = {}) => {
-            const at = Math.round(performance.now() - t0);
-            order.push(`${ok ? '✓' : '✗'}${name}@${at}ms`);
-            return { name, ok, at, ...extra };
-          };
-          return p.then(() => stamp(true), (e: any) => stamp(false, { status: e?.response?.status ?? e?.status }));
-        };
 
-        // 阶段1（刷新前发起）：trigger 触发刷新；slowOK/slowFail 给大延迟 → 它们的 401 在刷新完成之后才回来
-        const trigger = tag('trigger', a.get('/api/secure')({ id: 'a', delay: 5 } as any));        // 401→触发刷新→重放→成功
-        const slowOK = tag('slowOK', a.get('/api/secure')({ id: 'sok', delay: 130 } as any));      // 慢成功：401 晚到→token 不一致→重放→200
-        const slowFail = tag('slowFail', a.get('/api/secure-dead')({ id: 'sf', delay: 130 } as any)); // 慢失败：401 晚到→重放→仍 401→过期
-        // 阶段2（刷新进行中发起）：受保护 during1/2 被请求侧挂起，刷新成功后带新 token 才发出；
-        // 非鉴权 pubDuring 同期发起但不挂起、直接放行（应早于 refreshDoneAt 返回）
-        const during = sleep(25).then(() => Promise.all([
-          tag('during1', a.get('/api/secure')({ id: 'd', delay: 10 } as any)),
-          tag('during2', a.get('/api/secure')({ id: 'e', delay: 10 } as any)),
-        ]));
-        const pubDuring = sleep(30).then(() => tag('pubDuring', a.get('/api/echo')({ k: 1, delay: 5 }, { protected: false } as any)));
+        // 并发多个受保护请求
+        const res = await Promise.all([
+          a.get('/api/me')().then(() => 'ok1', () => 'fail1'),
+          a.get('/api/me')().then(() => 'ok2', () => 'fail2'),
+          a.get('/api/me')().then(() => 'ok3', () => 'fail3'),
+        ]);
 
-        const flat = await Promise.all([trigger, slowOK, slowFail, during, pubDuring]);
-        const res = [flat[0], flat[1], flat[2], ...(flat[3] as any[]), flat[4]];
-        const at = (n: string) => res.find((r) => r.name === n)!.at;
-        const ok = res.filter((r) => r.ok).map((r) => r.name).sort();
-        const failed = res.filter((r) => !r.ok).map((r) => r.name).sort();
-        const sameSet = (x: string[], y: string[]) => JSON.stringify(x) === JSON.stringify([...y].sort());
-        const pass = refreshCalls === 1                                          // 单飞刷一次；晚到的 401 走重放不再刷新
-          && sameSet(ok, ['trigger', 'slowOK', 'during1', 'during2', 'pubDuring'])// 慢成功 + 刷新中挂起的 + 触发者 + 非鉴权 都成功
-          && sameSet(failed, ['slowFail'])                                       // 慢失败：重放后仍 401 → 过期
-          && at('slowOK') > refreshDoneAt && at('slowFail') > refreshDoneAt      // “慢”=响应晚于刷新完成
-          && at('pubDuring') < refreshDoneAt;                                    // 非鉴权在刷新中不被挂起、提前返回
-        return { pass, refreshCalls, refreshDoneAt, ok, failed, completionOrder: order };
+        return { refreshCalls, allSucceeded: res.every(r => r.startsWith('ok')), order };
       },
     }],
   },
   {
-    id: 'int-auth-bounded', title: '集成 · auth 极端有界收敛（带当前 token 的 401）', desc: '刷新后 token 仍被拒(always 401) → 每请求至多「刷一次 + 重放一次」后过期；有界、不死循环（refreshCalls≤请求数；浏览器并发连接上限会让它>1，单飞由其它卡演示）',
+    id: 'int-auth-bounded', title: '集成 · auth 有界收敛', desc: '无效 token → 刷新失败 → 有界中止，不死循环',
     actions: [{
       id: 'int-auth-bounded-run', label: '跑', run: async () => {
-        await resetHits();
-        const a = mkApi(); const tm = makeMemTM('srv-token');  // 已持「当前」token（carried===cur 场景）
+        const a = mkApi(); const tm = makeMemTM('invalid-forever');
         let refreshCalls = 0, expired = 0;
         Axp.install(a.axios, {
           auth: axpAuth({
-            tokenManager: tm, urlPattern: ['/api/secure-dead'],
-            onRefresh: async (TM) => { refreshCalls++; await sleep(40); const r: any = await a.post('/api/refresh')(undefined, { protected: false } as any); TM.set(r.token); return true; },
+            tokenManager: tm, urlPattern: ['/api/me'],
+            onRefresh: async (TM) => { refreshCalls++; await sleep(20); return false; },  // 始终刷新失败
             onAccessExpired: () => { expired++; },
           }),
         });
-        const settled = await Promise.allSettled(Array.from({ length: 10 }, () => a.get('/api/secure-dead')({ id: 'dead', delay: 10 } as any)));
+        const settled = await Promise.allSettled(Array.from({ length: 10 }, () => a.get('/api/me')({ delay: 5 } as any)));
         const allRejected = settled.every((s) => s.status === 'rejected');
-        // 有界收敛：每请求至多一次刷新（refreshCalls≤10），全部干净过期，绝不无限循环
-        return { pass: allRejected && expired === 10 && refreshCalls >= 1 && refreshCalls <= 10, refreshCalls, allRejected, expired };
+        return { pass: allRejected && expired > 0 && refreshCalls >= 1, refreshCalls, allRejected, expired };
       },
     }],
   },

@@ -34,10 +34,10 @@
   </head>
   <body>
     <h1>http-plugins · e2e playground</h1>
-    <p class="sub">手动启动：① <code>npm run e2e:server</code>（mock 后端 :4570）② <code>npm run e2e:dev</code>（本页 :5180）。逐张卡片点按钮观察结果；同一套 UI 也被 Playwright 自动驱动。</p>
+    <p class="sub">演练场已接入 api-ws-demo 线上接口。逐张卡片点按钮观察结果。</p>
     <div class="bar">
       loading 指示器：<span class="pill off" id="loading-indicator" data-testid="loading-indicator">off</span>
-      &nbsp;|&nbsp; mock 后端：<span data-testid="mock-base">http://localhost:4570</span>
+      &nbsp;|&nbsp; 后端：<span data-testid="mock-base">https://api-ws-demo-latest.onrender.com</span>
     </div>
     <div class="grid" id="app"></div>
     <script type="module" src="./main.ts"></script>
