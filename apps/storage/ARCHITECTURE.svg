@@ -1,0 +1,126 @@
+<svg viewBox="0 0 1400 950" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <style>
+      .box { fill: #FDE8D0; stroke: #333; stroke-width: 2; }
+      .box-api { fill: #E8F5E9; stroke: #333; stroke-width: 1.5; }
+      .box-plugin { fill: #FFF9C4; stroke: #333; stroke-width: 1.5; }
+      .text-title { font-size: 18px; font-weight: bold; font-family: Arial; }
+      .text-label { font-size: 13px; font-family: Arial; }
+      .text-small { font-size: 11px; font-family: Arial; }
+      .text-api { font-size: 10px; font-family: 'Courier New', monospace; }
+      .arrow { stroke: #333; stroke-width: 2; fill: none; marker-end: url(#arrowhead); }
+      .arrow-small { stroke: #666; stroke-width: 1.5; fill: none; marker-end: url(#arrowhead-small); }
+    </style>
+    <marker id="arrowhead" markerWidth="10" markerHeight="10" refX="9" refY="3" orient="auto">
+      <polygon points="0 0, 10 3, 0 6" fill="#333"/>
+    </marker>
+    <marker id="arrowhead-small" markerWidth="8" markerHeight="8" refX="7" refY="2" orient="auto">
+      <polygon points="0 0, 8 2, 0 4" fill="#666"/>
+    </marker>
+  </defs>
+
+  <text x="700" y="30" text-anchor="middle" class="text-title">Storage 完整架构流程图</text>
+  <text x="700" y="50" text-anchor="middle" class="text-label">跨浏览器统一存储适配器 | localStorage/IndexedDB/sessionStorage</text>
+
+  <!-- 应用层 -->
+  <rect x="50" y="80" width="200" height="120" class="box" rx="8"/>
+  <text x="150" y="110" text-anchor="middle" class="text-title">应用代码</text>
+  <text x="150" y="130" text-anchor="middle" class="text-label">App Code</text>
+  <text x="150" y="150" text-anchor="middle" class="text-api">storage.setItem(key, val)</text>
+  <text x="150" y="165" text-anchor="middle" class="text-api">storage.getItem(key)</text>
+  <text x="150" y="180" text-anchor="middle" class="text-api">storage.removeItem(key)</text>
+
+  <path d="M 250 140 L 320 140" class="arrow"/>
+
+  <!-- Storage 核心 -->
+  <rect x="320" y="80" width="200" height="120" class="box" rx="8"/>
+  <text x="420" y="110" text-anchor="middle" class="text-title">Storage 核心</text>
+  <text x="420" y="130" text-anchor="middle" class="text-label">Storage Manager</text>
+  <text x="420" y="150" text-anchor="middle" class="text-api">set/get/remove</text>
+  <text x="420" y="165" text-anchor="middle" class="text-api">clear() / keys()</text>
+  <text x="420" y="180" text-anchor="middle" class="text-api">select adapter</text>
+
+  <path d="M 420 200 L 420 260" class="arrow"/>
+
+  <!-- 处理阶段 -->
+  <text x="50" y="260" class="text-label" font-weight="bold">📦 存储层适配</text>
+
+  <!-- 数据序列化 -->
+  <rect x="50" y="280" width="160" height="130" class="box-plugin" rx="5"/>
+  <text x="130" y="305" text-anchor="middle" class="text-label">数据序列化</text>
+  <text x="130" y="320" text-anchor="middle" class="text-small">Serialization</text>
+  <line x1="60" y1="330" x2="200" y2="330" stroke="#ccc" stroke-width="1"/>
+  <text x="130" y="348" text-anchor="middle" class="text-api">JSON.stringify()</text>
+  <text x="130" y="363" text-anchor="middle" class="text-api">encode/compress</text>
+  <text x="130" y="378" text-anchor="middle" class="text-api">handle types</text>
+  <text x="130" y="393" text-anchor="middle" class="text-small">转为存储格式</text>
+
+  <!-- 存储自适应 -->
+  <rect x="230" y="280" width="160" height="130" class="box-plugin" rx="5"/>
+  <text x="310" y="305" text-anchor="middle" class="text-label">自适应选择</text>
+  <text x="310" y="320" text-anchor="middle" class="text-small">Auto-Select</text>
+  <line x1="240" y1="330" x2="380" y2="330" stroke="#ccc" stroke-width="1"/>
+  <text x="310" y="348" text-anchor="middle" class="text-api">detect available</text>
+  <text x="310" y="363" text-anchor="middle" class="text-api">prioritize backends</text>
+  <text x="310" y="378" text-anchor="middle" class="text-api">fallback chain</text>
+  <text x="310" y="393" text-anchor="middle" class="text-small">后端选择优先级</text>
+
+  <!-- localStorage 适配 -->
+  <rect x="410" y="280" width="160" height="130" class="box-plugin" rx="5"/>
+  <text x="490" y="305" text-anchor="middle" class="text-label">localStorage</text>
+  <text x="490" y="320" text-anchor="middle" class="text-small">LocalStorage Adapter</text>
+  <line x1="420" y1="330" x2="560" y2="330" stroke="#ccc" stroke-width="1"/>
+  <text x="490" y="348" text-anchor="middle" class="text-api">10MB 限制</text>
+  <text x="490" y="363" text-anchor="middle" class="text-api">同步 API</text>
+  <text x="490" y="378" text-anchor="middle" class="text-api">跨标签页共享</text>
+  <text x="490" y="393" text-anchor="middle" class="text-small">本地持久化</text>
+
+  <!-- IndexedDB 适配 -->
+  <rect x="590" y="280" width="160" height="130" class="box-plugin" rx="5"/>
+  <text x="670" y="305" text-anchor="middle" class="text-label">IndexedDB</text>
+  <text x="670" y="320" text-anchor="middle" class="text-small">IndexedDB Adapter</text>
+  <line x1="600" y1="330" x2="740" y2="330" stroke="#ccc" stroke-width="1"/>
+  <text x="670" y="348" text-anchor="middle" class="text-api">无容量限制</text>
+  <text x="670" y="363" text-anchor="middle" class="text-api">异步 API / 事务</text>
+  <text x="670" y="378" text-anchor="middle" class="text-api">结构化数据</text>
+  <text x="670" y="393" text-anchor="middle" class="text-small">大数据存储</text>
+
+  <!-- 箭头 -->
+  <path d="M 130 410 L 300 480" class="arrow-small"/>
+  <path d="M 310 410 L 350 480" class="arrow-small"/>
+  <path d="M 490 410 L 420 480" class="arrow-small"/>
+  <path d="M 670 410 L 450 480" class="arrow-small"/>
+
+  <!-- 并发控制 -->
+  <rect x="300" y="480" width="240" height="110" class="box-api" rx="8"/>
+  <text x="420" y="510" text-anchor="middle" class="text-title">并发控制</text>
+  <text x="420" y="530" text-anchor="middle" class="text-label">Concurrency Control</text>
+  <line x1="310" y1="540" x2="530" y2="540" stroke="#999" stroke-width="1"/>
+  <text x="350" y="558" text-anchor="middle" class="text-api">mutex / lock</text>
+  <text x="490" y="558" text-anchor="middle" class="text-api">transaction</text>
+  <text x="420" y="575" text-anchor="middle" class="text-api">防止并发冲突</text>
+
+  <path d="M 420 590 L 420 650" class="arrow"/>
+
+  <!-- 存储操作 -->
+  <rect x="300" y="650" width="240" height="110" class="box" rx="8"/>
+  <text x="420" y="680" text-anchor="middle" class="text-title">实际存储</text>
+  <text x="420" y="700" text-anchor="middle" class="text-label">Backend Storage</text>
+  <line x1="310" y1="710" x2="530" y2="710" stroke="#999" stroke-width="1"/>
+  <text x="350" y="728" text-anchor="middle" class="text-api">write / read</text>
+  <text x="490" y="728" text-anchor="middle" class="text-api">delete / clear</text>
+  <text x="420" y="745" text-anchor="middle" class="text-api">浏览器存储引擎</text>
+
+  <path d="M 420 760 L 420 820" class="arrow"/>
+
+  <!-- 反序列化返回 -->
+  <rect x="300" y="820" width="240" height="110" class="box" rx="8"/>
+  <text x="420" y="850" text-anchor="middle" class="text-title">反序列化返回</text>
+  <text x="420" y="870" text-anchor="middle" class="text-label">Deserialization</text>
+  <line x1="310" y1="880" x2="530" y2="880" stroke="#999" stroke-width="1"/>
+  <text x="350" y="898" text-anchor="middle" class="text-api">parse & validate</text>
+  <text x="490" y="898" text-anchor="middle" class="text-api">restore objects</text>
+  <text x="420" y="915" text-anchor="middle" class="text-api">原始 JavaScript 对象</text>
+
+  <text x="50" y="930" class="text-small" font-weight="bold">完整流程：应用调用 → 序列化 → 自适应选择 → localStorage/IndexedDB → 并发控制 → 实际存储 → 读取 → 反序列化 → 返回数据</text>
+</svg>

@@ -1,0 +1,126 @@
+<svg viewBox="0 0 1400 950" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <style>
+      .box { fill: #FDE8D0; stroke: #333; stroke-width: 2; }
+      .box-api { fill: #E8F5E9; stroke: #333; stroke-width: 1.5; }
+      .box-plugin { fill: #FFF9C4; stroke: #333; stroke-width: 1.5; }
+      .text-title { font-size: 18px; font-weight: bold; font-family: Arial; }
+      .text-label { font-size: 13px; font-family: Arial; }
+      .text-small { font-size: 11px; font-family: Arial; }
+      .text-api { font-size: 10px; font-family: 'Courier New', monospace; }
+      .arrow { stroke: #333; stroke-width: 2; fill: none; marker-end: url(#arrowhead); }
+      .arrow-small { stroke: #666; stroke-width: 1.5; fill: none; marker-end: url(#arrowhead-small); }
+    </style>
+    <marker id="arrowhead" markerWidth="10" markerHeight="10" refX="9" refY="3" orient="auto">
+      <polygon points="0 0, 10 3, 0 6" fill="#333"/>
+    </marker>
+    <marker id="arrowhead-small" markerWidth="8" markerHeight="8" refX="7" refY="2" orient="auto">
+      <polygon points="0 0, 8 2, 0 4" fill="#666"/>
+    </marker>
+  </defs>
+
+  <text x="700" y="30" text-anchor="middle" class="text-title">Stomp 完整架构流程图</text>
+  <text x="700" y="50" text-anchor="middle" class="text-label">STOMP 协议客户端 | WebSocket 双向通信</text>
+
+  <!-- 应用层 -->
+  <rect x="50" y="80" width="200" height="120" class="box" rx="8"/>
+  <text x="150" y="110" text-anchor="middle" class="text-title">应用代码</text>
+  <text x="150" y="130" text-anchor="middle" class="text-label">App Code</text>
+  <text x="150" y="150" text-anchor="middle" class="text-api">stompClient.connect()</text>
+  <text x="150" y="165" text-anchor="middle" class="text-api">subscribe(dest)</text>
+  <text x="150" y="180" text-anchor="middle" class="text-api">send(dest, body)</text>
+
+  <path d="M 250 140 L 320 140" class="arrow"/>
+
+  <!-- Stomp 核心 -->
+  <rect x="320" y="80" width="200" height="120" class="box" rx="8"/>
+  <text x="420" y="110" text-anchor="middle" class="text-title">Stomp 客户端</text>
+  <text x="420" y="130" text-anchor="middle" class="text-label">Core Client</text>
+  <text x="420" y="150" text-anchor="middle" class="text-api">connect/disconnect</text>
+  <text x="420" y="165" text-anchor="middle" class="text-api">sub/unsub/send</text>
+  <text x="420" y="180" text-anchor="middle" class="text-api">frame handler</text>
+
+  <path d="M 420 200 L 420 260" class="arrow"/>
+
+  <!-- 处理管道 -->
+  <text x="50" y="260" class="text-label" font-weight="bold">📦 STOMP 协议处理</text>
+
+  <!-- 连接管理 -->
+  <rect x="50" y="280" width="160" height="130" class="box-plugin" rx="5"/>
+  <text x="130" y="305" text-anchor="middle" class="text-label">连接管理</text>
+  <text x="130" y="320" text-anchor="middle" class="text-small">Connection Manager</text>
+  <line x1="60" y1="330" x2="200" y2="330" stroke="#ccc" stroke-width="1"/>
+  <text x="130" y="348" text-anchor="middle" class="text-api">connect(url, opts)</text>
+  <text x="130" y="363" text-anchor="middle" class="text-api">heartbeat control</text>
+  <text x="130" y="378" text-anchor="middle" class="text-api">reconnect logic</text>
+  <text x="130" y="393" text-anchor="middle" class="text-small">连接生命周期</text>
+
+  <!-- 帧处理 -->
+  <rect x="230" y="280" width="160" height="130" class="box-plugin" rx="5"/>
+  <text x="310" y="305" text-anchor="middle" class="text-label">帧处理</text>
+  <text x="310" y="320" text-anchor="middle" class="text-small">Frame Handler</text>
+  <line x1="240" y1="330" x2="380" y2="330" stroke="#ccc" stroke-width="1"/>
+  <text x="310" y="348" text-anchor="middle" class="text-api">parse STOMP frames</text>
+  <text x="310" y="363" text-anchor="middle" class="text-api">CONNECT/SEND/MSG</text>
+  <text x="310" y="378" text-anchor="middle" class="text-api">validate headers</text>
+  <text x="310" y="393" text-anchor="middle" class="text-small">协议帧解析</text>
+
+  <!-- 消息管理 -->
+  <rect x="410" y="280" width="160" height="130" class="box-plugin" rx="5"/>
+  <text x="490" y="305" text-anchor="middle" class="text-label">消息队列</text>
+  <text x="490" y="320" text-anchor="middle" class="text-small">Message Queue</text>
+  <line x1="420" y1="330" x2="560" y2="330" stroke="#ccc" stroke-width="1"/>
+  <text x="490" y="348" text-anchor="middle" class="text-api">queue(msg)</text>
+  <text x="490" y="363" text-anchor="middle" class="text-api">dequeue/batch</text>
+  <text x="490" y="378" text-anchor="middle" class="text-api">flow control</text>
+  <text x="490" y="393" text-anchor="middle" class="text-small">消息缓冲管理</text>
+
+  <!-- 订阅管理 -->
+  <rect x="590" y="280" width="160" height="130" class="box-plugin" rx="5"/>
+  <text x="670" y="305" text-anchor="middle" class="text-label">订阅管理</text>
+  <text x="670" y="320" text-anchor="middle" class="text-small">Subscription Manager</text>
+  <line x1="600" y1="330" x2="740" y2="330" stroke="#ccc" stroke-width="1"/>
+  <text x="670" y="348" text-anchor="middle" class="text-api">subscribe(dest, cb)</text>
+  <text x="670" y="363" text-anchor="middle" class="text-api">maintain active subs</text>
+  <text x="670" y="378" text-anchor="middle" class="text-api">route messages</text>
+  <text x="670" y="393" text-anchor="middle" class="text-small">路由管理</text>
+
+  <!-- 箭头 -->
+  <path d="M 130 410 L 300 480" class="arrow-small"/>
+  <path d="M 310 410 L 350 480" class="arrow-small"/>
+  <path d="M 490 410 L 420 480" class="arrow-small"/>
+  <path d="M 670 410 L 450 480" class="arrow-small"/>
+
+  <!-- WebSocket 通信 -->
+  <rect x="300" y="480" width="240" height="110" class="box-api" rx="8"/>
+  <text x="420" y="510" text-anchor="middle" class="text-title">WebSocket 通信</text>
+  <text x="420" y="530" text-anchor="middle" class="text-label">WebSocket Transport</text>
+  <line x1="310" y1="540" x2="530" y2="540" stroke="#999" stroke-width="1"/>
+  <text x="350" y="558" text-anchor="middle" class="text-api">ws.send(frame)</text>
+  <text x="490" y="558" text-anchor="middle" class="text-api">ws.onmessage</text>
+  <text x="420" y="575" text-anchor="middle" class="text-api">双向帧传输 / 自动重连</text>
+
+  <path d="M 420 590 L 420 650" class="arrow"/>
+
+  <!-- 目标路由 -->
+  <rect x="300" y="650" width="240" height="110" class="box" rx="8"/>
+  <text x="420" y="680" text-anchor="middle" class="text-title">目标消息</text>
+  <text x="420" y="700" text-anchor="middle" class="text-label">Destination Routing</text>
+  <line x1="310" y1="710" x2="530" y2="710" stroke="#999" stroke-width="1"/>
+  <text x="350" y="728" text-anchor="middle" class="text-api">route by destination</text>
+  <text x="490" y="728" text-anchor="middle" class="text-api">/topic or /queue</text>
+  <text x="420" y="745" text-anchor="middle" class="text-api">多路复用分发</text>
+
+  <path d="M 420 760 L 420 820" class="arrow"/>
+
+  <!-- 回调派发 -->
+  <rect x="300" y="820" width="240" height="110" class="box" rx="8"/>
+  <text x="420" y="850" text-anchor="middle" class="text-title">回调派发</text>
+  <text x="420" y="870" text-anchor="middle" class="text-label">Callback Dispatch</text>
+  <line x1="310" y1="880" x2="530" y2="880" stroke="#999" stroke-width="1"/>
+  <text x="350" y="898" text-anchor="middle" class="text-api">invoke callbacks</text>
+  <text x="490" y="898" text-anchor="middle" class="text-api">subscribe handler</text>
+  <text x="420" y="915" text-anchor="middle" class="text-api">应用处理消息</text>
+
+  <text x="50" y="930" class="text-small" font-weight="bold">完整流程：应用连接 → 连接管理 → 帧处理 → 消息队列 → 订阅管理 → WebSocket发送 → 服务器处理 → 消息路由 → 回调派发 → 应用处理</text>
+</svg>

@@ -1,0 +1,157 @@
+<svg viewBox="0 0 1400 950" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <style>
+      .box { fill: #FDE8D0; stroke: #333; stroke-width: 2; }
+      .box-api { fill: #E8F5E9; stroke: #333; stroke-width: 1.5; }
+      .box-plugin { fill: #FFF9C4; stroke: #333; stroke-width: 1.5; }
+      .text-title { font-size: 18px; font-weight: bold; font-family: Arial; }
+      .text-label { font-size: 13px; font-family: Arial; }
+      .text-small { font-size: 11px; font-family: Arial; }
+      .text-api { font-size: 10px; font-family: 'Courier New', monospace; }
+      .arrow { stroke: #333; stroke-width: 2; fill: none; marker-end: url(#arrowhead); }
+      .arrow-small { stroke: #666; stroke-width: 1.5; fill: none; marker-end: url(#arrowhead-small); }
+      .arrow-label { font-size: 12px; font-family: Arial; fill: #333; }
+    </style>
+    <marker id="arrowhead" markerWidth="10" markerHeight="10" refX="9" refY="3" orient="auto">
+      <polygon points="0 0, 10 3, 0 6" fill="#333"/>
+    </marker>
+    <marker id="arrowhead-small" markerWidth="8" markerHeight="8" refX="7" refY="2" orient="auto">
+      <polygon points="0 0, 8 2, 0 4" fill="#666"/>
+    </marker>
+  </defs>
+
+  <!-- 标题 -->
+  <text x="700" y="30" text-anchor="middle" class="text-title">Counter 完整架构流程图</text>
+  <text x="700" y="50" text-anchor="middle" class="text-label">高性能计数动画引擎 | 共享 RAF + 插件渲染</text>
+
+  <!-- ===== 第一层：应用代码 ===== -->
+  <rect x="50" y="80" width="200" height="120" class="box" rx="8"/>
+  <text x="150" y="110" text-anchor="middle" class="text-title">应用代码</text>
+  <text x="150" y="130" text-anchor="middle" class="text-label">Vue/React Component</text>
+  <text x="150" y="150" text-anchor="middle" class="text-api">createCounter(options)</text>
+  <text x="150" y="165" text-anchor="middle" class="text-api">countUp(target, duration)</text>
+  <text x="150" y="180" text-anchor="middle" class="text-api">countDown(target, duration)</text>
+
+  <!-- 箭头 -->
+  <path d="M 250 140 L 320 140" class="arrow"/>
+  <text x="280" y="125" class="arrow-label">创建实例</text>
+
+  <!-- ===== 第二层：Counter 核心 ===== -->
+  <rect x="320" y="80" width="200" height="120" class="box" rx="8"/>
+  <text x="420" y="110" text-anchor="middle" class="text-title">Counter 核心</text>
+  <text x="420" y="130" text-anchor="middle" class="text-label">Counter Engine</text>
+  <text x="420" y="150" text-anchor="middle" class="text-api">start()/pause/resume</text>
+  <text x="420" y="165" text-anchor="middle" class="text-api">getValue()/getState()</text>
+  <text x="420" y="180" text-anchor="middle" class="text-api">setTarget(value)</text>
+
+  <!-- 箭头到共享 Ticker -->
+  <path d="M 420 200 L 420 260" class="arrow"/>
+
+  <!-- ===== 第三层：共享 RAF 定时器 ===== -->
+  <rect x="300" y="260" width="240" height="110" class="box-api" rx="8"/>
+  <text x="420" y="290" text-anchor="middle" class="text-title">共享 RAF 定时器</text>
+  <text x="420" y="310" text-anchor="middle" class="text-label">Shared Vsync Ticker</text>
+  <line x1="310" y1="320" x2="530" y2="320" stroke="#999" stroke-width="1"/>
+  <text x="350" y="338" text-anchor="middle" class="text-api">register(callback)</text>
+  <text x="490" y="338" text-anchor="middle" class="text-api">unregister(id)</text>
+  <text x="420" y="355" text-anchor="middle" class="text-api">每一帧: elapsed 时间戳</text>
+
+  <!-- 箭头到缓动函数 -->
+  <path d="M 420 370 L 420 430" class="arrow"/>
+
+  <!-- ===== 第四层：缓动函数 & 状态计算 ===== -->
+  <text x="50" y="430" class="text-label" font-weight="bold">📦 缓动函数 & 值计算</text>
+
+  <!-- Easing Functions -->
+  <rect x="50" y="450" width="160" height="130" class="box-plugin" rx="5"/>
+  <text x="130" y="475" text-anchor="middle" class="text-label">缓动函数</text>
+  <text x="130" y="490" text-anchor="middle" class="text-small">Easing Functions</text>
+  <line x1="60" y1="500" x2="200" y2="500" stroke="#ccc" stroke-width="1"/>
+  <text x="130" y="518" text-anchor="middle" class="text-api">linear(t)</text>
+  <text x="130" y="533" text-anchor="middle" class="text-api">easeOut(t)</text>
+  <text x="130" y="548" text-anchor="middle" class="text-api">easeInOut(t)</text>
+  <text x="130" y="563" text-anchor="middle" class="text-small">返回 0-1 进度</text>
+
+  <!-- State Calculator -->
+  <rect x="230" y="450" width="160" height="130" class="box-plugin" rx="5"/>
+  <text x="310" y="475" text-anchor="middle" class="text-label">状态计算</text>
+  <text x="310" y="490" text-anchor="middle" class="text-small">State Calculator</text>
+  <line x1="240" y1="500" x2="380" y2="500" stroke="#ccc" stroke-width="1"/>
+  <text x="310" y="518" text-anchor="middle" class="text-api">calcValue(progress)</text>
+  <text x="310" y="533" text-anchor="middle" class="text-api">getCurrentValue()</text>
+  <text x="310" y="548" text-anchor="middle" class="text-api">getCurrentFrame()</text>
+  <text x="310" y="563" text-anchor="middle" class="text-small">计算当前数值</text>
+
+  <!-- Rx Reactive -->
+  <rect x="410" y="450" width="160" height="130" class="box-plugin" rx="5"/>
+  <text x="490" y="475" text-anchor="middle" class="text-label">响应式状态</text>
+  <text x="490" y="490" text-anchor="middle" class="text-small">Rx Observable</text>
+  <line x1="420" y1="500" x2="560" y2="500" stroke="#ccc" stroke-width="1"/>
+  <text x="490" y="518" text-anchor="middle" class="text-api">currentValue.value</text>
+  <text x="490" y="533" text-anchor="middle" class="text-api">onUpdate(fn)</text>
+  <text x="490" y="548" text-anchor="middle" class="text-api">subscribe(fn)</text>
+  <text x="490" y="563" text-anchor="middle" class="text-small">GetX Rx 系统</text>
+
+  <!-- 箭头到渲染插件 -->
+  <path d="M 130 580 L 200 640" class="arrow-small"/>
+  <path d="M 310 580 L 310 640" class="arrow-small"/>
+  <path d="M 490 580 L 420 640" class="arrow-small"/>
+
+  <!-- ===== 第五层：渲染插件 ===== -->
+  <text x="50" y="640" class="text-label" font-weight="bold">📦 渲染插件 | Render Plugins</text>
+
+  <!-- Card Plugin -->
+  <rect x="50" y="660" width="150" height="130" class="box-plugin" rx="5"/>
+  <text x="125" y="685" text-anchor="middle" class="text-label">卡片插件</text>
+  <text x="125" y="700" text-anchor="middle" class="text-small">Card Plugin</text>
+  <line x1="60" y1="710" x2="190" y2="710" stroke="#ccc" stroke-width="1"/>
+  <text x="125" y="728" text-anchor="middle" class="text-api">render(value)</text>
+  <text x="125" y="743" text-anchor="middle" class="text-api">format(value)</text>
+  <text x="125" y="758" text-anchor="middle" class="text-api">update(newVal)</text>
+  <text x="125" y="773" text-anchor="middle" class="text-small">文本卡片显示</text>
+
+  <!-- Odometer Plugin -->
+  <rect x="220" y="660" width="150" height="130" class="box-plugin" rx="5"/>
+  <text x="295" y="685" text-anchor="middle" class="text-label">里程表插件</text>
+  <text x="295" y="700" text-anchor="middle" class="text-small">Odometer Plugin</text>
+  <line x1="230" y1="710" x2="360" y2="710" stroke="#ccc" stroke-width="1"/>
+  <text x="295" y="728" text-anchor="middle" class="text-api">flipDigit(num)</text>
+  <text x="295" y="743" text-anchor="middle" class="text-api">animate(from, to)</text>
+  <text x="295" y="758" text-anchor="middle" class="text-api">update(frame)</text>
+  <text x="295" y="773" text-anchor="middle" class="text-small">翻盘动画效果</text>
+
+  <!-- Ring Plugin -->
+  <rect x="390" y="660" width="150" height="130" class="box-plugin" rx="5"/>
+  <text x="465" y="685" text-anchor="middle" class="text-label">环形插件</text>
+  <text x="465" y="700" text-anchor="middle" class="text-small">Ring Plugin</text>
+  <line x1="400" y1="710" x2="530" y2="710" stroke="#ccc" stroke-width="1"/>
+  <text x="465" y="728" text-anchor="middle" class="text-api">drawArc(progress)</text>
+  <text x="465" y="743" text-anchor="middle" class="text-api">getProgress(val)</text>
+  <text x="465" y="758" text-anchor="middle" class="text-api">update(radius)</text>
+  <text x="465" y="773" text-anchor="middle" class="text-small">圆形进度条</text>
+
+  <!-- Vue Plugin -->
+  <rect x="560" y="660" width="150" height="130" class="box-plugin" rx="5"/>
+  <text x="635" y="685" text-anchor="middle" class="text-label">Vue 组件</text>
+  <text x="635" y="700" text-anchor="middle" class="text-small">Vue Plugin</text>
+  <line x1="570" y1="710" x2="700" y2="710" stroke="#ccc" stroke-width="1"/>
+  <text x="635" y="728" text-anchor="middle" class="text-api">Counter()</text>
+  <text x="635" y="743" text-anchor="middle" class="text-api">setup(props)</text>
+  <text x="635" y="758" text-anchor="middle" class="text-api">onMounted()</text>
+  <text x="635" y="773" text-anchor="middle" class="text-small">Vue 3 组件包装</text>
+
+  <!-- 箭头到 DOM 更新 -->
+  <path d="M 125 790 L 300 850" class="arrow-small"/>
+  <path d="M 295 790 L 350 850" class="arrow-small"/>
+  <path d="M 465 790 L 450 850" class="arrow-small"/>
+  <path d="M 635 790 L 550 850" class="arrow-small"/>
+
+  <!-- ===== 第六层：DOM 更新 ===== -->
+  <rect x="300" y="850" width="240" height="80" class="box" rx="8"/>
+  <text x="420" y="875" text-anchor="middle" class="text-title">DOM 更新</text>
+  <text x="420" y="895" text-anchor="middle" class="text-label">updateElement() / Obx render</text>
+  <text x="420" y="910" text-anchor="middle" class="text-api">浏览器重排重绘</text>
+
+  <!-- 底部说明 -->
+  <text x="50" y="930" class="text-small" font-weight="bold">完整流程：应用创建 → Counter核心 → 共享RAF每帧 → 缓动函数计算进度 → 状态更新 → 4个渲染插件并行 → DOM更新 → 用户看到动画</text>
+</svg>

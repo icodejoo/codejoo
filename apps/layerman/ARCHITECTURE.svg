@@ -1,0 +1,126 @@
+<svg viewBox="0 0 1400 950" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <style>
+      .box { fill: #FDE8D0; stroke: #333; stroke-width: 2; }
+      .box-api { fill: #E8F5E9; stroke: #333; stroke-width: 1.5; }
+      .box-plugin { fill: #FFF9C4; stroke: #333; stroke-width: 1.5; }
+      .text-title { font-size: 18px; font-weight: bold; font-family: Arial; }
+      .text-label { font-size: 13px; font-family: Arial; }
+      .text-small { font-size: 11px; font-family: Arial; }
+      .text-api { font-size: 10px; font-family: 'Courier New', monospace; }
+      .arrow { stroke: #333; stroke-width: 2; fill: none; marker-end: url(#arrowhead); }
+      .arrow-small { stroke: #666; stroke-width: 1.5; fill: none; marker-end: url(#arrowhead-small); }
+      .arrow-label { font-size: 12px; font-family: Arial; fill: #333; }
+    </style>
+    <marker id="arrowhead" markerWidth="10" markerHeight="10" refX="9" refY="3" orient="auto">
+      <polygon points="0 0, 10 3, 0 6" fill="#333"/>
+    </marker>
+    <marker id="arrowhead-small" markerWidth="8" markerHeight="8" refX="7" refY="2" orient="auto">
+      <polygon points="0 0, 8 2, 0 4" fill="#666"/>
+    </marker>
+  </defs>
+
+  <text x="700" y="30" text-anchor="middle" class="text-title">Layerman 完整架构流程图</text>
+  <text x="700" y="50" text-anchor="middle" class="text-label">无头弹层队列管理器 | 优先级/冷却/条件控制</text>
+
+  <!-- 应用代码 -->
+  <rect x="50" y="80" width="200" height="120" class="box" rx="8"/>
+  <text x="150" y="110" text-anchor="middle" class="text-title">应用代码</text>
+  <text x="150" y="130" text-anchor="middle" class="text-label">App Code</text>
+  <text x="150" y="150" text-anchor="middle" class="text-api">layerman.show(id, opts)</text>
+  <text x="150" y="165" text-anchor="middle" class="text-api">layerman.queue(id, opts)</text>
+  <text x="150" y="180" text-anchor="middle" class="text-api">layerman.dismiss(id)</text>
+
+  <path d="M 250 140 L 320 140" class="arrow"/>
+
+  <!-- Layerman 核心 -->
+  <rect x="320" y="80" width="200" height="120" class="box" rx="8"/>
+  <text x="420" y="110" text-anchor="middle" class="text-title">Layerman 核心</text>
+  <text x="420" y="130" text-anchor="middle" class="text-label">Queue Manager</text>
+  <text x="420" y="150" text-anchor="middle" class="text-api">show()/dismiss()</text>
+  <text x="420" y="165" text-anchor="middle" class="text-api">getPriority/getNext</text>
+  <text x="420" y="180" text-anchor="middle" class="text-api">execute(layer)</text>
+
+  <path d="M 420 200 L 420 260" class="arrow"/>
+
+  <!-- 处理流程 -->
+  <text x="50" y="260" class="text-label" font-weight="bold">📦 处理管道</text>
+
+  <!-- Priority Check -->
+  <rect x="50" y="280" width="160" height="130" class="box-plugin" rx="5"/>
+  <text x="130" y="305" text-anchor="middle" class="text-label">优先级检查</text>
+  <text x="130" y="320" text-anchor="middle" class="text-small">Priority Check</text>
+  <line x1="60" y1="330" x2="200" y2="330" stroke="#ccc" stroke-width="1"/>
+  <text x="130" y="348" text-anchor="middle" class="text-api">getPriority(layer)</text>
+  <text x="130" y="363" text-anchor="middle" class="text-api">FIFO / Replace</text>
+  <text x="130" y="378" text-anchor="middle" class="text-api">Overlap / Affix</text>
+  <text x="130" y="393" text-anchor="middle" class="text-small">队列排序算法</text>
+
+  <!-- Condition Check -->
+  <rect x="230" y="280" width="160" height="130" class="box-plugin" rx="5"/>
+  <text x="310" y="305" text-anchor="middle" class="text-label">条件检查</text>
+  <text x="310" y="320" text-anchor="middle" class="text-small">Conditions</text>
+  <line x1="240" y1="330" x2="380" y2="330" stroke="#ccc" stroke-width="1"/>
+  <text x="310" y="348" text-anchor="middle" class="text-api">checkRoute(path)</text>
+  <text x="310" y="363" text-anchor="middle" class="text-api">checkAuth(user)</text>
+  <text x="310" y="378" text-anchor="middle" class="text-api">checkPredicate(fn)</text>
+  <text x="310" y="393" text-anchor="middle" class="text-small">条件验证</text>
+
+  <!-- Cooldown Check -->
+  <rect x="410" y="280" width="160" height="130" class="box-plugin" rx="5"/>
+  <text x="490" y="305" text-anchor="middle" class="text-label">冷却检查</text>
+  <text x="490" y="320" text-anchor="middle" class="text-small">Cooldown Check</text>
+  <line x1="420" y1="330" x2="560" y2="330" stroke="#ccc" stroke-width="1"/>
+  <text x="490" y="348" text-anchor="middle" class="text-api">checkCooldown(id)</text>
+  <text x="490" y="363" text-anchor="middle" class="text-api">session/daily/minGap</text>
+  <text x="490" y="378" text-anchor="middle" class="text-api">getWaitTime()</text>
+  <text x="490" y="393" text-anchor="middle" class="text-small">冷却时间管理</text>
+
+  <!-- Storage Sync -->
+  <rect x="590" y="280" width="160" height="130" class="box-plugin" rx="5"/>
+  <text x="670" y="305" text-anchor="middle" class="text-label">存储同步</text>
+  <text x="670" y="320" text-anchor="middle" class="text-small">Storage Sync</text>
+  <line x1="600" y1="330" x2="740" y2="330" stroke="#ccc" stroke-width="1"/>
+  <text x="670" y="348" text-anchor="middle" class="text-api">save(cooldown)</text>
+  <text x="670" y="363" text-anchor="middle" class="text-api">load(id)</text>
+  <text x="670" y="378" text-anchor="middle" class="text-api">crossTab(event)</text>
+  <text x="670" y="393" text-anchor="middle" class="text-small">跨标签页同步</text>
+
+  <!-- 箭头 -->
+  <path d="M 130 410 L 300 480" class="arrow-small"/>
+  <path d="M 310 410 L 350 480" class="arrow-small"/>
+  <path d="M 490 410 L 420 480" class="arrow-small"/>
+  <path d="M 670 410 L 450 480" class="arrow-small"/>
+
+  <!-- 渲染 -->
+  <rect x="300" y="480" width="240" height="110" class="box-api" rx="8"/>
+  <text x="420" y="510" text-anchor="middle" class="text-title">弹层渲染</text>
+  <text x="420" y="530" text-anchor="middle" class="text-label">Overlay Render</text>
+  <line x1="310" y1="540" x2="530" y2="540" stroke="#999" stroke-width="1"/>
+  <text x="350" y="558" text-anchor="middle" class="text-api">render(component)</text>
+  <text x="490" y="558" text-anchor="middle" class="text-api">show(animation)</text>
+  <text x="420" y="575" text-anchor="middle" class="text-api">DOM 插入 / 框架渲染</text>
+
+  <path d="M 420 590 L 420 650" class="arrow"/>
+
+  <!-- 用户交互 -->
+  <rect x="300" y="650" width="240" height="110" class="box" rx="8"/>
+  <text x="420" y="680" text-anchor="middle" class="text-title">用户交互</text>
+  <text x="420" y="700" text-anchor="middle" class="text-label">User Interaction</text>
+  <line x1="310" y1="710" x2="530" y2="710" stroke="#999" stroke-width="1"/>
+  <text x="420" y="728" text-anchor="middle" class="text-api">onClick / onInput / onComplete</text>
+  <text x="420" y="745" text-anchor="middle" class="text-api">resolve(value) / reject()</text>
+
+  <path d="M 420 760 L 420 820" class="arrow"/>
+
+  <!-- 两阶段关闭 -->
+  <rect x="300" y="820" width="240" height="110" class="box" rx="8"/>
+  <text x="420" y="850" text-anchor="middle" class="text-title">两阶段关闭</text>
+  <text x="420" y="870" text-anchor="middle" class="text-label">Two-Phase Close</text>
+  <line x1="310" y1="880" x2="530" y2="880" stroke="#999" stroke-width="1"/>
+  <text x="350" y="898" text-anchor="middle" class="text-api">beforeClose(fn)</text>
+  <text x="490" y="898" text-anchor="middle" class="text-api">afterClose(fn)</text>
+  <text x="420" y="915" text-anchor="middle" class="text-api">清理资源 / 下一项</text>
+
+  <text x="50" y="930" class="text-small" font-weight="bold">完整流程：应用请求 → 优先级排队 → 条件验证 → 冷却检查 → 存储同步 → 渲染显示 → 用户交互 → 两阶段关闭 → 下一项</text>
+</svg>

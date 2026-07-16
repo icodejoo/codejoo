@@ -1,0 +1,126 @@
+<svg viewBox="0 0 1400 950" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <style>
+      .box { fill: #FDE8D0; stroke: #333; stroke-width: 2; }
+      .box-api { fill: #E8F5E9; stroke: #333; stroke-width: 1.5; }
+      .box-plugin { fill: #FFF9C4; stroke: #333; stroke-width: 1.5; }
+      .text-title { font-size: 18px; font-weight: bold; font-family: Arial; }
+      .text-label { font-size: 13px; font-family: Arial; }
+      .text-small { font-size: 11px; font-family: Arial; }
+      .text-api { font-size: 10px; font-family: 'Courier New', monospace; }
+      .arrow { stroke: #333; stroke-width: 2; fill: none; marker-end: url(#arrowhead); }
+      .arrow-small { stroke: #666; stroke-width: 1.5; fill: none; marker-end: url(#arrowhead-small); }
+    </style>
+    <marker id="arrowhead" markerWidth="10" markerHeight="10" refX="9" refY="3" orient="auto">
+      <polygon points="0 0, 10 3, 0 6" fill="#333"/>
+    </marker>
+    <marker id="arrowhead-small" markerWidth="8" markerHeight="8" refX="7" refY="2" orient="auto">
+      <polygon points="0 0, 8 2, 0 4" fill="#666"/>
+    </marker>
+  </defs>
+
+  <text x="700" y="30" text-anchor="middle" class="text-title">OpenAPI 完整架构流程图</text>
+  <text x="700" y="50" text-anchor="middle" class="text-label">OpenAPI 规范解析与 TypeScript 类型生成系统</text>
+
+  <!-- OpenAPI 文件 -->
+  <rect x="50" y="80" width="200" height="120" class="box" rx="8"/>
+  <text x="150" y="110" text-anchor="middle" class="text-title">OpenAPI 文件</text>
+  <text x="150" y="130" text-anchor="middle" class="text-label">API 定义</text>
+  <text x="150" y="150" text-anchor="middle" class="text-api">openapi.yaml / .json</text>
+  <text x="150" y="165" text-anchor="middle" class="text-api">paths / schemas</text>
+  <text x="150" y="180" text-anchor="middle" class="text-api">components.parameters</text>
+
+  <path d="M 250 140 L 320 140" class="arrow"/>
+
+  <!-- 解析器 -->
+  <rect x="320" y="80" width="200" height="120" class="box" rx="8"/>
+  <text x="420" y="110" text-anchor="middle" class="text-title">OpenAPI 解析器</text>
+  <text x="420" y="130" text-anchor="middle" class="text-label">Parser</text>
+  <text x="420" y="150" text-anchor="middle" class="text-api">parse(spec)</text>
+  <text x="420" y="165" text-anchor="middle" class="text-api">validate schema</text>
+  <text x="420" y="180" text-anchor="middle" class="text-api">extract metadata</text>
+
+  <path d="M 420 200 L 420 260" class="arrow"/>
+
+  <!-- 处理阶段 -->
+  <text x="50" y="260" class="text-label" font-weight="bold">📦 处理阶段</text>
+
+  <!-- Schema 分析 -->
+  <rect x="50" y="280" width="160" height="130" class="box-plugin" rx="5"/>
+  <text x="130" y="305" text-anchor="middle" class="text-label">Schema 分析</text>
+  <text x="130" y="320" text-anchor="middle" class="text-small">Schema Analyzer</text>
+  <line x1="60" y1="330" x2="200" y2="330" stroke="#ccc" stroke-width="1"/>
+  <text x="130" y="348" text-anchor="middle" class="text-api">analyze(schema)</text>
+  <text x="130" y="363" text-anchor="middle" class="text-api">properties / required</text>
+  <text x="130" y="378" text-anchor="middle" class="text-api">type mapping</text>
+  <text x="130" y="393" text-anchor="middle" class="text-small">数据结构分析</text>
+
+  <!-- 路径分析 -->
+  <rect x="230" y="280" width="160" height="130" class="box-plugin" rx="5"/>
+  <text x="310" y="305" text-anchor="middle" class="text-label">路径分析</text>
+  <text x="310" y="320" text-anchor="middle" class="text-small">Path Analyzer</text>
+  <line x1="240" y1="330" x2="380" y2="330" stroke="#ccc" stroke-width="1"/>
+  <text x="310" y="348" text-anchor="middle" class="text-api">extract paths</text>
+  <text x="310" y="363" text-anchor="middle" class="text-api">methods (GET/POST...)</text>
+  <text x="310" y="378" text-anchor="middle" class="text-api">parameters/responses</text>
+  <text x="310" y="393" text-anchor="middle" class="text-small">端点提取</text>
+
+  <!-- 类型生成 -->
+  <rect x="410" y="280" width="160" height="130" class="box-plugin" rx="5"/>
+  <text x="490" y="305" text-anchor="middle" class="text-label">类型生成</text>
+  <text x="490" y="320" text-anchor="middle" class="text-small">Type Generator</text>
+  <line x1="420" y1="330" x2="560" y2="330" stroke="#ccc" stroke-width="1"/>
+  <text x="490" y="348" text-anchor="middle" class="text-api">gen TypeScript</text>
+  <text x="490" y="363" text-anchor="middle" class="text-api">interfaces/types</text>
+  <text x="490" y="378" text-anchor="middle" class="text-api">request/response</text>
+  <text x="490" y="393" text-anchor="middle" class="text-small">TS 类型输出</text>
+
+  <!-- 代码生成 -->
+  <rect x="590" y="280" width="160" height="130" class="box-plugin" rx="5"/>
+  <text x="670" y="305" text-anchor="middle" class="text-label">代码生成</text>
+  <text x="670" y="320" text-anchor="middle" class="text-small">Code Generator</text>
+  <line x1="600" y1="330" x2="740" y2="330" stroke="#ccc" stroke-width="1"/>
+  <text x="670" y="348" text-anchor="middle" class="text-api">generate client SDK</text>
+  <text x="670" y="363" text-anchor="middle" class="text-api">endpoints methods</text>
+  <text x="670" y="378" text-anchor="middle" class="text-api">request/response wrap</text>
+  <text x="670" y="393" text-anchor="middle" class="text-small">SDK 代码生成</text>
+
+  <!-- 箭头 -->
+  <path d="M 130 410 L 300 480" class="arrow-small"/>
+  <path d="M 310 410 L 350 480" class="arrow-small"/>
+  <path d="M 490 410 L 420 480" class="arrow-small"/>
+  <path d="M 670 410 L 450 480" class="arrow-small"/>
+
+  <!-- 验证层 -->
+  <rect x="300" y="480" width="240" height="110" class="box-api" rx="8"/>
+  <text x="420" y="510" text-anchor="middle" class="text-title">数据验证</text>
+  <text x="420" y="530" text-anchor="middle" class="text-label">Validator (JSON Schema)</text>
+  <line x1="310" y1="540" x2="530" y2="540" stroke="#999" stroke-width="1"/>
+  <text x="350" y="558" text-anchor="middle" class="text-api">validate(data, schema)</text>
+  <text x="490" y="558" text-anchor="middle" class="text-api">type check</text>
+  <text x="420" y="575" text-anchor="middle" class="text-api">请求/响应数据验证</text>
+
+  <path d="M 420 590 L 420 650" class="arrow"/>
+
+  <!-- 请求处理 -->
+  <rect x="300" y="650" width="240" height="110" class="box" rx="8"/>
+  <text x="420" y="680" text-anchor="middle" class="text-title">HTTP 请求</text>
+  <text x="420" y="700" text-anchor="middle" class="text-label">Request Execution</text>
+  <line x1="310" y1="710" x2="530" y2="710" stroke="#999" stroke-width="1"/>
+  <text x="350" y="728" text-anchor="middle" class="text-api">buildRequest(endpoint)</text>
+  <text x="490" y="728" text-anchor="middle" class="text-api">exec/fetch</text>
+  <text x="420" y="745" text-anchor="middle" class="text-api">参数注入 / 请求执行</text>
+
+  <path d="M 420 760 L 420 820" class="arrow"/>
+
+  <!-- 响应处理 -->
+  <rect x="300" y="820" width="240" height="110" class="box" rx="8"/>
+  <text x="420" y="850" text-anchor="middle" class="text-title">响应处理</text>
+  <text x="420" y="870" text-anchor="middle" class="text-label">Response Transform</text>
+  <line x1="310" y1="880" x2="530" y2="880" stroke="#999" stroke-width="1"/>
+  <text x="350" y="898" text-anchor="middle" class="text-api">parseResponse(data)</text>
+  <text x="490" y="898" text-anchor="middle" class="text-api">validate vs schema</text>
+  <text x="420" y="915" text-anchor="middle" class="text-api">类型化数据返回</text>
+
+  <text x="50" y="930" class="text-small" font-weight="bold">完整流程：OpenAPI文件 → 解析 → Schema/路径/类型分析 → 代码生成 → 数据验证 → HTTP请求 → 响应处理 → 类型安全SDK</text>
+</svg>

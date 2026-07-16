@@ -1,0 +1,126 @@
+<svg viewBox="0 0 1400 950" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <style>
+      .box { fill: #FDE8D0; stroke: #333; stroke-width: 2; }
+      .box-api { fill: #E8F5E9; stroke: #333; stroke-width: 1.5; }
+      .box-plugin { fill: #FFF9C4; stroke: #333; stroke-width: 1.5; }
+      .text-title { font-size: 18px; font-weight: bold; font-family: Arial; }
+      .text-label { font-size: 13px; font-family: Arial; }
+      .text-small { font-size: 11px; font-family: Arial; }
+      .text-api { font-size: 10px; font-family: 'Courier New', monospace; }
+      .arrow { stroke: #333; stroke-width: 2; fill: none; marker-end: url(#arrowhead); }
+      .arrow-small { stroke: #666; stroke-width: 1.5; fill: none; marker-end: url(#arrowhead-small); }
+    </style>
+    <marker id="arrowhead" markerWidth="10" markerHeight="10" refX="9" refY="3" orient="auto">
+      <polygon points="0 0, 10 3, 0 6" fill="#333"/>
+    </marker>
+    <marker id="arrowhead-small" markerWidth="8" markerHeight="8" refX="7" refY="2" orient="auto">
+      <polygon points="0 0, 8 2, 0 4" fill="#666"/>
+    </marker>
+  </defs>
+
+  <text x="700" y="30" text-anchor="middle" class="text-title">Mocker 完整架构流程图</text>
+  <text x="700" y="50" text-anchor="middle" class="text-label">灵活的 Mock 数据管理系统 | 支持动态规则、延迟、状态管理</text>
+
+  <!-- 应用层 -->
+  <rect x="50" y="80" width="200" height="120" class="box" rx="8"/>
+  <text x="150" y="110" text-anchor="middle" class="text-title">应用代码</text>
+  <text x="150" y="130" text-anchor="middle" class="text-label">App Code</text>
+  <text x="150" y="150" text-anchor="middle" class="text-api">mocker.mock(url, data)</text>
+  <text x="150" y="165" text-anchor="middle" class="text-api">mocker.getData(path)</text>
+  <text x="150" y="180" text-anchor="middle" class="text-api">mocker.reset()</text>
+
+  <path d="M 250 140 L 320 140" class="arrow"/>
+
+  <!-- Mocker 核心 -->
+  <rect x="320" y="80" width="200" height="120" class="box" rx="8"/>
+  <text x="420" y="110" text-anchor="middle" class="text-title">Mocker 核心</text>
+  <text x="420" y="130" text-anchor="middle" class="text-label">Mock Manager</text>
+  <text x="420" y="150" text-anchor="middle" class="text-api">mock(path, config)</text>
+  <text x="420" y="165" text-anchor="middle" class="text-api">match(url)/getResponse()</text>
+  <text x="420" y="180" text-anchor="middle" class="text-api">manage registry</text>
+
+  <path d="M 420 200 L 420 260" class="arrow"/>
+
+  <!-- 规则处理管道 -->
+  <text x="50" y="260" class="text-label" font-weight="bold">📦 规则处理管道</text>
+
+  <!-- URL 匹配 -->
+  <rect x="50" y="280" width="160" height="130" class="box-plugin" rx="5"/>
+  <text x="130" y="305" text-anchor="middle" class="text-label">URL 匹配</text>
+  <text x="130" y="320" text-anchor="middle" class="text-small">URL Matcher</text>
+  <line x1="60" y1="330" x2="200" y2="330" stroke="#ccc" stroke-width="1"/>
+  <text x="130" y="348" text-anchor="middle" class="text-api">match(url, path)</text>
+  <text x="130" y="363" text-anchor="middle" class="text-api">exactMatch/wildcard</text>
+  <text x="130" y="378" text-anchor="middle" class="text-api">priority resolver</text>
+  <text x="130" y="393" text-anchor="middle" class="text-small">路径匹配优先级</text>
+
+  <!-- 动态计算 -->
+  <rect x="230" y="280" width="160" height="130" class="box-plugin" rx="5"/>
+  <text x="310" y="305" text-anchor="middle" class="text-label">动态计算</text>
+  <text x="310" y="320" text-anchor="middle" class="text-small">Dynamic Logic</text>
+  <line x1="240" y1="330" x2="380" y2="330" stroke="#ccc" stroke-width="1"/>
+  <text x="310" y="348" text-anchor="middle" class="text-api">compute(fn)</text>
+  <text x="310" y="363" text-anchor="middle" class="text-api">replace template</text>
+  <text x="310" y="378" text-anchor="middle" class="text-api">params binding</text>
+  <text x="310" y="393" text-anchor="middle" class="text-small">函数求值</text>
+
+  <!-- 延迟模拟 -->
+  <rect x="410" y="280" width="160" height="130" class="box-plugin" rx="5"/>
+  <text x="490" y="305" text-anchor="middle" class="text-label">延迟模拟</text>
+  <text x="490" y="320" text-anchor="middle" class="text-small">Delay Simulate</text>
+  <line x1="420" y1="330" x2="560" y2="330" stroke="#ccc" stroke-width="1"/>
+  <text x="490" y="348" text-anchor="middle" class="text-api">delay(ms)</text>
+  <text x="490" y="363" text-anchor="middle" class="text-api">randomDelay(min,max)</text>
+  <text x="490" y="378" text-anchor="middle" class="text-api">setTimeout/async</text>
+  <text x="490" y="393" text-anchor="middle" class="text-small">网络延迟模拟</text>
+
+  <!-- 状态管理 -->
+  <rect x="590" y="280" width="160" height="130" class="box-plugin" rx="5"/>
+  <text x="670" y="305" text-anchor="middle" class="text-label">状态管理</text>
+  <text x="670" y="320" text-anchor="middle" class="text-small">State Manager</text>
+  <line x1="600" y1="330" x2="740" y2="330" stroke="#ccc" stroke-width="1"/>
+  <text x="670" y="348" text-anchor="middle" class="text-api">setState(key, val)</text>
+  <text x="670" y="363" text-anchor="middle" class="text-api">getState(key)</text>
+  <text x="670" y="378" text-anchor="middle" class="text-api">resetState()</text>
+  <text x="670" y="393" text-anchor="middle" class="text-small">跨请求状态</text>
+
+  <!-- 箭头 -->
+  <path d="M 130 410 L 300 480" class="arrow-small"/>
+  <path d="M 310 410 L 350 480" class="arrow-small"/>
+  <path d="M 490 410 L 420 480" class="arrow-small"/>
+  <path d="M 670 410 L 450 480" class="arrow-small"/>
+
+  <!-- 响应构建 -->
+  <rect x="300" y="480" width="240" height="110" class="box-api" rx="8"/>
+  <text x="420" y="510" text-anchor="middle" class="text-title">响应构建</text>
+  <text x="420" y="530" text-anchor="middle" class="text-label">Response Builder</text>
+  <line x1="310" y1="540" x2="530" y2="540" stroke="#999" stroke-width="1"/>
+  <text x="350" y="558" text-anchor="middle" class="text-api">buildResponse(config)</text>
+  <text x="490" y="558" text-anchor="middle" class="text-api">set status/header</text>
+  <text x="420" y="575" text-anchor="middle" class="text-api">序列化数据 / CORS 头处理</text>
+
+  <path d="M 420 590 L 420 650" class="arrow"/>
+
+  <!-- 拦截器 -->
+  <rect x="300" y="650" width="240" height="110" class="box" rx="8"/>
+  <text x="420" y="680" text-anchor="middle" class="text-title">网络拦截</text>
+  <text x="420" y="700" text-anchor="middle" class="text-label">Network Intercept</text>
+  <line x1="310" y1="710" x2="530" y2="710" stroke="#999" stroke-width="1"/>
+  <text x="350" y="728" text-anchor="middle" class="text-api">XMLHttpRequest</text>
+  <text x="490" y="728" text-anchor="middle" class="text-api">Fetch API</text>
+  <text x="420" y="745" text-anchor="middle" class="text-api">interceptor hook</text>
+
+  <path d="M 420 760 L 420 820" class="arrow"/>
+
+  <!-- 返回应用 -->
+  <rect x="300" y="820" width="240" height="110" class="box" rx="8"/>
+  <text x="420" y="850" text-anchor="middle" class="text-title">返回应用</text>
+  <text x="420" y="870" text-anchor="middle" class="text-label">Return to App</text>
+  <line x1="310" y1="880" x2="530" y2="880" stroke="#999" stroke-width="1"/>
+  <text x="350" y="898" text-anchor="middle" class="text-api">Promise resolve</text>
+  <text x="490" y="898" text-anchor="middle" class="text-api">response object</text>
+  <text x="420" y="915" text-anchor="middle" class="text-api">应用收到 Mock 数据</text>
+
+  <text x="50" y="930" class="text-small" font-weight="bold">完整流程：应用请求 → URL匹配 → 动态计算 → 延迟模拟 → 状态管理 → 响应构建 → 网络拦截 → 返回应用</text>
+</svg>

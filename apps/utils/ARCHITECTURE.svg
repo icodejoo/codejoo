@@ -1,0 +1,118 @@
+<svg viewBox="0 0 1400 950" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <style>
+      .box { fill: #FDE8D0; stroke: #333; stroke-width: 2; }
+      .box-api { fill: #E8F5E9; stroke: #333; stroke-width: 1.5; }
+      .box-plugin { fill: #FFF9C4; stroke: #333; stroke-width: 1.5; }
+      .text-title { font-size: 18px; font-weight: bold; font-family: Arial; }
+      .text-label { font-size: 13px; font-family: Arial; }
+      .text-small { font-size: 11px; font-family: Arial; }
+      .text-api { font-size: 10px; font-family: 'Courier New', monospace; }
+      .arrow { stroke: #333; stroke-width: 2; fill: none; marker-end: url(#arrowhead); }
+    </style>
+    <marker id="arrowhead" markerWidth="10" markerHeight="10" refX="9" refY="3" orient="auto">
+      <polygon points="0 0, 10 3, 0 6" fill="#333"/>
+    </marker>
+  </defs>
+
+  <text x="700" y="30" text-anchor="middle" class="text-title">Utils 完整架构流程图</text>
+  <text x="700" y="50" text-anchor="middle" class="text-label">轻量级工具函数库 | 通用辅助工具集</text>
+
+  <!-- 应用调用 -->
+  <rect x="50" y="100" width="240" height="120" class="box" rx="8"/>
+  <text x="170" y="135" text-anchor="middle" class="text-title">应用调用</text>
+  <text x="170" y="155" text-anchor="middle" class="text-label">import utils</text>
+  <text x="170" y="175" text-anchor="middle" class="text-api">{ debounce, throttle, clone, ... }</text>
+
+  <!-- 第一类：函数增强 -->
+  <rect x="60" y="280" width="200" height="200" class="box-plugin" rx="5"/>
+  <text x="160" y="310" text-anchor="middle" class="text-label" font-weight="bold">函数增强</text>
+  <text x="160" y="330" text-anchor="middle" class="text-small">Function Utils</text>
+  <line x1="70" y1="340" x2="250" y2="340" stroke="#ccc" stroke-width="1"/>
+  <text x="160" y="365" text-anchor="middle" class="text-api">debounce(fn, delay)</text>
+  <text x="160" y="380" text-anchor="middle" class="text-api">throttle(fn, interval)</text>
+  <text x="160" y="395" text-anchor="middle" class="text-api">once(fn)</text>
+  <text x="160" y="410" text-anchor="middle" class="text-api">memoize(fn)</text>
+  <text x="160" y="425" text-anchor="middle" class="text-api">compose/pipe(fns)</text>
+  <text x="160" y="440" text-anchor="middle" class="text-api">retry(fn, maxTimes)</text>
+  <text x="160" y="455" text-anchor="middle" class="text-api">partial/curry(fn)</text>
+
+  <!-- 第二类：数据转换 -->
+  <rect x="320" y="280" width="200" height="200" class="box-plugin" rx="5"/>
+  <text x="420" y="310" text-anchor="middle" class="text-label" font-weight="bold">数据转换</text>
+  <text x="420" y="330" text-anchor="middle" class="text-small">Data Transform</text>
+  <line x1="330" y1="340" x2="510" y2="340" stroke="#ccc" stroke-width="1"/>
+  <text x="420" y="365" text-anchor="middle" class="text-api">clone(obj, deep)</text>
+  <text x="420" y="380" text-anchor="middle" class="text-api">merge/assign(...objs)</text>
+  <text x="420" y="395" text-anchor="middle" class="text-api">pick/omit(obj, keys)</text>
+  <text x="420" y="410" text-anchor="middle" class="text-api">flatten(arr, depth)</text>
+  <text x="420" y="425" text-anchor="middle" class="text-api">groupBy(arr, fn)</text>
+  <text x="420" y="440" text-anchor="middle" class="text-api">uniq/unique(arr)</text>
+  <text x="420" y="455" text-anchor="middle" class="text-api">keyBy(arr, key)</text>
+
+  <!-- 第三类：字符串处理 -->
+  <rect x="580" y="280" width="200" height="200" class="box-plugin" rx="5"/>
+  <text x="680" y="310" text-anchor="middle" class="text-label" font-weight="bold">字符串处理</text>
+  <text x="680" y="330" text-anchor="middle" class="text-small">String Utils</text>
+  <line x1="590" y1="340" x2="770" y2="340" stroke="#ccc" stroke-width="1"/>
+  <text x="680" y="365" text-anchor="middle" class="text-api">trim/trimStart/trimEnd</text>
+  <text x="680" y="380" text-anchor="middle" class="text-api">camelCase/snake_case</text>
+  <text x="680" y="395" text-anchor="middle" class="text-api">capitalize/uppercase</text>
+  <text x="680" y="410" text-anchor="middle" class="text-api">padStart/padEnd</text>
+  <text x="680" y="425" text-anchor="middle" class="text-api">template(str, vars)</text>
+  <text x="680" y="440" text-anchor="middle" class="text-api">split/join/replace</text>
+  <text x="680" y="455" text-anchor="middle" class="text-api">includes/startsWith</text>
+
+  <!-- 第四类：类型检查 -->
+  <rect x="840" y="280" width="200" height="200" class="box-plugin" rx="5"/>
+  <text x="940" y="310" text-anchor="middle" class="text-label" font-weight="bold">类型检查</text>
+  <text x="940" y="330" text-anchor="middle" class="text-small">Type Check</text>
+  <line x1="850" y1="340" x2="1030" y2="340" stroke="#ccc" stroke-width="1"/>
+  <text x="940" y="365" text-anchor="middle" class="text-api">isObject/Array/String</text>
+  <text x="940" y="380" text-anchor="middle" class="text-api">isNumber/Boolean/Null</text>
+  <text x="940" y="395" text-anchor="middle" class="text-api">isFunction/isPromise</text>
+  <text x="940" y="410" text-anchor="middle" class="text-api">isEmpty/isNil</text>
+  <text x="940" y="425" text-anchor="middle" class="text-api">isEqual(a, b, deep)</text>
+  <text x="940" y="440" text-anchor="middle" class="text-api">has(obj, path)</text>
+  <text x="940" y="455" text-anchor="middle" class="text-api">typeof helper</text>
+
+  <!-- 第五类：数学/时间 -->
+  <rect x="1100" y="280" width="200" height="200" class="box-plugin" rx="5"/>
+  <text x="1200" y="310" text-anchor="middle" class="text-label" font-weight="bold">数学与时间</text>
+  <text x="1200" y="330" text-anchor="middle" class="text-small">Math/Date Utils</text>
+  <line x1="1110" y1="340" x2="1290" y2="340" stroke="#ccc" stroke-width="1"/>
+  <text x="1200" y="365" text-anchor="middle" class="text-api">random(min, max)</text>
+  <text x="1200" y="380" text-anchor="middle" class="text-api">round/floor/ceil</text>
+  <text x="1200" y="395" text-anchor="middle" class="text-api">clamp(val, min, max)</text>
+  <text x="1200" y="410" text-anchor="middle" class="text-api">sleep(ms)</text>
+  <text x="1200" y="425" text-anchor="middle" class="text-api">now() / timestamp</text>
+  <text x="1200" y="440" text-anchor="middle" class="text-api">formatTime(ms)</text>
+  <text x="1200" y="455" text-anchor="middle" class="text-api">parseJSON/stringify</text>
+
+  <!-- 箭头向下 -->
+  <path d="M 160 480 L 160 530" class="arrow"/>
+  <path d="M 420 480 L 420 530" class="arrow"/>
+  <path d="M 680 480 L 680 530" class="arrow"/>
+  <path d="M 940 480 L 940 530" class="arrow"/>
+  <path d="M 1200 480 L 1200 530" class="arrow"/>
+
+  <!-- 导出聚合 -->
+  <rect x="300" y="530" width="800" height="120" class="box-api" rx="8"/>
+  <text x="700" y="570" text-anchor="middle" class="text-title">统一导出</text>
+  <text x="700" y="590" text-anchor="middle" class="text-label">Unified Export</text>
+  <line x1="310" y1="605" x2="1090" y2="605" stroke="#999" stroke-width="1"/>
+  <text x="400" y="625" text-anchor="middle" class="text-api">import * as utils from '@codejoo/utils'</text>
+  <text x="1000" y="625" text-anchor="middle" class="text-api">tree-shakeable</text>
+
+  <!-- 应用使用 -->
+  <path d="M 700 650 L 700 700" class="arrow"/>
+
+  <rect x="300" y="700" width="800" height="150" class="box" rx="8"/>
+  <text x="700" y="740" text-anchor="middle" class="text-title">应用集成</text>
+  <text x="700" y="760" text-anchor="middle" class="text-label">Application Integration</text>
+  <line x1="310" y1="770" x2="1090" y2="770" stroke="#999" stroke-width="1"/>
+  <text x="700" y="795" text-anchor="middle" class="text-api">Vue/React 组件中使用 | Node.js 服务端使用</text>
+  <text x="700" y="820" text-anchor="middle" class="text-api">零依赖 | 轻量级 (~10-20KB after gzip)</text>
+
+  <text x="60" y="900" class="text-small" font-weight="bold">完整体系：5大类工具函数 → 函数增强 / 数据转换 / 字符串 / 类型检查 / 数学时间 → 统一导出 → 应用集成</text>
+</svg>

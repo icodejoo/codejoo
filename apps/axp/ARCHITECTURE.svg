@@ -1,0 +1,193 @@
+<svg viewBox="0 0 1400 950" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <style>
+      .box { fill: #FDE8D0; stroke: #333; stroke-width: 2; }
+      .box-api { fill: #E8F5E9; stroke: #333; stroke-width: 1.5; }
+      .box-plugin { fill: #FFF9C4; stroke: #333; stroke-width: 1.5; }
+      .text-title { font-size: 18px; font-weight: bold; font-family: Arial; }
+      .text-label { font-size: 13px; font-family: Arial; }
+      .text-small { font-size: 11px; font-family: Arial; }
+      .text-api { font-size: 10px; font-family: 'Courier New', monospace; }
+      .arrow { stroke: #333; stroke-width: 2; fill: none; marker-end: url(#arrowhead); }
+      .arrow-small { stroke: #666; stroke-width: 1.5; fill: none; marker-end: url(#arrowhead-small); }
+      .arrow-label { font-size: 12px; font-family: Arial; fill: #333; }
+    </style>
+    <marker id="arrowhead" markerWidth="10" markerHeight="10" refX="9" refY="3" orient="auto">
+      <polygon points="0 0, 10 3, 0 6" fill="#333"/>
+    </marker>
+    <marker id="arrowhead-small" markerWidth="8" markerHeight="8" refX="7" refY="2" orient="auto">
+      <polygon points="0 0, 8 2, 0 4" fill="#666"/>
+    </marker>
+  </defs>
+
+  <!-- 标题 -->
+  <text x="700" y="30" text-anchor="middle" class="text-title">AXP 完整架构流程图</text>
+  <text x="700" y="50" text-anchor="middle" class="text-label">Axios Plugin-based HTTP Client | 完整 API 及数据流</text>
+
+  <!-- ===== 第一层：应用代码 ===== -->
+  <rect x="50" y="80" width="200" height="120" class="box" rx="8"/>
+  <text x="150" y="110" text-anchor="middle" class="text-title">应用代码</text>
+  <text x="150" y="130" text-anchor="middle" class="text-label">App Code</text>
+  <text x="150" y="150" text-anchor="middle" class="text-api">axp.get('/api/users')</text>
+  <text x="150" y="165" text-anchor="middle" class="text-api">axp.post('/api/data')</text>
+  <text x="150" y="180" text-anchor="middle" class="text-api">axp.request(config)</text>
+
+  <!-- 箭头 -->
+  <path d="M 250 140 L 320 140" class="arrow"/>
+  <text x="280" y="125" class="arrow-label">创建实例</text>
+  <text x="280" y="140" class="arrow-label">create(config)</text>
+
+  <!-- ===== 第二层：AXP 核心 ===== -->
+  <rect x="320" y="80" width="200" height="120" class="box" rx="8"/>
+  <text x="420" y="110" text-anchor="middle" class="text-title">AXP 核心</text>
+  <text x="420" y="130" text-anchor="middle" class="text-label">AXP Core Manager</text>
+  <text x="420" y="150" text-anchor="middle" class="text-api">get/post/put/delete</text>
+  <text x="420" y="165" text-anchor="middle" class="text-api">request(config)</text>
+  <text x="420" y="180" text-anchor="middle" class="text-api">createAxp(options)</text>
+
+  <!-- 箭头到插件们 -->
+  <path d="M 420 200 L 420 260" class="arrow"/>
+
+  <!-- ===== 第三层：插件系统 ===== -->
+  <text x="50" y="260" class="text-label" font-weight="bold">📦 插件系统 | Plugin System</text>
+
+  <!-- Plugin 1: Cache -->
+  <rect x="50" y="280" width="160" height="130" class="box-plugin" rx="5"/>
+  <text x="130" y="305" text-anchor="middle" class="text-label">缓存插件</text>
+  <text x="130" y="320" text-anchor="middle" class="text-small">Cache Plugin</text>
+  <line x1="60" y1="330" x2="200" y2="330" stroke="#ccc" stroke-width="1"/>
+  <text x="130" y="348" text-anchor="middle" class="text-api">cache.get(key)</text>
+  <text x="130" y="363" text-anchor="middle" class="text-api">cache.set(key, val)</text>
+  <text x="130" y="378" text-anchor="middle" class="text-api">cache.clear()</text>
+  <text x="130" y="393" text-anchor="middle" class="text-small">缓存时间管理</text>
+
+  <!-- Plugin 2: Retry -->
+  <rect x="230" y="280" width="160" height="130" class="box-plugin" rx="5"/>
+  <text x="310" y="305" text-anchor="middle" class="text-label">重试插件</text>
+  <text x="310" y="320" text-anchor="middle" class="text-small">Retry Plugin</text>
+  <line x1="240" y1="330" x2="380" y2="330" stroke="#ccc" stroke-width="1"/>
+  <text x="310" y="348" text-anchor="middle" class="text-api">retry(maxTimes)</text>
+  <text x="310" y="363" text-anchor="middle" class="text-api">backoff(times)</text>
+  <text x="310" y="378" text-anchor="middle" class="text-api">onRetry(fn)</text>
+  <text x="310" y="393" text-anchor="middle" class="text-small">指数退避策略</text>
+
+  <!-- Plugin 3: Share -->
+  <rect x="410" y="280" width="160" height="130" class="box-plugin" rx="5"/>
+  <text x="490" y="305" text-anchor="middle" class="text-label">去重插件</text>
+  <text x="490" y="320" text-anchor="middle" class="text-small">Share Plugin</text>
+  <line x1="420" y1="330" x2="560" y2="330" stroke="#ccc" stroke-width="1"/>
+  <text x="490" y="348" text-anchor="middle" class="text-api">normalize(config)</text>
+  <text x="490" y="363" text-anchor="middle" class="text-api">share(key)</text>
+  <text x="490" y="378" text-anchor="middle" class="text-api">dedup(promise)</text>
+  <text x="490" y="393" text-anchor="middle" class="text-small">请求去重管理</text>
+
+  <!-- Plugin 4: Auth -->
+  <rect x="590" y="280" width="160" height="130" class="box-plugin" rx="5"/>
+  <text x="670" y="305" text-anchor="middle" class="text-label">认证插件</text>
+  <text x="670" y="320" text-anchor="middle" class="text-small">Auth Plugin</text>
+  <line x1="600" y1="330" x2="740" y2="330" stroke="#ccc" stroke-width="1"/>
+  <text x="670" y="348" text-anchor="middle" class="text-api">setToken(token)</text>
+  <text x="670" y="363" text-anchor="middle" class="text-api">refreshToken()</text>
+  <text x="670" y="378" text-anchor="middle" class="text-api">injectAuth(header)</text>
+  <text x="670" y="393" text-anchor="middle" class="text-small">Token 自动刷新</text>
+
+  <!-- Plugin 5: Cancel -->
+  <rect x="770" y="280" width="160" height="130" class="box-plugin" rx="5"/>
+  <text x="850" y="305" text-anchor="middle" class="text-label">取消插件</text>
+  <text x="850" y="320" text-anchor="middle" class="text-small">Cancel Plugin</text>
+  <line x1="780" y1="330" x2="920" y2="330" stroke="#ccc" stroke-width="1"/>
+  <text x="850" y="348" text-anchor="middle" class="text-api">abort(requestId)</text>
+  <text x="850" y="363" text-anchor="middle" class="text-api">timeout(ms)</text>
+  <text x="850" y="378" text-anchor="middle" class="text-api">abortController</text>
+  <text x="850" y="393" text-anchor="middle" class="text-small">请求取消管理</text>
+
+  <!-- Plugin 6: Loading -->
+  <rect x="950" y="280" width="160" height="130" class="box-plugin" rx="5"/>
+  <text x="1030" y="305" text-anchor="middle" class="text-label">加载插件</text>
+  <text x="1030" y="320" text-anchor="middle" class="text-small">Loading Plugin</text>
+  <line x1="960" y1="330" x2="1100" y2="330" stroke="#ccc" stroke-width="1"/>
+  <text x="1030" y="348" text-anchor="middle" class="text-api">setLoading(bool)</text>
+  <text x="1030" y="363" text-anchor="middle" class="text-api">getLoading()</text>
+  <text x="1030" y="378" text-anchor="middle" class="text-api">subscribe(fn)</text>
+  <text x="1030" y="393" text-anchor="middle" class="text-small">全局加载状态</text>
+
+  <!-- Plugin 7: Mock -->
+  <rect x="1130" y="280" width="160" height="130" class="box-plugin" rx="5"/>
+  <text x="1210" y="305" text-anchor="middle" class="text-label">Mock 插件</text>
+  <text x="1210" y="320" text-anchor="middle" class="text-small">Mock Plugin</text>
+  <line x1="1140" y1="330" x2="1280" y2="330" stroke="#ccc" stroke-width="1"/>
+  <text x="1210" y="348" text-anchor="middle" class="text-api">mock(url, data)</text>
+  <text x="1210" y="363" text-anchor="middle" class="text-api">mockList: {}</text>
+  <text x="1210" y="378" text-anchor="middle" class="text-api">disable/enable()</text>
+  <text x="1210" y="393" text-anchor="middle" class="text-small">模拟数据管理</text>
+
+  <!-- 所有插件的箭头到Axios -->
+  <path d="M 130 410 L 420 480" class="arrow-small"/>
+  <path d="M 310 410 L 420 480" class="arrow-small"/>
+  <path d="M 490 410 L 420 480" class="arrow-small"/>
+  <path d="M 670 410 L 420 480" class="arrow-small"/>
+  <path d="M 850 410 L 420 480" class="arrow-small"/>
+  <path d="M 1030 410 L 420 480" class="arrow-small"/>
+  <path d="M 1210 410 L 420 480" class="arrow-small"/>
+
+  <!-- ===== 第四层：拦截器 ===== -->
+  <rect x="300" y="480" width="240" height="110" class="box-api" rx="8"/>
+  <text x="420" y="510" text-anchor="middle" class="text-title">请求/响应拦截器</text>
+  <text x="420" y="530" text-anchor="middle" class="text-label">Request/Response Interceptors</text>
+  <line x1="310" y1="540" x2="530" y2="540" stroke="#999" stroke-width="1"/>
+  <text x="350" y="558" text-anchor="middle" class="text-api">onRequest(fn)</text>
+  <text x="490" y="558" text-anchor="middle" class="text-api">onResponse(fn)</text>
+  <text x="350" y="575" text-anchor="middle" class="text-api">onError(fn)</text>
+  <text x="490" y="575" text-anchor="middle" class="text-api">onComplete(fn)</text>
+
+  <!-- 箭头到Axios -->
+  <path d="M 420 480 L 420 620" class="arrow"/>
+
+  <!-- ===== 第五层：Axios 实例 ===== -->
+  <rect x="300" y="620" width="240" height="110" class="box" rx="8"/>
+  <text x="420" y="650" text-anchor="middle" class="text-title">Axios 实例</text>
+  <text x="420" y="670" text-anchor="middle" class="text-label">Axios Instance</text>
+  <line x1="310" y1="680" x2="530" y2="680" stroke="#999" stroke-width="1"/>
+  <text x="420" y="698" text-anchor="middle" class="text-api">axios.get/post/request</text>
+  <text x="420" y="715" text-anchor="middle" class="text-api">创建标准 HTTP 请求</text>
+
+  <!-- ===== 右侧：网络通信 ===== -->
+  <!-- 箭头向右 -->
+  <path d="M 650 675 L 750 675" class="arrow"/>
+  <text x="690" y="660" class="arrow-label">HTTP 请求</text>
+
+  <!-- 网络 -->
+  <rect x="750" y="620" width="240" height="110" class="box" rx="8"/>
+  <text x="870" y="650" text-anchor="middle" class="text-title">网络通信</text>
+  <text x="870" y="670" text-anchor="middle" class="text-label">Network Request</text>
+  <line x1="760" y1="680" x2="980" y2="680" stroke="#999" stroke-width="1"/>
+  <text x="870" y="698" text-anchor="middle" class="text-api">GET/POST/PUT/DELETE</text>
+  <text x="870" y="715" text-anchor="middle" class="text-api">HTTP/REST API</text>
+
+  <!-- 箭头返回 -->
+  <path d="M 750 750 L 650 750" class="arrow"/>
+  <text x="690" y="740" class="arrow-label">HTTP 响应</text>
+
+  <!-- 响应处理 -->
+  <rect x="300" y="760" width="240" height="110" class="box-api" rx="8"/>
+  <text x="420" y="790" text-anchor="middle" class="text-title">响应处理</text>
+  <text x="420" y="810" text-anchor="middle" class="text-label">Response Processing</text>
+  <line x1="310" y1="820" x2="530" y2="820" stroke="#999" stroke-width="1"/>
+  <text x="420" y="838" text-anchor="middle" class="text-api">parseResponse(data)</text>
+  <text x="420" y="855" text-anchor="middle" class="text-api">transformData(value)</text>
+
+  <!-- 箭头向右 -->
+  <path d="M 650 815 L 750 815" class="arrow"/>
+
+  <!-- 最终应用 -->
+  <rect x="750" y="760" width="240" height="110" class="box" rx="8"/>
+  <text x="870" y="790" text-anchor="middle" class="text-title">应用接收</text>
+  <text x="870" y="810" text-anchor="middle" class="text-label">App Response</text>
+  <line x1="760" y1="820" x2="980" y2="820" stroke="#999" stroke-width="1"/>
+  <text x="870" y="838" text-anchor="middle" class="text-api">Promise[T]</text>
+  <text x="870" y="855" text-anchor="middle" class="text-api">类型安全数据</text>
+
+  <!-- 底部说明 -->
+  <rect x="50" y="900" width="1300" height="40" fill="none" stroke="#ccc" stroke-width="1" rx="5"/>
+  <text x="60" y="925" class="text-small" font-weight="bold">完整流程：应用调用 → AXP 核心 → 7 个插件并行处理 → 拦截器链 → Axios 执行 → 网络通信 → 响应拦截 → 返回类型化数据</text>
+</svg>
