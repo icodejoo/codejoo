@@ -79,14 +79,17 @@
     </section>
 
     <section>
-      <h2>D. 静态大图渐进(staticProgressive)—— 同域 big.png,直接写 &lt;img src&gt;</h2>
+      <h2>D. 静态大图渐进(staticProgressive)—— sample PNG(2MB) + sample JPEG(768KB)</h2>
       <p class="note">
-        412KB 的静态 PNG(无动画)。picman 对静态大图走"色块占位 → 部分字节缩略图 → 高清"三段:缩略图在已到字节跨过该图自己的结构性"可显示"信号时触发(动态门槛,非固定字节数), 缓存的是已到达的原始前缀字节,由 &lt;img&gt;
-        宽容解码渲染;高清则要等元素真正进入视口。同样延迟 3 秒才展示高清,便于观察。
+        两张真实样本静态图:2MB 非隔行 PNG 与 768KB baseline JPEG。picman 对静态大图走"色块占位 → 部分字节缩略图 → 高清"三段:缩略图在已到字节跨过该图自己的结构性"可显示"信号时触发(动态门槛,非固定字节数),
+        缓存的是已到达的原始前缀字节,由 &lt;img&gt; 宽容解码渲染;高清则要等元素真正进入视口。同样延迟 3 秒才展示高清,便于观察。
       </p>
-      <img id="png-img" src="/big.png" alt="静态大图 PNG(真实接管,隐藏)" style="display: none" />
-      <img id="png-img-display" alt="静态大图 PNG(演示展示层)" />
+      <img id="png-img" src="/sample_1280×853.png" alt="样本 PNG(真实接管,隐藏)" style="display: none" />
+      <img id="png-img-display" alt="样本 PNG(演示展示层)" />
       <div id="png-log" class="log"></div>
+      <img id="jpeg-img" src="/sample_1920×1280.jpeg" alt="样本 JPEG(真实接管,隐藏)" style="display: none" />
+      <img id="jpeg-img-display" alt="样本 JPEG(演示展示层)" />
+      <div id="jpeg-log" class="log"></div>
     </section>
 
     <section>
@@ -190,9 +193,11 @@
       const gifLog = makeLogger(document.getElementById("gif-log"), t0);
       wireDelayedDisplay(document.getElementById("gif-img"), document.getElementById("gif-img-display"), gifLog);
 
-      // D. 静态大图 PNG(staticProgressive 三段:色块 → 部分字节缩略图 → 高清)
+      // D. 静态大图(staticProgressive 三段:色块 → 部分字节缩略图 → 高清)
       const pngLog = makeLogger(document.getElementById("png-log"), t0);
       wireDelayedDisplay(document.getElementById("png-img"), document.getElementById("png-img-display"), pngLog);
+      const jpegLog = makeLogger(document.getElementById("jpeg-log"), t0);
+      wireDelayedDisplay(document.getElementById("jpeg-img"), document.getElementById("jpeg-img-display"), jpegLog);
 
       // E. 本地动画 WebP 对照组
       const webpLog = makeLogger(document.getElementById("webp-log"), t0);

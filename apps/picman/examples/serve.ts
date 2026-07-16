@@ -103,7 +103,9 @@ async function streamThrottled(filePath: string, req: IncomingMessage, res: Serv
 
 createServer((req: IncomingMessage, res: ServerResponse) => {
   const url = new URL(req.url ?? "/", `http://localhost:${port}`);
-  const pathname = url.pathname === "/" ? "/index.html" : url.pathname;
+  // decode percent-encoding so non-ASCII filenames (e.g. sample_1280×853.png) resolve on disk
+  // 解码 percent-encoding,使非 ASCII 文件名(如 sample_1280×853.png)能在磁盘上找到
+  const pathname = decodeURIComponent(url.pathname === "/" ? "/index.html" : url.pathname);
 
   // Serve built ESM entries/chunks straight out of dist/ (index.html imports ../dist/esm/*.mjs)
   // 直接从 dist/ 提供构建产物(index.html 引用 ../dist/esm/*.mjs)
