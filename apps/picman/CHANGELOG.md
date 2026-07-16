@@ -17,3 +17,9 @@
 - 新增:`<pic-man>` Web Component(基于 load() 的框架无关封装)
 - 新增:demo 页 + 限速静态服务(examples/),README 按渐进加载库重写
 - 新增:examples/big.gif(程序化生成的 60 帧、724KB 测试动图,供 demo 人工验收用)
+- 新增:视频拦截(降 LCP)——页面端 `<video>` facade `auto({ videos: true })`:中和 autoplay/preload 贪婪加载,用封面占位(有 poster 直接用,无 poster 上 SVG 色块并可在 LCP 之后抓真实首帧升级),手势/`.play()`/autoplay(after-lcp)时还原真实源播放
+- 新增:协议 `PARAM_PLAY` / `withPlayParam()`,`stripPicmanParams` 一并剥除播放标记
+- 新增:SW 兜底门控 `PicmanSWOptions.deferVideos`(默认关)——未带播放标记的视频请求返回 204 deferred 响应,带标记则原生透传(保留 Range)
+- 新增:页面端视频配置 `videos` / `videoFrame` / `videoRangeBytes` / `videoAutoplay` / `videoAutoplayDelay`
+- 重构:`svgColorBlock` 及色块纯函数下沉到 `src/shared/placeholder.ts`(新增 `svgDataUri`),`sw/placeholder.ts` re-export 保持兼容
+- 验证:跨域 CDN 资源加载功能——Service Worker 与缓存机制对所有 CORS 源有效,三段加载流程正常工作

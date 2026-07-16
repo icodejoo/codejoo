@@ -18,7 +18,8 @@
         color: #555;
       }
       img,
-      pic-man {
+      pic-man,
+      video {
         max-width: 320px;
         border: 1px solid #ddd;
       }
@@ -36,6 +37,13 @@
     </p>
 
     <section>
+      <h2>测试跨域 CDN URL</h2>
+      <input id="cdn-url" type="text" placeholder="输入图片 URL" style="width: 100%; padding: 8px; margin-bottom: 8px;" />
+      <button id="load-cdn" style="padding: 8px 16px;">加载</button>
+      <div id="cdn-result" style="margin-top: 16px;"></div>
+    </section>
+
+    <section>
       <h2>A. 零改造接管(auto)—— &lt;img&gt; 原样写</h2>
       <img src="/big.gif" alt="auto 模式" />
     </section>
@@ -51,6 +59,18 @@
       <p id="explicit-stage" class="note"></p>
     </section>
 
+    <section>
+      <h2>D. 视频接管(auto videos)—— 有 poster,autoplay</h2>
+      <p class="note">封面直接用 poster,首屏零视频请求;首屏渲染后(after-lcp)才放行自动播放。放一份 <code>examples/big.mp4</code>(faststart)与一张 <code>examples/poster.jpg</code>。</p>
+      <video src="/big.mp4" poster="/poster.jpg" autoplay muted loop playsinline></video>
+    </section>
+
+    <section>
+      <h2>E. 视频接管(auto videos)—— 无 poster</h2>
+      <p class="note">先上色块封面,首屏空闲后拉视频开头一小段抽首帧当封面;鼠标移上去或点击才装回真实源播放。</p>
+      <video src="/big.mp4" controls muted loop playsinline></video>
+    </section>
+
     <script type="module">
       import { registerPicmanSW } from "../dist/esm/index.mjs";
       import { auto, load } from "../dist/esm/index.mjs";
@@ -63,7 +83,7 @@
         console.log("picman SW registered, reload to activate control");
       }
 
-      auto();
+      auto({ videos: true });
 
       const img = document.getElementById("explicit-img");
       const stageEl = document.getElementById("explicit-stage");
@@ -72,6 +92,32 @@
         img.src = displayUrl;
       });
       task.done.catch((err) => console.error("load() failed", err));
+
+      // 跨域 CDN 测试
+      const urlInput = document.getElementById("cdn-url");
+      const loadBtn = document.getElementById("load-cdn");
+      const resultDiv = document.getElementById("cdn-result");
+
+      loadBtn.addEventListener("click", () => {
+        const url = urlInput.value.trim();
+        if (!url) {
+          resultDiv.textContent = "请输入 URL";
+          return;
+        }
+        resultDiv.innerHTML = "<p>加载中...</p>";
+        const cdnTask = load(url).onStage((stage, displayUrl) => {
+          resultDiv.innerHTML = `<p>stage: ${stage}</p><img src="${displayUrl}" alt="CDN" style="max-width: 100%; border: 1px solid #ddd;" />`;
+        });
+        cdnTask.done.catch((err) => {
+          resultDiv.innerHTML = `<p style="color: red;">错误: ${err.message}</p>`;
+          console.error("CDN load failed", err);
+        });
+      });
+
+      // 快速测试，允许 Enter 键加载
+      urlInput.addEventListener("keydown", (e) => {
+        if (e.key === "Enter") loadBtn.click();
+      });
     </script>
   </body>
 </html>
