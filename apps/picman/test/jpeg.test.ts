@@ -41,34 +41,29 @@ describe("scanJpeg", () => {
   });
 });
 
-describe("sniff 的静态可显示信号(staticDisplayable)", () => {
-  it("baseline JPEG:熵数据不足 4096 时 false,够了 true——门槛随图动态", () => {
-    const small = sniff(makeJpeg({ scanBytes: 1000 }));
-    expect(small.format).toBe("jpeg");
-    expect(small.staticDisplayable).toBe(false);
-
-    const big = sniff(makeJpeg({ scanBytes: 8192 }));
-    expect(big.staticDisplayable).toBe(true);
+describe("sniff 的静态可显示信号(staticDisplayable)——只有全图覆盖编码才触发", () => {
+  it("baseline JPEG:无论熵数据多少都不触发(截断只有顶部切片,不值得展示)", () => {
+    expect(sniff(makeJpeg({ scanBytes: 1000 })).staticDisplayable).toBe(false);
+    expect(sniff(makeJpeg({ scanBytes: 8192 })).staticDisplayable).toBe(false);
   });
 
-  it("progressive JPEG:首 scan 收完即可显示,与字节数无关", () => {
+  it("progressive JPEG:首 scan 收完即可显示(全图模糊),与字节数无关", () => {
     const j = makeJpeg({ progressive: true, scanBytes: 500, endFirstScan: true });
-    const r = sniff(j);
-    expect(r.staticDisplayable).toBe(true);
+    expect(sniff(j).staticDisplayable).toBe(true);
 
     // 同样 500 字节但首 scan 未结束:不可显示
     const cut = sniff(makeJpeg({ progressive: true, scanBytes: 500 }).subarray(0, 400));
     expect(cut.staticDisplayable).toBeFalsy();
   });
 
-  it("静态 PNG:IDAT 累计字节跨过门槛才可显示,含未收全的尾部 chunk", () => {
-    const png = makeBigPng({ idatBytes: 20000, chunkSize: 4096 });
-    // 只收到首个 IDAT 一半:IHDR(8+25)+首 chunk 头(8)+2048 数据
-    const partial = sniff(png.subarray(0, 33 + 8 + 2048));
-    expect(partial.format).toBe("apng");
-    expect(partial.staticDisplayable).toBe(false);
+  it("非隔行 PNG:不触发;隔行(Adam7)PNG:IDAT 跨过门槛后触发(全图马赛克)", () => {
+    const plain = makeBigPng({ idatBytes: 20000, chunkSize: 4096 });
+    expect(sniff(plain).staticDisplayable).toBe(false);
 
-    const enough = sniff(png.subarray(0, 33 + (8 + 4096 + 4) + 8 + 4096));
-    expect(enough.staticDisplayable).toBe(true);
+    const interlaced = makeBigPng({ idatBytes: 20000, chunkSize: 4096, interlaced: true });
+    // 只收到首个 IDAT 一半:不够
+    expect(sniff(interlaced.subarray(0, 33 + 8 + 2048)).staticDisplayable).toBe(false);
+    // 跨过 4096 字节 IDAT:可显示
+    expect(sniff(interlaced.subarray(0, 33 + (8 + 4096 + 4) + 8 + 4096)).staticDisplayable).toBe(true);
   });
 });

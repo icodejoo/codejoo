@@ -33,4 +33,8 @@
 - 新增:静态大图(PNG/JPEG)渐进加载(`staticProgressive` 选项,默认开)——占位色块 → 部分字节缩略图 → 完整图三段;缩略图触发时机为逐图动态的结构性"可显示"信号而非固定字节数:渐进式 JPEG 是首个 scan 收完(全图模糊可解),baseline JPEG/PNG 是越过结构头(SOS/IDAT)后攒到最少一段像素数据(顶部切片可解);缩略图阶段缓存的是已到达的原始前缀字节,由页面 `<img>` 的宽容解码器直接渲染
 - 新增:`src/shared/walkers/jpeg.ts`(SOF 尺寸解析、SOS/首 scan 结束检测)、`scanPng` 增加 `idatBytes` 已到像素字节计数、`sniff` 增加 `staticDisplayable` 统一信号;默认 include 规则加入 `jpe?g`
 - 新增:`auto()` 完整阶段视口门控——高清('1')按元素粒度只在真正进入可见区后才切换(IntersectionObserver,不可用时退回立即切换),视口外元素停留在缩略图/首帧,滚入可见区立即换高清;stop() 一并断开该观察器
-- 新增:`examples/big.png`(程序化生成的 412KB 真实可解码 PNG,供静态渐进 demo/验收用)
+- 新增:`examples/big.png`(程序化生成的 412KB 真实可解码 PNG,供静态渐进 demo/验收用;后由真实样本图 sample_1280×853.png / sample_1920×1280.jpeg 替代)
+- 改进(LCP/体验折中):静态图缩略图按编码方式双路径——渐进式 JPEG(首 scan 收完)/隔行 PNG(Adam7,IDAT 跨门槛)才走"截断字节早期缩略图"(全图覆盖的模糊/马赛克,远早于下载完成);baseline JPEG/非隔行 PNG 的截断字节只有顶部一条不值得展示,改为全量下载后在 SW 线程用 makeFirstFrame 光栅化降采样缩略图。`scanPng` 增加 `interlaced` 检测,`staticDisplayable` 语义收紧为"全图覆盖可解"
+- 改进:`scheduleIdle` 升级为真实 LCP 信号感知——PerformanceObserver 监听 `largest-contentful-paint`(buffered),工作在"idle 且已有 LCP 绘制"两个信号较晚者执行,LCP 条目迟迟不出现时 1 秒兜底;不支持该 entry 类型的环境(经 supportedEntryTypes 检测)退回纯 idle 门控
+- 新增:`auto()` 的 `offViewport` 选项——图片离开视口后显示什么:`'keep'`(默认,保持高清)/`'thumbnail'`(回退 ff 缩略图,浏览器得以释放大图解码内存)/`'placeholder'`(回退页面端生成的色块 data URI);回声判定升级为按元素的 `elExpected`,避免回退写入触发 MutationObserver 反馈回路
+- 文档:README 新增"静态大图渐进与编码方式"一节——建议业务方把大图转渐进式编码(mozjpeg -progressive / sharp progressive / imgix fm=pjpg / PNG Adam7)以获得最佳预览体验;hero 图用 `exclude` 排除走原生渐进渲染

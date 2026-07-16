@@ -199,15 +199,24 @@ async function background(reader: ReadableStreamDefaultReader<Uint8Array>, acc: 
 }
 
 /**
- * Static-progressive background: keep downloading, and the moment the byte
- * stream crosses the per-image "displayable" signal (see
- * {@link sniff}'s `staticDisplayable` — dynamic, not a fixed byte count),
- * cache the raw prefix bytes as the 'ff' stage so the page's tolerant `<img>`
- * decoder can show a partial/blurry preview; then cache the full image.
+ * Static-progressive background, encoding-aware two-path thumbnail:
+ * - Full-coverage encodings (progressive JPEG / interlaced PNG): the moment
+ *   the stream crosses the per-image "displayable" signal (see {@link sniff}'s
+ *   `staticDisplayable`), cache the raw prefix bytes as the 'ff' stage — the
+ *   page's tolerant `<img>` decoder shows a whole-image blurry/mosaic preview
+ *   long before the download finishes.
+ * - Baseline JPEG / non-interlaced PNG: truncated bytes decode to a top slice
+ *   only (not worth showing), so wait for the full download and rasterize a
+ *   downscaled thumbnail via makeFirstFrame instead.
+ * Then cache the full image either way.
  *
- * 静态渐进后台:持续下载,一旦字节流越过该图自己的"可显示"信号(见 {@link sniff} 的
- * `staticDisplayable`——动态判定,不是固定字节数),就把已到的原始前缀字节缓存为 'ff'
- * 阶段,页面 `<img>` 的宽容解码器即可显示部分/模糊预览;之后缓存完整图。
+ * 静态渐进后台,编码感知的双路径缩略图:
+ * - 全图覆盖编码(渐进式 JPEG / 隔行 PNG):字节流一越过该图自己的"可显示"信号(见
+ *   {@link sniff} 的 `staticDisplayable`),就把已到原始前缀字节缓存为 'ff' 阶段——
+ *   页面 `<img>` 宽容解码器在下载远未完成时就能显示全图模糊/马赛克预览。
+ * - baseline JPEG / 非隔行 PNG:截断字节只能解出顶部一条(不值得展示),改为等全量
+ *   下载完,用 makeFirstFrame 光栅化一张降采样缩略图。
+ * 两条路径最后都缓存完整图。
  * @param reader - Body reader positioned after the buffered prefix — 定位在已缓冲前缀之后的 body reader
  * @param acc - Accumulator already holding the buffered prefix — 已持有缓冲前缀的累积器
  * @param initialSniff - Sniff result at handoff — 交接时的嗅探结果
@@ -219,20 +228,31 @@ async function backgroundStatic(reader: ReadableStreamDefaultReader<Uint8Array>,
   const mime = initialSniff.mime!;
   let thumbDone = false;
 
-  const putThumb = async (): Promise<void> => {
+  const putPrefixThumb = async (): Promise<void> => {
     await deps.cache.putStage(url, "ff", new Response(acc.view().slice(), { headers: { "Content-Type": mime } }));
     await deps.notify({ picman: 1, type: "first-frame", url });
     thumbDone = true;
   };
 
   try {
-    if (initialSniff.staticDisplayable) await putThumb();
+    if (initialSniff.staticDisplayable) await putPrefixThumb();
 
     while (true) {
       const { done, value } = await reader.read();
       if (value) acc.append(value);
       if (done) break;
-      if (!thumbDone && sniff(acc.view()).staticDisplayable) await putThumb();
+      if (!thumbDone && sniff(acc.view()).staticDisplayable) await putPrefixThumb();
+    }
+
+    // Baseline path: no early signal fired — rasterize a downscaled thumbnail
+    // from the now-complete bytes (worker-side decode, off the main thread).
+    // baseline 路径:早期信号未触发——用已完整的字节光栅化降采样缩略图(worker 线程解码,不占主线程)。
+    if (!thumbDone) {
+      const blob = await deps.makeFirstFrame(acc.view(), mime);
+      if (blob) {
+        await deps.cache.putStage(url, "ff", new Response(blob, { headers: { "Content-Type": "image/png" } }));
+        await deps.notify({ picman: 1, type: "first-frame", url });
+      }
     }
 
     await deps.cache.putStage(url, "1", new Response(acc.view().slice(), { headers: origResp.headers }));

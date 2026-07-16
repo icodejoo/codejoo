@@ -32,6 +32,15 @@ export interface PngScan {
    * 可显示信号(宽容解码器能 inflate 已有的这部分数据)。
    */
   idatBytes?: number;
+  /**
+   * Whether IHDR declares Adam7 interlacing — only interlaced PNGs give a
+   * full-coverage (mosaic) preview from truncated bytes; non-interlaced ones
+   * decode top rows only, which is not worth showing.
+   *
+   * IHDR 是否声明 Adam7 隔行——只有隔行 PNG 的截断字节能解出全图覆盖(马赛克)预览;
+   * 非隔行只解出顶部若干行,不值得展示。
+   */
+  interlaced?: boolean;
 }
 
 /** Standalone IEND chunk bytes (len=0, CRC precomputed) — 独立 IEND chunk 字节(长度 0,CRC 预算好) */
@@ -54,6 +63,7 @@ export function scanPng(buf: Uint8Array): PngScan {
   let inIdatRun = false;
   let firstFrameReady = false;
   let idatBytes = 0;
+  let interlaced: boolean | undefined;
 
   let p = 8;
   while (p + 8 <= buf.length) {
@@ -74,6 +84,8 @@ export function scanPng(buf: Uint8Array): PngScan {
     if (type === "IHDR") {
       width = readBE32(buf, dataStart);
       height = readBE32(buf, dataStart + 4);
+      // IHDR: width(4)+height(4)+depth(1)+colorType(1)+compression(1)+filter(1)+interlace(1)
+      interlaced = buf[dataStart + 12] === 1;
     } else if (type === "PLTE") {
       palette = [];
       for (let i = dataStart; i + 3 <= dataStart + len; i += 3) palette.push([buf[i]!, buf[i + 1]!, buf[i + 2]!]);
@@ -94,7 +106,7 @@ export function scanPng(buf: Uint8Array): PngScan {
     p += total;
   }
 
-  return { status, width, height, palette, firstFrameReady, idatBytes };
+  return { status, width, height, palette, firstFrameReady, idatBytes, interlaced };
 }
 
 /**

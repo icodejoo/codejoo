@@ -374,11 +374,11 @@ export function makeJpeg(opts: { progressive?: boolean; scanBytes?: number; endF
  *
  * 构造 IDAT 负载总量为 `idatBytes`、分多个 chunk 的大静态 PNG——用于测试静态渐进
  * 可显示信号。
- * @param opts - idatBytes: total IDAT payload bytes; chunkSize: per-IDAT payload size
+ * @param opts - idatBytes: total IDAT payload bytes; chunkSize: per-IDAT payload size; interlaced: set the IHDR Adam7 interlace flag
  * @returns PNG bytes — PNG 字节
  */
-export function makeBigPng(opts: { idatBytes: number; chunkSize?: number }): Uint8Array {
-  const { idatBytes, chunkSize = 4096 } = opts;
+export function makeBigPng(opts: { idatBytes: number; chunkSize?: number; interlaced?: boolean }): Uint8Array {
+  const { idatBytes, chunkSize = 4096, interlaced = false } = opts;
   const sig = new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
 
   const ihdrData = new Uint8Array(13);
@@ -387,6 +387,7 @@ export function makeBigPng(opts: { idatBytes: number; chunkSize?: number }): Uin
   ihdrView.setUint32(4, 100, false); // height
   ihdrData[8] = 8; // bit depth
   ihdrData[9] = 2; // color type: truecolor
+  ihdrData[12] = interlaced ? 1 : 0; // interlace method: Adam7 or none
   const parts: Uint8Array[] = [sig, pngChunk("IHDR", ihdrData)];
 
   let remaining = idatBytes;

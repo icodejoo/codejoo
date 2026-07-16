@@ -6,6 +6,7 @@
  */
 
 import { type PicmanStage, PARAM_BYPASS, isPicmanMessage, stripPicmanParams, withStageParam } from "../shared/protocol";
+import { svgColorBlock, svgDataUri } from "../shared/placeholder";
 import type { PicmanErrorContext } from "../shared/types";
 import type { PicmanAutoOptions } from "./types";
 import { scheduleIdle } from "./idle";
@@ -73,6 +74,7 @@ export function auto(options: PicmanAutoOptions = {}): () => void {
   const root = options.root ?? document;
   const backgrounds = options.backgrounds ?? true;
   const videos = options.videos ?? false;
+  const offViewport = options.offViewport ?? "keep";
   const onError = options.onError ?? (() => {});
 
   /** Video facade, created only when video takeover is enabled — 仅在启用视频接管时创建的 video facade */
@@ -82,6 +84,32 @@ export function auto(options: PicmanAutoOptions = {}): () => void {
   const tracked = new Map<string, Set<WeakRef<Element>>>();
   /** Canonical URL → latest known stage — 规范化 URL → 已知最新阶段 */
   const stageOf = new Map<string, PicmanStage>();
+  /** Element → its canonical tracking URL — 元素 → 其规范化跟踪 URL */
+  const elUrl = new WeakMap<Element, string>();
+  /**
+   * Element → the display URL our own last write set on it. Consulted by the
+   * src-mutation handler to break the feedback loop — with off-viewport
+   * swap-backs an element's src can legitimately differ from its URL's latest
+   * stage, so echo detection must be per-element, not per-URL.
+   *
+   * 元素 → 我们自己最后一次写入的展示 URL。src 变更处理器据此打断反馈回路——
+   * 引入离开视口回退后,元素的 src 可以合法地不同于其 URL 的最新阶段,
+   * 回声判定必须按元素而非按 URL。
+   */
+  const elExpected = new WeakMap<Element, string>();
+
+  /**
+   * Write a display URL to an element and record it as that element's
+   * expected value for echo detection.
+   *
+   * 把展示 URL 写到元素上,并记录为该元素的期望值供回声判定。
+   * @param el - Target element — 目标元素
+   * @param displayUrl - URL to display — 待展示的 URL
+   */
+  function setDisplay(el: Element, displayUrl: string): void {
+    elExpected.set(el, displayUrl);
+    applyUrl(el, displayUrl);
+  }
 
   /** Elements waiting for viewport entry before their full-stage swap — 等待进入视口才切换完整阶段的元素 */
   const pendingFull = new WeakMap<Element, string>();
@@ -93,16 +121,48 @@ export function auto(options: PicmanAutoOptions = {}): () => void {
    *
    * 确保完整阶段共享视口观察器已创建。
    */
+  /**
+   * Build the off-viewport fallback display URL for an element, per the
+   * `offViewport` option: the cached thumbnail stage, or a page-side color
+   * block sized to the element.
+   *
+   * 按 `offViewport` 选项为元素构造离开视口后的回退展示 URL:已缓存的缩略图阶段,
+   * 或按元素尺寸生成的页面端色块。
+   * @param el - Element leaving the viewport — 正在离开视口的元素
+   * @param url - Its canonical URL — 其规范化 URL
+   * @returns Fallback display URL, or null for 'keep' — 回退展示 URL,'keep' 时为 null
+   */
+  function offViewportUrl(el: Element, url: string): string | null {
+    if (offViewport === "thumbnail") return withStageParam(url, "ff");
+    if (offViewport === "placeholder") {
+      const w = (el as HTMLElement).clientWidth || 300;
+      const h = (el as HTMLElement).clientHeight || 150;
+      return svgDataUri(svgColorBlock({ width: w, height: h, mode: "gradient", fallbackColor: "#e0e0e0" }));
+    }
+    return null;
+  }
+
   function ensureFullObserver(): void {
     if (fullIO || typeof IntersectionObserver === "undefined") return;
     fullIO = new IntersectionObserver((entries) => {
       for (const e of entries) {
-        if (!e.isIntersecting) continue;
-        fullIO!.unobserve(e.target);
-        const displayUrl = pendingFull.get(e.target);
-        if (displayUrl) {
-          pendingFull.delete(e.target);
-          applyUrl(e.target, displayUrl);
+        const el = e.target;
+        const url = elUrl.get(el);
+        if (e.isIntersecting) {
+          const displayUrl = pendingFull.get(el) ?? (url && stageOf.get(url) === "1" ? withStageParam(url, "1") : null);
+          if (displayUrl) {
+            pendingFull.delete(el);
+            setDisplay(el, displayUrl);
+          }
+          // 'keep': one-shot — full content stays after the first entry.
+          // 'keep':一次性——首次进入后完整内容常驻,停止观察。
+          if (offViewport === "keep") fullIO!.unobserve(el);
+        } else if (offViewport !== "keep" && url && stageOf.get(url) === "1" && !pendingFull.has(el)) {
+          // Leaving the viewport with full content applied: swap back so the
+          // browser can drop the heavy decode; re-entry restores it above.
+          // 带着完整内容离开视口:回退,让浏览器得以释放重解码;再次进入由上方分支恢复。
+          const fallback = offViewportUrl(el, url);
+          if (fallback) setDisplay(el, fallback);
         }
       }
     });
@@ -132,23 +192,35 @@ export function auto(options: PicmanAutoOptions = {}): () => void {
   }
 
   /**
-   * Apply one stage to one element, with the full-stage viewport gate.
+   * Apply one stage to one element, with the full-stage viewport gate. When
+   * `offViewport` is not 'keep', full-stage elements stay observed after
+   * entry so leaving the viewport can swap them back.
    *
-   * 把一个阶段应用到一个元素,带完整阶段的视口门控。
+   * 把一个阶段应用到一个元素,带完整阶段的视口门控。`offViewport` 非 'keep' 时,
+   * 完整阶段的元素在进入视口后仍保持被观察,以便离开视口时回退。
    * @param el - Target element — 目标元素
    * @param url - Canonical URL — 规范化 URL
    * @param stage - Stage to display — 待展示阶段
    */
   function applyStageToElement(el: Element, url: string, stage: PicmanStage): void {
     const displayUrl = withStageParam(url, stage);
-    if (stage === "1" && !inViewport(el) && typeof IntersectionObserver !== "undefined") {
-      ensureFullObserver();
-      pendingFull.set(el, displayUrl);
-      fullIO?.observe(el);
-    } else {
+    if (stage === "1" && typeof IntersectionObserver !== "undefined") {
+      if (!inViewport(el)) {
+        ensureFullObserver();
+        pendingFull.set(el, displayUrl);
+        fullIO?.observe(el);
+        return;
+      }
       pendingFull.delete(el);
-      applyUrl(el, displayUrl);
+      setDisplay(el, displayUrl);
+      if (offViewport !== "keep") {
+        ensureFullObserver();
+        fullIO?.observe(el);
+      }
+      return;
     }
+    pendingFull.delete(el);
+    setDisplay(el, displayUrl);
   }
 
   /**
@@ -253,6 +325,7 @@ export function auto(options: PicmanAutoOptions = {}): () => void {
       tracked.set(url, set);
     }
     set.add(new WeakRef(el));
+    elUrl.set(el, url);
 
     const known = stageOf.get(url);
     if (known) {
@@ -263,16 +336,21 @@ export function auto(options: PicmanAutoOptions = {}): () => void {
   }
 
   /**
-   * Whether `rawUrl` on `el` is exactly the URL our own last swap produced —
+   * Whether `rawUrl` on `el` is exactly the URL our own last write produced —
    * used to break the src-mutation feedback loop (setting an attribute to an
    * unchanged value still queues a MutationRecord per the DOM spec).
+   * Per-element: with off-viewport swap-backs, an element's src can
+   * legitimately differ from its URL's latest stage.
    *
-   * 判断 `el` 上的 `rawUrl` 是否正是我们自己上次切换写入的值——用于打断
+   * 判断 `el` 上的 `rawUrl` 是否正是我们自己最后一次写入的值——用于打断
    * src 属性变更的反馈回路(按 DOM 规范,即便写入相同值也会入队 MutationRecord)。
+   * 按元素判定:引入离开视口回退后,元素的 src 可以合法地不同于其 URL 的最新阶段。
+   * @param el - Element whose src mutated — src 发生变更的元素
    * @param rawUrl - Current URL as seen on the element — 元素当前的 URL
    * @returns Whether this mutation was self-caused — 该变更是否为自我触发
    */
-  function isOwnEcho(rawUrl: string): boolean {
+  function isOwnEcho(el: Element, rawUrl: string): boolean {
+    if (elExpected.get(el) === rawUrl) return true;
     const url = canonicalize(rawUrl);
     if (!tracked.has(url)) return false;
     const known = stageOf.get(url);
@@ -317,7 +395,7 @@ export function auto(options: PicmanAutoOptions = {}): () => void {
       } else if (m.type === "attributes") {
         const el = m.target as Element;
         if (m.attributeName === "src" && el instanceof HTMLImageElement && el.src) {
-          if (!isOwnEcho(el.src)) track(el, el.src);
+          if (!isOwnEcho(el, el.src)) track(el, el.src);
         } else if (backgrounds && m.attributeName === BG_ATTR) {
           const v = el.getAttribute(BG_ATTR);
           if (v) track(el, v);

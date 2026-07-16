@@ -42,22 +42,25 @@ export interface SniffResult {
   /** AVIF raw `av1C` box bytes (see {@link scanAvif}) — AVIF 原始 av1C box 字节(见 {@link scanAvif}) */
   avifAv1C?: Uint8Array;
   /**
-   * Static-progressive displayability: whether enough pixel-data bytes have
-   * arrived for a tolerant decoder to show a partial/blurry preview. Dynamic
-   * per image — depends on where its pixel data starts and how it's encoded
-   * (progressive JPEG: first scan complete; baseline JPEG/PNG: a minimum run
-   * of entropy/IDAT bytes past the structural headers).
+   * Static-progressive displayability: whether the bytes so far decode into a
+   * FULL-COVERAGE preview. Only encodings that interleave the whole picture
+   * qualify — progressive JPEG (first scan complete → whole image, blurry)
+   * and Adam7-interlaced PNG (early passes → whole image, mosaic). Baseline
+   * JPEG / non-interlaced PNG never signal here: their truncated bytes decode
+   * to a top slice only, which is not worth showing (those get a downscaled
+   * thumbnail generated after the full download instead).
    *
-   * 静态渐进可显示信号:已到达的像素数据字节是否足以让宽容解码器显示出部分/模糊预览。
-   * 逐图动态判定——取决于该图像素数据从哪里开始、以及编码方式(渐进式 JPEG:第一个 scan
-   * 收完;baseline JPEG/PNG:越过结构头之后攒到最起码的一段熵编码/IDAT 字节)。
+   * 静态渐进可显示信号:已到字节能否解出**全图覆盖**的预览。只有把整幅画面交织编码的
+   * 格式才符合——渐进式 JPEG(首个 scan 收完 → 全图模糊)与 Adam7 隔行 PNG(早期 pass →
+   * 全图马赛克)。baseline JPEG / 非隔行 PNG 永不触发:它们的截断字节只能解出顶部
+   * 一条,不值得展示(这类图改为全量下载后生成降采样缩略图)。
    */
   staticDisplayable?: boolean;
   /** MIME type for the matched format — 命中格式对应的 MIME */
   mime?: "image/gif" | "image/png" | "image/webp" | "image/avif" | "image/jpeg";
 }
 
-/** Minimum pixel-data bytes for the baseline-JPEG/PNG displayability heuristic — baseline JPEG/PNG 可显示启发式的最少像素数据字节 */
+/** Minimum IDAT bytes before an interlaced PNG's mosaic preview is worth showing — 隔行 PNG 马赛克预览值得展示前的最少 IDAT 字节 */
 const MIN_PIXEL_BYTES = 4096;
 
 /**
@@ -93,7 +96,7 @@ export function sniff(buf: Uint8Array): SniffResult {
       height: r.height,
       palette: r.palette,
       apngFirstFrameReady: r.firstFrameReady,
-      staticDisplayable: r.status === "static" && (r.idatBytes ?? 0) >= MIN_PIXEL_BYTES,
+      staticDisplayable: r.status === "static" && r.interlaced === true && (r.idatBytes ?? 0) >= MIN_PIXEL_BYTES,
       mime: "image/png",
     };
   }
@@ -125,17 +128,16 @@ export function sniff(buf: Uint8Array): SniffResult {
 
   if (buf[0] === 0xff && buf[1] === 0xd8) {
     const r = scanJpeg(buf);
-    // Progressive JPEG: first scan complete = full-coverage blurry decode.
-    // Baseline: a minimum run of entropy bytes past SOS = top-slice decode.
-    // 渐进式 JPEG:第一个 scan 收完 = 全图覆盖的模糊解码;
-    // baseline:越过 SOS 攒到最少一段熵编码字节 = 顶部切片解码。
-    const displayable = r.status === "static" && r.scanDataStart !== undefined && (r.progressive ? r.firstScanEnd !== undefined : buf.length - r.scanDataStart >= MIN_PIXEL_BYTES);
+    // Only progressive JPEG signals early: first scan complete = full-coverage
+    // blurry decode. Baseline JPEG never signals (top-slice only).
+    // 只有渐进式 JPEG 触发早期信号:首个 scan 收完 = 全图覆盖的模糊解码;
+    // baseline JPEG 永不触发(只有顶部切片)。
     return {
       status: r.status,
       format: "jpeg",
       width: r.width,
       height: r.height,
-      staticDisplayable: displayable,
+      staticDisplayable: r.status === "static" && r.progressive === true && r.firstScanEnd !== undefined,
       mime: "image/jpeg",
     };
   }

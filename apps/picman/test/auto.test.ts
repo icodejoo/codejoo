@@ -178,6 +178,7 @@ describe("auto", () => {
       return {
         observed,
         enter: (el: Element) => cb?.([{ target: el, isIntersecting: true }]),
+        leave: (el: Element) => cb?.([{ target: el, isIntersecting: false }]),
         restore: () => {
           (globalThis as unknown as { IntersectionObserver: unknown }).IntersectionObserver = orig;
         },
@@ -225,6 +226,83 @@ describe("auto", () => {
         sw.emit({ picman: 1, type: "complete", url: URL1 });
         await flush();
         expect(img.src).toBe(withStageParam(URL1, "1"));
+      } finally {
+        io.restore();
+      }
+    });
+
+    it("offViewport:'thumbnail' —— 离开视口回退到 ff,再进入恢复高清,不触发反馈回路", async () => {
+      const io = fakeIO();
+      try {
+        const sw = fakeSW();
+        _setServiceWorkerContainer(sw as unknown as ServiceWorkerContainer);
+
+        const img = document.createElement("img");
+        img.src = URL1;
+        img.getBoundingClientRect = () => ({ top: 100, bottom: 200, left: 0, right: 100, width: 100, height: 100, x: 0, y: 100, toJSON: () => ({}) }) as DOMRect;
+        (globalThis as unknown as { innerHeight: number }).innerHeight = 800;
+        document.body.append(img);
+        stop = auto({ offViewport: "thumbnail" });
+
+        sw.emit({ picman: 1, type: "complete", url: URL1 });
+        await flush();
+        expect(img.src).toBe(withStageParam(URL1, "1")); // 视口内:高清
+
+        io.leave(img);
+        await flush();
+        expect(img.src).toBe(withStageParam(URL1, "ff")); // 离开视口:回退缩略图
+
+        io.enter(img);
+        await flush();
+        expect(img.src).toBe(withStageParam(URL1, "1")); // 再进入:恢复高清
+      } finally {
+        io.restore();
+      }
+    });
+
+    it("offViewport:'placeholder' —— 离开视口回退到页面端色块 data URI", async () => {
+      const io = fakeIO();
+      try {
+        const sw = fakeSW();
+        _setServiceWorkerContainer(sw as unknown as ServiceWorkerContainer);
+
+        const img = document.createElement("img");
+        img.src = URL1;
+        img.getBoundingClientRect = () => ({ top: 100, bottom: 200, left: 0, right: 100, width: 100, height: 100, x: 0, y: 100, toJSON: () => ({}) }) as DOMRect;
+        (globalThis as unknown as { innerHeight: number }).innerHeight = 800;
+        document.body.append(img);
+        stop = auto({ offViewport: "placeholder" });
+
+        sw.emit({ picman: 1, type: "complete", url: URL1 });
+        await flush();
+        expect(img.src).toBe(withStageParam(URL1, "1"));
+
+        io.leave(img);
+        await flush();
+        expect(img.src).toContain("data:image/svg+xml"); // 回退到色块
+      } finally {
+        io.restore();
+      }
+    });
+
+    it("offViewport 默认 'keep':离开视口不回退", async () => {
+      const io = fakeIO();
+      try {
+        const sw = fakeSW();
+        _setServiceWorkerContainer(sw as unknown as ServiceWorkerContainer);
+
+        const img = document.createElement("img");
+        img.src = URL1;
+        img.getBoundingClientRect = () => ({ top: 100, bottom: 200, left: 0, right: 100, width: 100, height: 100, x: 0, y: 100, toJSON: () => ({}) }) as DOMRect;
+        (globalThis as unknown as { innerHeight: number }).innerHeight = 800;
+        document.body.append(img);
+        stop = auto();
+
+        sw.emit({ picman: 1, type: "complete", url: URL1 });
+        await flush();
+        io.leave(img);
+        await flush();
+        expect(img.src).toBe(withStageParam(URL1, "1")); // 保持高清
       } finally {
         io.restore();
       }
