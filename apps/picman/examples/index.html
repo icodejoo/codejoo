@@ -119,6 +119,8 @@
         cdnImgEl.style.display = "none";
 
         let completeUrl = null;
+        let firstFrameTime = null;
+        const MIN_FIRST_FRAME_DISPLAY_MS = 3000;
 
         const cdnTask = load(url).onStage((stage, displayUrl) => {
           if (stage === "placeholder") {
@@ -128,19 +130,30 @@
             cdnImgEl.style.opacity = "0.3";
             cdnImgEl.title = "占位符（SVG 色块）";
           } else if (stage === "first-frame") {
+            firstFrameTime = Date.now();
             cdnStageEl.textContent = stageTexts[stage];
             cdnImgEl.src = displayUrl;
             cdnImgEl.style.opacity = "0.6";
             cdnImgEl.title = "这是首帧的静态版本（不动）";
           } else if (stage === "complete") {
             completeUrl = displayUrl;
-            // 延迟 3 秒再显示完整的动画资源，让首帧阶段更明显
-            setTimeout(() => {
-              cdnStageEl.textContent = stageTexts[stage] + " - 现在动起来！";
+            // 确保首帧至少显示 3 秒，然后才切换到完整动画
+            if (firstFrameTime) {
+              const elapsedMs = Date.now() - firstFrameTime;
+              const remainingMs = Math.max(0, MIN_FIRST_FRAME_DISPLAY_MS - elapsedMs);
+              setTimeout(() => {
+                cdnStageEl.textContent = stageTexts[stage] + " - 现在动起来！";
+                cdnImgEl.src = completeUrl;
+                cdnImgEl.style.opacity = "1";
+                cdnImgEl.title = "完整的动画资源现在在播放";
+              }, remainingMs);
+            } else {
+              // 如果没有首帧阶段，直接显示完整版本
+              cdnStageEl.textContent = stageTexts[stage];
               cdnImgEl.src = completeUrl;
               cdnImgEl.style.opacity = "1";
-              cdnImgEl.title = "完整的动画资源现在在播放";
-            }, 3000);
+              cdnImgEl.title = "完整的动画资源";
+            }
           }
         });
         cdnTask.done.catch((err) => {
