@@ -1,0 +1,126 @@
+<svg viewBox="0 0 1400 950" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <style>
+      .box { fill: #FDE8D0; stroke: #333; stroke-width: 2; }
+      .box-api { fill: #E8F5E9; stroke: #333; stroke-width: 1.5; }
+      .box-plugin { fill: #FFF9C4; stroke: #333; stroke-width: 1.5; }
+      .text-title { font-size: 18px; font-weight: bold; font-family: Arial; }
+      .text-label { font-size: 13px; font-family: Arial; }
+      .text-small { font-size: 11px; font-family: Arial; }
+      .text-api { font-size: 10px; font-family: 'Courier New', monospace; }
+      .arrow { stroke: #333; stroke-width: 2; fill: none; marker-end: url(#arrowhead); }
+      .arrow-small { stroke: #666; stroke-width: 1.5; fill: none; marker-end: url(#arrowhead-small); }
+    </style>
+    <marker id="arrowhead" markerWidth="10" markerHeight="10" refX="9" refY="3" orient="auto">
+      <polygon points="0 0, 10 3, 0 6" fill="#333"/>
+    </marker>
+    <marker id="arrowhead-small" markerWidth="8" markerHeight="8" refX="7" refY="2" orient="auto">
+      <polygon points="0 0, 8 2, 0 4" fill="#666"/>
+    </marker>
+  </defs>
+
+  <text x="700" y="30" text-anchor="middle" class="text-title">Picman 完整架构流程图</text>
+  <text x="700" y="50" text-anchor="middle" class="text-label">Service Worker 驱动的渐进式图像加载库 | GIF/APNG/WebP 动画支持</text>
+
+  <!-- Web Component 层 -->
+  <rect x="50" y="80" width="200" height="120" class="box" rx="8"/>
+  <text x="150" y="110" text-anchor="middle" class="text-title">Web Component</text>
+  <text x="150" y="130" text-anchor="middle" class="text-label">&lt;pic-man&gt; 元素</text>
+  <text x="150" y="150" text-anchor="middle" class="text-api">connectedCallback()</text>
+  <text x="150" y="165" text-anchor="middle" class="text-api">src/alt/data attrs</text>
+  <text x="150" y="180" text-anchor="middle" class="text-api">create img/canvas</text>
+
+  <path d="M 250 140 L 320 140" class="arrow"/>
+
+  <!-- Service Worker 层 -->
+  <rect x="320" y="80" width="200" height="120" class="box" rx="8"/>
+  <text x="420" y="110" text-anchor="middle" class="text-title">Service Worker</text>
+  <text x="420" y="130" text-anchor="middle" class="text-label">请求拦截</text>
+  <text x="420" y="150" text-anchor="middle" class="text-api">register() / activate</text>
+  <text x="420" y="165" text-anchor="middle" class="text-api">intercept fetch</text>
+  <text x="420" y="180" text-anchor="middle" class="text-api">match patterns</text>
+
+  <path d="M 420 200 L 420 260" class="arrow"/>
+
+  <!-- 处理管道 -->
+  <text x="50" y="260" class="text-label" font-weight="bold">📦 处理管道</text>
+
+  <!-- Cache Storage 检查 -->
+  <rect x="50" y="280" width="160" height="130" class="box-plugin" rx="5"/>
+  <text x="130" y="305" text-anchor="middle" class="text-label">缓存检查</text>
+  <text x="130" y="320" text-anchor="middle" class="text-small">Cache Storage</text>
+  <line x1="60" y1="330" x2="200" y2="330" stroke="#ccc" stroke-width="1"/>
+  <text x="130" y="348" text-anchor="middle" class="text-api">caches.match(url)</text>
+  <text x="130" y="363" text-anchor="middle" class="text-api">picman-v1 bucket</text>
+  <text x="130" y="378" text-anchor="middle" class="text-api">hit → return</text>
+  <text x="130" y="393" text-anchor="middle" class="text-small">整个资源缓存</text>
+
+  <!-- 网络请求 -->
+  <rect x="230" y="280" width="160" height="130" class="box-plugin" rx="5"/>
+  <text x="310" y="305" text-anchor="middle" class="text-label">网络请求</text>
+  <text x="310" y="320" text-anchor="middle" class="text-small">Network Fetch</text>
+  <line x1="240" y1="330" x2="380" y2="330" stroke="#ccc" stroke-width="1"/>
+  <text x="310" y="348" text-anchor="middle" class="text-api">fetch(request)</text>
+  <text x="310" y="363" text-anchor="middle" class="text-api">HTTP GET image</text>
+  <text x="310" y="378" text-anchor="middle" class="text-api">save to cache</text>
+  <text x="310" y="393" text-anchor="middle" class="text-small">下载并缓存</text>
+
+  <!-- 渐进式加载 -->
+  <rect x="410" y="280" width="160" height="130" class="box-plugin" rx="5"/>
+  <text x="490" y="305" text-anchor="middle" class="text-label">渐进式加载</text>
+  <text x="490" y="320" text-anchor="middle" class="text-small">Progressive Load</text>
+  <line x1="420" y1="330" x2="560" y2="330" stroke="#ccc" stroke-width="1"/>
+  <text x="490" y="348" text-anchor="middle" class="text-api">first frame quick</text>
+  <text x="490" y="363" text-anchor="middle" class="text-api">后续帧后台加载</text>
+  <text x="490" y="378" text-anchor="middle" class="text-api">chunked download</text>
+  <text x="490" y="393" text-anchor="middle" class="text-small">优先级加载</text>
+
+  <!-- 格式检测 -->
+  <rect x="590" y="280" width="160" height="130" class="box-plugin" rx="5"/>
+  <text x="670" y="305" text-anchor="middle" class="text-label">格式识别</text>
+  <text x="670" y="320" text-anchor="middle" class="text-small">Format Detection</text>
+  <line x1="600" y1="330" x2="740" y2="330" stroke="#ccc" stroke-width="1"/>
+  <text x="670" y="348" text-anchor="middle" class="text-api">magic bytes check</text>
+  <text x="670" y="363" text-anchor="middle" class="text-api">GIF/PNG/WebP</text>
+  <text x="670" y="378" text-anchor="middle" class="text-api">select decoder</text>
+  <text x="670" y="393" text-anchor="middle" class="text-small">动画格式识别</text>
+
+  <!-- 箭头 -->
+  <path d="M 130 410 L 300 480" class="arrow-small"/>
+  <path d="M 310 410 L 350 480" class="arrow-small"/>
+  <path d="M 490 410 L 420 480" class="arrow-small"/>
+  <path d="M 670 410 L 450 480" class="arrow-small"/>
+
+  <!-- 解码器 -->
+  <rect x="300" y="480" width="240" height="110" class="box-api" rx="8"/>
+  <text x="420" y="510" text-anchor="middle" class="text-title">动画解码</text>
+  <text x="420" y="530" text-anchor="middle" class="text-label">Animation Decoder</text>
+  <line x1="310" y1="540" x2="530" y2="540" stroke="#999" stroke-width="1"/>
+  <text x="350" y="558" text-anchor="middle" class="text-api">GifDecoder/ApngDecoder</text>
+  <text x="490" y="558" text-anchor="middle" class="text-api">WebpDecoder</text>
+  <text x="420" y="575" text-anchor="middle" class="text-api">逐帧解析 → ImageData</text>
+
+  <path d="M 420 590 L 420 650" class="arrow"/>
+
+  <!-- 帧缓存 -->
+  <rect x="300" y="650" width="240" height="110" class="box" rx="8"/>
+  <text x="420" y="680" text-anchor="middle" class="text-title">帧缓存管理</text>
+  <text x="420" y="700" text-anchor="middle" class="text-label">IndexedDB Frame Cache</text>
+  <line x1="310" y1="710" x2="530" y2="710" stroke="#999" stroke-width="1"/>
+  <text x="350" y="728" text-anchor="middle" class="text-api">store frames data</text>
+  <text x="490" y="728" text-anchor="middle" class="text-api">delay info</text>
+  <text x="420" y="745" text-anchor="middle" class="text-api">跨标签页共享缓存</text>
+
+  <path d="M 420 760 L 420 820" class="arrow"/>
+
+  <!-- Canvas 渲染 -->
+  <rect x="300" y="820" width="240" height="110" class="box" rx="8"/>
+  <text x="420" y="850" text-anchor="middle" class="text-title">Canvas 动画</text>
+  <text x="420" y="870" text-anchor="middle" class="text-label">Animation Render (RAF)</text>
+  <line x1="310" y1="880" x2="530" y2="880" stroke="#999" stroke-width="1"/>
+  <text x="350" y="898" text-anchor="middle" class="text-api">requestAnimationFrame</text>
+  <text x="490" y="898" text-anchor="middle" class="text-api">drawImage on canvas</text>
+  <text x="420" y="915" text-anchor="middle" class="text-api">用户看到动画图片</text>
+
+  <text x="50" y="930" class="text-small" font-weight="bold">完整流程：Web Component → SW拦截 → 缓存检查 → 网络请求 → 渐进式加载 → 格式检测 → 帧解码 → IndexedDB缓存 → Canvas渲染 → 播放动画</text>
+</svg>

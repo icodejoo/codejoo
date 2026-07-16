@@ -23,6 +23,15 @@ export interface PngScan {
   palette?: [number, number, number][];
   /** Whether the first frame's IDAT run has fully arrived (a following chunk header was read) — 首帧 IDAT 连段是否已收完(其后 chunk 头已读到) */
   firstFrameReady?: boolean;
+  /**
+   * IDAT payload bytes arrived so far, counting the already-received part of
+   * a chunk whose tail hasn't arrived yet — the static-progressive pipeline's
+   * displayability signal (a tolerant decoder can inflate whatever is here).
+   *
+   * 目前已到达的 IDAT 负载字节数,含尾部尚未收全的 chunk 的已到部分——静态渐进管线的
+   * 可显示信号(宽容解码器能 inflate 已有的这部分数据)。
+   */
+  idatBytes?: number;
 }
 
 /** Standalone IEND chunk bytes (len=0, CRC precomputed) — 独立 IEND chunk 字节(长度 0,CRC 预算好) */
@@ -44,14 +53,22 @@ export function scanPng(buf: Uint8Array): PngScan {
   let sawIDAT = false;
   let inIdatRun = false;
   let firstFrameReady = false;
+  let idatBytes = 0;
 
   let p = 8;
   while (p + 8 <= buf.length) {
     const len = readBE32(buf, p);
     const total = 12 + len;
-    if (p + total > buf.length) break; // chunk not fully arrived yet — chunk 未收全
-
     const type = String.fromCharCode(buf[p + 4]!, buf[p + 5]!, buf[p + 6]!, buf[p + 7]!);
+
+    if (p + total > buf.length) {
+      // Chunk tail not arrived — still count the received part of IDAT payload
+      // toward displayability before breaking.
+      // chunk 尾部未收全——break 前仍把 IDAT 负载的已到部分计入可显示信号。
+      if (type === "IDAT") idatBytes += Math.max(0, Math.min(len, buf.length - (p + 8)));
+      break;
+    }
+
     const dataStart = p + 8;
 
     if (type === "IHDR") {
@@ -68,6 +85,7 @@ export function scanPng(buf: Uint8Array): PngScan {
         status = sawACTL ? "animated" : "static";
       }
       inIdatRun = true;
+      idatBytes += len;
     } else {
       if (sawIDAT && inIdatRun) firstFrameReady = true;
       inIdatRun = false;
@@ -76,7 +94,7 @@ export function scanPng(buf: Uint8Array): PngScan {
     p += total;
   }
 
-  return { status, width, height, palette, firstFrameReady };
+  return { status, width, height, palette, firstFrameReady, idatBytes };
 }
 
 /**

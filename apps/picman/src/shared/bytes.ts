@@ -48,6 +48,18 @@ export function readLE24(buf: Uint8Array, off: number): number {
 }
 
 /**
+ * Read big-endian uint16.
+ *
+ * 读大端 16 位无符号整数。
+ * @param buf - Source bytes — 源字节
+ * @param off - Byte offset — 偏移
+ * @returns Value — 数值
+ */
+export function readBE16(buf: Uint8Array, off: number): number {
+  return (buf[off]! << 8) | buf[off + 1]!;
+}
+
+/**
  * Read big-endian uint32.
  *
  * 读大端 32 位无符号整数。
@@ -57,6 +69,18 @@ export function readLE24(buf: Uint8Array, off: number): number {
  */
 export function readBE32(buf: Uint8Array, off: number): number {
   return ((buf[off]! << 24) | (buf[off + 1]! << 16) | (buf[off + 2]! << 8) | buf[off + 3]!) >>> 0;
+}
+
+/**
+ * Read a 4-character ASCII box/chunk type tag.
+ *
+ * 读取 4 字符 ASCII 盒子/chunk 类型标签。
+ * @param buf - Source bytes — 源字节
+ * @param off - Byte offset — 偏移
+ * @returns 4-char tag string — 4 字符标签字符串
+ */
+export function readFourCC(buf: Uint8Array, off: number): string {
+  return String.fromCharCode(buf[off]!, buf[off + 1]!, buf[off + 2]!, buf[off + 3]!);
 }
 
 /**

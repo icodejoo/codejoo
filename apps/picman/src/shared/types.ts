@@ -52,8 +52,35 @@ export interface PicmanSWOptions {
   /** Min head bytes before sniffing, default 4096 — 嗅探前最小头部字节,默认 4096 */
   headBytes?: number;
 
+  /**
+   * SW-side fallback gate for `<video>`: when true, video requests NOT carrying
+   * the play marker get a tiny deferred response (no bytes downloaded), and
+   * only marked (user-play) requests pass through. Default false — the page-side
+   * facade already prevents eager loads; enabling this WITHOUT `auto({ videos:true })`
+   * on every controlled page will break plain videos, so keep it off unless the
+   * facade fully covers the site.
+   *
+   * SW 端对 `<video>` 的兜底门控:为 true 时,未带播放标记的视频请求返回极小 deferred 响应
+   * (不下载字节),仅带标记(用户播放)的请求放行。默认 false——页面端 facade 已能阻止贪婪加载;
+   * 若未在每个受控页启用 `auto({ videos:true })` 就打开本项,会让普通视频失效,故除非 facade 全覆盖否则保持关闭。
+   */
+  deferVideos?: boolean;
+
   /** Max bytes to wait for first frame, default 524288 — 首帧最大等待字节,默认 524288 */
   firstFrameMaxBytes?: number;
+
+  /**
+   * Progressive loading for large static PNG/JPEG: placeholder first, then a
+   * partial-bytes thumbnail the moment enough pixel data has arrived for a
+   * tolerant decoder to show something (dynamic per image — depends on where
+   * its pixel data starts and how it's encoded, not a fixed byte count), then
+   * the full image. Default true.
+   *
+   * 静态大图 PNG/JPEG 的渐进加载:先占位,一旦到达的像素数据足以让宽容解码器显示出
+   * 内容就给部分字节缩略图(逐图动态判定——取决于像素数据起点与编码方式,不是固定
+   * 字节数),最后完整图。默认 true。
+   */
+  staticProgressive?: boolean;
 
   /** Cache tuning — 缓存配置 */
   cache?: { name?: string; maxEntries?: number; maxAgeSeconds?: number };
@@ -85,7 +112,7 @@ export type ResolvedSWOptions = Required<Omit<PicmanSWOptions, "cache" | "onErro
 export function resolveSWOptions(o: PicmanSWOptions = {}): ResolvedSWOptions {
   return {
     threshold: o.threshold ?? 102400,
-    include: o.include ?? [/\.(gif|png|apng|webp)(\?|$)/i],
+    include: o.include ?? [/\.(gif|png|apng|webp|avif|jpe?g)(\?|$)/i],
     exclude: o.exclude ?? [],
     colorBlock: o.colorBlock ?? "gradient",
     fallbackColor: o.fallbackColor ?? "#e0e0e0",
@@ -93,6 +120,8 @@ export function resolveSWOptions(o: PicmanSWOptions = {}): ResolvedSWOptions {
     blurRadius: o.blurRadius ?? 12,
     headBytes: o.headBytes ?? 4096,
     firstFrameMaxBytes: o.firstFrameMaxBytes ?? 512 * 1024,
+    staticProgressive: o.staticProgressive ?? true,
+    deferVideos: o.deferVideos ?? false,
     cache: {
       name: o.cache?.name ?? CACHE_NAME,
       maxEntries: o.cache?.maxEntries ?? 200,

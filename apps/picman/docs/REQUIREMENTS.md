@@ -1,6 +1,6 @@
 # @codejoo/picman 需求现状
 
-> 最后更新:2026-07-16(对应 [docs/logs/2026-07-16-1.md](logs/2026-07-16-1.md))
+> 最后更新:2026-07-16(对应 [docs/logs/2026-07-16-2.md](logs/2026-07-16-2.md))
 
 ## 一句话定位
 
@@ -116,6 +116,40 @@ vitest,四层:
 2. **管线逻辑单测**:SW 管线依赖注入(fetch/caches/clients/canvas 可注入),mock 测阈值判定、计数转档、去重、LRU、通知对账。
 3. **DOM 侧单测**:happy-dom 跑 `auto()`、`<pic-man>`、降级路径。
 4. **真浏览器验收**:examples/ demo 页 + 限速本地服务人工验收;自动化 e2e v1 不做。
+
+## v2 视频拦截:封面占位 + 延迟放行(降 LCP)
+
+> 详见 [docs/logs/2026-07-16-2.md](logs/2026-07-16-2.md)。
+
+面向 LCP:首屏 `<video>`(尤其 autoplay/preload hero 视频)会被浏览器贪婪下载抢带宽。picman 用一张封面顶住首屏,把真实视频字节推迟到用户播放(或对 autoplay 视频推迟到 LCP 之后)再下。
+
+关键前提(与图片管线的本质差异):
+
+- SW 无法零解码抽视频帧(MP4/WebM 容器不支持字节截断出单帧),占位图也不能作为 `<video>` 响应体——**封面必然在页面端生成并落到 `poster`**。
+- 不能为抓封面反而提前下视频——封面优先复用 `poster`(零额外请求),无 poster 才在关键路径外廉价抓一帧。
+
+### 数据流(页面端 facade 为主)
+
+```
+auto({ videos: true }) 跟踪 <video>
+  → 中和贪婪加载:摘 src / <source> src、preload="none"、去 autoplay(保留 poster),load() 中止在途
+  → 封面占位:
+      有 poster → 直接用(降 LCP 主路径,最常见)
+      无 poster → 先上 SVG 色块;videoFrame 开启则在 idle(LCP 之后)用小 Range fetch 抓首帧升级,失败停留色块
+  → 还原真实源(src 带 __picman_play__ 标记)并播放:
+      用户手势(pointerenter/pointerdown/focus)、程序化 .play()、
+      autoplay 视频按 videoAutoplay 策略在 LCP 之后经 requestIdleCallback 放行(离屏交 IntersectionObserver)
+```
+
+### 配置
+
+- 页面端 `PicmanAutoOptions`:`videos`(默认 false,opt-in)、`videoFrame`(默认 true)、`videoRangeBytes`(默认 262144)、`videoAutoplay`(`'after-lcp'`|`'immediate'`|`false`,默认 `'after-lcp'`)、`videoAutoplayDelay`(默认 2000)。
+- SW 端 `PicmanSWOptions.deferVideos`(默认 false):兜底门控——未带播放标记的视频请求返回极小 deferred 响应;仅当 facade 全覆盖站点时才开,否则会让普通视频失效。
+
+### 降级
+
+- 跨域视频:走 `fetch(mode:'cors')→blob URL→canvas`(blob 同源不污染);拿到 opaque / 无 CORS 时 `toDataURL` 抛 `SecurityError`,已兜住并退回色块。建议跨域视频配 CORS 或直接给 `poster`。
+- facade 未覆盖(SSR 首屏、框架中和后重设 src):v1 仅靠 `load()` 兜底,不追踪 video 的 `src` 再变更。
 
 ## 延后到下一轮的议题(静图)
 

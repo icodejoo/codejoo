@@ -18,7 +18,6 @@
         color: #555;
       }
       img,
-      pic-man,
       video {
         max-width: 320px;
         border: 1px solid #ddd;
@@ -27,146 +26,192 @@
         color: #888;
         font-size: 0.85rem;
       }
+      .log {
+        margin-top: 16px;
+        padding: 8px;
+        background: #111;
+        color: #0f0;
+        font-family: ui-monospace, monospace;
+        font-size: 12px;
+        white-space: pre-wrap;
+        max-height: 300px;
+        overflow-y: auto;
+      }
+      .spacer {
+        height: 1400px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        background: repeating-linear-gradient(45deg, #f4f4f4, #f4f4f4 20px, #e8e8e8 20px, #e8e8e8 40px);
+        color: #999;
+        font-size: 1.2rem;
+        border: 1px dashed #ccc;
+      }
     </style>
   </head>
   <body>
-    <h1>picman 三段渐进加载 demo</h1>
-    <p class="note">
-      运行前先放一张较大的动图到 <code>examples/big.gif</code>(建议 &gt; 500KB,便于在限速下观察三段时间轴), 再执行 <code>pnpm build &amp;&amp; node --experimental-strip-types examples/serve.ts --throttle 51200</code>,
-      浏览器打开 <code>http://localhost:8787</code>。
-    </p>
+    <h1>picman demo</h1>
+    <p id="sw-status" class="note" style="font-weight: bold">SW 状态检测中...</p>
 
     <section>
-      <h2>测试跨域 CDN URL</h2>
-      <input id="cdn-url" type="text" placeholder="输入图片 URL" style="width: 100%; padding: 8px; margin-bottom: 8px;" />
-      <button id="load-cdn" style="padding: 8px 16px;">加载</button>
-      <div id="cdn-result" style="margin-top: 16px;">
-        <div id="cdn-stage" style="margin-bottom: 8px; font-weight: bold; color: #666;"></div>
-        <img id="cdn-img" alt="CDN" style="max-width: 320px; border: 1px solid #ddd; display: none;" />
-      </div>
+      <h2>A. 零改造接管(auto)—— 跨域 CDN 图片,直接写 &lt;img src&gt;</h2>
+      <p class="note">
+        不经过任何 JS API,原样一个 &lt;img&gt; 标签,src 直接指向跨域 CDN URL。picman 的 auto() 扫描到它后自动接管,随 SW 阶段推进自行替换 src。 下方展示图额外做了一层演示用的延迟:切到完整动画前固定停留 3
+        秒,方便肉眼观察阶段切换,不影响 auto() 本身的接管时机。
+      </p>
+      <img
+        id="cdn-img"
+        crossorigin="anonymous"
+        src="https://digiplus-prod.imgix.net/externals/C66FM/img/_wms/_l/electronicgames/OP0714/Bathala1000eventGIF.webp?auto=format&w=240&fit=max"
+        alt="跨域 CDN 动图(真实接管,隐藏)"
+        style="display: none"
+      />
+      <img id="cdn-img-display" alt="跨域 CDN 动图(演示展示层)" />
+      <div id="img-log" class="log"></div>
     </section>
 
     <section>
-      <h2>A. 零改造接管(auto)—— &lt;img&gt; 原样写</h2>
-      <img src="/big.gif" alt="auto 模式" />
+      <h2>C. 零改造接管(auto)—— 同域 giphy.gif,直接写 &lt;img src&gt;</h2>
+      <p class="note">同 A,但换成同域静态 GIF 文件,作为跨域 CDN 场景的对照组;同样延迟 3 秒才展示完整动画。</p>
+      <img id="gif-img" src="/giphy.gif" alt="同域 GIF(真实接管,隐藏)" style="display: none" />
+      <img id="gif-img-display" alt="同域 GIF(演示展示层)" />
+      <div id="gif-log" class="log"></div>
     </section>
 
     <section>
-      <h2>C. Web Component —— &lt;pic-man&gt;</h2>
-      <pic-man src="/big.gif" alt="pic-man 模式"></pic-man>
-    </section>
-
-    <section>
-      <h2>B. 显式 API —— load()</h2>
-      <img id="explicit-img" alt="load() 模式" />
-      <p id="explicit-stage" class="note"></p>
-    </section>
-
-    <section>
-      <h2>D. 视频接管(auto videos)—— 有 poster,autoplay</h2>
-      <p class="note">封面直接用 poster,首屏零视频请求;首屏渲染后(after-lcp)才放行自动播放。放一份 <code>examples/big.mp4</code>(faststart)与一张 <code>examples/poster.jpg</code>。</p>
-      <video src="/big.mp4" poster="/poster.jpg" autoplay muted loop playsinline></video>
-    </section>
-
-    <section>
-      <h2>E. 视频接管(auto videos)—— 无 poster</h2>
-      <p class="note">先上色块封面,首屏空闲后拉视频开头一小段抽首帧当封面;鼠标移上去或点击才装回真实源播放。</p>
-      <video src="/big.mp4" controls muted loop playsinline></video>
+      <h2>B. 视频 IntersectionObserver 验证 —— autoplay 视频,首屏外</h2>
+      <p class="note">
+        下面这个 &lt;video autoplay&gt; 没有 poster,先上纯色块占位,picman 在关键路径外抓取真实首帧并升级 poster(色块 → 首帧)。 它在页面加载时并不在视口内(隔着一大段占位内容)。picman 的 video facade 在 after-lcp
+        空闲窗口触发时,若视频不在视口内,会转为用 IntersectionObserver 监视它, 真正滚动进入视口才还原真实源;演示额外加了一层:还原后先暂停,固定停留 3 秒才真正开始播放,方便肉眼观察这一步,不影响 auto() 本身还原真实源的时机。
+        向下滚动到视频出现,观察下方日志。
+      </p>
+      <div class="spacer">↓ 向下滚动,视频在这段占位之后 ↓</div>
+      <video id="test-video" src="/big.mp4" autoplay muted loop playsinline></video>
+      <div id="video-log" class="log"></div>
     </section>
 
     <script type="module">
       import { registerPicmanSW } from "../dist/esm/index.mjs";
-      import { auto, load } from "../dist/esm/index.mjs";
-      import "../dist/esm/element.mjs";
+      import { auto } from "../dist/esm/index.mjs";
 
+      const swStatusEl = document.getElementById("sw-status");
       const { controlled } = await registerPicmanSW("/picman-sw.js");
       if (!controlled) {
-        // First visit — the SW isn't controlling this page yet; reload once it takes over.
-        // 首次访问——SW 尚未接管本页,注册完成后刷新一次即可生效。
-        console.log("picman SW registered, reload to activate control");
+        // 首次访问——SW 尚未接管本页。避免死循环:只自动刷新一次(用 sessionStorage 打标记),
+        // 刷新后仍未接管才提示用户手动处理(理论上不该发生,除非 SW 注册失败)。
+        if (!sessionStorage.getItem("picman-demo-reloaded")) {
+          sessionStorage.setItem("picman-demo-reloaded", "1");
+          swStatusEl.textContent = "⏳ SW 已注册但尚未接管本页,即将自动刷新一次...";
+          location.reload();
+        } else {
+          swStatusEl.textContent = "❌ 刷新后 SW 仍未接管本页 —— 后续加载会走无拦截直通路径,三段加载不会生效";
+          swStatusEl.style.color = "red";
+        }
+      } else {
+        sessionStorage.removeItem("picman-demo-reloaded");
+        swStatusEl.textContent = "✅ SW 已接管本页(navigator.serviceWorker.controller 存在),demo 应正常生效";
+        swStatusEl.style.color = "green";
       }
 
-      auto({ videos: true });
+      auto({ videos: true, videoFrame: true });
 
-      const img = document.getElementById("explicit-img");
-      const stageEl = document.getElementById("explicit-stage");
-      const task = load("/big.gif").onStage((stage, displayUrl) => {
-        stageEl.textContent = `stage: ${stage}`;
-        img.src = displayUrl;
-      });
-      task.done.catch((err) => console.error("load() failed", err));
+      /** 追加一行带相对起点毫秒时间戳的日志 — append one timestamped log line relative to t0 */
+      function makeLogger(el, t0) {
+        return (msg) => {
+          const line = `[+${(Date.now() - t0).toString().padStart(6, " ")}ms] ${msg}`;
+          el.textContent += line + "\n";
+          el.scrollTop = el.scrollHeight;
+          console.log(line);
+        };
+      }
 
-      // 跨域 CDN 测试
-      const urlInput = document.getElementById("cdn-url");
-      const loadBtn = document.getElementById("load-cdn");
-      const cdnStageEl = document.getElementById("cdn-stage");
-      const cdnImgEl = document.getElementById("cdn-img");
+      // 完整动画切换前,演示展示层固定停留的时长——只影响展示层视觉呈现,
+      // 不影响 auto() 本身接管/切换真实 <img> 的时机。
+      // Fixed dwell time before the display layer swaps to the full animation —
+      // only affects the demo's visual layer, never auto()'s own swap timing.
+      const DEMO_COMPLETE_DELAY_MS = 3000;
 
-      const stageTexts = {
-        placeholder: "第一阶段：占位符（SVG 色块）",
-        "first-frame": "第二阶段：首帧（静态，不动）",
-        complete: "第三阶段：完整（动画可播放）"
-      };
-
-      loadBtn.addEventListener("click", () => {
-        const url = urlInput.value.trim();
-        if (!url) {
-          cdnStageEl.textContent = "请输入 URL";
-          cdnImgEl.style.display = "none";
-          return;
-        }
-        cdnStageEl.textContent = "加载中...";
-        cdnImgEl.style.display = "none";
-
-        let completeUrl = null;
-        let firstFrameTime = null;
-        const MIN_FIRST_FRAME_DISPLAY_MS = 3000;
-
-        const cdnTask = load(url).onStage((stage, displayUrl) => {
-          if (stage === "placeholder") {
-            firstFrameTime = Date.now();
-            cdnStageEl.textContent = stageTexts[stage];
-            cdnImgEl.src = displayUrl;
-            cdnImgEl.style.display = "block";
-            cdnImgEl.style.opacity = "0.3";
-            cdnImgEl.title = "占位符（SVG 色块）";
-          } else if (stage === "first-frame") {
-            firstFrameTime = Date.now();
-            cdnStageEl.textContent = stageTexts[stage];
-            cdnImgEl.src = displayUrl;
-            cdnImgEl.style.opacity = "0.6";
-            cdnImgEl.title = "这是首帧的静态版本（不动）";
-          } else if (stage === "complete") {
-            completeUrl = displayUrl;
-            // 确保首帧至少显示 3 秒，然后才切换到完整动画
-            if (firstFrameTime) {
-              const elapsedMs = Date.now() - firstFrameTime;
-              const remainingMs = Math.max(0, MIN_FIRST_FRAME_DISPLAY_MS - elapsedMs);
+      /**
+       * 用 MutationObserver 观察 auto() 零改造接管下真实 img.src 的实际切换,
+       * 并驱动一个额外的"展示层" <img>:占位/首帧立即同步,完整动画延迟展示。
+       * Observe the real (auto()-managed) img.src via MutationObserver and drive
+       * a separate "display" <img>: placeholder/first-frame sync immediately,
+       * the full animation is held back for DEMO_COMPLETE_DELAY_MS.
+       * @param realImg - 被 auto() 接管的真实(隐藏)img — the real, auto()-managed (hidden) img
+       * @param displayImg - 仅用于演示展示的 img — display-only img for the demo
+       * @param log - 该组的日志函数 — this group's logger
+       */
+      function wireDelayedDisplay(realImg, displayImg, log) {
+        displayImg.src = realImg.getAttribute("src");
+        log(`初始 src: ${realImg.getAttribute("src")}`);
+        new MutationObserver((muts) => {
+          for (const m of muts) {
+            if (m.type !== "attributes" || m.attributeName !== "src") continue;
+            const newSrc = realImg.getAttribute("src");
+            log(`src 变为: ${newSrc}`);
+            if (newSrc.includes("__picman_full__=1")) {
+              log(`(展示层延迟 ${DEMO_COMPLETE_DELAY_MS}ms 后再切到完整动画)`);
               setTimeout(() => {
-                cdnStageEl.textContent = stageTexts[stage] + " - 现在动起来！";
-                cdnImgEl.src = completeUrl;
-                cdnImgEl.style.opacity = "1";
-                cdnImgEl.title = "完整的动画资源现在在播放";
-              }, remainingMs);
+                displayImg.src = newSrc;
+                log(`展示层已切到完整动画: ${newSrc}`);
+              }, DEMO_COMPLETE_DELAY_MS);
             } else {
-              // 如果没有首帧阶段，直接显示完整版本
-              cdnStageEl.textContent = stageTexts[stage];
-              cdnImgEl.src = completeUrl;
-              cdnImgEl.style.opacity = "1";
-              cdnImgEl.title = "完整的动画资源";
+              displayImg.src = newSrc;
             }
           }
-        });
-        cdnTask.done.catch((err) => {
-          cdnStageEl.textContent = `❌ 加载失败: ${err.message}`;
-          cdnImgEl.style.display = "none";
-          console.error("CDN load failed", err);
-        });
-      });
+        }).observe(realImg, { attributes: true, attributeFilter: ["src"] });
+      }
 
-      // 快速测试，允许 Enter 键加载
-      urlInput.addEventListener("keydown", (e) => {
-        if (e.key === "Enter") loadBtn.click();
+      // A. 跨域 CDN 图片
+      const t0 = Date.now();
+      const imgLog = makeLogger(document.getElementById("img-log"), t0);
+      wireDelayedDisplay(document.getElementById("cdn-img"), document.getElementById("cdn-img-display"), imgLog);
+
+      // C. 同域 GIF 对照组
+      const gifLog = makeLogger(document.getElementById("gif-log"), t0);
+      wireDelayedDisplay(document.getElementById("gif-img"), document.getElementById("gif-img-display"), gifLog);
+
+      // B. 观察 video 的 src/poster 属性变化 + 滚动位置,验证 IntersectionObserver 触发时机
+      const video = document.getElementById("test-video");
+      const videoLogEl = document.getElementById("video-log");
+      const videoLog = makeLogger(videoLogEl, t0);
+      videoLog(`初始 src: ${video.getAttribute("src") ?? "(空)"}, poster: ${video.getAttribute("poster") ?? "(空)"}`);
+
+      new MutationObserver((muts) => {
+        for (const m of muts) {
+          if (m.type === "attributes" && (m.attributeName === "src" || m.attributeName === "poster" || m.attributeName === "preload")) {
+            videoLog(`${m.attributeName} 变为: ${video.getAttribute(m.attributeName) ?? "(空)"}`);
+          }
+        }
+      }).observe(video, { attributes: true, attributeFilter: ["src", "poster", "preload"] });
+
+      let lastLoggedInViewport = null;
+      const checkViewport = () => {
+        const r = video.getBoundingClientRect();
+        const inViewport = r.top < innerHeight && r.bottom > 0;
+        if (inViewport !== lastLoggedInViewport) {
+          lastLoggedInViewport = inViewport;
+          videoLog(`视频${inViewport ? "进入" : "离开"}视口(rect.top=${Math.round(r.top)})`);
+        }
+      };
+      window.addEventListener("scroll", checkViewport, { passive: true });
+      checkViewport();
+
+      // 还原真实源后,auto() 会立即调用 play()——演示上先暂停住,固定停留
+      // DEMO_COMPLETE_DELAY_MS 后才真正开始播放,方便肉眼观察这一步;
+      // 不影响 auto() 本身还原真实源(即换上真实 src)的时机。
+      let videoDelayHandled = false;
+      video.addEventListener("play", () => {
+        videoLog("video play 事件触发");
+        if (videoDelayHandled) return;
+        videoDelayHandled = true;
+        video.pause();
+        videoLog(`(演示延迟 ${DEMO_COMPLETE_DELAY_MS}ms 后才真正开始播放)`);
+        setTimeout(() => {
+          video.currentTime = 0;
+          video.play().catch(() => {});
+          videoLog("视频已开始播放");
+        }, DEMO_COMPLETE_DELAY_MS);
       });
     </script>
   </body>

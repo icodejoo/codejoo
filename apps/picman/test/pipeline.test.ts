@@ -1,8 +1,8 @@
 import { describe, expect, it, vi } from "vitest";
 import { handleImageRequest, shouldIntercept, type PipelineDeps } from "../src/sw/pipeline";
 import { resolveSWOptions } from "../src/shared/types";
-import { HEADER_MARK, PARAM_BYPASS, withStageParam } from "../src/shared/protocol";
-import { makeGif } from "./fixtures";
+import { HEADER_MARK, PARAM_BYPASS, withPlayParam, withStageParam } from "../src/shared/protocol";
+import { makeBigPng, makeGif, makeJpeg } from "./fixtures";
 
 const GIF_URL = "https://a.com/big.gif";
 
@@ -42,10 +42,22 @@ describe("shouldIntercept", () => {
   it("非 image destination → false", () => {
     expect(shouldIntercept(withDest(img(GIF_URL), "script"), o)).toBe(false);
   });
-  it("include 命中 image → true;exclude 优先", () => {
+  it("include 命中 image → true(含 jpg);exclude 优先", () => {
     expect(shouldIntercept(withDest(img(GIF_URL), "image"), o)).toBe(true);
-    expect(shouldIntercept(withDest(img("https://a.com/x.jpg"), "image"), o)).toBe(false);
+    expect(shouldIntercept(withDest(img("https://a.com/x.jpg"), "image"), o)).toBe(true);
+    expect(shouldIntercept(withDest(img("https://a.com/x.txt"), "image"), o)).toBe(false);
     expect(shouldIntercept(withDest(img(GIF_URL), "image"), resolveSWOptions({ exclude: [/big/] }))).toBe(false);
+  });
+
+  const VIDEO_URL = "https://a.com/hero.mp4";
+  it("video 默认不拦(deferVideos 关)", () => {
+    expect(shouldIntercept(withDest(img(VIDEO_URL), "video"), o)).toBe(false);
+  });
+  it("video + deferVideos:未带播放标记 → true", () => {
+    expect(shouldIntercept(withDest(img(VIDEO_URL), "video"), resolveSWOptions({ deferVideos: true }))).toBe(true);
+  });
+  it("video + deferVideos:带播放标记 → false(原生放行)", () => {
+    expect(shouldIntercept(withDest(img(withPlayParam(VIDEO_URL)), "video"), resolveSWOptions({ deferVideos: true }))).toBe(false);
   });
 });
 
@@ -117,6 +129,15 @@ describe("handleImageRequest", () => {
     expect(await resp.text()).toBe("retry");
     expect(onError).toHaveBeenCalled();
   });
+  it("video deferred:destination=video → 204 极小响应且不 fetch", async () => {
+    const d = makeDeps();
+    const req = new Request("https://a.com/hero.mp4");
+    Object.defineProperty(req, "destination", { value: "video" });
+    const resp = await handleImageRequest(req, d);
+    expect(resp.status).toBe(204);
+    expect(resp.headers.get(HEADER_MARK)).toBe("deferred");
+    expect(d.fetchImpl).not.toHaveBeenCalled();
+  });
   it("同 URL 并发:第二个请求复用同一下载(fetch 只调一次)", async () => {
     const gif = makeGif({ frames: 3, loop: true });
     const d = makeDeps();
@@ -125,5 +146,70 @@ describe("handleImageRequest", () => {
     expect(d.fetchImpl).toHaveBeenCalledTimes(1);
     expect(await r1.text()).toContain("<svg");
     expect(await r2.text()).toContain("<svg");
+  });
+
+  describe("静态渐进(staticProgressive)", () => {
+    const JPG_URL = "https://a.com/photo.jpg";
+    const PNG_URL = "https://a.com/photo.png";
+
+    it("大 baseline JPEG:占位 SVG,可显示信号触发后 ff=已到前缀原始字节,最后 complete", async () => {
+      const jpg = makeJpeg({ scanBytes: 12000 });
+      const d = makeDeps();
+      (d.fetchImpl as ReturnType<typeof vi.fn>).mockResolvedValue(streamResponse(jpg, 1024));
+      const resp = await handleImageRequest(new Request(JPG_URL), d);
+      expect(resp.headers.get(HEADER_MARK)).toBe("placeholder");
+      expect(await resp.text()).toContain("<svg");
+
+      await drain(d);
+      const ffCall = (d.cache.putStage as ReturnType<typeof vi.fn>).mock.calls.find((c) => c[1] === "ff");
+      expect(ffCall).toBeDefined();
+      const ffResp = ffCall![2] as Response;
+      expect(ffResp.headers.get("Content-Type")).toBe("image/jpeg");
+      // ff 是"已到前缀原始字节":比完整文件短,但已越过可显示门槛
+      const ffBytes = new Uint8Array(await ffResp.arrayBuffer());
+      expect(ffBytes.length).toBeGreaterThan(4096);
+      expect(ffBytes.length).toBeLessThan(jpg.length);
+      expect(ffBytes[0]).toBe(0xff);
+      expect(ffBytes[1]).toBe(0xd8);
+
+      expect(d.notify).toHaveBeenCalledWith({ picman: 1, type: "first-frame", url: JPG_URL });
+      expect(d.notify).toHaveBeenCalledWith({ picman: 1, type: "complete", url: JPG_URL });
+      const fullCall = (d.cache.putStage as ReturnType<typeof vi.fn>).mock.calls.find((c) => c[1] === "1");
+      expect(new Uint8Array(await (fullCall![2] as Response).arrayBuffer())).toEqual(jpg);
+    });
+
+    it("大静态 PNG:同样进入静态渐进流程", async () => {
+      const png = makeBigPng({ idatBytes: 20000 });
+      const d = makeDeps();
+      (d.fetchImpl as ReturnType<typeof vi.fn>).mockResolvedValue(streamResponse(png, 2048));
+      const resp = await handleImageRequest(new Request(PNG_URL), d);
+      expect(resp.headers.get(HEADER_MARK)).toBe("placeholder");
+
+      await drain(d);
+      const ffCall = (d.cache.putStage as ReturnType<typeof vi.fn>).mock.calls.find((c) => c[1] === "ff");
+      expect((ffCall![2] as Response).headers.get("Content-Type")).toBe("image/png");
+      expect(d.notify).toHaveBeenCalledWith({ picman: 1, type: "complete", url: PNG_URL });
+    });
+
+    it("staticProgressive: false 时静态大图原样透传", async () => {
+      const jpg = makeJpeg({ scanBytes: 12000 });
+      const d = makeDeps({ options: resolveSWOptions({ threshold: 10, headBytes: 16, staticProgressive: false }) });
+      (d.fetchImpl as ReturnType<typeof vi.fn>).mockResolvedValue(streamResponse(jpg, 1024));
+      const resp = await handleImageRequest(new Request(JPG_URL), d);
+      expect(resp.headers.get(HEADER_MARK)).toBeNull();
+      expect(new Uint8Array(await resp.arrayBuffer())).toEqual(jpg);
+    });
+
+    it("动图流程不受影响:GIF 仍走首帧重组路径", async () => {
+      const gif = makeGif({ frames: 3, loop: true });
+      const d = makeDeps();
+      (d.fetchImpl as ReturnType<typeof vi.fn>).mockResolvedValue(streamResponse(gif, 7));
+      await handleImageRequest(new Request(GIF_URL), d);
+      await drain(d);
+      // 动图的 ff 是 makeFirstFrame 光栅化的 PNG,不是原始前缀字节
+      const ffCall = (d.cache.putStage as ReturnType<typeof vi.fn>).mock.calls.find((c) => c[1] === "ff");
+      expect((ffCall![2] as Response).headers.get("Content-Type")).toBe("image/png");
+      expect(d.makeFirstFrame).toHaveBeenCalled();
+    });
   });
 });

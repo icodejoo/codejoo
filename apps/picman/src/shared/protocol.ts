@@ -14,6 +14,9 @@ export const PARAM_FULL = "__picman_full__";
 /** Query param forcing network passthrough (retry) — 强制透传网络的重试参数 */
 export const PARAM_BYPASS = "__picman_bypass__";
 
+/** Query param marking a user-initiated video play request (SW lets it through) — 标记用户发起的视频播放请求(SW 放行) */
+export const PARAM_PLAY = "__picman_play__";
+
 /** Response header marking picman-generated responses — picman 生成响应的标记头 */
 export const HEADER_MARK = "X-Picman";
 
@@ -55,6 +58,7 @@ export function stripPicmanParams(url: string): string {
   const u = new URL(url);
   u.searchParams.delete(PARAM_FULL);
   u.searchParams.delete(PARAM_BYPASS);
+  u.searchParams.delete(PARAM_PLAY);
   return u.href;
 }
 
@@ -70,5 +74,19 @@ export function stripPicmanParams(url: string): string {
 export function withStageParam(url: string, stage: PicmanStage): string {
   const u = new URL(url);
   u.searchParams.set(PARAM_FULL, stage);
+  return u.href;
+}
+
+/**
+ * Append the play marker used to release a deferred video through the SW.
+ *
+ * 追加播放标记,用于让被延迟的视频经 SW 放行。
+ * @param url - Canonical original video URL — 规范化原始视频 URL
+ * @returns URL carrying the play marker — 带播放标记的 URL
+ * @example withPlayParam('https://a.com/hero.mp4')
+ */
+export function withPlayParam(url: string): string {
+  const u = new URL(url);
+  u.searchParams.set(PARAM_PLAY, "1");
   return u.href;
 }

@@ -1,0 +1,455 @@
+<title>picman 请求→显示全流程</title>
+<style>
+  :root {
+    --paper: #eef1ef;
+    --paper-raised: #e2e8e4;
+    --ink: #16211d;
+    --ink-dim: #45564e;
+    --line: #547069;
+    --accent: #b5651d;
+    --accent-soft: #f0dcc0;
+    --accent2: #2b6f77;
+    --accent2-soft: #d9e9ea;
+    --danger: #a13a2f;
+    --danger-soft: #f3ded9;
+  }
+  :root[data-theme="dark"] {
+    --paper: #0e1513;
+    --paper-raised: #16201d;
+    --ink: #dde6e2;
+    --ink-dim: #93a49d;
+    --line: #6f8a82;
+    --accent: #e0a04d;
+    --accent-soft: #3a2c17;
+    --accent2: #4fa3ac;
+    --accent2-soft: #14282a;
+    --danger: #d9695a;
+    --danger-soft: #341f1c;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --paper: #0e1513;
+      --paper-raised: #16201d;
+      --ink: #dde6e2;
+      --ink-dim: #93a49d;
+      --line: #6f8a82;
+      --accent: #e0a04d;
+      --accent-soft: #3a2c17;
+      --accent2: #4fa3ac;
+      --accent2-soft: #14282a;
+      --danger: #d9695a;
+      --danger-soft: #341f1c;
+    }
+  }
+
+  * {
+    box-sizing: border-box;
+  }
+  html,
+  body {
+    background: var(--paper);
+    color: var(--ink);
+    font-family: -apple-system, "Segoe UI", "PingFang SC", "Noto Sans SC", sans-serif;
+    margin: 0;
+  }
+  body {
+    max-width: 1180px;
+    margin: 0 auto;
+    padding: 3rem 1.5rem 5rem;
+  }
+  code,
+  .mono {
+    font-family: ui-monospace, "SF Mono", Consolas, "Cascadia Code", monospace;
+    font-size: 0.86em;
+  }
+
+  header.top {
+    border-bottom: 2px solid var(--line);
+    padding-bottom: 1.5rem;
+    margin-bottom: 2.25rem;
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-end;
+    gap: 1.5rem;
+    flex-wrap: wrap;
+  }
+  h1 {
+    font-size: clamp(1.5rem, 2.6vw, 2rem);
+    font-weight: 800;
+    letter-spacing: -0.01em;
+    margin: 0 0 0.4rem;
+    text-wrap: balance;
+  }
+  .kicker {
+    text-transform: uppercase;
+    letter-spacing: 0.14em;
+    font-size: 0.72rem;
+    font-weight: 700;
+    color: var(--accent);
+    margin: 0 0 0.5rem;
+  }
+  .subtitle {
+    color: var(--ink-dim);
+    font-size: 0.95rem;
+    max-width: 60ch;
+    margin: 0;
+  }
+
+  .legend {
+    display: flex;
+    gap: 1.1rem;
+    flex-wrap: wrap;
+    font-size: 0.78rem;
+    color: var(--ink-dim);
+  }
+  .legend span {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.4rem;
+    white-space: nowrap;
+  }
+  .swatch {
+    width: 0.7rem;
+    height: 0.7rem;
+    border-radius: 2px;
+    display: inline-block;
+    flex: none;
+  }
+
+  section {
+    margin-bottom: 2.75rem;
+  }
+  .section-head {
+    display: flex;
+    align-items: baseline;
+    gap: 0.75rem;
+    margin-bottom: 0.9rem;
+    border-bottom: 1px solid var(--line);
+    padding-bottom: 0.5rem;
+  }
+  .section-num {
+    font-family: ui-monospace, monospace;
+    font-size: 0.78rem;
+    color: var(--accent2);
+    font-weight: 700;
+  }
+  h2 {
+    font-size: 1.15rem;
+    font-weight: 800;
+    margin: 0;
+    letter-spacing: -0.005em;
+  }
+  .section-note {
+    color: var(--ink-dim);
+    font-size: 0.85rem;
+    margin: 0 0 1rem;
+    max-width: 72ch;
+  }
+
+  .card {
+    background: var(--paper-raised);
+    border: 1px solid var(--line);
+    border-radius: 4px;
+    padding: 1.1rem 1.2rem 0.6rem;
+    overflow-x: auto;
+  }
+  .card figcaption {
+    font-size: 0.76rem;
+    color: var(--ink-dim);
+    text-align: center;
+    padding: 0.5rem 0 0.15rem;
+    border-top: 1px dashed var(--line);
+    margin-top: 0.5rem;
+  }
+  figure {
+    margin: 0;
+  }
+  pre.mermaid {
+    margin: 0;
+  }
+
+  .row-2 {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 1.25rem;
+  }
+  @media (max-width: 820px) {
+    .row-2 {
+      grid-template-columns: 1fr;
+    }
+  }
+
+  .callout {
+    border: 1px solid var(--accent);
+    background: var(--accent-soft);
+    border-radius: 4px;
+    padding: 0.95rem 1.1rem;
+    margin-top: 1rem;
+    font-size: 0.86rem;
+    line-height: 1.55;
+  }
+  .callout.cool {
+    border-color: var(--accent2);
+    background: var(--accent2-soft);
+  }
+  .callout-label {
+    display: inline-block;
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    font-size: 0.68rem;
+    font-weight: 800;
+    color: var(--accent);
+    margin-bottom: 0.35rem;
+  }
+  .callout.cool .callout-label {
+    color: var(--accent2);
+  }
+  .callout p {
+    margin: 0.3rem 0;
+  }
+  .callout p + p {
+    margin-top: 0.5rem;
+  }
+
+  table.stages {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.84rem;
+  }
+  table.stages th,
+  table.stages td {
+    text-align: left;
+    padding: 0.55rem 0.8rem;
+    border-bottom: 1px solid var(--line);
+  }
+  table.stages th {
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    font-size: 0.68rem;
+    color: var(--ink-dim);
+    font-weight: 700;
+    border-bottom: 2px solid var(--line);
+  }
+  table.stages tr:last-child td {
+    border-bottom: none;
+  }
+  .pill {
+    display: inline-block;
+    padding: 0.1rem 0.5rem;
+    border-radius: 99px;
+    font-size: 0.72rem;
+    font-weight: 700;
+    font-family: ui-monospace, monospace;
+  }
+  .pill.placeholder {
+    background: var(--paper);
+    border: 1px solid var(--ink-dim);
+    color: var(--ink-dim);
+  }
+  .pill.ff {
+    background: var(--accent2-soft);
+    color: var(--accent2);
+    border: 1px solid var(--accent2);
+  }
+  .pill.complete {
+    background: var(--accent-soft);
+    color: var(--accent);
+    border: 1px solid var(--accent);
+  }
+
+  footer.foot {
+    margin-top: 3rem;
+    padding-top: 1rem;
+    border-top: 1px solid var(--line);
+    font-size: 0.78rem;
+    color: var(--ink-dim);
+  }
+</style>
+
+<header class="top">
+  <div>
+    <p class="kicker">picman · service worker 渐进加载</p>
+    <h1>从一次 &lt;img src&gt; 请求,到画面真正显示</h1>
+    <p class="subtitle">跨 SW / Cache Storage / 页面三方的完整时序,含首帧生成、通知竞态修复与 LCP 门控三处关键决策点。</p>
+  </div>
+  <div class="legend">
+    <span><i class="swatch" style="background: var(--ink-dim)"></i>页面 / Page</span>
+    <span><i class="swatch" style="background: var(--accent2)"></i>Service Worker</span>
+    <span><i class="swatch" style="background: var(--accent)"></i>关键决策 / 已知坑</span>
+  </div>
+</header>
+
+<section>
+  <div class="section-head">
+    <span class="section-num">01</span>
+    <h2>总览时序图 — 四方角色的完整交互</h2>
+  </div>
+  <p class="section-note">
+    一次 <code>&lt;img src&gt;</code> 从 HTML parser 发出请求开始,直到内容真正落在页面上,横跨页面、Service Worker、CDN/源站、Cache Storage 四方。 浅色阶段(占位 SVG)在几毫秒内完成;深色阶段(首帧/完整)由后台下载驱动,通过
+    <code>notify()</code> 跨进程投递,最终由页面侧的空闲调度决定何时真正生效。
+  </p>
+  <div class="card">
+    <figure>
+      <pre class="mermaid">
+sequenceDiagram
+    autonumber
+    participant P as 页面(auto/load)
+    participant SW as Service Worker
+    participant NET as CDN / 源站
+    participant C as Cache Storage
+
+    Note over P: HTML parser 解析到 img[src]<br/>或代码发起 load(url)
+    P->>SW: fetch(image, destination=image)
+    SW->>SW: shouldIntercept()<br/>method / destination / include-exclude
+
+    SW->>NET: fetch(request)
+    NET-->>SW: 响应头 + 字节流
+
+    SW->>SW: Content-Length < threshold ?
+
+    alt 小于阈值,或非动图/未知格式
+        SW-->>P: 原样透传剩余流
+    else 达到阈值且判定 animated
+        loop 累积到 headBytes,增量嗅探
+            SW->>SW: sniff(bytes) → need-more / static / animated
+        end
+        SW-->>P: 200 占位 SVG(X-Picman: placeholder,几毫秒内返回)
+        SW->>SW: waitUntil(background())
+        Note over SW: 后台继续下载,fetch 已经"结束"但<br/>waitUntil 延长 SW 生命周期
+
+        SW->>SW: tryRecomposeFirstFrame(sniff, bytes)
+        SW->>SW: makeFirstFrame() → canvas → PNG blob
+        SW->>C: putStage(url, "ff", PNG)
+        SW->>P: await notify({type:"first-frame"})
+        Note right of SW: 必须 await——postMessage 跨进程<br/>需要真实时间,不 await 会让<br/>waitUntil 提前判定"完成"
+
+        SW->>SW: 继续读取直至 done
+        SW->>C: putStage(url, "1", 原始字节)
+        SW->>P: await notify({type:"complete"})
+    end
+
+    par 与实时通知并行的对账通路
+        P->>C: caches.match(url + "?__picman_full__=ff")
+        P->>C: caches.match(url + "?__picman_full__=1")
+    end
+
+    Note over P: 两路结果都汇入 applyStageWhenIdle
+    P->>P: scheduleIdle(...) 等主线程空闲(近似 LCP 之后)
+    P->>P: img.src = 对应阶段 URL
+</pre>
+    </figure>
+    <figcaption>四条泳道:页面、Service Worker、CDN/源站、Cache Storage —— 占位响应几乎瞬时,首帧/完整由后台驱动</figcaption>
+  </div>
+</section>
+
+<section>
+  <div class="section-head">
+    <span class="section-num">02</span>
+    <h2>拆解两处关键决策</h2>
+  </div>
+  <div class="row-2">
+    <div class="card">
+      <figure>
+        <pre class="mermaid">
+flowchart TB
+    S["sniff(bytes)"] --> M{魔数匹配哪种格式?}
+    M -- GIF89a/87a --> G["scanGif()"]
+    M -- \x89PNG --> N["scanPng() 判 acTL"]
+    M -- RIFF····WEBP --> W["scanWebp() 判 VP8X"]
+    M -- ftyp box --> AV["scanAvif() 判 brand avis"]
+    M -- 都不匹配 --> ST[status: static]
+
+    G --> R{status?}
+    N --> R
+    W --> R
+    AV --> R
+    R -- animated --> FF["tryRecomposeFirstFrame()"]
+    R -- static/need-more --> ST
+
+    FF --> PNG["makeFirstFrame()<br/>decode → canvas → PNG blob"]
+    PNG --> CACHE["cache.putStage(url,'ff', PNG)<br/>Content-Type 固定 image/png"]
+</pre>
+      </figure>
+      <figcaption>四种格式的魔数分派——AVIF 走 ISOBMFF 盒式解析,首样本字节可能滞后于 moov 结构本身到达</figcaption>
+    </div>
+
+    <div class="card">
+      <figure>
+        <pre class="mermaid">
+flowchart TB
+    A["SW 实时通知<br/>message event"] --> G{applyStageWhenIdle}
+    B["Cache 对账<br/>caches.match ff / 1"] --> G
+
+    G --> H["scheduleIdle()<br/>requestIdleCallback,近似 LCP 之后"]
+    H --> I{执行时 stage 是否倒退?<br/>本次是 ff,但 stageOf 已是 1}
+    I -- 是,跳过 --> X[丢弃,保留完整内容]
+    I -- 否 --> J["stageOf.set + swapAll"]
+    J --> K["img.src / video 换成真实源"]
+</pre>
+      </figure>
+      <figcaption>两条来源汇入同一门控——无论数据从哪来,真实内容永远等到空闲才生效</figcaption>
+    </div>
+  </div>
+
+  <div class="callout">
+    <span class="callout-label">已修复的竞态</span>
+    <p>
+      <code>background()</code> 调用 <code>deps.notify(...)</code> 曾经没有 <code>await</code>。<code>notify</code> 内部要做 <code>clients.matchAll()</code> 和跨进程 <code>postMessage</code>,这需要真实时间——不等待意味着
+      <code>waitUntil()</code> 延长的生命周期没有真正覆盖投递过程,浏览器可能在消息送达前就回收了 SW 实例,通知因此静默丢失,图片永远卡在占位符阶段。
+    </p>
+    <p>
+      触发条件很刁钻:HTML parser 的 preload scanner 独立于脚本执行时序发起请求,如果下载/通知发生得足够快,可能抢在页面 <code>auto()</code> 完成 <code>message</code> 监听器注册之前——三处
+      <code>notify()</code> 调用现已全部补上 <code>await</code>。
+    </p>
+  </div>
+
+  <div class="callout cool">
+    <span class="callout-label">LCP 门控原则</span>
+    <p>无论 first-frame / complete 是通过 SW 实时通知拿到的,还是 Cache Storage 瞬间命中的,一律不在页面主线程空闲(近似 LCP 完成)之前生效——重复访问的瞬间缓存命中,不该抢在关键渲染路径前面替换成解码更重的内容。</p>
+  </div>
+</section>
+
+<section>
+  <div class="section-head">
+    <span class="section-num">03</span>
+    <h2>三段阶段一览</h2>
+  </div>
+  <div class="card" style="overflow-x: auto">
+    <table class="stages">
+      <thead>
+        <tr>
+          <th>阶段</th>
+          <th>URL 参数</th>
+          <th>内容</th>
+          <th>来源</th>
+          <th>何时对页面生效</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><span class="pill placeholder">placeholder</span></td>
+          <td><code>(无参数)</code></td>
+          <td>SVG 渐变色块,取自源图调色板</td>
+          <td>SW 同步生成</td>
+          <td>立即(几毫秒内)</td>
+        </tr>
+        <tr>
+          <td><span class="pill ff">first-frame</span></td>
+          <td><code>?__picman_full__=ff</code></td>
+          <td>光栅化 PNG 首帧(canvas 生成,<code>image/png</code>)</td>
+          <td>SW 通知 <em>或</em> Cache 对账</td>
+          <td>下一次主线程空闲</td>
+        </tr>
+        <tr>
+          <td><span class="pill complete">complete</span></td>
+          <td><code>?__picman_full__=1</code></td>
+          <td>原始完整字节(GIF/APNG/WebP/AVIF)</td>
+          <td>SW 通知 <em>或</em> Cache 对账</td>
+          <td>下一次主线程空闲(且不早于 first-frame)</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<footer class="foot">picman · Service Worker 动图渐进加载库 —— 三段时序 + 通知竞态修复 + LCP 门控</footer>

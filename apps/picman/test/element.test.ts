@@ -1,5 +1,5 @@
 // @vitest-environment happy-dom
-import { afterEach, describe, expect, it } from "vitest";
+import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest";
 import { definePicMan } from "../src/element/index";
 import { _setServiceWorkerContainer } from "../src/page/messages";
 import { withStageParam } from "../src/shared/protocol";
@@ -17,6 +17,16 @@ const URL1 = "https://a.com/x.gif";
 afterEach(() => {
   _setServiceWorkerContainer(null);
   document.body.innerHTML = "";
+});
+
+// scheduleIdle 优先用 requestIdleCallback;测试环境下替换成立即(0ms)触发的
+// setTimeout 版本,一轮宏任务即可等到"LCP 之后才应用真实阶段"的回调跑完。
+const originalRIC = (globalThis as unknown as { requestIdleCallback?: unknown }).requestIdleCallback;
+beforeAll(() => {
+  (globalThis as unknown as { requestIdleCallback: (cb: () => void) => void }).requestIdleCallback = (cb) => setTimeout(cb, 0);
+});
+afterAll(() => {
+  (globalThis as unknown as { requestIdleCallback: unknown }).requestIdleCallback = originalRIC;
 });
 
 describe("<pic-man>", () => {

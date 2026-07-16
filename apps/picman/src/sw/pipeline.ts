@@ -6,10 +6,11 @@
  */
 
 import { ByteAccumulator } from "../shared/bytes";
-import { HEADER_MARK, PARAM_BYPASS, PARAM_FULL, type PicmanMessage, type PicmanStage, stripPicmanParams } from "../shared/protocol";
+import { HEADER_MARK, PARAM_BYPASS, PARAM_FULL, PARAM_PLAY, type PicmanMessage, type PicmanStage, stripPicmanParams } from "../shared/protocol";
 import { sniff } from "../shared/sniff";
 import type { PicmanErrorContext, ResolvedSWOptions } from "../shared/types";
 import { apngFirstFrame } from "../shared/walkers/apng";
+import { avifFirstFrame } from "../shared/walkers/avif";
 import { gifFirstFrame } from "../shared/walkers/gif";
 import { webpFirstFrame } from "../shared/walkers/webp";
 import type { PicmanCacheLike } from "./cache";
@@ -25,8 +26,18 @@ export interface PipelineDeps {
   fetchImpl: typeof fetch;
   /** Stage-keyed cache — 按阶段分 key 的缓存 */
   cache: PicmanCacheLike;
-  /** Notify controlled pages — 通知受控页面 */
-  notify: (msg: PicmanMessage) => void;
+  /**
+   * Notify controlled pages. Must be awaited by callers — postMessage to a
+   * Client is cross-process and takes real (if small) time; if this isn't
+   * awaited inside the same async chain that `waitUntil()` is extending, the
+   * SW can be recycled by the browser before the message actually lands,
+   * silently dropping it.
+   *
+   * 通知受控页面。调用方必须 await——给 Client 的 postMessage 是跨进程的,需要真实
+   * (虽然很短)的时间;若不在 `waitUntil()` 延长的同一条异步链里 await 它,浏览器可能
+   * 在消息真正投递前就回收 SW,导致消息静默丢失。
+   */
+  notify: (msg: PicmanMessage) => Promise<void>;
   /** First-frame bytes → placeholder PNG blob; null on unsupported/failure — 首帧字节 → 占位 PNG blob;不支持/失败为 null */
   makeFirstFrame: (bytes: Uint8Array, mime: string) => Promise<Blob | null>;
   /** Extend the fetch event lifetime for background work — 延长 fetch 事件生命周期以完成后台工作 */
@@ -48,7 +59,19 @@ const inflight = new Map<string, Promise<Response>>();
  */
 export function shouldIntercept(request: Request, options: ResolvedSWOptions): boolean {
   if (request.method !== "GET") return false;
-  if ((request as unknown as { destination?: string }).destination !== "image") return false;
+
+  const destination = (request as unknown as { destination?: string }).destination;
+
+  // Video fallback gate: a play-marked request is a real user play → native
+  // passthrough (preserves Range/206/seek); otherwise defer only when opted in.
+  // 视频兜底门控:带播放标记 = 真实用户播放 → 原生透传(保留 Range/206/seek);否则仅在 opt-in 时延迟。
+  if (destination === "video") {
+    const parsed = new URL(request.url);
+    if (parsed.searchParams.has(PARAM_PLAY)) return false;
+    return options.deferVideos;
+  }
+
+  if (destination !== "image") return false;
 
   const url = request.url;
   const parsed = new URL(url);
@@ -103,6 +126,20 @@ function tryRecomposeFirstFrame(sr: ReturnType<typeof sniff>, bytes: Uint8Array)
   if (sr.format === "gif" && sr.gifFirstFrameEnd !== undefined) return gifFirstFrame(bytes, sr.gifFirstFrameEnd);
   if (sr.format === "apng" && sr.apngFirstFrameReady) return apngFirstFrame(bytes);
   if (sr.format === "webp" && sr.webpAnmf !== undefined) return webpFirstFrame(bytes, sr.webpAnmf);
+  if (sr.format === "avif" && sr.avifFirstSample && sr.avifAv1C && sr.width !== undefined && sr.height !== undefined) {
+    // Unlike GIF/APNG/WebP (whose first-frame boundary is always within the
+    // already-scanned prefix), AVIF's sample offset comes from `moov`, which
+    // can resolve before the referenced `mdat` bytes have actually arrived —
+    // so an explicit length check is required here (the other formats get
+    // this for free from their linear/sequential parsing).
+    //
+    // 不同于 GIF/APNG/WebP(首帧边界恒在已扫描前缀内),AVIF 的样本偏移来自 moov,
+    // 可能在其指向的 mdat 字节真正到达前就已解出——所以这里需要显式长度检查
+    // (其他格式因为是线性顺序解析,这个保证是免费的)。
+    const { offset, size } = sr.avifFirstSample;
+    if (bytes.length < offset + size) return null;
+    return avifFirstFrame(bytes.subarray(offset, offset + size), sr.avifAv1C, sr.width, sr.height);
+  }
   return null;
 }
 
@@ -129,8 +166,16 @@ async function background(reader: ReadableStreamDefaultReader<Uint8Array>, acc: 
         if (bytes) {
           const blob = await deps.makeFirstFrame(bytes, currentSniff.mime!);
           if (blob) {
-            await deps.cache.putStage(url, "ff", new Response(blob, { headers: { "Content-Type": currentSniff.mime! } }));
-            deps.notify({ picman: 1, type: "first-frame", url });
+            // makeFirstFrame always rasterizes to a PNG blob regardless of the
+            // source format (see makeFirstFramePlaceholder's canvas.convertToBlob),
+            // so the cached response's Content-Type must be 'image/png' — reusing
+            // the original format's mime here would mismatch the actual bytes.
+            //
+            // makeFirstFrame 无论源格式是什么,始终光栅化为 PNG blob(见
+            // makeFirstFramePlaceholder 的 canvas.convertToBlob),所以缓存响应的
+            // Content-Type 必须是 'image/png'——沿用原始格式的 mime 会与实际字节不符。
+            await deps.cache.putStage(url, "ff", new Response(blob, { headers: { "Content-Type": "image/png" } }));
+            await deps.notify({ picman: 1, type: "first-frame", url });
           } else {
             deps.options.onError({ url, stage: "first-frame", error: new Error("first-frame render returned null") });
           }
@@ -145,9 +190,55 @@ async function background(reader: ReadableStreamDefaultReader<Uint8Array>, acc: 
     }
 
     await deps.cache.putStage(url, "1", new Response(acc.view().slice(), { headers: origResp.headers }));
-    deps.notify({ picman: 1, type: "complete", url });
+    await deps.notify({ picman: 1, type: "complete", url });
   } catch (err) {
-    deps.notify({ picman: 1, type: "error", url, stage: "download", message: String(err) });
+    await deps.notify({ picman: 1, type: "error", url, stage: "download", message: String(err) });
+    const ctx: PicmanErrorContext = { url, stage: "download", error: err };
+    deps.options.onError(ctx);
+  }
+}
+
+/**
+ * Static-progressive background: keep downloading, and the moment the byte
+ * stream crosses the per-image "displayable" signal (see
+ * {@link sniff}'s `staticDisplayable` — dynamic, not a fixed byte count),
+ * cache the raw prefix bytes as the 'ff' stage so the page's tolerant `<img>`
+ * decoder can show a partial/blurry preview; then cache the full image.
+ *
+ * 静态渐进后台:持续下载,一旦字节流越过该图自己的"可显示"信号(见 {@link sniff} 的
+ * `staticDisplayable`——动态判定,不是固定字节数),就把已到的原始前缀字节缓存为 'ff'
+ * 阶段,页面 `<img>` 的宽容解码器即可显示部分/模糊预览;之后缓存完整图。
+ * @param reader - Body reader positioned after the buffered prefix — 定位在已缓冲前缀之后的 body reader
+ * @param acc - Accumulator already holding the buffered prefix — 已持有缓冲前缀的累积器
+ * @param initialSniff - Sniff result at handoff — 交接时的嗅探结果
+ * @param url - Canonical image URL — 规范化图片 URL
+ * @param origResp - Original network response, for header reuse — 原始网络响应,用于复用响应头
+ * @param deps - Pipeline dependencies — 管线依赖
+ */
+async function backgroundStatic(reader: ReadableStreamDefaultReader<Uint8Array>, acc: ByteAccumulator, initialSniff: ReturnType<typeof sniff>, url: string, origResp: Response, deps: PipelineDeps): Promise<void> {
+  const mime = initialSniff.mime!;
+  let thumbDone = false;
+
+  const putThumb = async (): Promise<void> => {
+    await deps.cache.putStage(url, "ff", new Response(acc.view().slice(), { headers: { "Content-Type": mime } }));
+    await deps.notify({ picman: 1, type: "first-frame", url });
+    thumbDone = true;
+  };
+
+  try {
+    if (initialSniff.staticDisplayable) await putThumb();
+
+    while (true) {
+      const { done, value } = await reader.read();
+      if (value) acc.append(value);
+      if (done) break;
+      if (!thumbDone && sniff(acc.view()).staticDisplayable) await putThumb();
+    }
+
+    await deps.cache.putStage(url, "1", new Response(acc.view().slice(), { headers: origResp.headers }));
+    await deps.notify({ picman: 1, type: "complete", url });
+  } catch (err) {
+    await deps.notify({ picman: 1, type: "error", url, stage: "download", message: String(err) });
     const ctx: PicmanErrorContext = { url, stage: "download", error: err };
     deps.options.onError(ctx);
   }
@@ -183,6 +274,26 @@ async function mainFlow(request: Request, deps: PipelineDeps): Promise<Response>
       const sr = sniff(acc.view());
 
       if (sr.status === "static") {
+        // Large static PNG/JPEG with known dimensions: enter the static-
+        // progressive flow (placeholder now, partial-bytes thumbnail when the
+        // dynamic displayability signal fires, full image last) instead of a
+        // plain passthrough. Unrecognized formats still pass through untouched.
+        //
+        // 已知尺寸的静态大图 PNG/JPEG:进入静态渐进流程(先占位,动态可显示信号触发时
+        // 给部分字节缩略图,最后完整图),不再直接透传。未识别格式仍原样透传。
+        if (deps.options.staticProgressive && (sr.format === "jpeg" || sr.format === "apng") && sr.width !== undefined && sr.height !== undefined && !done) {
+          const svg = svgColorBlock({
+            width: sr.width,
+            height: sr.height,
+            palette: sr.palette,
+            mode: deps.options.colorBlock,
+            fallbackColor: deps.options.fallbackColor,
+          });
+          deps.waitUntil(backgroundStatic(reader, acc, sr, request.url, resp, deps));
+          return new Response(svg, {
+            headers: { "Content-Type": "image/svg+xml", "Cache-Control": "no-store", [HEADER_MARK]: "placeholder" },
+          });
+        }
         return new Response(concatStream(acc.view().slice(), reader), { headers: resp.headers });
       }
 
@@ -223,6 +334,15 @@ async function mainFlow(request: Request, deps: PipelineDeps): Promise<Response>
 export async function handleImageRequest(request: Request, deps: PipelineDeps): Promise<Response> {
   try {
     const url = new URL(request.url);
+
+    // Deferred video: reached only when deferVideos is on and the request
+    // carries no play marker — starve it with a tiny response so no video
+    // bytes download; the page-side facade re-requests with PARAM_PLAY on play.
+    // 延迟视频:仅当 deferVideos 开启且请求无播放标记时到达——用极小响应"饿死"它,
+    // 不下载任何视频字节;页面端 facade 会在播放时带 PARAM_PLAY 重新请求。
+    if ((request as unknown as { destination?: string }).destination === "video") {
+      return new Response(null, { status: 204, headers: { [HEADER_MARK]: "deferred", "Cache-Control": "no-store" } });
+    }
 
     if (url.searchParams.has(PARAM_BYPASS)) {
       return deps.fetchImpl(stripPicmanParams(request.url));

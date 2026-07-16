@@ -70,6 +70,17 @@ export function setupPicman(options?: PicmanSWOptions): void {
       handleImageRequest(e.request, {
         fetchImpl: fetch.bind(scope),
         cache,
+        // Must be awaited by callers (see PipelineDeps.notify) — postMessage to a
+        // Client is cross-process; without waiting for clients.matchAll() and the
+        // postMessage calls themselves inside the same async chain that
+        // e.waitUntil() extends, the SW can be recycled before delivery completes,
+        // silently dropping the notification (observed in practice with slower
+        // first-frame decodes racing the browser's own preload-scanner timing).
+        //
+        // 调用方必须 await(见 PipelineDeps.notify)——给 Client 的 postMessage 是跨进程的;
+        // 若不在 e.waitUntil() 延长的同一条异步链里等待 clients.matchAll() 和 postMessage
+        // 本身完成,浏览器可能在投递完成前就回收 SW,导致通知静默丢失(实测中,首帧解码较慢、
+        // 与浏览器自身预加载扫描器的时序竞争时会触发)。
         notify: (msg) => scope.clients.matchAll({ type: "window" }).then((cs) => cs.forEach((c) => c.postMessage(msg))),
         makeFirstFrame: (bytes, mime) =>
           typeof OffscreenCanvas === "undefined" || typeof createImageBitmap === "undefined"
