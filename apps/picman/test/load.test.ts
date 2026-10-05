@@ -49,8 +49,8 @@ describe("load", () => {
     const seen: [string, string][] = [];
     const task = load(URL1).onStage((s, u) => seen.push([s, u]));
     await Promise.resolve(); // placeholder 微任务
-    sw.emit({ picman: 1, type: "first-frame", url: URL1 });
-    sw.emit({ picman: 1, type: "complete", url: URL1 });
+    sw.emit({ imgprogress: 1, type: "first-frame", url: URL1 });
+    sw.emit({ imgprogress: 1, type: "complete", url: URL1 });
     await flush();
     await expect(task.done).resolves.toBe(withStageParam(URL1, "1"));
     expect(seen).toEqual([
@@ -64,7 +64,7 @@ describe("load", () => {
     _setServiceWorkerContainer(sw as unknown as ServiceWorkerContainer);
     const cb = vi.fn();
     load(URL1).onStage(cb);
-    sw.emit({ picman: 1, type: "complete", url: "https://a.com/other.gif" });
+    sw.emit({ imgprogress: 1, type: "complete", url: "https://a.com/other.gif" });
     await flush();
     expect(cb).not.toHaveBeenCalledWith("complete", expect.anything());
   });
@@ -73,7 +73,7 @@ describe("load", () => {
     _setServiceWorkerContainer(sw as unknown as ServiceWorkerContainer);
     const task = load(URL1);
     task.done.catch(() => {}); // 防未处理
-    sw.emit({ picman: 1, type: "error", url: URL1, stage: "download", message: "net" });
+    sw.emit({ imgprogress: 1, type: "error", url: URL1, stage: "download", message: "net" });
     await expect(task.done).rejects.toBeTruthy();
   });
 
@@ -128,7 +128,7 @@ describe("load", () => {
       const cb = vi.fn();
       load(URL1).onStage(cb);
       await Promise.resolve();
-      sw.emit({ picman: 1, type: "first-frame", url: URL1 });
+      sw.emit({ imgprogress: 1, type: "first-frame", url: URL1 });
       await flush();
       await flush();
 

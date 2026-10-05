@@ -2,7 +2,15 @@
 
 ## 0.2.0 (Unreleased)
 
-- 重构:移除 0.1.0 的内存元数据管理器(Picman 类),转型 SW 动图渐进加载库
+- 改名:@codejoo/picman → @codejoo/imgprogress,Web Component <pic-man> → <img-progress>,所有 API 名称同步更新(registerImgprogressSW / setupImgprogress / ImgprogressTask / ImgprogressAutoOptions 等)
+- 文档:README 新增"尽早注册 SW"一节——说明 SW 注册的异步时序、`<head>` 预注册 + bundle 内 await 复用的推荐姿势,以及 SPA 首屏接管与降级行为
+- 变更(API):`registerImgprogressSW(swUrl, options?)` 注册就绪后自动启动接管,不再需要手动调用 `auto()`;返回值由 `{ controlled }` 改为 `{ controlled, stop }`(`stop()` 停止接管)。`options` 合并页面端接管选项与 SW 端选项,SW 端可序列化标量(threshold/colorBlock/firstFrame 等)经 SW 脚本 URL query 送入预构建 SW;含正则的 include/exclude 与 SW 端 onError 仍需自建 SW 配置
+- 新增:`src/shared/config-transport.ts`(`appendSWConfig`/`parseSWConfig`)——页面↔预构建 SW 的配置 query 编解码,白名单双向过滤;`sw-standalone.ts` 启动时从 `location.search` 解析配置传给 `setupImgprogress`
+- 变更(色块,需求1):色块不再从图片取色,改为**静态骨架色**——SW 端按(颜色,样式,尺寸)记忆化生成并复用(`getColorBlock`),不再逐请求取色/重建;全局默认色沿用 `fallbackColor`(默认灰 `#e0e0e0`),新增 `PARAM_SKE`(`__imgprogress_ske__`)供页面端按元素 `data-ske-color` 传色。`mainFlow` 统一用剥参后的规范 URL 做 fetch/缓存/通知(不把标记参数泄漏给源站或写进 key)
+- 变更(缓存,需求2):`handleImageRequest` 对原始请求先查缓存,完整图已在 Cache Storage 则直接返回、跳过色块与重新下载(重复访问优化)
+- 新增:`PARAM_SKE` / `PARAM_THUMB_SCALE` 协议参数,`stripImgprogressParams` 一并剥除
+- 修复(内存):`auto()` 增加元素移除时的主动清理——MutationObserver 处理 `removedNodes`,元素离开 DOM(以 `isConnected` 守卫排除移动)时从视口观察器 `unobserve`、删除其 WeakRef,该 URL 无存活元素时连同 `tracked`/`stageOf`/`reconciled` 元数据一并释放;`swapAll` 遍历时顺手清除死 WeakRef 空壳并回收空 URL。解决长跑 SPA(无限滚动/频繁换页)下元数据单调增长与观察器记录残留的隐患
+- 重构:移除 0.1.0 的内存元数据管理器,转型 SW 动图渐进加载库
 - 新增:shared 基础层(bytes/protocol/types)与多入口构建配置
 - 新增:测试用程序化生成微型动图 fixtures(GIF/APNG/动画 WebP)
 - 新增:GIF walker(增量扫描、动图判定、首帧截断重组)
@@ -10,16 +18,16 @@
 - 新增:动画 WebP walker(VP8X 判定、首帧重打包,尝试档)
 - 新增:统一魔数嗅探入口 sniff,分派三格式 walker
 - 新增:占位生成(SVG 色块 + 首帧位图渲染)
-- 新增:缓存层 PicmanCache(Cache Storage + LRU 淘汰)
-- 新增:SW 管线(阈值/嗅探状态机、占位响应、后台下载去重)+ setupPicman 自装/托管入口
-- 新增:页面端显式 API load()(阶段事件+对账)与 registerPicmanSW
+- 新增:缓存层 ImgprogressCache(Cache Storage + LRU 淘汰)
+- 新增:SW 管线(阈值/嗅探状态机、占位响应、后台下载去重)+ setupImgprogress 自装/托管入口
+- 新增:页面端显式 API load()(阶段事件+对账)与 registerImgprogressSW
 - 新增:页面端零改造接管 auto()(img/背景元素跟踪、阶段切换、错过通知补偿)
-- 新增:`<pic-man>` Web Component(基于 load() 的框架无关封装)
+- 新增:`<img-progress>` Web Component(基于 load() 的框架无关封装)
 - 新增:demo 页 + 限速静态服务(examples/),README 按渐进加载库重写
 - 新增:examples/big.gif(程序化生成的 60 帧、724KB 测试动图,供 demo 人工验收用)
 - 新增:视频拦截(降 LCP)——页面端 `<video>` facade `auto({ videos: true })`:中和 autoplay/preload 贪婪加载,用封面占位(有 poster 直接用,无 poster 上 SVG 色块并可在 LCP 之后抓真实首帧升级),手势/`.play()`/autoplay(after-lcp)时还原真实源播放
-- 新增:协议 `PARAM_PLAY` / `withPlayParam()`,`stripPicmanParams` 一并剥除播放标记
-- 新增:SW 兜底门控 `PicmanSWOptions.deferVideos`(默认关)——未带播放标记的视频请求返回 204 deferred 响应,带标记则原生透传(保留 Range)
+- 新增:协议 `PARAM_PLAY` / `withPlayParam()`,`stripImgprogressParams` 一并剥除播放标记
+- 新增:SW 兜底门控 `ImgprogressSWOptions.deferVideos`(默认关)——未带播放标记的视频请求返回 204 deferred 响应,带标记则原生透传(保留 Range)
 - 新增:页面端视频配置 `videos` / `videoFrame` / `videoRangeBytes` / `videoAutoplay` / `videoAutoplayDelay`
 - 重构:`svgColorBlock` 及色块纯函数下沉到 `src/shared/placeholder.ts`(新增 `svgDataUri`),`sw/placeholder.ts` re-export 保持兼容
 - 验证:跨域 CDN 资源加载功能——Service Worker 与缓存机制对所有 CORS 源有效,三段加载流程正常工作

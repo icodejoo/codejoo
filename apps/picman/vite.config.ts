@@ -1,13 +1,13 @@
 import { defineConfig } from "vite-plus";
 
 // Determine which build to run based on environment
-const isSWBuild = process.env.PICMAN_BUILD_SW === "1";
+const isSWBuild = process.env.IMGPROGRESS_BUILD_SW === "1";
 
 export default defineConfig({
   pack: isSWBuild
     ? {
         // Standalone SW build
-        entry: { "picman-sw": "src/sw-standalone.ts" },
+        entry: { "imgprogress-sw": "src/sw-standalone.ts" },
         format: "esm",
         platform: "browser",
         target: "es2022",

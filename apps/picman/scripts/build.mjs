@@ -31,13 +31,13 @@ async function build() {
     // Build ESM entries (index, sw, element, shared)
     console.log("Building ESM entries...");
     await run("vp", ["pack"], {
-      env: { ...process.env, PICMAN_BUILD_SW: "0" },
+      env: { ...process.env, IMGPROGRESS_BUILD_SW: "0" },
     });
 
     // Build standalone SW entry
     console.log("Building standalone SW...");
     await run("vp", ["pack"], {
-      env: { ...process.env, PICMAN_BUILD_SW: "1" },
+      env: { ...process.env, IMGPROGRESS_BUILD_SW: "1" },
     });
 
     console.log("Build complete!");

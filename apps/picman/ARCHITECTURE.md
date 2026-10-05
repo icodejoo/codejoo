@@ -1,13 +1,13 @@
-# Picman 架构文档
+# imgprogress 架构文档
 
 ## 项目概述
 
-**@codejoo/picman** 是一个 Service Worker 驱动的渐进式图像加载库，专门支持动画格式（GIF、APNG、动画 WebP），框架无关。
+**@codejoo/imgprogress** 是一个 Service Worker 驱动的渐进式图像加载库，专门支持动画格式（GIF、APNG、动画 WebP），框架无关。
 
 ## 核心架构
 
 ```
-<img> or <pic-man> 元素
+<img> or <img-progress> 元素
     ↓
 [Web Component (Custom Element)]
     ├─ 属性解析 (src, alt, etc.)
@@ -46,7 +46,7 @@
 
 ### 1. **Web Component 集成**
 
-- 自定义元素 `<pic-man>`
+- 自定义元素 `<img-progress>`
 - 标准 HTML 属性支持
 - 可独立使用，无框架依赖
 
@@ -117,11 +117,11 @@ src/
 
 ```typescript
 // 注册 Service Worker
-await navigator.serviceWorker.register("/picman-sw.js");
+await navigator.serviceWorker.register("/imgprogress-sw.js");
 
 // 定义 Web Component
-import { PicMan } from "@codejoo/picman";
-customElements.define("pic-man", PicMan);
+import { ImgProgressElement } from "@codejoo/imgprogress";
+customElements.define("img-progress", ImgProgressElement);
 ```
 
 ### 2. 使用
@@ -209,7 +209,7 @@ customElements.define("pic-man", PicMan);
 
 ```typescript
 // Service Worker 缓存整个图像文件
-const cache = await caches.open("picman-v1");
+const cache = await caches.open("imgprogress-v1");
 await cache.put(url, response);
 ```
 

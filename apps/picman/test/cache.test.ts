@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { PicmanCache } from "../src/sw/cache";
+import { ImgprogressCache } from "../src/sw/cache";
 
 /** 极简内存 CacheStorage mock — 只实现用到的 open/put/match/delete/keys */
 function memCaches(failPuts = 0): CacheStorage {
@@ -31,9 +31,9 @@ const URL1 = "https://a.com/1.gif";
 const URL2 = "https://a.com/2.gif";
 const URL3 = "https://a.com/3.gif";
 
-describe("PicmanCache", () => {
+describe("ImgprogressCache", () => {
   it("put 后 match 命中,key 与二次请求 URL 一致", async () => {
-    const c = new PicmanCache(opts, memCaches(), () => 1000);
+    const c = new ImgprogressCache(opts, memCaches(), () => 1000);
     expect(await c.putStage(URL1, "1", new Response("full"))).toBe(true);
     const hit = await c.matchStage(URL1, "1");
     expect(hit).toBeDefined();
@@ -41,7 +41,7 @@ describe("PicmanCache", () => {
   });
   it("超 maxEntries 驱逐最旧,ff 成对删", async () => {
     let t = 0;
-    const c = new PicmanCache(opts, memCaches(), () => ++t);
+    const c = new ImgprogressCache(opts, memCaches(), () => ++t);
     await c.putStage(URL1, "ff", new Response("f1"));
     await c.putStage(URL1, "1", new Response("1"));
     await c.putStage(URL2, "1", new Response("2"));
@@ -52,13 +52,13 @@ describe("PicmanCache", () => {
   });
   it("过期条目 match 不命中", async () => {
     let now = 1000;
-    const c = new PicmanCache(opts, memCaches(), () => now);
+    const c = new ImgprogressCache(opts, memCaches(), () => now);
     await c.putStage(URL1, "1", new Response("x"));
     now += 101 * 1000;
     expect(await c.matchStage(URL1, "1")).toBeUndefined();
   });
   it("put 持续失败返回 false 不抛", async () => {
-    const c = new PicmanCache(opts, memCaches(99), () => 1);
+    const c = new ImgprogressCache(opts, memCaches(99), () => 1);
     expect(await c.putStage(URL1, "1", new Response("x"))).toBe(false);
   });
 });

@@ -11,7 +11,7 @@ import { CACHE_NAME } from "./protocol";
  *
  * 两端 onError 钩子收到的错误上下文。
  */
-export interface PicmanErrorContext {
+export interface ImgprogressErrorContext {
   /** Canonical image URL — 规范化图片 URL */
   url: string;
 
@@ -27,7 +27,7 @@ export interface PicmanErrorContext {
  *
  * SW 端管线配置(语义与默认值见 spec §3)。
  */
-export interface PicmanSWOptions {
+export interface ImgprogressSWOptions {
   /** Big-image threshold in bytes, default 102400 — 大图阈值(字节),默认 102400 */
   threshold?: number;
 
@@ -40,7 +40,14 @@ export interface PicmanSWOptions {
   /** Color block style, default 'gradient' — 色块样式,默认 'gradient' */
   colorBlock?: "solid" | "gradient";
 
-  /** Fallback color when no palette, default '#e0e0e0' — 无调色板底色,默认 '#e0e0e0' */
+  /**
+   * Static skeleton color for the placeholder block, default '#e0e0e0' (gray).
+   * The color block is no longer sampled from the image — it is a static color,
+   * this global default overridable per element via `data-ske-color`.
+   *
+   * 占位色块的静态骨架色,默认 '#e0e0e0'(灰)。色块不再从图片取色,而是静态色;
+   * 此全局默认可由元素上的 `data-ske-color` 逐个覆盖。
+   */
   fallbackColor?: string;
 
   /** First-frame style, default 'sharp' — 首帧样式,默认 'sharp' */
@@ -86,7 +93,7 @@ export interface PicmanSWOptions {
   cache?: { name?: string; maxEntries?: number; maxAgeSeconds?: number };
 
   /** Error hook — 错误钩子 */
-  onError?: (ctx: PicmanErrorContext) => void;
+  onError?: (ctx: ImgprogressErrorContext) => void;
 }
 
 /**
@@ -94,12 +101,12 @@ export interface PicmanSWOptions {
  *
  * 应用全部默认值后的 SW 配置。
  */
-export type ResolvedSWOptions = Required<Omit<PicmanSWOptions, "cache" | "onError">> & {
+export type ResolvedSWOptions = Required<Omit<ImgprogressSWOptions, "cache" | "onError">> & {
   /** Resolved cache tuning — 已解析缓存配置 */
-  cache: Required<NonNullable<PicmanSWOptions["cache"]>>;
+  cache: Required<NonNullable<ImgprogressSWOptions["cache"]>>;
 
   /** Error hook (noop by default) — 错误钩子(默认空实现) */
-  onError: (ctx: PicmanErrorContext) => void;
+  onError: (ctx: ImgprogressErrorContext) => void;
 };
 
 /**
@@ -109,7 +116,7 @@ export type ResolvedSWOptions = Required<Omit<PicmanSWOptions, "cache" | "onErro
  * @param o - User options — 用户配置
  * @returns Resolved options — 解析后的配置
  */
-export function resolveSWOptions(o: PicmanSWOptions = {}): ResolvedSWOptions {
+export function resolveSWOptions(o: ImgprogressSWOptions = {}): ResolvedSWOptions {
   return {
     threshold: o.threshold ?? 102400,
     include: o.include ?? [/\.(gif|png|apng|webp|avif|jpe?g)(\?|$)/i],

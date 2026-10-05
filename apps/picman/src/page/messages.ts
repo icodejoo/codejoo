@@ -5,7 +5,7 @@
  * 页面端消息总线:单一 SW 消息监听器按 URL 分发,load()/auto() 共用。
  */
 
-import { isPicmanMessage } from "../shared/protocol";
+import { isImgprogressMessage } from "../shared/protocol";
 
 /**
  * Normalized stage event delivered to page-side subscribers.
@@ -29,7 +29,7 @@ let listening = false;
  * @param e - Raw message event — 原始消息事件
  */
 function onMessage(e: MessageEvent): void {
-  if (!isPicmanMessage(e.data)) return;
+  if (!isImgprogressMessage(e.data)) return;
   const subs = registry.get(e.data.url);
   if (!subs) return;
   const evt: StageEvent = e.data.type === "error" ? { type: "error", url: e.data.url, message: e.data.message } : { type: e.data.type, url: e.data.url };

@@ -1,5 +1,5 @@
 {
-  "name": "@codejoo/picman",
+  "name": "@codejoo/imgprogress",
   "version": "0.1.0",
   "description": "Service Worker progressive image loading library for animated formats (GIF/APNG/animated WebP), framework-agnostic.",
   "keywords": [
@@ -15,7 +15,7 @@
   "repository": {
     "type": "git",
     "url": "git+https://github.com/icodejoo/codejoo.git",
-    "directory": "apps/picman"
+    "directory": "apps/imgprogress"
   },
   "files": [
     "dist",
@@ -45,7 +45,7 @@
       "types": "./dist/esm/shared.d.mts",
       "import": "./dist/esm/shared.mjs"
     },
-    "./picman-sw.js": "./dist/picman-sw.js",
+    "./imgprogress-sw.js": "./dist/imgprogress-sw.js",
     "./package.json": "./package.json"
   },
   "publishConfig": {

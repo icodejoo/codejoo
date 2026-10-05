@@ -5,27 +5,27 @@
  * 页面端零改造接管:跟踪 <img> 与打标背景元素,随 SW 阶段推进切换其显示 URL。
  */
 
-import { type PicmanStage, PARAM_BYPASS, isPicmanMessage, stripPicmanParams, withStageParam } from "../shared/protocol";
+import { type ImgprogressStage, PARAM_BYPASS, isImgprogressMessage, stripImgprogressParams, withStageParam } from "../shared/protocol";
 import { svgColorBlock, svgDataUri } from "../shared/placeholder";
-import type { PicmanErrorContext } from "../shared/types";
-import type { PicmanAutoOptions } from "./types";
+import type { ImgprogressErrorContext } from "../shared/types";
+import type { ImgprogressAutoOptions } from "./types";
 import { scheduleIdle } from "./idle";
 import { _getContainer } from "./messages";
 import { createVideoFacade, resolveVideoOptions, type VideoFacade } from "./video";
 
 /** Attribute marking a non-<img> element as a background-image takeover target — 标记非 <img> 元素为背景图接管目标的属性 */
-const BG_ATTR = "data-picman-bg";
+const BG_ATTR = "data-imgprogress-bg";
 
 /**
  * Resolve `raw` (absolute or relative) against the current page and strip
- * any picman marker params, yielding the canonical tracking key.
+ * any imgprogress marker params, yielding the canonical tracking key.
  *
- * 相对当前页面解析 `raw`(绝对或相对)并剥掉 picman 标记参数,得到规范化跟踪 key。
+ * 相对当前页面解析 `raw`(绝对或相对)并剥掉 imgprogress 标记参数,得到规范化跟踪 key。
  * @param raw - Raw URL as seen on the element — 元素上看到的原始 URL
  * @returns Canonical URL — 规范化 URL
  */
 function canonicalize(raw: string): string {
-  return stripPicmanParams(new URL(raw, location.href).href);
+  return stripImgprogressParams(new URL(raw, location.href).href);
 }
 
 /**
@@ -70,7 +70,7 @@ function inViewport(el: Element): boolean {
  * // later
  * stop()
  */
-export function auto(options: PicmanAutoOptions = {}): () => void {
+export function auto(options: ImgprogressAutoOptions = {}): () => void {
   const root = options.root ?? document;
   const backgrounds = options.backgrounds ?? true;
   const videos = options.videos ?? false;
@@ -83,7 +83,7 @@ export function auto(options: PicmanAutoOptions = {}): () => void {
   /** Canonical URL → tracked elements (weakly held) — 规范化 URL → 被跟踪元素(弱引用) */
   const tracked = new Map<string, Set<WeakRef<Element>>>();
   /** Canonical URL → latest known stage — 规范化 URL → 已知最新阶段 */
-  const stageOf = new Map<string, PicmanStage>();
+  const stageOf = new Map<string, ImgprogressStage>();
   /** Element → its canonical tracking URL — 元素 → 其规范化跟踪 URL */
   const elUrl = new WeakMap<Element, string>();
   /**
@@ -182,12 +182,22 @@ export function auto(options: PicmanAutoOptions = {}): () => void {
    * @param url - Canonical URL — 规范化 URL
    * @param stage - Stage to display — 待展示阶段
    */
-  function swapAll(url: string, stage: PicmanStage): void {
+  function swapAll(url: string, stage: ImgprogressStage): void {
     const set = tracked.get(url);
     if (!set) return;
     for (const ref of set) {
       const el = ref.deref();
       if (el) applyStageToElement(el, url, stage);
+      // 顺手清除已被 GC 的元素留下的死 WeakRef 空壳,避免遍历成本随历史元素数增长。
+      // Sweep dead WeakRef shells left by GC'd elements so iteration cost tracks live, not historical, count.
+      else set.delete(ref);
+    }
+    // 集合清空(元素全部离场)后,连同该 URL 的元数据一并释放。
+    // Once empty (all elements gone), drop the URL's metadata too.
+    if (set.size === 0) {
+      tracked.delete(url);
+      stageOf.delete(url);
+      reconciled.delete(url);
     }
   }
 
@@ -202,7 +212,7 @@ export function auto(options: PicmanAutoOptions = {}): () => void {
    * @param url - Canonical URL — 规范化 URL
    * @param stage - Stage to display — 待展示阶段
    */
-  function applyStageToElement(el: Element, url: string, stage: PicmanStage): void {
+  function applyStageToElement(el: Element, url: string, stage: ImgprogressStage): void {
     const displayUrl = withStageParam(url, stage);
     if (stage === "1" && typeof IntersectionObserver !== "undefined") {
       if (!inViewport(el)) {
@@ -241,7 +251,7 @@ export function auto(options: PicmanAutoOptions = {}): () => void {
    * @param url - Canonical URL — 规范化 URL
    * @param stage - Stage to apply once idle — 待应用的阶段(空闲后)
    */
-  function applyStageWhenIdle(url: string, stage: PicmanStage): void {
+  function applyStageWhenIdle(url: string, stage: ImgprogressStage): void {
     scheduleIdle(() => {
       if (stage === "ff" && stageOf.get(url) === "1") return;
       stageOf.set(url, stage);
@@ -336,6 +346,55 @@ export function auto(options: PicmanAutoOptions = {}): () => void {
   }
 
   /**
+   * Stop tracking one element and release everything held for it: unobserve it
+   * from the viewport gate, drop its WeakRef from the URL's set, and when that
+   * set becomes empty drop the URL's metadata entries too. Guarded by
+   * `isConnected` so a merely-moved element (removed + re-added within one
+   * mutation batch) is not mistakenly untracked.
+   *
+   * 停止跟踪某元素并释放为它持有的一切:从视口门控观察器移除、从该 URL 的集合删掉它的
+   * WeakRef;集合清空后连同该 URL 的元数据一并删除。用 `isConnected` 守卫,避免把仅仅被
+   * 移动(同一批变更里先移除又重新插入)的元素误清理。
+   * @param el - Element leaving the DOM — 正在离开 DOM 的元素
+   */
+  function untrackElement(el: Element): void {
+    if (el.isConnected) return;
+    fullIO?.unobserve(el);
+    pendingFull.delete(el);
+    elExpected.delete(el);
+    const url = elUrl.get(el);
+    elUrl.delete(el);
+    if (url === undefined) return;
+    const set = tracked.get(url);
+    if (!set) return;
+    for (const ref of set) {
+      const e = ref.deref();
+      if (e === el || e === undefined) set.delete(ref);
+    }
+    if (set.size === 0) {
+      tracked.delete(url);
+      stageOf.delete(url);
+      reconciled.delete(url);
+    }
+  }
+
+  /**
+   * Untrack an element and every trackable descendant within a removed subtree —
+   * MutationObserver only lists the subtree root in `removedNodes`, so we walk
+   * into it to catch nested images/backgrounds.
+   *
+   * 清理一个被移除子树里的元素及其所有可跟踪后代——MutationObserver 的 `removedNodes`
+   * 只列出子树根节点,故需下钻到子树内部,捕获其中嵌套的图片/背景元素。
+   * @param node - Removed subtree root — 被移除的子树根节点
+   */
+  function untrackSubtree(node: Node): void {
+    if (!(node instanceof Element)) return;
+    if (node instanceof HTMLImageElement || node.hasAttribute(BG_ATTR)) untrackElement(node);
+    node.querySelectorAll("img").forEach((img) => untrackElement(img));
+    if (backgrounds) node.querySelectorAll(`[${BG_ATTR}]`).forEach((el) => untrackElement(el));
+  }
+
+  /**
    * Whether `rawUrl` on `el` is exactly the URL our own last write produced —
    * used to break the src-mutation feedback loop (setting an attribute to an
    * unchanged value still queues a MutationRecord per the DOM spec).
@@ -392,6 +451,9 @@ export function auto(options: PicmanAutoOptions = {}): () => void {
           if (videoFacade && n.matches("video")) videoFacade.track(n as HTMLVideoElement);
           scan(n);
         });
+        // 元素离开 DOM 时主动清理:释放视口观察记录与 URL 元数据,不再被动等 GC。
+        // Actively release on removal: viewport-observer records + URL metadata, instead of waiting on GC.
+        m.removedNodes.forEach((n) => untrackSubtree(n));
       } else if (m.type === "attributes") {
         const el = m.target as Element;
         if (m.attributeName === "src" && el instanceof HTMLImageElement && el.src) {
@@ -407,14 +469,14 @@ export function auto(options: PicmanAutoOptions = {}): () => void {
 
   const container = _getContainer();
   const onMessage = (e: MessageEvent): void => {
-    if (!isPicmanMessage(e.data)) return;
+    if (!isImgprogressMessage(e.data)) return;
     const { url } = e.data;
     if (e.data.type === "first-frame") {
       applyStageWhenIdle(url, "ff");
     } else if (e.data.type === "complete") {
       applyStageWhenIdle(url, "1");
     } else {
-      const ctx: PicmanErrorContext = { url, stage: e.data.stage, error: new Error(e.data.message) };
+      const ctx: ImgprogressErrorContext = { url, stage: e.data.stage, error: new Error(e.data.message) };
       onError(ctx);
       retryAll(url);
     }

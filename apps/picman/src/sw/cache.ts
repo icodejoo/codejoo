@@ -4,10 +4,10 @@
  * 按阶段分 key 的 Cache Storage 封装,对全图条目维护 LRU 索引。
  */
 
-import { type PicmanStage, withStageParam } from "../shared/protocol";
+import { type ImgprogressStage, withStageParam } from "../shared/protocol";
 
 /** Internal request key for the LRU index entry — LRU 索引条目的内部请求 key */
-const INDEX_URL = "https://picman.internal/__index__";
+const INDEX_URL = "https://imgprogress.internal/__index__";
 
 /** Per-URL LRU bookkeeping — 按 URL 的 LRU 记录 */
 interface IndexEntry {
@@ -20,22 +20,22 @@ interface IndexEntry {
  *
  * pipeline 消费的最小缓存接口。
  */
-export interface PicmanCacheLike {
+export interface ImgprogressCacheLike {
   /** Look up a cached stage response — 查找某阶段的缓存响应 */
-  matchStage: (url: string, stage: PicmanStage) => Promise<Response | undefined>;
+  matchStage: (url: string, stage: ImgprogressStage) => Promise<Response | undefined>;
   /** Store a stage response; false when the write ultimately failed (e.g. quota) — 存储某阶段响应;写入最终失败(如配额)返回 false */
-  putStage: (url: string, stage: PicmanStage, resp: Response) => Promise<boolean>;
+  putStage: (url: string, stage: ImgprogressStage, resp: Response) => Promise<boolean>;
   /** Delete both stage entries for a URL and drop it from the LRU index — 删除一个 URL 的两阶段缓存并从 LRU 索引移除 */
   deleteUrl: (url: string) => Promise<void>;
 }
 
 /**
- * Cache Storage-backed implementation of {@link PicmanCacheLike} with
+ * Cache Storage-backed implementation of {@link ImgprogressCacheLike} with
  * entry-count and age-based LRU eviction.
  *
- * 基于 Cache Storage 的 {@link PicmanCacheLike} 实现,支持条目数与存活时长的 LRU 淘汰。
+ * 基于 Cache Storage 的 {@link ImgprogressCacheLike} 实现,支持条目数与存活时长的 LRU 淘汰。
  */
-export class PicmanCache implements PicmanCacheLike {
+export class ImgprogressCache implements ImgprogressCacheLike {
   /** Cache bucket name — 缓存桶名 */
   private readonly name: string;
   /** Max tracked full-image entries before eviction — 触发淘汰前的最大全图条目数 */
@@ -100,7 +100,7 @@ export class PicmanCache implements PicmanCacheLike {
     await cache.delete(withStageParam(url, "1"));
   }
 
-  async matchStage(url: string, stage: PicmanStage): Promise<Response | undefined> {
+  async matchStage(url: string, stage: ImgprogressStage): Promise<Response | undefined> {
     const cache = await this.cachesImpl.open(this.name);
 
     if (stage === "1") {
@@ -123,7 +123,7 @@ export class PicmanCache implements PicmanCacheLike {
     return resp;
   }
 
-  async putStage(url: string, stage: PicmanStage, resp: Response): Promise<boolean> {
+  async putStage(url: string, stage: ImgprogressStage, resp: Response): Promise<boolean> {
     const cache = await this.cachesImpl.open(this.name);
     const key = withStageParam(url, stage);
 

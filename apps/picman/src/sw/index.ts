@@ -6,8 +6,8 @@
  */
 
 import { resolveSWOptions } from "../shared/types";
-import type { PicmanSWOptions } from "../shared/types";
-import { PicmanCache } from "./cache";
+import type { ImgprogressSWOptions } from "../shared/types";
+import { ImgprogressCache } from "./cache";
 import { handleImageRequest, shouldIntercept } from "./pipeline";
 import { makeFirstFramePlaceholder } from "./placeholder";
 
@@ -44,21 +44,21 @@ interface ServiceWorkerScopeLike {
 }
 
 /**
- * Install the picman progressive-loading pipeline on the current Service
+ * Install the imgprogress progressive-loading pipeline on the current Service
  * Worker scope: intercepts matching image requests, degrading to a normal
  * network passthrough for everything else.
  *
- * 在当前 Service Worker scope 上安装 picman 渐进加载管线:拦截匹配的图片请求,
+ * 在当前 Service Worker scope 上安装 imgprogress 渐进加载管线:拦截匹配的图片请求,
  * 其余一律走原生网络透传。
  * @param options - SW-side pipeline options — SW 端管线配置
  * @example
  * // src/sw.ts in a consumer's own service worker
- * import { setupPicman } from '@codejoo/picman/sw'
- * setupPicman({ threshold: 200 * 1024 })
+ * import { setupImgprogress } from '@codejoo/imgprogress/sw'
+ * setupImgprogress({ threshold: 200 * 1024 })
  */
-export function setupPicman(options?: PicmanSWOptions): void {
+export function setupImgprogress(options?: ImgprogressSWOptions): void {
   const o = resolveSWOptions(options);
-  const cache = new PicmanCache(o.cache, caches);
+  const cache = new ImgprogressCache(o.cache, caches);
   const scope = self as unknown as ServiceWorkerScopeLike;
 
   scope.addEventListener("install", () => scope.skipWaiting());

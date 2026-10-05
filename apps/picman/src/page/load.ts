@@ -13,11 +13,11 @@ import { _getContainer, subscribe } from "./messages";
  *
  * 一次进行中(或已结束)的渐进加载。
  */
-export interface PicmanTask {
+export interface ImgprogressTask {
   /** Canonical original URL — 规范化原始 URL */
   url: string;
   /** Register a stage callback; returns this task for chaining — 注册阶段回调,返回自身以便链式调用 */
-  onStage(cb: (stage: "placeholder" | "first-frame" | "complete", displayUrl: string) => void): PicmanTask;
+  onStage(cb: (stage: "placeholder" | "first-frame" | "complete", displayUrl: string) => void): ImgprogressTask;
   /** Resolves with the full-image display URL; rejects on download failure — 全图就绪后 resolve 显示 URL;下载失败 reject */
   done: Promise<string>;
 }
@@ -32,7 +32,7 @@ export interface PicmanTask {
  * const task = load(img.src).onStage((stage, displayUrl) => { img.src = displayUrl })
  * await task.done
  */
-export function load(url: string): PicmanTask {
+export function load(url: string): ImgprogressTask {
   const canonical = new URL(url, location.href).href;
   const stageCbs: ((stage: "placeholder" | "first-frame" | "complete", displayUrl: string) => void)[] = [];
 
@@ -72,7 +72,7 @@ export function load(url: string): PicmanTask {
     emit("first-frame", displayUrl);
   };
 
-  const task: PicmanTask = {
+  const task: ImgprogressTask = {
     url: canonical,
     onStage(cb) {
       stageCbs.push(cb);
@@ -112,7 +112,7 @@ export function load(url: string): PicmanTask {
       });
     } else {
       unsubscribe();
-      rejectDone(new Error(e.message ?? "picman download failed"));
+      rejectDone(new Error(e.message ?? "imgprogress download failed"));
     }
   });
 

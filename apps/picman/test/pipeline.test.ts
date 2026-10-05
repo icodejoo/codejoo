@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import { handleImageRequest, shouldIntercept, type PipelineDeps } from "../src/sw/pipeline";
 import { resolveSWOptions } from "../src/shared/types";
-import { HEADER_MARK, PARAM_BYPASS, withPlayParam, withStageParam } from "../src/shared/protocol";
+import { HEADER_MARK, PARAM_BYPASS, PARAM_SKE, withPlayParam, withStageParam } from "../src/shared/protocol";
 import { makeBigPng, makeGif, makeJpeg } from "./fixtures";
 
 const GIF_URL = "https://a.com/big.gif";
@@ -80,8 +80,8 @@ describe("handleImageRequest", () => {
     await drain(d);
     expect(d.cache.putStage).toHaveBeenCalledWith(GIF_URL, "ff", expect.any(Response));
     expect(d.cache.putStage).toHaveBeenCalledWith(GIF_URL, "1", expect.any(Response));
-    expect(d.notify).toHaveBeenCalledWith({ picman: 1, type: "first-frame", url: GIF_URL });
-    expect(d.notify).toHaveBeenCalledWith({ picman: 1, type: "complete", url: GIF_URL });
+    expect(d.notify).toHaveBeenCalledWith({ imgprogress: 1, type: "first-frame", url: GIF_URL });
+    expect(d.notify).toHaveBeenCalledWith({ imgprogress: 1, type: "complete", url: GIF_URL });
   });
   it("非动图大文件:透传全部字节", async () => {
     const bytes = new Uint8Array(64).fill(0xff); // 未知容器 → static
@@ -119,7 +119,7 @@ describe("handleImageRequest", () => {
     await handleImageRequest(new Request(GIF_URL), d);
     await drain(d);
     expect(d.notify).not.toHaveBeenCalledWith(expect.objectContaining({ type: "first-frame" }));
-    expect(d.notify).toHaveBeenCalledWith({ picman: 1, type: "complete", url: GIF_URL });
+    expect(d.notify).toHaveBeenCalledWith({ imgprogress: 1, type: "complete", url: GIF_URL });
   });
   it("fetch 抛异常:onError 后透传重试不抛", async () => {
     const onError = vi.fn();
@@ -147,6 +147,27 @@ describe("handleImageRequest", () => {
     expect(await r1.text()).toContain("<svg");
     expect(await r2.text()).toContain("<svg");
   });
+  it("需求2 已缓存完整图:原始请求直接回缓存,不出色块也不 fetch", async () => {
+    const d = makeDeps();
+    const cached = new Response("full-cached");
+    (d.cache.matchStage as ReturnType<typeof vi.fn>).mockImplementation((_u: string, stage: string) => Promise.resolve(stage === "1" ? cached : undefined));
+    const resp = await handleImageRequest(new Request(GIF_URL), d);
+    expect(resp).toBe(cached);
+    expect(d.fetchImpl).not.toHaveBeenCalled();
+  });
+  it("需求1 data-ske-color(PARAM_SKE):色块用指定的静态颜色", async () => {
+    const gif = makeGif({ frames: 3, loop: true });
+    const d = makeDeps({ options: resolveSWOptions({ threshold: 10, headBytes: 16, colorBlock: "solid" }) });
+    (d.fetchImpl as ReturnType<typeof vi.fn>).mockResolvedValue(streamResponse(gif, 7));
+    const u = new URL(GIF_URL);
+    u.searchParams.set(PARAM_SKE, "#ff0000");
+    const resp = await handleImageRequest(new Request(u.href), d);
+    const svg = await resp.text();
+    expect(svg).toContain('fill="#ff0000"');
+    // 通知/缓存 key 应为剥参后的规范 URL
+    await drain(d);
+    expect(d.notify).toHaveBeenCalledWith({ imgprogress: 1, type: "complete", url: GIF_URL });
+  });
 
   describe("静态渐进(staticProgressive)", () => {
     const JPG_URL = "https://a.com/photo.jpg";
@@ -171,8 +192,8 @@ describe("handleImageRequest", () => {
       expect(ffBytes[1]).toBe(0xd8);
       expect(d.makeFirstFrame).not.toHaveBeenCalled();
 
-      expect(d.notify).toHaveBeenCalledWith({ picman: 1, type: "first-frame", url: JPG_URL });
-      expect(d.notify).toHaveBeenCalledWith({ picman: 1, type: "complete", url: JPG_URL });
+      expect(d.notify).toHaveBeenCalledWith({ imgprogress: 1, type: "first-frame", url: JPG_URL });
+      expect(d.notify).toHaveBeenCalledWith({ imgprogress: 1, type: "complete", url: JPG_URL });
       const fullCall = (d.cache.putStage as ReturnType<typeof vi.fn>).mock.calls.find((c) => c[1] === "1");
       expect(new Uint8Array(await (fullCall![2] as Response).arrayBuffer())).toEqual(jpg);
     });
@@ -190,8 +211,8 @@ describe("handleImageRequest", () => {
       // baseline 路径:ff 是下载完后光栅化的缩略图 PNG
       expect((ffCall![2] as Response).headers.get("Content-Type")).toBe("image/png");
       expect(d.makeFirstFrame).toHaveBeenCalledWith(expect.anything(), "image/jpeg");
-      expect(d.notify).toHaveBeenCalledWith({ picman: 1, type: "first-frame", url: JPG_URL });
-      expect(d.notify).toHaveBeenCalledWith({ picman: 1, type: "complete", url: JPG_URL });
+      expect(d.notify).toHaveBeenCalledWith({ imgprogress: 1, type: "first-frame", url: JPG_URL });
+      expect(d.notify).toHaveBeenCalledWith({ imgprogress: 1, type: "complete", url: JPG_URL });
     });
 
     it("隔行 PNG:IDAT 跨过门槛后 ff=原始前缀字节;非隔行 PNG:下载完后光栅化缩略图", async () => {
@@ -210,7 +231,7 @@ describe("handleImageRequest", () => {
       await handleImageRequest(new Request("https://a.com/plain.png"), d2);
       await drain(d2);
       expect(d2.makeFirstFrame).toHaveBeenCalledWith(expect.anything(), "image/png"); // 光栅化缩略图路径
-      expect(d2.notify).toHaveBeenCalledWith({ picman: 1, type: "complete", url: "https://a.com/plain.png" });
+      expect(d2.notify).toHaveBeenCalledWith({ imgprogress: 1, type: "complete", url: "https://a.com/plain.png" });
     });
 
     it("staticProgressive: false 时静态大图原样透传", async () => {

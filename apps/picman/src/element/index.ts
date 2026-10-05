@@ -1,20 +1,20 @@
 /**
- * `<pic-man>` custom element: a framework-agnostic wrapper around load(),
- * rendering an internal shadow <img> that swaps through picman's stages.
+ * `<img-progress>` custom element: a framework-agnostic wrapper around load(),
+ * rendering an internal shadow <img> that swaps through imgprogress's stages.
  *
- * `<pic-man>` 自定义元素:围绕 load() 的框架无关封装,内部 shadow <img> 随 picman 各阶段切换。
+ * `<img-progress>` 自定义元素:围绕 load() 的框架无关封装,内部 shadow <img> 随 imgprogress 各阶段切换。
  */
 
 import { load } from "../page/load";
 
 /**
- * `<pic-man src alt>` — renders `<img>` that auto-swaps placeholder → first-frame → full image.
+ * `<img-progress src alt>` — renders `<img>` that auto-swaps placeholder → first-frame → full image.
  *
- * `<pic-man src alt>`——渲染会自动从占位 → 首帧 → 全图切换的 `<img>`。
+ * `<img-progress src alt>`——渲染会自动从占位 → 首帧 → 全图切换的 `<img>`。
  * @example
- * <pic-man src="/big.gif" alt="demo"></pic-man>
+ * <img-progress src="/big.gif" alt="demo"></img-progress>
  */
-export class PicManElement extends HTMLElement {
+export class ImgProgressElement extends HTMLElement {
   static observedAttributes = ["src", "alt"];
 
   /** Internal shadow <img> — 内部 shadow <img> */
@@ -67,15 +67,15 @@ export class PicManElement extends HTMLElement {
 }
 
 /**
- * Register `<pic-man>` (or a custom tag name) as a custom element. Safe to
+ * Register `<img-progress>` (or a custom tag name) as a custom element. Safe to
  * call more than once — a second call with the same tag is a no-op.
  *
- * 把 `<pic-man>`(或自定义标签名)注册为自定义元素。可重复调用——同名标签的第二次调用为空操作。
- * @param tag - Tag name, default 'pic-man' — 标签名,默认 'pic-man'
+ * 把 `<img-progress>`(或自定义标签名)注册为自定义元素。可重复调用——同名标签的第二次调用为空操作。
+ * @param tag - Tag name, default 'img-progress' — 标签名,默认 'img-progress'
  * @example
- * definePicMan() // then use <pic-man src="..."></pic-man> anywhere
+ * defineImgProgress() // then use <img-progress src="..."></img-progress> anywhere
  */
-export function definePicMan(tag = "pic-man"): void {
+export function defineImgProgress(tag = "img-progress"): void {
   if (customElements.get(tag)) return;
-  customElements.define(tag, PicManElement);
+  customElements.define(tag, ImgProgressElement);
 }

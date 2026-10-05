@@ -12,7 +12,7 @@
 
 import { withPlayParam } from "../shared/protocol";
 import { svgColorBlock, svgDataUri } from "../shared/placeholder";
-import type { PicmanErrorContext } from "../shared/types";
+import type { ImgprogressErrorContext } from "../shared/types";
 import { scheduleIdle } from "./idle";
 
 /** Fallback cover color when none is derivable — 无可推导颜色时的封面底色 */
@@ -23,10 +23,10 @@ const DEFAULT_COVER = { width: 320, height: 180 };
 const MAX_COVER_SIDE = 512;
 
 /**
- * Resolved video-facade options (the subset of {@link PicmanAutoOptions} this
+ * Resolved video-facade options (the subset of {@link ImgprogressAutoOptions} this
  * module reads, with defaults already applied by {@link resolveVideoOptions}).
  *
- * 已解析的 video facade 配置(本模块读取的 {@link PicmanAutoOptions} 子集,默认值已由
+ * 已解析的 video facade 配置(本模块读取的 {@link ImgprogressAutoOptions} 子集,默认值已由
  * {@link resolveVideoOptions} 应用)。
  */
 export interface ResolvedVideoOptions {
@@ -39,13 +39,13 @@ export interface ResolvedVideoOptions {
   /** Upper bound (ms) for the after-lcp idle wait — after-lcp idle 等待上限(毫秒) */
   videoAutoplayDelay: number;
   /** Error hook — 错误钩子 */
-  onError: (ctx: PicmanErrorContext) => void;
+  onError: (ctx: ImgprogressErrorContext) => void;
 }
 
 /**
- * Apply {@link PicmanAutoOptions} defaults for the fields this module needs.
+ * Apply {@link ImgprogressAutoOptions} defaults for the fields this module needs.
  *
- * 为本模块所需字段应用 {@link PicmanAutoOptions} 默认值。
+ * 为本模块所需字段应用 {@link ImgprogressAutoOptions} 默认值。
  * @param o - Partial video options — 部分视频配置
  * @returns Resolved video options — 解析后的视频配置
  */

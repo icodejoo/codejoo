@@ -6,14 +6,14 @@
  */
 
 import { ByteAccumulator } from "../shared/bytes";
-import { HEADER_MARK, PARAM_BYPASS, PARAM_FULL, PARAM_PLAY, type PicmanMessage, type PicmanStage, stripPicmanParams } from "../shared/protocol";
+import { HEADER_MARK, PARAM_BYPASS, PARAM_FULL, PARAM_PLAY, PARAM_SKE, type ImgprogressMessage, type ImgprogressStage, stripImgprogressParams } from "../shared/protocol";
 import { sniff } from "../shared/sniff";
-import type { PicmanErrorContext, ResolvedSWOptions } from "../shared/types";
+import type { ImgprogressErrorContext, ResolvedSWOptions } from "../shared/types";
 import { apngFirstFrame } from "../shared/walkers/apng";
 import { avifFirstFrame } from "../shared/walkers/avif";
 import { gifFirstFrame } from "../shared/walkers/gif";
 import { webpFirstFrame } from "../shared/walkers/webp";
-import type { PicmanCacheLike } from "./cache";
+import type { ImgprogressCacheLike } from "./cache";
 import { svgColorBlock } from "./placeholder";
 
 /**
@@ -25,7 +25,7 @@ export interface PipelineDeps {
   /** Network fetch — 网络请求 */
   fetchImpl: typeof fetch;
   /** Stage-keyed cache — 按阶段分 key 的缓存 */
-  cache: PicmanCacheLike;
+  cache: ImgprogressCacheLike;
   /**
    * Notify controlled pages. Must be awaited by callers — postMessage to a
    * Client is cross-process and takes real (if small) time; if this isn't
@@ -37,7 +37,7 @@ export interface PipelineDeps {
    * (虽然很短)的时间;若不在 `waitUntil()` 延长的同一条异步链里 await 它,浏览器可能
    * 在消息真正投递前就回收 SW,导致消息静默丢失。
    */
-  notify: (msg: PicmanMessage) => Promise<void>;
+  notify: (msg: ImgprogressMessage) => Promise<void>;
   /** First-frame bytes → placeholder PNG blob; null on unsupported/failure — 首帧字节 → 占位 PNG blob;不支持/失败为 null */
   makeFirstFrame: (bytes: Uint8Array, mime: string) => Promise<Blob | null>;
   /** Extend the fetch event lifetime for background work — 延长 fetch 事件生命周期以完成后台工作 */
@@ -49,10 +49,37 @@ export interface PipelineDeps {
 /** In-flight main-flow downloads keyed by canonical URL, for de-duplication — 按规范化 URL 去重的进行中下载 */
 const inflight = new Map<string, Promise<Response>>();
 
+/** Memoized static color blocks, keyed by `color|mode|WxH` — 静态色块记忆缓存,按 `颜色|样式|宽x高` 键存 */
+const colorBlockCache = new Map<string, string>();
+
 /**
- * Synchronous pre-check: should this request be handed to picman?
+ * Get a static color-block SVG, generated once per (color, mode, size) and
+ * reused thereafter. No per-request palette extraction and no per-request
+ * rebuild — the block is content-independent, so identical (color, mode, size)
+ * requests share the same precomputed markup.
  *
- * 同步预判:该请求是否交给 picman 处理。
+ * 取静态色块 SVG,按(颜色,样式,尺寸)只生成一次、之后复用。不再逐请求取色、逐请求重建——
+ * 色块与图片内容无关,故相同(颜色,样式,尺寸)的请求共享同一份预生成字符串。
+ * @param width - Block width — 色块宽
+ * @param height - Block height — 色块高
+ * @param color - Hex skeleton color — 十六进制骨架色
+ * @param mode - Solid fill or vertical gradient — 纯色或纵向渐变
+ * @returns SVG markup — SVG 字符串
+ */
+function getColorBlock(width: number, height: number, color: string, mode: "solid" | "gradient"): string {
+  const key = `${color}|${mode}|${width}x${height}`;
+  let svg = colorBlockCache.get(key);
+  if (svg === undefined) {
+    svg = svgColorBlock({ width, height, mode, fallbackColor: color });
+    colorBlockCache.set(key, svg);
+  }
+  return svg;
+}
+
+/**
+ * Synchronous pre-check: should this request be handed to imgprogress?
+ *
+ * 同步预判:该请求是否交给 imgprogress 处理。
  * @param request - Incoming fetch request — 拦截到的请求
  * @param options - Resolved SW options — 已解析的 SW 配置
  * @returns Whether to intercept — 是否拦截
@@ -175,7 +202,7 @@ async function background(reader: ReadableStreamDefaultReader<Uint8Array>, acc: 
             // makeFirstFramePlaceholder 的 canvas.convertToBlob),所以缓存响应的
             // Content-Type 必须是 'image/png'——沿用原始格式的 mime 会与实际字节不符。
             await deps.cache.putStage(url, "ff", new Response(blob, { headers: { "Content-Type": "image/png" } }));
-            await deps.notify({ picman: 1, type: "first-frame", url });
+            await deps.notify({ imgprogress: 1, type: "first-frame", url });
           } else {
             deps.options.onError({ url, stage: "first-frame", error: new Error("first-frame render returned null") });
           }
@@ -190,10 +217,10 @@ async function background(reader: ReadableStreamDefaultReader<Uint8Array>, acc: 
     }
 
     await deps.cache.putStage(url, "1", new Response(acc.view().slice(), { headers: origResp.headers }));
-    await deps.notify({ picman: 1, type: "complete", url });
+    await deps.notify({ imgprogress: 1, type: "complete", url });
   } catch (err) {
-    await deps.notify({ picman: 1, type: "error", url, stage: "download", message: String(err) });
-    const ctx: PicmanErrorContext = { url, stage: "download", error: err };
+    await deps.notify({ imgprogress: 1, type: "error", url, stage: "download", message: String(err) });
+    const ctx: ImgprogressErrorContext = { url, stage: "download", error: err };
     deps.options.onError(ctx);
   }
 }
@@ -230,7 +257,7 @@ async function backgroundStatic(reader: ReadableStreamDefaultReader<Uint8Array>,
 
   const putPrefixThumb = async (): Promise<void> => {
     await deps.cache.putStage(url, "ff", new Response(acc.view().slice(), { headers: { "Content-Type": mime } }));
-    await deps.notify({ picman: 1, type: "first-frame", url });
+    await deps.notify({ imgprogress: 1, type: "first-frame", url });
     thumbDone = true;
   };
 
@@ -251,15 +278,15 @@ async function backgroundStatic(reader: ReadableStreamDefaultReader<Uint8Array>,
       const blob = await deps.makeFirstFrame(acc.view(), mime);
       if (blob) {
         await deps.cache.putStage(url, "ff", new Response(blob, { headers: { "Content-Type": "image/png" } }));
-        await deps.notify({ picman: 1, type: "first-frame", url });
+        await deps.notify({ imgprogress: 1, type: "first-frame", url });
       }
     }
 
     await deps.cache.putStage(url, "1", new Response(acc.view().slice(), { headers: origResp.headers }));
-    await deps.notify({ picman: 1, type: "complete", url });
+    await deps.notify({ imgprogress: 1, type: "complete", url });
   } catch (err) {
-    await deps.notify({ picman: 1, type: "error", url, stage: "download", message: String(err) });
-    const ctx: PicmanErrorContext = { url, stage: "download", error: err };
+    await deps.notify({ imgprogress: 1, type: "error", url, stage: "download", message: String(err) });
+    const ctx: ImgprogressErrorContext = { url, stage: "download", error: err };
     deps.options.onError(ctx);
   }
 }
@@ -273,7 +300,20 @@ async function backgroundStatic(reader: ReadableStreamDefaultReader<Uint8Array>,
  * @returns Response to hand back to the page — 回给页面的响应
  */
 async function mainFlow(request: Request, deps: PipelineDeps): Promise<Response> {
-  const resp = await deps.fetchImpl(request);
+  // 骨架色:优先用本请求携带的按元素 data-ske-color(经 PARAM_SKE),否则用全局静态默认色。
+  // Skeleton color: prefer this request's per-element data-ske-color (via PARAM_SKE), else the global static default.
+  const ske = new URL(request.url).searchParams.get(PARAM_SKE);
+  const color = ske ?? deps.options.fallbackColor;
+
+  // 规范化 URL 用于 fetch/缓存/通知——绝不能把 ske 等标记参数发给源站或写进 key,
+  // 否则页面端(用规范 URL 订阅)会与通知对不上。无参数时沿用原 Request 保留语义。
+  // Canonical URL for fetch/cache/notify — never leak marker params (ske, …) to the
+  // origin or into the key, or the page (subscribed on the canonical URL) won't match
+  // the notification. Reuse the original Request when there are no params, to preserve semantics.
+  const canonical = stripImgprogressParams(request.url);
+  const fetchReq = canonical === request.url ? request : new Request(canonical, request);
+
+  const resp = await deps.fetchImpl(fetchReq);
   if (!resp.ok || resp.type === "opaque" || !resp.body) return resp;
 
   const cl = resp.headers.get("Content-Length");
@@ -302,14 +342,8 @@ async function mainFlow(request: Request, deps: PipelineDeps): Promise<Response>
         // 已知尺寸的静态大图 PNG/JPEG:进入静态渐进流程(先占位,动态可显示信号触发时
         // 给部分字节缩略图,最后完整图),不再直接透传。未识别格式仍原样透传。
         if (deps.options.staticProgressive && (sr.format === "jpeg" || sr.format === "apng") && sr.width !== undefined && sr.height !== undefined && !done) {
-          const svg = svgColorBlock({
-            width: sr.width,
-            height: sr.height,
-            palette: sr.palette,
-            mode: deps.options.colorBlock,
-            fallbackColor: deps.options.fallbackColor,
-          });
-          deps.waitUntil(backgroundStatic(reader, acc, sr, request.url, resp, deps));
+          const svg = getColorBlock(sr.width, sr.height, color, deps.options.colorBlock);
+          deps.waitUntil(backgroundStatic(reader, acc, sr, canonical, resp, deps));
           return new Response(svg, {
             headers: { "Content-Type": "image/svg+xml", "Cache-Control": "no-store", [HEADER_MARK]: "placeholder" },
           });
@@ -318,14 +352,8 @@ async function mainFlow(request: Request, deps: PipelineDeps): Promise<Response>
       }
 
       if (sr.status === "animated" && sr.width !== undefined && sr.height !== undefined) {
-        const svg = svgColorBlock({
-          width: sr.width,
-          height: sr.height,
-          palette: sr.palette,
-          mode: deps.options.colorBlock,
-          fallbackColor: deps.options.fallbackColor,
-        });
-        deps.waitUntil(background(reader, acc, sr, request.url, resp, deps));
+        const svg = getColorBlock(sr.width, sr.height, color, deps.options.colorBlock);
+        deps.waitUntil(background(reader, acc, sr, canonical, resp, deps));
         return new Response(svg, {
           headers: { "Content-Type": "image/svg+xml", "Cache-Control": "no-store", [HEADER_MARK]: "placeholder" },
         });
@@ -365,18 +393,24 @@ export async function handleImageRequest(request: Request, deps: PipelineDeps): 
     }
 
     if (url.searchParams.has(PARAM_BYPASS)) {
-      return deps.fetchImpl(stripPicmanParams(request.url));
+      return deps.fetchImpl(stripImgprogressParams(request.url));
     }
 
     if (url.searchParams.has(PARAM_FULL)) {
-      const stage = url.searchParams.get(PARAM_FULL) as PicmanStage;
-      const strip = stripPicmanParams(request.url);
+      const stage = url.searchParams.get(PARAM_FULL) as ImgprogressStage;
+      const strip = stripImgprogressParams(request.url);
       const cached = await deps.cache.matchStage(strip, stage);
       if (cached) return cached;
       return deps.fetchImpl(strip);
     }
 
-    const key = stripPicmanParams(request.url);
+    const key = stripImgprogressParams(request.url);
+
+    // 需求2:统一行为——完整图已在缓存里就直接返回,跳过色块与重新下载(重复访问优化)。
+    // Unify behavior: if the full image is already cached, serve it directly — skip the color block and the re-download (repeat-visit optimization).
+    const cachedFull = await deps.cache.matchStage(key, "1");
+    if (cachedFull) return cachedFull;
+
     const existing = inflight.get(key);
     if (existing) return (await existing).clone();
 
@@ -388,7 +422,7 @@ export async function handleImageRequest(request: Request, deps: PipelineDeps): 
       inflight.delete(key);
     }
   } catch (err) {
-    const ctx: PicmanErrorContext = { url: request.url, stage: "fetch", error: err };
+    const ctx: ImgprogressErrorContext = { url: request.url, stage: "fetch", error: err };
     deps.options.onError(ctx);
     return deps.fetchImpl(request);
   }

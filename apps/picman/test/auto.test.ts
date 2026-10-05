@@ -41,7 +41,7 @@ describe("auto", () => {
     img.src = URL1;
     document.body.append(img);
     stop = auto();
-    sw.emit({ picman: 1, type: "complete", url: URL1 });
+    sw.emit({ imgprogress: 1, type: "complete", url: URL1 });
     await flush();
     expect(img.src).toBe(withStageParam(URL1, "1"));
   });
@@ -53,18 +53,18 @@ describe("auto", () => {
     img.src = URL1;
     document.body.append(img);
     await flush();
-    sw.emit({ picman: 1, type: "first-frame", url: URL1 });
+    sw.emit({ imgprogress: 1, type: "first-frame", url: URL1 });
     await flush();
     expect(img.src).toBe(withStageParam(URL1, "ff"));
   });
-  it("data-picman-bg 元素切 backgroundImage", async () => {
+  it("data-imgprogress-bg 元素切 backgroundImage", async () => {
     const sw = fakeSW();
     _setServiceWorkerContainer(sw as unknown as ServiceWorkerContainer);
     const div = document.createElement("div");
-    div.setAttribute("data-picman-bg", URL1);
+    div.setAttribute("data-imgprogress-bg", URL1);
     document.body.append(div);
     stop = auto();
-    sw.emit({ picman: 1, type: "complete", url: URL1 });
+    sw.emit({ imgprogress: 1, type: "complete", url: URL1 });
     await flush();
     expect(div.style.backgroundImage).toContain(withStageParam(URL1, "1"));
   });
@@ -72,7 +72,7 @@ describe("auto", () => {
     const sw = fakeSW();
     _setServiceWorkerContainer(sw as unknown as ServiceWorkerContainer);
     stop = auto();
-    sw.emit({ picman: 1, type: "complete", url: URL1 });
+    sw.emit({ imgprogress: 1, type: "complete", url: URL1 });
     const img = document.createElement("img");
     img.src = URL1;
     document.body.append(img);
@@ -88,8 +88,25 @@ describe("auto", () => {
     stop = auto();
     stop();
     stop = undefined;
-    sw.emit({ picman: 1, type: "complete", url: URL1 });
+    sw.emit({ imgprogress: 1, type: "complete", url: URL1 });
     await flush();
+    expect(img.src).toBe(URL1);
+  });
+  it("元素移出 DOM 后被清理,不再接收后续阶段", async () => {
+    const sw = fakeSW();
+    _setServiceWorkerContainer(sw as unknown as ServiceWorkerContainer);
+    const img = document.createElement("img");
+    img.src = URL1;
+    document.body.append(img);
+    stop = auto();
+    await flush();
+    // 移出 DOM → MutationObserver removedNodes → untrackSubtree 主动清理
+    img.remove();
+    await flush();
+    sw.emit({ imgprogress: 1, type: "complete", url: URL1 });
+    await flush();
+    // 测试仍持有 img 引用(WeakRef 可 deref),若未清理则会被 swap 到全图;
+    // src 保持原值,证明它已从 tracked 移除。
     expect(img.src).toBe(URL1);
   });
 
@@ -199,7 +216,7 @@ describe("auto", () => {
         document.body.append(img);
         stop = auto();
 
-        sw.emit({ picman: 1, type: "complete", url: URL1 });
+        sw.emit({ imgprogress: 1, type: "complete", url: URL1 });
         await flush();
         expect(img.src).toBe(URL1); // 未进入视口:保持原样,不切高清
 
@@ -223,7 +240,7 @@ describe("auto", () => {
         document.body.append(img);
         stop = auto();
 
-        sw.emit({ picman: 1, type: "complete", url: URL1 });
+        sw.emit({ imgprogress: 1, type: "complete", url: URL1 });
         await flush();
         expect(img.src).toBe(withStageParam(URL1, "1"));
       } finally {
@@ -244,7 +261,7 @@ describe("auto", () => {
         document.body.append(img);
         stop = auto({ offViewport: "thumbnail" });
 
-        sw.emit({ picman: 1, type: "complete", url: URL1 });
+        sw.emit({ imgprogress: 1, type: "complete", url: URL1 });
         await flush();
         expect(img.src).toBe(withStageParam(URL1, "1")); // 视口内:高清
 
@@ -273,7 +290,7 @@ describe("auto", () => {
         document.body.append(img);
         stop = auto({ offViewport: "placeholder" });
 
-        sw.emit({ picman: 1, type: "complete", url: URL1 });
+        sw.emit({ imgprogress: 1, type: "complete", url: URL1 });
         await flush();
         expect(img.src).toBe(withStageParam(URL1, "1"));
 
@@ -298,7 +315,7 @@ describe("auto", () => {
         document.body.append(img);
         stop = auto();
 
-        sw.emit({ picman: 1, type: "complete", url: URL1 });
+        sw.emit({ imgprogress: 1, type: "complete", url: URL1 });
         await flush();
         io.leave(img);
         await flush();

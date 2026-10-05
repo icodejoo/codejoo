@@ -1,6 +1,6 @@
 // @vitest-environment happy-dom
 import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest";
-import { definePicMan } from "../src/element/index";
+import { defineImgProgress } from "../src/element/index";
 import { _setServiceWorkerContainer } from "../src/page/messages";
 import { withStageParam } from "../src/shared/protocol";
 
@@ -29,10 +29,10 @@ afterAll(() => {
   (globalThis as unknown as { requestIdleCallback: unknown }).requestIdleCallback = originalRIC;
 });
 
-describe("<pic-man>", () => {
+describe("<img-progress>", () => {
   it("SW 缺失:直接渲染原 URL", async () => {
-    definePicMan();
-    const el = document.createElement("pic-man");
+    defineImgProgress();
+    const el = document.createElement("img-progress");
     el.setAttribute("src", URL1);
     document.body.append(el);
     await new Promise((r) => setTimeout(r, 0));
@@ -42,8 +42,8 @@ describe("<pic-man>", () => {
   it("阶段推进更新内部 img", async () => {
     const sw = fakeSW();
     _setServiceWorkerContainer(sw as unknown as ServiceWorkerContainer);
-    definePicMan();
-    const el = document.createElement("pic-man");
+    defineImgProgress();
+    const el = document.createElement("img-progress");
     el.setAttribute("src", URL1);
     el.setAttribute("alt", "demo");
     document.body.append(el);
@@ -51,12 +51,12 @@ describe("<pic-man>", () => {
     const img = el.shadowRoot!.querySelector("img")!;
     expect(img.src).toBe(URL1); // placeholder 阶段 = 原 URL(SW 回占位)
     expect(img.alt).toBe("demo");
-    sw.emit({ picman: 1, type: "complete", url: URL1 });
+    sw.emit({ imgprogress: 1, type: "complete", url: URL1 });
     await new Promise((r) => setTimeout(r, 0));
     expect(img.src).toBe(withStageParam(URL1, "1"));
   });
-  it("重复 definePicMan 幂等", () => {
-    definePicMan();
-    expect(() => definePicMan()).not.toThrow();
+  it("重复 defineImgProgress 幂等", () => {
+    defineImgProgress();
+    expect(() => defineImgProgress()).not.toThrow();
   });
 });
