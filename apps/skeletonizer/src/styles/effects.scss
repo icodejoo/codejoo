@@ -1,0 +1,198 @@
+/* ===== 动画效果：fade（默认）/ solid / sweep（原型）/ pulse / shimmer =====
+ * 通过根上的 x-ske-effect 属性切换。
+ * 性能分级：fade 只对根做 opacity 动画，跑在合成器线程，几乎零成本；
+ * pulse / shimmer 是每个骨头元素各挂一个动画，主线程每帧重算，元素多了会卡，仅建议小骨架使用。
+ * 骨头规则只读 --x-ske-bg-img / --x-ske-anim / --x-ske-anim-ul 三个变量。 */
+/* 默认全静态：不挂任何元素级动画 */
+.x-ske {
+  --x-ske-bg-img: none;
+  --x-ske-anim: none;
+  --x-ske-anim-ul: none;
+  --x-ske-fade-min: 0.55;
+  /* 浅色：lighten（逐通道取较大值）+ 比骨头略亮的高光色，只有比高光暗的像素会被提亮，
+ * 近白的卡片背景比它亮，原样不动 */
+  --x-ske-sweep-a: 0.5;
+  --x-ske-sweep-rgb: 236, 239, 243;
+  --x-ske-sweep-blend: lighten;
+  --x-ske-sweep-bleed: 16px;
+  /* sweep 光带宽度，相对根宽，可在根上覆盖 */
+  --x-ske-sweep-w: 35%;
+}
+
+/* fade：根整体 opacity 脉冲（没写 x-ske-effect 时的默认；显式写 fade 则强制开启） */
+.x-ske:not([x-ske-effect]),
+.x-ske[x-ske-effect="fade"] {
+  animation: x-ske-fade var(--x-ske-duration) ease-in-out infinite alternate;
+}
+@keyframes x-ske-fade {
+  from {
+    opacity: 1;
+  }
+  to {
+    opacity: var(--x-ske-fade-min, 0.55);
+  }
+}
+
+/* pulse：每个骨头元素背景色来回闪（元素级动画，贵） */
+.x-ske[x-ske-effect="pulse"] {
+  --x-ske-anim: x-ske-pulse var(--x-ske-duration) ease-in-out infinite alternate;
+  --x-ske-anim-ul: x-ske-pulse-ul var(--x-ske-duration) ease-in-out infinite alternate;
+}
+
+/* shimmer：流光用 fixed 背景在视口坐标里同步（元素级动画，贵）；下划线文字没法渐变，降级 pulse */
+.x-ske[x-ske-effect="shimmer"] {
+  --x-ske-bg-img: linear-gradient(100deg, transparent 0, var(--x-ske-highlight) 50%, transparent 100%);
+  --x-ske-anim: x-ske-shimmer var(--x-ske-duration) linear infinite;
+  --x-ske-anim-ul: x-ske-pulse-ul var(--x-ske-duration) ease-in-out infinite alternate;
+}
+
+/* 深色：卡片背景比骨头还暗，lighten 区分不开，维持 soft-light + 淡白色高光（强度调淡，减轻漏到容器背景） */
+@media (prefers-color-scheme: dark) {
+  :root:not([data-x-ske-theme="light"]) .x-ske {
+    --x-ske-sweep-a: 0.22;
+    --x-ske-sweep-rgb: 255, 255, 255;
+    --x-ske-sweep-blend: soft-light;
+  }
+}
+:root[data-x-ske-theme="dark"] .x-ske {
+  --x-ske-sweep-a: 0.22;
+  --x-ske-sweep-rgb: 255, 255, 255;
+  --x-ske-sweep-blend: soft-light;
+}
+
+/* sweep（原型）：整个根只有一个 ::after 扫光条，用 transform 平移，跑在合成器线程。
+   * 浅色用 lighten、深色用 soft-light 混合，让它主要提亮骨头，容器背景尽量不动。
+   * 代价：根会变成 position:relative + 左右裁剪（overflow-x: clip）；根自己的 ::after 会被占用；根里的 x-ske-ignore 内容也会被扫到。 */
+.x-ske[x-ske-effect="sweep"] {
+  position: relative;
+  /* 只裁左右，上下放开让光带多出一截。
+ * 必须用 overflow-x: clip：它不产生层叠上下文，mix-blend-mode 才能和页面背景混合；
+ * 换成 clip-path 会让根变成独立图层，光带就只在空隙里亮、扫不到骨头上 */
+  overflow-x: clip;
+}
+.x-ske[x-ske-effect="sweep"]::after {
+  content: "";
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 0;
+  /* 伪元素铺满根宽，光带只是渐变里居中的一段（宽度 --x-ske-sweep-w），
+ * 这样平移距离永远相对根宽，改光带宽度不用动动画 */
+  width: 100%;
+  pointer-events: none;
+  /* 渐变必须水平（90deg）：倾斜的渐变线比盒子宽，水平方向一行只覆盖其中一段，
+ * 盒子边缘处透明度到不了 0，会被硬截断成一道断崖；斜的观感改用 skewX。
+ * 渐变本身就是 透明 → 高光 → 透明；用 background-size 把它缩成宽 --x-ske-sweep-w 并居中，其余留白。 */
+  background: linear-gradient(
+      90deg,
+      rgba(var(--x-ske-sweep-rgb), 0),
+      rgba(var(--x-ske-sweep-rgb), var(--x-ske-sweep-a)) 30%,
+      rgba(var(--x-ske-sweep-rgb), var(--x-ske-sweep-a)),
+      rgba(var(--x-ske-sweep-rgb), var(--x-ske-sweep-a)) 70%,
+      rgba(var(--x-ske-sweep-rgb), 0)
+    )
+    center / var(--x-ske-sweep-w) 100% no-repeat;
+  transform: translateX(0%) skewX(-12deg);
+  // animation: x-ske-sweep var(--x-ske-duration) ease-out infinite;
+  will-change: transform;
+}
+/* 混合模式专属：光带上下各多出 --x-ske-sweep-bleed，淡出只发生在多出来的这一截，根的盒子内全程满强度；
+   * 再用 mix-blend-mode 让光带只提亮骨头。容器色模式不需要这两样 */
+.x-ske[x-ske-effect="sweep"]:not([x-ske-sweep="bg"])::after {
+  top: calc(var(--x-ske-sweep-bleed) * -1);
+  bottom: calc(var(--x-ske-sweep-bleed) * -1);
+  -webkit-mask-image: linear-gradient(to bottom, transparent 0, #000 var(--x-ske-sweep-bleed), #000 calc(100% - var(--x-ske-sweep-bleed)), transparent 100%);
+  mask-image: linear-gradient(to bottom, transparent 0, #000 var(--x-ske-sweep-bleed), #000 calc(100% - var(--x-ske-sweep-bleed)), transparent 100%);
+  mix-blend-mode: var(--x-ske-sweep-blend);
+}
+@keyframes x-ske-sweep {
+  from {
+    transform: translateX(-100%) skewX(-12deg);
+  }
+  to {
+    transform: translateX(100%) skewX(-12deg);
+  }
+}
+
+/* sweep 的"容器色"模式（需和 x-ske-effect="sweep" 一起写 x-ske-sweep="bg"）：
+   * 高光色直接取容器背景色 x，强度只靠 --x-ske-sweep-a 控制，不用混合模式、不用遮罩。
+   * 光带是普通 alpha 叠加：x 叠在 x 上还是 x，容器纹丝不动；骨头 y 会向 x 靠
+   * （浅色 x 比 y 亮，骨头被提亮；深色 x 比 y 暗，骨头被压暗）。
+   * 副作用：比 x 更亮/更暗的内容（如浅色下的纯白文字）也会被轻微拉向 x。
+   * 容器色用 --x-ske-sweep-bg-rgb 指定：取根里"最接近骨头"的那种容器背景
+   * （浅色取最暗的容器色，深色取最亮的容器色），可在根上用内联样式覆盖。 */
+.x-ske[x-ske-effect="sweep"][x-ske-sweep="bg"] {
+  --x-ske-sweep-bg-rgb: 249, 250, 251;
+  --x-ske-sweep-rgb: var(--x-ske-sweep-bg-rgb);
+  --x-ske-sweep-a: 0.4;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-x-ske-theme="light"]) .x-ske[x-ske-effect="sweep"][x-ske-sweep="bg"] {
+    --x-ske-sweep-bg-rgb: 31, 41, 55;
+  }
+}
+:root[data-x-ske-theme="dark"] .x-ske[x-ske-effect="sweep"][x-ske-sweep="bg"] {
+  --x-ske-sweep-bg-rgb: 31, 41, 55;
+}
+
+@keyframes x-ske-shimmer {
+  from {
+    background-position: -60vw 0;
+  }
+  to {
+    background-position: 110vw 0;
+  }
+}
+@keyframes x-ske-pulse {
+  from {
+    background-color: var(--x-ske-color);
+  }
+  to {
+    background-color: var(--x-ske-highlight);
+  }
+}
+@keyframes x-ske-pulse-ul {
+  from {
+    text-decoration-color: var(--x-ske-color);
+  }
+  to {
+    text-decoration-color: var(--x-ske-highlight);
+  }
+}
+
+/* iOS Safari 不支持 background-attachment:fixed，流光会各自为政，统一降级成 pulse */
+@supports (-webkit-touch-callout: none) {
+  .x-ske[x-ske-effect="shimmer"] {
+    --x-ske-bg-img: none;
+    --x-ske-anim: x-ske-pulse var(--x-ske-duration) ease-in-out infinite alternate;
+  }
+}
+
+/* 减少动态效果：全部静止（含根上的 fade） */
+@media (prefers-reduced-motion: reduce) {
+  .x-ske.x-ske {
+    --x-ske-bg-img: none;
+    --x-ske-anim: none;
+    --x-ske-anim-ul: none;
+    animation: none !important;
+  }
+  .x-ske[x-ske-effect="sweep"]::after {
+    animation: none;
+  }
+}
+
+/* 下划线文字的元素级动画：只在显式选了 pulse / shimmer 时才给元素挂动画 */
+@supports (text-decoration-thickness: 1em) {
+  .x-ske[x-ske-effect="pulse"]:not([x-ske-text="leaf"]) *:not([x-ske-ignore]),
+  .x-ske[x-ske-effect="shimmer"]:not([x-ske-text="leaf"]) *:not([x-ske-ignore]) {
+    animation: var(--x-ske-anim-ul, none);
+  }
+}
+
+/* 根里有 x-ske-ignore 时，默认的 fade 会连带把它也淡掉，所以隐式默认下不开 fade；
+ * 想强制开就显式写 x-ske-effect="fade" */
+@supports selector(:has(*)) {
+  .x-ske:not([x-ske-effect]):has([x-ske-ignore]) {
+    animation: none;
+  }
+}

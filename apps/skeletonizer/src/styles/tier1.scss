@@ -1,0 +1,30 @@
+@use "lists" as *;
+
+/* ===== 第 1 档：下划线法文字骨头（Safari 12.1+/Chrome 89+/Firefox 70+）=====
+ * 给所有文字画一根超粗下划线：沿真实文字行延伸，最后一行自然变短，混合文字也覆盖。
+ * 不能 shimmer、没有圆角；元素级动画不在这里挂（见 effects.css），默认只有根的 fade。 */
+@supports (text-decoration-thickness: 1em) {
+  /* 文字标签上第 0 档的背景色退场，改用下划线 */
+  #{sk-sel('.x-ske:not([x-ske-text="leaf"])', $text-tags)} {
+    background-color: transparent !important;
+    background-image: none !important;
+    border-radius: 0;
+    animation: none;
+  }
+
+  .x-ske:not([x-ske-text="leaf"]) *:not([x-ske-ignore]) {
+    color: transparent !important;
+    text-decoration-line: underline !important;
+    text-decoration-style: solid !important;
+    text-decoration-color: var(--x-ske-color) !important;
+    text-decoration-thickness: var(--x-ske-ul-thickness, 1em) !important;
+    text-decoration-skip-ink: none !important;
+    text-underline-offset: var(--x-ske-ul-offset, -0.85em) !important;
+  }
+
+  /* 叶子背景模式 / 媒体 / 标记元素不画下划线 */
+  .x-ske [x-ske-leaf] *,
+  .x-ske [x-ske-ignore] *:not([x-ske-ignore]):not([x-ske-x]) {
+    text-decoration: none !important;
+  }
+}

@@ -1,0 +1,94 @@
+{
+  "name": "@codejoo/skeletonizer",
+  "version": "0.1.0",
+  "description": "Web skeleton screens from your real DOM + mock data + pure CSS. 运行时 + mock + 覆盖标记的 Web 骨架屏。",
+  "keywords": [
+    "css",
+    "loading",
+    "placeholder",
+    "react",
+    "skeleton",
+    "skeleton-screen",
+    "svelte",
+    "vue",
+    "web-component",
+    "骨架屏"
+  ],
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/icodejoo/codejoo.git",
+    "directory": "apps/skeletonizer"
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "README.zh-CN.md"
+  ],
+  "type": "module",
+  "sideEffects": [
+    "**/*.css"
+  ],
+  "module": "./dist/index.mjs",
+  "types": "./dist/index.d.mts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.mts",
+      "import": "./dist/index.mjs",
+      "default": "./dist/index.mjs"
+    },
+    "./vue": {
+      "types": "./dist/vue.d.mts",
+      "import": "./dist/vue.mjs",
+      "default": "./dist/vue.mjs"
+    },
+    "./react": {
+      "types": "./dist/react.d.mts",
+      "import": "./dist/react.mjs",
+      "default": "./dist/react.mjs"
+    },
+    "./svelte": {
+      "types": "./dist/svelte.d.mts",
+      "import": "./dist/svelte.mjs",
+      "default": "./dist/svelte.mjs"
+    },
+    "./style.css": "./dist/skeletonizer.css",
+    "./package.json": "./package.json"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "scripts": {
+    "fmt": "vp fmt -c oxfmt.config.ts",
+    "lint": "vp lint -c oxlint.config.ts",
+    "check": "vp fmt -c oxfmt.config.ts --check && vp lint -c oxlint.config.ts",
+    "build": "vp pack",
+    "dev": "vp dev",
+    "dev:lib": "vp pack --watch",
+    "test": "vp test",
+    "prepublishOnly": "pnpm run check && pnpm build && pnpm test"
+  },
+  "devDependencies": {
+    "@tsdown/css": "catalog:",
+    "@types/node": "catalog:",
+    "@types/react": "^19.0.0",
+    "@typescript/native-preview": "catalog:",
+    "react": "^19.0.0",
+    "sass": "^1.105.1",
+    "vite-plus": "catalog:",
+    "vitest": "catalog:",
+    "vue": "catalog:"
+  },
+  "peerDependencies": {
+    "react": ">=16.8.0",
+    "vue": ">=3.0.0"
+  },
+  "peerDependenciesMeta": {
+    "vue": {
+      "optional": true
+    },
+    "react": {
+      "optional": true
+    }
+  }
+}

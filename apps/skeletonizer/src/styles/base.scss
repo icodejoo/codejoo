@@ -1,0 +1,41 @@
+/* ===== 兜底层：无条件生效，只用 CSS2.1/3 基础语法，颜色写字面量 =====
+ * 效果：根的直接子元素各自变成一整块灰，后代全部藏起来。
+ * 后面的档位会覆盖掉这一层。 */
+
+/* 自定义元素没升级时是 inline，先变块级 */
+x-ske {
+  display: block;
+}
+
+/* 交互锁（inert 之外的兜底，鼠标和选中） */
+.x-ske {
+  pointer-events: none !important;
+  -webkit-user-select: none !important;
+  user-select: none !important;
+}
+
+/* 根的直接子元素：整块半透明灰（用渐变图层，退出兜底时只需清掉 background-image） */
+.x-ske > *:not([x-ske-ignore]) {
+  background-image: linear-gradient(rgba(128, 128, 128, 0.2), rgba(128, 128, 128, 0.2)) !important;
+  color: transparent !important;
+}
+x-ske[loading] > *:not([x-ske-ignore]) {
+  background-image: linear-gradient(rgba(128, 128, 128, 0.2), rgba(128, 128, 128, 0.2)) !important;
+  color: transparent !important;
+}
+
+/* 后代藏起来：只藏后代，保住直接子元素自己的背景 */
+.x-ske > * *,
+x-ske[loading] > * * {
+  visibility: hidden !important;
+}
+
+/* x-ske-ignore 例外：保持原样可见 */
+.x-ske [x-ske-ignore],
+.x-ske [x-ske-ignore] * {
+  visibility: visible !important;
+}
+x-ske[loading] [x-ske-ignore],
+x-ske[loading] [x-ske-ignore] * {
+  visibility: visible !important;
+}

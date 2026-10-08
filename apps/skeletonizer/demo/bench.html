@@ -1,0 +1,81 @@
+<!doctype html>
+<html lang="zh">
+  <head>
+    <meta charset="utf-8" />
+    <title>skeletonizer 性能基准</title>
+    <link rel="stylesheet" href="../src/styles/skeletonizer.scss" />
+    <style>
+      body {
+        font:
+          14px/1.5 system-ui,
+          sans-serif;
+        margin: 0;
+      }
+      .card {
+        display: flex;
+        gap: 8px;
+        padding: 8px;
+        border: 1px solid #ddd;
+        margin: 4px;
+      }
+      .card img {
+        width: 48px;
+        height: 48px;
+        border-radius: 50%;
+      }
+    </style>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module">
+      import { Bone, enable } from "../src/index.ts";
+      const GIF = Bone.image();
+      /** 生成 n 张卡片，每张约 8 个元素 */
+      window.build = (n) => {
+        const root = document.getElementById("root");
+        root.innerHTML = Array.from(
+          { length: n },
+          (_, i) => `
+    <div class="card"><img src="${GIF}" alt="">
+      <div><h3>${Bone.text(10)}</h3><p>${Bone.lines(2)}</p>
+      <span>${Bone.text(6)}</span> <i class="icon-star"></i><button>${Bone.text(4)}</button></div></div>`,
+        ).join("");
+        return root.querySelectorAll("*").length;
+      };
+      window.skEnable = enable;
+
+      const nextFrame = () => new Promise((r) => requestAnimationFrame(() => r()));
+
+      /**
+       * 测一种配置每帧平均耗时（目标 16.6ms），在控制台调用：await bench(500, [['x-ske-effect','pulse']])
+       * @param {number} n 卡片数（每张约 8 个元素）
+       * @param {Array<[string,string]>} attrs 要写到根上的属性
+       * @param {number} [ms] 采样时长
+       * @returns {Promise<{elements:number, avg_ms:number, frames:number}>}
+       */
+      window.bench = async (n, attrs = [], ms = 1500) => {
+        const elements = build(n);
+        const root = window.root;
+        root.className = "";
+        ["x-ske-text", "x-ske-effect"].forEach((a) => root.removeAttribute(a));
+        attrs.forEach(([k, v]) => root.setAttribute(k, v));
+        root.classList.add("x-ske");
+        await nextFrame();
+        await nextFrame();
+        const d = [];
+        let last = performance.now();
+        const end = last + ms;
+        while (performance.now() < end) {
+          await nextFrame();
+          const now = performance.now();
+          d.push(now - last);
+          last = now;
+        }
+        root.classList.remove("x-ske");
+        return { elements, avg_ms: +(d.reduce((a, b) => a + b, 0) / d.length).toFixed(1), frames: d.length };
+      };
+      window.root = document.getElementById("root");
+      window.ready = true;
+    </script>
+  </body>
+</html>

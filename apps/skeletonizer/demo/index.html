@@ -1,0 +1,495 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>skeletonizer 原型 demo</title>
+    <style>
+      :root {
+        --bg: #fff;
+        --fg: #111827;
+        --card: #f9fafb;
+        --line: #e5e7eb;
+        --accent: #2563eb;
+      }
+      :root[data-x-ske-theme="dark"] {
+        --bg: #111827;
+        --fg: #f3f4f6;
+        --card: #1f2937;
+        --line: #374151;
+        --accent: #60a5fa;
+        color-scheme: dark;
+      }
+      * {
+        box-sizing: border-box;
+      }
+      body {
+        margin: 0;
+        background: var(--bg);
+        color: var(--fg);
+        font:
+          15px/1.6 system-ui,
+          "PingFang SC",
+          "Microsoft YaHei",
+          sans-serif;
+      }
+      header.bar {
+        position: sticky;
+        top: 0;
+        z-index: 10;
+        display: flex;
+        flex-wrap: wrap;
+        gap: 10px 16px;
+        align-items: center;
+        padding: 10px 20px;
+        background: var(--bg);
+        border-bottom: 1px solid var(--line);
+      }
+      header.bar label {
+        font-size: 13px;
+        display: inline-flex;
+        gap: 6px;
+        align-items: center;
+      }
+      header.bar button,
+      header.bar select {
+        font: inherit;
+        padding: 4px 10px;
+        border: 1px solid var(--line);
+        border-radius: 6px;
+        background: var(--card);
+        color: var(--fg);
+        cursor: pointer;
+      }
+      main {
+        max-width: 1080px;
+        margin: 0 auto;
+        padding: 20px;
+        display: grid;
+        gap: 28px;
+      }
+      h2.sec {
+        margin: 0 0 4px;
+        font-size: 18px;
+      }
+      p.note {
+        margin: 0 0 10px;
+        font-size: 13px;
+        opacity: 0.7;
+      }
+      .grid2 {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 16px;
+      }
+      .grid3 {
+        display: grid;
+        grid-template-columns: repeat(3, 1fr);
+        gap: 16px;
+      }
+      @media (max-width: 760px) {
+        .grid2,
+        .grid3 {
+          grid-template-columns: 1fr;
+        }
+      }
+      .box {
+        border: 1px solid var(--line);
+        border-radius: 10px;
+        padding: 14px;
+        background: var(--card);
+      }
+      .box > h4 {
+        margin: 0 0 8px;
+        font-size: 12px;
+        text-transform: uppercase;
+        letter-spacing: 0.06em;
+        opacity: 0.6;
+      }
+      .narrow {
+        max-width: 240px;
+      }
+      .card {
+        display: flex;
+        gap: 12px;
+        align-items: flex-start;
+      }
+      .card img.avatar {
+        width: 48px;
+        height: 48px;
+        border-radius: 50%;
+        flex: none;
+      }
+      .card .body {
+        flex: 1;
+        min-width: 0;
+      }
+      .card h3 {
+        margin: 0;
+        font-size: 16px;
+      }
+      .card small {
+        opacity: 0.7;
+      }
+      .btn {
+        margin-top: 8px;
+        padding: 6px 14px;
+        border: 0;
+        border-radius: 6px;
+        background: var(--accent);
+        color: #fff;
+        font: inherit;
+      }
+      .icon-star::before {
+        content: "★";
+        color: #f59e0b;
+      }
+      .icon-star {
+        display: inline-block;
+        width: 1.2em;
+        height: 1.2em;
+        font-style: normal;
+        vertical-align: middle;
+      }
+      .big {
+        font-size: 28px;
+        line-height: 1.2;
+        margin: 0 0 6px;
+      }
+      .tiny {
+        font-size: 12px;
+      }
+      code.out {
+        display: block;
+        word-break: break-all;
+        font:
+          12px/1.5 ui-monospace,
+          monospace;
+        padding: 6px 8px;
+        background: var(--bg);
+        border: 1px dashed var(--line);
+        border-radius: 6px;
+        margin-bottom: 8px;
+      }
+      .float {
+        position: absolute;
+        right: 8px;
+        top: 8px;
+        padding: 2px 8px;
+        border-radius: 10px;
+        background: #ef4444;
+        color: #fff;
+        font-size: 12px;
+      }
+      .rel {
+        position: relative;
+      }
+      [data-demo-root] {
+        min-height: 20px;
+      }
+      .tag-ok {
+        color: #16a34a;
+      }
+      .tag-no {
+        color: #dc2626;
+      }
+    </style>
+  </head>
+  <body>
+    <header class="bar">
+      <strong>skeletonizer 原型</strong>
+      <button id="btn-loading">loading：开</button>
+      <button id="btn-dark">深色：开</button>
+      <label
+        >效果
+        <select id="sel-effect">
+          <option>fade</option>
+          <option selected>sweep</option>
+          <option>solid</option>
+          <option>pulse</option>
+          <option>shimmer</option>
+        </select>
+      </label>
+      <label
+        >光带模式
+        <select id="sel-sweep">
+          <option value="mix">混合（现有）</option>
+          <option value="bg" selected>容器色</option>
+        </select>
+      </label>
+      <label
+        >档位
+        <select id="sel-tier">
+          <option value="0">仅兜底层</option>
+          <option value="1">+ 第 0 档</option>
+          <option value="2">+ 第 1 档</option>
+          <option value="3" selected>+ 第 2 档（全部）</option>
+        </select>
+      </label>
+      <label
+        >文字骨头
+        <select id="sel-text">
+          <option value="underline">下划线法</option>
+          <option value="leaf">叶子背景法</option>
+        </select>
+      </label>
+    </header>
+
+    <main>
+      <!-- 1 文字：下划线法 vs 叶子背景法 -->
+      <section>
+        <h2 class="sec">1 · 文字骨头：下划线法 vs 叶子背景法</h2>
+        <p class="note">同一份内容，左边固定下划线法，右边固定叶子背景法（右边在第 2 档才有效）。看粗细、垂直位置、不同字号、混合文字、嵌套、最后一行。</p>
+        <div class="grid2">
+          <div class="box">
+            <h4>下划线法</h4>
+            <div data-demo-root data-fixed-text="underline" id="cmp-a"></div>
+          </div>
+          <div class="box">
+            <h4>叶子背景法</h4>
+            <div data-demo-root data-fixed-text="leaf" id="cmp-b"></div>
+          </div>
+        </div>
+      </section>
+
+      <!-- 2 :has 叶子 / 卡片 -->
+      <section>
+        <h2 class="sec">2 · 卡片：结构叶子 + 图标启发式</h2>
+        <p class="note">avatar 用 Bone.image 透明图；按钮、标题、描述、图标（i.icon-star）自动命中，容器的边框背景保留。</p>
+        <div class="grid3" data-demo-root id="cards"></div>
+      </section>
+
+      <!-- 3 媒体叶子 -->
+      <section>
+        <h2 class="sec">3 · 媒体叶子</h2>
+        <p class="note">img（透明 mock 图 / 真实图片）、内联 svg、video、canvas。观察真实图片能否被藏起来。</p>
+        <div class="grid3" data-demo-root id="media">
+          <div class="box">
+            <h4>img · Bone.image(160,100)</h4>
+            <img id="img-mock" width="160" height="100" alt="" />
+          </div>
+          <div class="box">
+            <h4>img · 真实图片（没 mock）</h4>
+            <img id="img-real" width="160" height="100" alt="" />
+          </div>
+          <div class="box">
+            <h4>svg</h4>
+            <svg width="160" height="100" viewBox="0 0 160 100">
+              <rect width="160" height="100" fill="#fca5a5" />
+              <circle cx="80" cy="50" r="30" fill="#b91c1c" />
+            </svg>
+          </div>
+          <div class="box">
+            <h4>video</h4>
+            <video width="160" height="100" poster="" muted></video>
+          </div>
+          <div class="box">
+            <h4>canvas</h4>
+            <canvas id="cv" width="160" height="100"></canvas>
+          </div>
+          <div class="box">
+            <h4>input / button</h4>
+            <input value="已填写的内容" style="width: 100%" /><br /><button class="btn">提交</button>
+          </div>
+        </div>
+      </section>
+
+      <!-- 4 标记 -->
+      <section>
+        <h2 class="sec">4 · 标记：x-ske-bone / x-ske-leaf / x-ske-ignore</h2>
+        <div class="grid3" data-demo-root id="marks">
+          <div class="box">
+            <h4>x-ske-ignore（Logo 保持原样）</h4>
+            <div x-ske-ignore style="font-weight: 700; font-size: 20px; color: var(--accent)">⌘ Brand<span style="color: #16a34a"> Logo</span></div>
+            <p>这段会变骨头：欢迎回来，今天也要加油。</p>
+          </div>
+          <div class="box">
+            <h4>x-ske-leaf（整块合并）</h4>
+            <div x-ske-leaf style="padding: 10px; border-radius: 8px; border: 1px solid var(--line)"><b>订单 #8841</b><br /><span>3 件商品 · ¥ 128.00</span><br /><small>预计明天送达</small></div>
+          </div>
+          <div class="box">
+            <h4>x-ske-bone（装饰 div 强制当骨头）</h4>
+            <div x-ske-bone style="height: 40px; border-radius: 8px; background: linear-gradient(90deg, #f97316, #ec4899)"></div>
+            <p class="tiny">上面是渐变装饰条，没有标记时不会被识别。</p>
+          </div>
+        </div>
+      </section>
+
+      <!-- 5 Web Component -->
+      <section>
+        <h2 class="sec">5 · Web Component（Shadow DOM）</h2>
+        <p class="note">demo-card 内部有 shadow DOM。宿主 visibility:hidden + ::before 铺骨头，样式表由 registerCustomElements 运行时生成。</p>
+        <div class="grid3" data-demo-root id="wc">
+          <demo-card heading="Shadow 卡片 A" text="这里的文字都在 shadow DOM 里，外部选择器进不去。"></demo-card>
+          <demo-card heading="Shadow 卡片 B" text="第二张卡片，用来确认多个实例都命中。"></demo-card>
+          <demo-card heading="Shadow 卡片 C" text="第三张。"></demo-card>
+        </div>
+      </section>
+
+      <!-- 7 Bone -->
+      <section>
+        <h2 class="sec">6/7 · 动画与 Bone mock</h2>
+        <p class="note">顶部切换 fade（默认，根级 opacity，几乎零成本）/ solid / pulse / shimmer（元素级动画，仅适合小骨架）。下面的文字全部由 Bone 生成（确定性、不用 Math.random）。</p>
+        <div class="grid2" data-demo-root id="bones"></div>
+      </section>
+
+      <!-- 8 兜底层失败场景 -->
+      <section>
+        <h2 class="sec">8 · 兜底层的边界（Q29）</h2>
+        <p class="note">把顶部「档位」切到「仅兜底层」再看。根的直接子元素依次是：普通块 / 绝对定位悬浮角标 / display:contents 包装 / canvas / 裸文字。</p>
+        <div class="box rel" data-demo-root id="fails" style="display: flex; flex-direction: column; gap: 10px">
+          <div>普通块：直接子元素一</div>
+          <span class="float">NEW</span>
+          <div style="display: contents">
+            <p style="margin: 0">display:contents 包装里的段落一</p>
+            <p style="margin: 0">段落二</p>
+          </div>
+          <canvas width="160" height="60" id="cv2"></canvas>
+          这是直接放在根下的裸文字，没有被元素包住。
+        </div>
+      </section>
+    </main>
+
+    <script type="module">
+      import { Bone, enable, disable, registerCustomElements, defineXSke } from "../src/index.ts";
+
+      // ---------- 自带 shadow DOM 的演示组件 ----------
+      class DemoCard extends HTMLElement {
+        connectedCallback() {
+          if (this.shadowRoot) return;
+          const root = this.attachShadow({ mode: "open" });
+          root.innerHTML = `<style>
+      :host { display: block; border: 1px solid #cbd5e1; border-radius: 10px; padding: 14px; background: #f1f5f9; color: #0f172a; }
+      h3 { margin: 0 0 6px; font-size: 16px; } p { margin: 0; font-size: 14px; }
+      .dot { display: inline-block; width: 28px; height: 28px; border-radius: 50%; background: #6366f1; margin-bottom: 6px; }
+    </style><span class="dot"></span><h3>${this.getAttribute("heading")}</h3><p>${this.getAttribute("text")}</p>`;
+        }
+      }
+      customElements.define("demo-card", DemoCard);
+      defineXSke();
+
+      // ---------- 内容填充 ----------
+      const $ = (s) => document.querySelector(s);
+      const mixedContent = `
+  <h1 class="big">大标题：夏季新品发布</h1>
+  <h3>三号标题：限时折扣信息</h3>
+  <p style="max-width:300px">这是一段比较长的正文，会在窄容器里折成好几行，最后一行应该明显比前面短，用来检查骨头是不是跟着真实文字行走。</p>
+  <p class="tiny">小字号：更新于昨天，共 128 条评论。</p>
+  <div>价格：<b>¥ 5.00</b> 起，<em>包邮</em></div>
+  <p>嵌套：<span>外层 <em>斜体中的 <strong>加粗</strong> 内容</em> 收尾</span></p>
+  <ul><li>列表项一：第一条说明</li><li>列表项二：第二条说明比较长一点点</li></ul>`;
+      $("#cmp-a").innerHTML = mixedContent;
+      $("#cmp-b").innerHTML = mixedContent;
+
+      $("#cards").innerHTML = [1, 2, 3]
+        .map(
+          (i) => `
+  <div class="box card">
+    <img class="avatar" src="${Bone.image(48)}" alt="">
+    <div class="body">
+      <h3>用户昵称 ${i}</h3>
+      <small>发布于 3 小时前 <i class="icon-star"></i></small>
+      <p>${i === 1 ? "一条很短的描述。" : "这里是一段稍长的个人简介，用来看多行文字在卡片里的骨头形状。"}</p>
+      <button class="btn">关注</button>
+    </div>
+  </div>`,
+        )
+        .join("");
+
+      const realImg =
+        "data:image/svg+xml;charset=utf-8," +
+        encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" width="160" height="100"><rect width="160" height="100" fill="#34d399"/><text x="20" y="58" font-size="22" fill="#064e3b">REAL IMG</text></svg>');
+      $("#img-mock").src = Bone.image(160, 100);
+      $("#img-real").src = realImg;
+      $("#media video").setAttribute("src", "");
+      for (const id of ["cv", "cv2"]) {
+        const c = document.getElementById(id),
+          g = c.getContext("2d");
+        const grad = g.createLinearGradient(0, 0, c.width, 0);
+        grad.addColorStop(0, "#60a5fa");
+        grad.addColorStop(1, "#a78bfa");
+        g.fillStyle = grad;
+        g.fillRect(0, 0, c.width, c.height);
+        g.fillStyle = "#fff";
+        g.font = "16px sans-serif";
+        g.fillText("CANVAS", 10, 34);
+      }
+
+      $("#bones").innerHTML = `
+  <div class="box"><h4>Bone.text(24) / text(60)</h4>
+    <code class="out">${Bone.text(24)}</code>
+    <p class="narrow">${Bone.text(60)}</p></div>
+  <div class="box"><h4>Bone.lines(3)</h4><p class="narrow">${Bone.lines(3, { perLine: 22 })}</p></div>
+  <div class="box"><h4>Bone.cjk(40)</h4><p class="narrow">${Bone.cjk(40)}</p></div>
+  <div class="box"><h4>Bone.number(5)</h4><h3>余额：${Bone.number(5)} 元</h3></div>`;
+
+      // ---------- 开关与控制 ----------
+      const roots = [...document.querySelectorAll("[data-demo-root]")];
+      const state = { loading: true, dark: true, effect: "sweep", sweep: "bg", tier: 3, text: "underline" };
+      let hosts;
+
+      function apply() {
+        document.documentElement.toggleAttribute("data-x-ske-theme", false);
+        document.documentElement.setAttribute("data-x-ske-theme", state.dark ? "dark" : "light");
+        roots.forEach((el) => {
+          const text = el.dataset.fixedText ?? state.text;
+          if (state.loading) enable(el, { effect: state.effect, text });
+          else disable(el);
+          el.setAttribute("x-ske-effect", state.effect);
+          el.setAttribute("x-ske-text", text);
+          if (state.sweep === "bg") el.setAttribute("x-ske-sweep", "bg");
+          else el.removeAttribute("x-ske-sweep");
+        });
+        $("#btn-loading").textContent = `loading：${state.loading ? "开" : "关"}`;
+        $("#btn-dark").textContent = `深色：${state.dark ? "开" : "关"}`;
+      }
+
+      const CSS_FILES = ["base", "tier0", "tier1", "tier2", "effects"];
+      function loadTier(n) {
+        document.querySelectorAll("link[data-x-ske-css]").forEach((l) => l.remove());
+        // n=0 仅 base；n=1 + tier0 + effects；n=2 + tier1；n=3 + tier2
+        const want = ["base"];
+        if (n >= 1) want.push("tier0", "effects");
+        if (n >= 2) want.push("tier1");
+        if (n >= 3) want.push("tier2");
+        CSS_FILES.filter((f) => want.includes(f)).forEach((f) => {
+          const l = document.createElement("link");
+          l.rel = "stylesheet";
+          l.href = `../src/styles/${f}.scss`;
+          l.dataset.skCss = f;
+          document.head.appendChild(l);
+        });
+      }
+
+      $("#btn-loading").onclick = () => {
+        state.loading = !state.loading;
+        apply();
+      };
+      $("#btn-dark").onclick = () => {
+        state.dark = !state.dark;
+        apply();
+      };
+      $("#sel-effect").onchange = (e) => {
+        state.effect = e.target.value;
+        apply();
+      };
+      $("#sel-sweep").onchange = (e) => {
+        state.sweep = e.target.value;
+        apply();
+      };
+      $("#sel-tier").onchange = (e) => {
+        state.tier = +e.target.value;
+        loadTier(state.tier);
+      };
+      $("#sel-text").onchange = (e) => {
+        state.text = e.target.value;
+        apply();
+      };
+
+      loadTier(state.tier);
+      hosts = registerCustomElements(document, { watch: true });
+      apply();
+      window.__sk = { state, apply, loadTier, hosts, enable, disable };
+    </script>
+  </body>
+</html>
