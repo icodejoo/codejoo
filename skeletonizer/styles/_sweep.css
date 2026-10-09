@@ -1,0 +1,81 @@
+@charset "UTF-8";
+/* ===== sweep：整个根一个 ::after 扫光条，transform 平移，跑在合成器线程（skeletonizer/sweep.css） =====
+ * 光带默认竖直（倾斜见 --skz-sweep-skew 的注释）。
+ * 浅色用 lighten 混合，深色用容器色 alpha 叠加，让它主要提亮/扫过骨头。
+ * 代价：根会变成 position:relative + 左右裁剪（overflow-x: clip）；根自己的 ::after 会被占用；根里的 skz-ignore 内容也会被扫到。 */
+[skz] {
+  /* 浅色：lighten（逐通道取较大值）+ 比骨头略亮的高光色，只有比高光暗的像素会被提亮，近白的卡片背景比它亮，原样不动 */
+  --skz-sweep-a: 0.5;
+  --skz-sweep-rgb: 236, 239, 243;
+  --skz-sweep-blend: lighten;
+  --skz-sweep-bleed: 16px;
+  /* sweep 光带宽度，相对根宽，可在根上覆盖 */
+  --skz-sweep-w: 35%;
+  /* 光带倾斜角，默认 0（竖直）。skewX 绕元素中心倾斜，根越高两端被斜出去越远（偏移 = 高度 / 2 * tan(角度)），
+   * 根高超过约 16 倍根宽（1200px 宽约 19k px）视口里就看不到光带了。想要斜光带可在根上设 -12deg，别用在长列表上 */
+  --skz-sweep-skew: 0deg;
+  /* 上下淡出遮罩：光带上下各多出 --skz-sweep-bleed，淡出只发生在多出来的这一截，根的盒子内全程满强度 */
+  --skz-sweep-mask: linear-gradient(to bottom, transparent 0, #000 var(--skz-sweep-bleed), #000 calc(100% - var(--skz-sweep-bleed)), transparent 100%);
+}
+
+/* 深色：改用容器色叠加（光带色=容器背景色，普通 alpha 叠加，不用混合模式、不用遮罩，容器不漏光，骨头被压向容器色）。
+ * 换主题时在根上覆盖 --skz-sweep-bg-rgb，取根里最亮的那种容器色 */
+@media (prefers-color-scheme: dark) {
+  :root:not([data-skz-theme=light]) [skz] {
+    --skz-sweep-bg-rgb: 31, 41, 55;
+    --skz-sweep-rgb: var(--skz-sweep-bg-rgb);
+    --skz-sweep-a: 0.4;
+    --skz-sweep-blend: normal;
+    --skz-sweep-bleed: 0px;
+    --skz-sweep-mask: none;
+  }
+}
+:root[data-skz-theme=dark] [skz] {
+  --skz-sweep-bg-rgb: 31, 41, 55;
+  --skz-sweep-rgb: var(--skz-sweep-bg-rgb);
+  --skz-sweep-a: 0.4;
+  --skz-sweep-blend: normal;
+  --skz-sweep-bleed: 0px;
+  --skz-sweep-mask: none;
+}
+
+@keyframes skz-sweep {
+  from {
+    transform: translateX(-100%) skewX(var(--skz-sweep-skew));
+  }
+  to {
+    transform: translateX(100%) skewX(var(--skz-sweep-skew));
+  }
+}
+[skz][skz-effect=sweep] {
+  position: relative;
+  /* 只裁左右，上下放开让光带多出一截。
+   * 必须用 overflow-x: clip：它不产生层叠上下文，mix-blend-mode 才能和页面背景混合；
+   * 换成 clip-path 会让根变成独立图层，光带就只在空隙里亮、扫不到骨头上 */
+  overflow-x: clip;
+  /* 根自己不做动画（降级到 sweep 时关掉 fade） */
+  animation: none;
+}
+[skz][skz-effect=sweep]::after {
+  content: "";
+  position: absolute;
+  /* 上下多出 --skz-sweep-bleed（深色为 0），配合 --skz-sweep-mask 淡出 */
+  top: calc(var(--skz-sweep-bleed) * -1);
+  bottom: calc(var(--skz-sweep-bleed) * -1);
+  left: 0;
+  /* 伪元素铺满根宽，光带只是渐变里居中的一段（宽度 --skz-sweep-w），
+   * 这样平移距离永远相对根宽，改光带宽度不用动动画 */
+  width: 100%;
+  pointer-events: none;
+  /* 渐变必须水平（90deg）：倾斜的渐变线比盒子宽，水平方向一行只覆盖其中一段，
+   * 盒子边缘处透明度到不了 0，会被硬截断成一道断崖。倾斜见 --skz-sweep-skew。
+   * 渐变本身就是 透明 → 高光 → 透明；用 background-size 把它缩成宽 --skz-sweep-w 并居中，其余留白。 */
+  background: linear-gradient(90deg, rgba(var(--skz-sweep-rgb), 0), rgba(var(--skz-sweep-rgb), var(--skz-sweep-a)) 30%, rgba(var(--skz-sweep-rgb), var(--skz-sweep-a)), rgba(var(--skz-sweep-rgb), var(--skz-sweep-a)) 70%, rgba(var(--skz-sweep-rgb), 0)) center/var(--skz-sweep-w) 100% no-repeat;
+  transform: translateX(-100%) skewX(var(--skz-sweep-skew));
+  animation: skz-sweep var(--skz-duration) ease-out infinite;
+  will-change: transform;
+  -webkit-mask-image: var(--skz-sweep-mask);
+  mask-image: var(--skz-sweep-mask);
+  /* 浅色 lighten 只提亮骨头；深色 normal（容器色叠加） */
+  mix-blend-mode: var(--skz-sweep-blend);
+}

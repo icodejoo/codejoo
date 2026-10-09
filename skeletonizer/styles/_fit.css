@@ -1,0 +1,13 @@
+@charset "UTF-8";
+/* ===== 骨架 fit 模式（防滚动溢出） ===== */
+[skz-fit] {
+  max-height: 100vh;
+  max-height: 100dvh;
+  overflow: hidden;
+  overflow: clip;
+}
+
+/* fit 模式下完全溢出边界而被程序打上隐藏标记的项不参与渲染 */
+[skz-fit-hide] {
+  display: none !important;
+}

@@ -1,0 +1,47 @@
+@charset "UTF-8";
+/* ===== 显式标记与忽略区：所有基底共用 =====
+ * skz-bone = 本元素当骨头；skz-leaf = 本元素整块，子树全藏；skz-ignore = 保持原样、可交互。 */
+/* 忽略区恢复鼠标交互和选中（pointer-events 可以在后代上重新打开）。
+ * text-fill-color 故意不加 !important：藏文字用它而不是 color（color 会继承，忽略区会跟着变透明）；
+ * 这里低优先级盖掉从骨架父级继承来的 transparent，忽略区自己写了渐变文字等则以它自己的为准 */
+[skz] [skz-ignore] {
+  pointer-events: auto !important;
+  -webkit-user-select: auto !important;
+  user-select: auto !important;
+  -webkit-text-fill-color: currentColor;
+}
+
+/* 忽略区保持原样可见 */
+[skz] [skz-ignore],
+[skz] [skz-ignore] * {
+  visibility: visible !important;
+}
+
+[skz] [skz-bone],
+[skz] [skz-leaf] {
+  background-color: var(--skz-fill, var(--skz-color)) !important;
+  background-position: var(--skz-bg-pos, 0 0);
+  background-image: var(--skz-bg-img, none) !important;
+  background-repeat: no-repeat !important;
+  background-attachment: fixed !important;
+  background-size: var(--skz-bg-size, 60vw 100vh) !important;
+  -webkit-text-fill-color: transparent !important;
+}
+
+/* 骨头圆角：用 :where() 把优先级降到 0，元素自己写了 border-radius（如圆形头像）就保留它的形状 */
+:where([skz] [skz-bone], [skz] [skz-leaf]) {
+  border-radius: var(--skz-radius);
+}
+
+[skz] [skz-leaf] * {
+  visibility: hidden !important;
+  text-decoration: none !important;
+}
+
+/* 忽略区子树：撤销骨头效果。文字用 text-fill-color 撤销、不动 color，后代自己的文字色得以保留；
+ * 背景/背景图仍会被清掉（自动推导模式下第 2 档才完整保留） */
+[skz] [skz-ignore] *:not([skz-ignore]):not([skz-x]) {
+  background-color: transparent !important;
+  background-image: none !important;
+  -webkit-text-fill-color: currentColor !important;
+}

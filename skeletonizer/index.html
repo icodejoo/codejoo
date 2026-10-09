@@ -1,0 +1,383 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>skeletonizer 原型 demo</title>
+    <link rel="icon" href="data:," />
+    <style>
+      :root {
+        --bg: #fff;
+        --fg: #111827;
+        --card: #f9fafb;
+        --line: #e5e7eb;
+        --accent: #2563eb;
+      }
+      :root[data-skz-theme="dark"] {
+        --bg: #111827;
+        --fg: #f3f4f6;
+        --card: #1f2937;
+        --line: #374151;
+        --accent: #60a5fa;
+        color-scheme: dark;
+      }
+      * {
+        box-sizing: border-box;
+      }
+      body {
+        margin: 0;
+        background: var(--bg);
+        color: var(--fg);
+        font:
+          15px/1.6 system-ui,
+          "PingFang SC",
+          "Microsoft YaHei",
+          sans-serif;
+      }
+      header.bar {
+        position: sticky;
+        top: 0;
+        z-index: 10;
+        display: flex;
+        flex-wrap: wrap;
+        gap: 10px 16px;
+        align-items: center;
+        padding: 10px 20px;
+        background: var(--bg);
+        border-bottom: 1px solid var(--line);
+      }
+      header.bar label {
+        font-size: 13px;
+        display: inline-flex;
+        gap: 6px;
+        align-items: center;
+      }
+      header.bar button,
+      header.bar select {
+        font: inherit;
+        padding: 4px 10px;
+        border: 1px solid var(--line);
+        border-radius: 6px;
+        background: var(--card);
+        color: var(--fg);
+        cursor: pointer;
+      }
+      main {
+        max-width: 1080px;
+        margin: 0 auto;
+        padding: 20px;
+        display: grid;
+        gap: 28px;
+      }
+      h2.sec {
+        margin: 0 0 4px;
+        font-size: 18px;
+      }
+      p.note {
+        margin: 0 0 10px;
+        font-size: 13px;
+        opacity: 0.7;
+      }
+      .grid2 {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 16px;
+      }
+      .grid3 {
+        display: grid;
+        grid-template-columns: repeat(3, 1fr);
+        gap: 16px;
+      }
+      @media (max-width: 760px) {
+        .grid2,
+        .grid3 {
+          grid-template-columns: 1fr;
+        }
+      }
+      .box {
+        border: 1px solid var(--line);
+        border-radius: 10px;
+        padding: 14px;
+        background: var(--card);
+      }
+      .box > h4 {
+        margin: 0 0 8px;
+        font-size: 12px;
+        text-transform: uppercase;
+        letter-spacing: 0.06em;
+        opacity: 0.6;
+      }
+      .narrow {
+        max-width: 240px;
+      }
+      .card {
+        display: flex;
+        gap: 12px;
+        align-items: flex-start;
+      }
+      .card img.avatar {
+        width: 48px;
+        height: 48px;
+        border-radius: 50%;
+        flex: none;
+      }
+      .card .body {
+        flex: 1;
+        min-width: 0;
+      }
+      .card h3 {
+        margin: 0;
+        font-size: 16px;
+      }
+      .card small {
+        opacity: 0.7;
+      }
+      .btn {
+        margin-top: 8px;
+        padding: 6px 14px;
+        border: 0;
+        border-radius: 6px;
+        background: var(--accent);
+        color: #fff;
+        font: inherit;
+      }
+      .icon-star::before {
+        content: "★";
+        color: #f59e0b;
+      }
+      .icon-star {
+        display: inline-block;
+        width: 1.2em;
+        height: 1.2em;
+        font-style: normal;
+        vertical-align: middle;
+      }
+      .big {
+        font-size: 28px;
+        line-height: 1.2;
+        margin: 0 0 6px;
+      }
+      .tiny {
+        font-size: 12px;
+      }
+      code.out {
+        display: block;
+        word-break: break-all;
+        font:
+          12px/1.5 ui-monospace,
+          monospace;
+        padding: 6px 8px;
+        background: var(--bg);
+        border: 1px dashed var(--line);
+        border-radius: 6px;
+        margin-bottom: 8px;
+      }
+      .float {
+        position: absolute;
+        right: 8px;
+        top: 8px;
+        padding: 2px 8px;
+        border-radius: 10px;
+        background: #ef4444;
+        color: #fff;
+        font-size: 12px;
+      }
+      .rel {
+        position: relative;
+      }
+      [data-demo-root] {
+        min-height: 20px;
+      }
+      .tag-ok {
+        color: #16a34a;
+      }
+      .tag-no {
+        color: #dc2626;
+      }
+    </style>
+    <script type="module" crossorigin src="/codejoo/skeletonizer/assets/index-BrrnreiK.js"></script>
+  </head>
+  <body>
+    <header class="bar">
+      <strong>skeletonizer 原型</strong>
+      <button id="btn-loading">loading：开</button>
+      <button id="btn-dark">深色：开</button>
+      <label
+        >效果
+        <select id="sel-effect">
+          <option>fade</option>
+          <option>sweep</option>
+          <option>solid</option>
+          <option>pulse</option>
+          <option selected>shimmer</option>
+        </select>
+      </label>
+      <label
+        >动画实现
+        <select id="sel-engine">
+          <option value="global" selected>根驱动（global）</option>
+          <option value="svg">SVG 方案</option>
+        </select>
+      </label>
+      <label
+        >档位
+        <select id="sel-tier">
+          <option value="0">仅兜底层</option>
+          <option value="1">+ 第 0 档</option>
+          <option value="2">+ 第 1 档</option>
+          <option value="3" selected>+ 第 2 档（全部）</option>
+        </select>
+      </label>
+      <label
+        >文字骨头
+        <select id="sel-text">
+          <option value="underline">下划线法</option>
+          <option value="leaf">叶子背景法</option>
+        </select>
+      </label>
+    </header>
+
+    <main>
+      <!-- 1 文字：下划线法 vs 叶子背景法 -->
+      <section>
+        <h2 class="sec">1 · 文字骨头：下划线法 vs 叶子背景法</h2>
+        <p class="note">同一份内容，左边固定下划线法，右边固定叶子背景法（右边在第 2 档才有效）。看粗细、垂直位置、不同字号、混合文字、嵌套、最后一行。</p>
+        <div class="grid2">
+          <div class="box">
+            <h4>下划线法</h4>
+            <div data-demo-root data-fixed-text="underline" id="cmp-a"></div>
+          </div>
+          <div class="box">
+            <h4>叶子背景法</h4>
+            <div data-demo-root data-fixed-text="leaf" id="cmp-b"></div>
+          </div>
+        </div>
+      </section>
+
+      <!-- 2 :has 叶子 / 卡片 -->
+      <section>
+        <h2 class="sec">2 · 卡片：结构叶子 + 图标启发式</h2>
+        <p class="note">avatar 用 Bone.image 透明图；按钮、标题、描述、图标（i.icon-star）自动命中，容器的边框背景保留。</p>
+        <div class="grid3" data-demo-root id="cards"></div>
+      </section>
+
+      <!-- 3 媒体叶子 -->
+      <section>
+        <h2 class="sec">3 · 媒体叶子</h2>
+        <p class="note">img（透明 mock 图 / 真实图片）、内联 svg、video、canvas。观察真实图片能否被藏起来。</p>
+        <div class="grid3" data-demo-root id="media">
+          <div class="box">
+            <h4>img · Bone.image(160,100)</h4>
+            <img id="img-mock" width="160" height="100" alt="" />
+          </div>
+          <div class="box">
+            <h4>img · 真实图片（没 mock）</h4>
+            <img id="img-real" width="160" height="100" alt="" />
+          </div>
+          <div class="box">
+            <h4>svg</h4>
+            <svg width="160" height="100" viewBox="0 0 160 100">
+              <rect width="160" height="100" fill="#fca5a5" />
+              <circle cx="80" cy="50" r="30" fill="#b91c1c" />
+            </svg>
+          </div>
+          <div class="box">
+            <h4>video</h4>
+            <video width="160" height="100" poster="" muted></video>
+          </div>
+          <div class="box">
+            <h4>canvas</h4>
+            <canvas id="cv" width="160" height="100"></canvas>
+          </div>
+          <div class="box">
+            <h4>input / button</h4>
+            <input value="已填写的内容" style="width: 100%" /><br /><button class="btn">提交</button>
+          </div>
+        </div>
+      </section>
+
+      <!-- 4 标记 -->
+      <section>
+        <h2 class="sec">4 · 标记：skz-bone / skz-leaf / skz-ignore</h2>
+        <div class="grid3" data-demo-root id="marks">
+          <div class="box">
+            <h4>skz-ignore（Logo 保持原样）</h4>
+            <div skz-ignore style="font-weight: 700; font-size: 20px; color: var(--accent)">⌘ Brand<span style="color: #16a34a"> Logo</span></div>
+            <p>这段会变骨头：欢迎回来，今天也要加油。</p>
+          </div>
+          <div class="box">
+            <h4>skz-leaf（整块合并）</h4>
+            <div skz-leaf style="padding: 10px; border-radius: 8px; border: 1px solid var(--line)"><b>订单 #8841</b><br /><span>3 件商品 · ¥ 128.00</span><br /><small>预计明天送达</small></div>
+          </div>
+          <div class="box">
+            <h4>skz-bone（装饰 div 强制当骨头）</h4>
+            <div skz-bone style="height: 40px; border-radius: 8px; background: linear-gradient(90deg, #f97316, #ec4899)"></div>
+            <p class="tiny">上面是渐变装饰条，没有标记时不会被识别。</p>
+          </div>
+        </div>
+      </section>
+
+      <!-- 5 Web Component -->
+      <section>
+        <h2 class="sec">5 · Web Component（Shadow DOM）</h2>
+        <p class="note">demo-card 内部有 shadow DOM。宿主 visibility:hidden + ::before 铺骨头，样式表由 registerCustomElements 运行时生成。</p>
+        <div class="grid3" data-demo-root id="wc">
+          <demo-card heading="Shadow 卡片 A" text="这里的文字都在 shadow DOM 里，外部选择器进不去。"></demo-card>
+          <demo-card heading="Shadow 卡片 B" text="第二张卡片，用来确认多个实例都命中。"></demo-card>
+          <demo-card heading="Shadow 卡片 C" text="第三张。"></demo-card>
+        </div>
+      </section>
+
+      <!-- 7 Bone -->
+      <section>
+        <h2 class="sec">6/7 · 动画与 Bone mock</h2>
+        <p class="note">顶部切换 fade（默认，根级 opacity，几乎零成本）/ solid / pulse / shimmer（元素级动画，仅适合小骨架）。下面的文字全部由 Bone 生成（确定性、不用 Math.random）。</p>
+        <div class="grid2" data-demo-root id="bones"></div>
+      </section>
+
+      <!-- 8 兜底层失败场景 -->
+      <section>
+        <h2 class="sec">8 · 兜底层的边界（Q29）</h2>
+        <p class="note">把顶部「档位」切到「仅兜底层」再看。根的直接子元素依次是：普通块 / 绝对定位悬浮角标 / display:contents 包装 / canvas / 裸文字。</p>
+        <div class="box rel" data-demo-root id="fails" style="display: flex; flex-direction: column; gap: 10px">
+          <div>普通块：直接子元素一</div>
+          <span class="float">NEW</span>
+          <div style="display: contents">
+            <p style="margin: 0">display:contents 包装里的段落一</p>
+            <p style="margin: 0">段落二</p>
+          </div>
+          <canvas width="160" height="60" id="cv2"></canvas>
+          这是直接放在根下的裸文字，没有被元素包住。
+        </div>
+      </section>
+      <!-- 9 fit 选项 -->
+      <section>
+        <h2 class="sec">9 · fit：不撑出滚动条</h2>
+        <p class="note">
+          同一个 100 项列表骨架放进三种容器——固定高度滚动容器（300px overflow:auto）、无确定高度的普通 div（靠页面/视口）、应用壳布局（固定高度的 flex 列，标题下面 flex:1 的区域负责滚动，常见于后台/App 页面）；每个带 fit
+          开关对比。开启 fit 后骨架不会把容器撑出滚动条，多余项会被 display:none。本区在页面末尾（首屏以下），页面本来就能滚，所以「普通 div」放宽为一屏高；容器内的两个贴着容器底边。
+        </p>
+        <div style="margin-bottom: 10px">
+          <button id="btn-fit">fit：开</button>
+        </div>
+        <div class="grid3">
+          <div class="box" style="height: 300px; overflow: auto; padding-bottom: 0">
+            <h4>固定高度 (300px overflow:auto)</h4>
+            <div data-demo-fit id="fit-scroll"></div>
+          </div>
+          <div class="box" style="padding-bottom: 0">
+            <h4>普通 div (靠页面/视口)</h4>
+            <div data-demo-fit id="fit-viewport"></div>
+          </div>
+          <div class="box" style="display: flex; flex-direction: column; height: 300px; padding-bottom: 0">
+            <h4>应用壳：标题 + flex:1 滚动区</h4>
+            <div style="flex: 1; min-height: 0; overflow: auto">
+              <div data-demo-fit id="fit-flex"></div>
+            </div>
+          </div>
+        </div>
+      </section>
+    </main>
+
+  </body>
+</html>
