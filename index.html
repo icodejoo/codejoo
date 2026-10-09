@@ -1,0 +1,55 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>codejoo / demos</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      background: #0d1117; color: #e6edf3;
+      display: flex; flex-direction: column;
+      align-items: center; min-height: 100vh;
+      padding: 48px 16px;
+    }
+    h1 { font-size: 2rem; margin-bottom: 8px; }
+    .subtitle { color: #8b949e; margin-bottom: 48px; }
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+      gap: 16px; width: 100%; max-width: 960px;
+    }
+    a.card {
+      display: block; padding: 24px;
+      background: #161b22; border: 1px solid #30363d;
+      border-radius: 12px; text-decoration: none; color: inherit;
+      transition: border-color .2s, transform .15s;
+    }
+    a.card:hover { border-color: #58a6ff; transform: translateY(-2px); }
+    .card-title { font-size: 1.2rem; font-weight: 700; margin-bottom: 6px; }
+    .card-desc  { font-size: .875rem; color: #8b949e; line-height: 1.5; }
+    .badge {
+      display: inline-block; margin-top: 12px;
+      padding: 3px 10px; border-radius: 20px;
+      font-size: .75rem; font-weight: 600;
+      background: #1f6feb33; color: #58a6ff;
+      border: 1px solid #1f6feb;
+    }
+  </style>
+</head>
+<body>
+  <h1>codejoo / demos</h1>
+  <p class="subtitle">monorepo 里各个包的在线 demo</p>
+  <div class="grid">
+    <!-- 新增 app 的卡片：复制下面整个 <a class="card"> 块，改 href（相对路径，= 该 app deploy 工作流的 destination_dir）、标题、描述即可 -->
+    <a class="card" href="skeletonizer/">
+      <div class="card-title">🦴 skeletonizer</div>
+      <div class="card-desc">
+        用真实组件树 + mock 数据生成骨架屏，纯 CSS 推导骨头，多种动效（fade / pulse / shimmer / sweep）。
+      </div>
+      <span class="badge">Vite 静态 demo</span>
+    </a>
+  </div>
+</body>
+</html>
