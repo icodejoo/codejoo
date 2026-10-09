@@ -1,0 +1,5 @@
+{"name":"css shimmer叶子","elements":4000,"fps":60.4,"mainBusy":25.5,"compositor":3.33,"gpu":5.12,"UpdateLayoutTree":10.05,"PrePaint":1.17,"Paint":1.56,"Layerize":0.09,"Commit":0.08,"UpdateLayer":0.01,"HitTest":0,"toggleMs":16.5}
+{"name":"svg shimmer叶子","elements":4000,"fps":60.4,"mainBusy":11.75,"compositor":3.1,"PrePaint":3.69,"Paint":2.18,"Layerize":0.07,"Commit":0.15,"UpdateLayer":0.04,"gpu":5.62,"UpdateLayoutTree":0.07,"Layout":0.04,"HitTest":0,"toggleMs":18}
+{"name":"css pulse叶子","elements":4000,"fps":60.4,"mainBusy":21.05,"compositor":1.73,"UpdateLayoutTree":8.9,"PrePaint":0.51,"Paint":0.64,"Layerize":0.04,"Commit":0.11,"UpdateLayer":0,"gpu":1.36,"HitTest":0,"toggleMs":16.3}
+{"name":"svg pulse叶子","elements":4000,"fps":60.4,"mainBusy":12.14,"PrePaint":4.02,"Paint":2.21,"Layerize":0.06,"Commit":0.13,"UpdateLayer":0.04,"compositor":3.1,"gpu":5.41,"UpdateLayoutTree":0.04,"HitTest":0,"toggleMs":19.5}
+{"name":"css shimmer下划线","elements":4000,"fps":60.4,"PrePaint":0.85,"Paint":1.16,"Layerize":0.06,"Commit":0.22,"UpdateLayer":0.14,"compositor":3.36,"mainBusy":26.09,"gpu":3.54,"UpdateLayoutTree":10.33,"HitTest":0,"toggleMs":15.5}

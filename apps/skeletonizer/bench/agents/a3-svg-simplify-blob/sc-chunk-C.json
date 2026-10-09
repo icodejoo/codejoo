@@ -1,0 +1,154 @@
+[
+ {
+  "name": "base(current data URI)",
+  "css": "base",
+  "n": 2000,
+  "attrs": [
+   [
+    "x-ske-effect",
+    "shimmer"
+   ],
+   [
+    "x-ske-text",
+    "leaf"
+   ],
+   [
+    "x-ske-engine",
+    "svg"
+   ]
+  ]
+ },
+ {
+  "name": "p-2b1",
+  "css": "p-2b1",
+  "n": 2000,
+  "attrs": [
+   [
+    "x-ske-effect",
+    "shimmer"
+   ],
+   [
+    "x-ske-text",
+    "leaf"
+   ],
+   [
+    "x-ske-engine",
+    "svg"
+   ]
+  ]
+ },
+ {
+  "name": "p-2b2",
+  "css": "p-2b2",
+  "n": 2000,
+  "attrs": [
+   [
+    "x-ske-effect",
+    "shimmer"
+   ],
+   [
+    "x-ske-text",
+    "leaf"
+   ],
+   [
+    "x-ske-engine",
+    "svg"
+   ]
+  ]
+ },
+ {
+  "name": "p-2c",
+  "css": "p-2c",
+  "n": 2000,
+  "attrs": [
+   [
+    "x-ske-effect",
+    "shimmer"
+   ],
+   [
+    "x-ske-text",
+    "leaf"
+   ],
+   [
+    "x-ske-engine",
+    "svg"
+   ]
+  ]
+ },
+ {
+  "name": "p-2e",
+  "css": "p-2e",
+  "n": 2000,
+  "attrs": [
+   [
+    "x-ske-effect",
+    "shimmer"
+   ],
+   [
+    "x-ske-text",
+    "leaf"
+   ],
+   [
+    "x-ske-engine",
+    "svg"
+   ]
+  ]
+ },
+ {
+  "name": "p-2d",
+  "css": "p-2d",
+  "n": 2000,
+  "attrs": [
+   [
+    "x-ske-effect",
+    "shimmer"
+   ],
+   [
+    "x-ske-text",
+    "leaf"
+   ],
+   [
+    "x-ske-engine",
+    "svg"
+   ]
+  ]
+ },
+ {
+  "name": "p-2f",
+  "css": "p-2f",
+  "n": 2000,
+  "attrs": [
+   [
+    "x-ske-effect",
+    "shimmer"
+   ],
+   [
+    "x-ske-text",
+    "leaf"
+   ],
+   [
+    "x-ske-engine",
+    "svg"
+   ]
+  ]
+ },
+ {
+  "name": "p-2a-scroll",
+  "css": "p-2a-scroll",
+  "n": 2000,
+  "attrs": [
+   [
+    "x-ske-effect",
+    "shimmer"
+   ],
+   [
+    "x-ske-text",
+    "leaf"
+   ],
+   [
+    "x-ske-engine",
+    "svg"
+   ]
+  ]
+ }
+]

@@ -1,0 +1,242 @@
+[
+ {
+  "name": "500-shimmer叶子-现行-顶部",
+  "css": "base",
+  "n": 500,
+  "attrs": {
+   "effect": "shimmer",
+   "text": "leaf"
+  },
+  "js": [
+   "top",
+   0
+  ],
+  "toggle": true,
+  "toggleN": 7
+ },
+ {
+  "name": "500-shimmer叶子-A-顶部",
+  "css": "a",
+  "n": 500,
+  "attrs": {
+   "effect": "shimmer",
+   "text": "leaf",
+   "a": true
+  },
+  "js": [
+   "top",
+   0
+  ],
+  "toggle": true,
+  "toggleN": 7
+ },
+ {
+  "name": "500-shimmer叶子-现行-中间",
+  "css": "base",
+  "n": 500,
+  "attrs": {
+   "effect": "shimmer",
+   "text": "leaf"
+  },
+  "js": [
+   "mid",
+   0
+  ],
+  "toggle": true,
+  "toggleN": 7
+ },
+ {
+  "name": "500-shimmer叶子-A-中间",
+  "css": "a",
+  "n": 500,
+  "attrs": {
+   "effect": "shimmer",
+   "text": "leaf",
+   "a": true
+  },
+  "js": [
+   "mid",
+   0
+  ],
+  "toggle": true,
+  "toggleN": 7
+ },
+ {
+  "name": "500-pulse下划线-现行-顶部",
+  "css": "base",
+  "n": 500,
+  "attrs": {
+   "effect": "pulse"
+  },
+  "js": [
+   "top",
+   0
+  ],
+  "toggle": true,
+  "toggleN": 7
+ },
+ {
+  "name": "500-pulse下划线-A-顶部",
+  "css": "a",
+  "n": 500,
+  "attrs": {
+   "effect": "pulse",
+   "a": true
+  },
+  "js": [
+   "top",
+   0
+  ],
+  "toggle": true,
+  "toggleN": 7
+ },
+ {
+  "name": "500-pulse下划线-现行-中间",
+  "css": "base",
+  "n": 500,
+  "attrs": {
+   "effect": "pulse"
+  },
+  "js": [
+   "mid",
+   0
+  ],
+  "toggle": true,
+  "toggleN": 7
+ },
+ {
+  "name": "500-pulse下划线-A-中间",
+  "css": "a",
+  "n": 500,
+  "attrs": {
+   "effect": "pulse",
+   "a": true
+  },
+  "js": [
+   "mid",
+   0
+  ],
+  "toggle": true,
+  "toggleN": 7
+ },
+ {
+  "name": "2000-shimmer叶子-现行-顶部",
+  "css": "base",
+  "n": 2000,
+  "attrs": {
+   "effect": "shimmer",
+   "text": "leaf"
+  },
+  "js": [
+   "top",
+   0
+  ],
+  "toggle": true,
+  "toggleN": 7
+ },
+ {
+  "name": "2000-shimmer叶子-A-顶部",
+  "css": "a",
+  "n": 2000,
+  "attrs": {
+   "effect": "shimmer",
+   "text": "leaf",
+   "a": true
+  },
+  "js": [
+   "top",
+   0
+  ],
+  "toggle": true,
+  "toggleN": 7
+ },
+ {
+  "name": "2000-shimmer叶子-现行-中间",
+  "css": "base",
+  "n": 2000,
+  "attrs": {
+   "effect": "shimmer",
+   "text": "leaf"
+  },
+  "js": [
+   "mid",
+   0
+  ],
+  "toggle": true,
+  "toggleN": 7
+ },
+ {
+  "name": "2000-shimmer叶子-A-中间",
+  "css": "a",
+  "n": 2000,
+  "attrs": {
+   "effect": "shimmer",
+   "text": "leaf",
+   "a": true
+  },
+  "js": [
+   "mid",
+   0
+  ],
+  "toggle": true,
+  "toggleN": 7
+ },
+ {
+  "name": "2000-pulse下划线-现行-顶部",
+  "css": "base",
+  "n": 2000,
+  "attrs": {
+   "effect": "pulse"
+  },
+  "js": [
+   "top",
+   0
+  ],
+  "toggle": true,
+  "toggleN": 7
+ },
+ {
+  "name": "2000-pulse下划线-A-顶部",
+  "css": "a",
+  "n": 2000,
+  "attrs": {
+   "effect": "pulse",
+   "a": true
+  },
+  "js": [
+   "top",
+   0
+  ],
+  "toggle": true,
+  "toggleN": 7
+ },
+ {
+  "name": "2000-pulse下划线-现行-中间",
+  "css": "base",
+  "n": 2000,
+  "attrs": {
+   "effect": "pulse"
+  },
+  "js": [
+   "mid",
+   0
+  ],
+  "toggle": true,
+  "toggleN": 7
+ },
+ {
+  "name": "2000-pulse下划线-A-中间",
+  "css": "a",
+  "n": 2000,
+  "attrs": {
+   "effect": "pulse",
+   "a": true
+  },
+  "js": [
+   "mid",
+   0
+  ],
+  "toggle": true,
+  "toggleN": 7
+ }
+]

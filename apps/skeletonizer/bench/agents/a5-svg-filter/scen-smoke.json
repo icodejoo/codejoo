@@ -1,0 +1,22 @@
+[
+ {
+  "name": "smoke-A-50",
+  "css": "filter",
+  "n": 50,
+  "attrs": {
+   "filter": "light",
+   "variant": "A",
+   "anim": "none"
+  },
+  "toggle": true,
+  "toggleN": 9
+ },
+ {
+  "name": "smoke-prod-50",
+  "css": "prod",
+  "n": 50,
+  "attrs": [],
+  "toggle": true,
+  "toggleN": 9
+ }
+]

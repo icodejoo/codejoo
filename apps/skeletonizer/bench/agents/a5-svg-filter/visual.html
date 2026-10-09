@@ -1,0 +1,143 @@
+<!doctype html>
+<html lang="zh"><head><meta charset="utf-8" /><title>visual-a5</title>
+<link rel="stylesheet" href="./filter.css" />
+<style>
+/* 视觉页：?mode=raw|A|B|C & theme=light|dark & r=22|64 */
+*{box-sizing:border-box}
+body{margin:0;font:14px/1.5 system-ui,"Microsoft YaHei",sans-serif;background:#fff;color:#1f2328}
+#root{width:1100px;padding:16px;background:#fff;display:grid;grid-template-columns:repeat(3,1fr);gap:16px}
+.card{border:1px solid #d0d7de;border-radius:8px;padding:12px;background:#fff}
+.card h3{margin:8px 0 4px;font-size:16px}
+.card img{display:block;width:100%;height:120px;object-fit:cover;border-radius:4px}
+.muted{color:#9aa0a6;font-size:12px}
+.faint{color:#c5c9ce;font-size:12px}
+.btn{display:inline-block;background:#1f2328;color:#fff;border:0;border-radius:6px;padding:6px 14px;font-size:14px}
+.btn2{display:inline-block;background:#2563eb;color:#fff;border:0;border-radius:6px;padding:6px 14px;font-size:14px}
+.tag{display:inline-block;padding:1px 8px;border-radius:10px;font-size:12px;color:#fff;margin-right:4px}
+.t1{background:#2da44e}.t2{background:#fb8500}.t3{background:#cf222e}.t4{background:#8250df}
+.tagl{display:inline-block;padding:1px 8px;border-radius:10px;font-size:12px;margin-right:4px}
+.l1{background:#ddf4ff;color:#0969da}.l2{background:#fff8c5;color:#9a6700}
+.wide{grid-column:span 3}
+.long{font-size:14px;line-height:1.6;margin:0}
+.lightimg{background:#f6f8fa}
+.row{display:flex;align-items:center;gap:8px;margin-top:8px}
+.avatar{width:40px;height:40px;border-radius:50%}
+/* 深色主题 */
+:root[data-x-ske-theme="dark"] body{background:#111;color:#eee}
+:root[data-x-ske-theme="dark"] #root{background:#111}
+:root[data-x-ske-theme="dark"] .card{background:#1b1f27;border-color:#3a4150}
+:root[data-x-ske-theme="dark"] .muted{color:#777}
+:root[data-x-ske-theme="dark"] .faint{color:#444}
+:root[data-x-ske-theme="dark"] .btn{background:#e6e6e6;color:#111}
+:root[data-x-ske-theme="dark"] .btn2{background:#3b82f6;color:#fff}
+:root[data-x-ske-theme="dark"] .l1{background:#12304d;color:#79c0ff}
+:root[data-x-ske-theme="dark"] .l2{background:#3d2e00;color:#e3b341}
+</style></head><body>
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+<filter id="x-ske-f-light" color-interpolation-filters="sRGB" x="0" y="0" width="100%" height="100%">
+  <feColorMatrix type="matrix" values="0 0 0 0 0  0 0 0 0 0  0 0 0 0 0  -0.6378 -2.1456 -0.2166 0 2.4" result="ink"/>
+  <feComposite in="ink" in2="SourceAlpha" operator="in" result="inkA"/>
+  <feComponentTransfer in="inkA" result="bin"><feFuncA type="discrete" tableValues="0 1"/></feComponentTransfer>
+  <feMorphology in="bin" operator="dilate" radius="4 3" result="grown"/>
+  <feFlood flood-color="#d9dde3" result="c"/>
+  <feComposite in="c" in2="grown" operator="in"/>
+</filter>
+<filter id="x-ske-f-light-r22" color-interpolation-filters="sRGB" x="0" y="0" width="100%" height="100%">
+  <feColorMatrix type="matrix" values="0 0 0 0 0  0 0 0 0 0  0 0 0 0 0  -0.6378 -2.1456 -0.2166 0 2.4" result="ink"/>
+  <feComposite in="ink" in2="SourceAlpha" operator="in" result="inkA"/>
+  <feComponentTransfer in="inkA" result="bin"><feFuncA type="discrete" tableValues="0 1"/></feComponentTransfer>
+  <feMorphology in="bin" operator="dilate" radius="2 2" result="grown"/>
+  <feFlood flood-color="#d9dde3" result="c"/>
+  <feComposite in="c" in2="grown" operator="in"/>
+</filter>
+<filter id="x-ske-f-light-r64" color-interpolation-filters="sRGB" x="0" y="0" width="100%" height="100%">
+  <feColorMatrix type="matrix" values="0 0 0 0 0  0 0 0 0 0  0 0 0 0 0  -0.6378 -2.1456 -0.2166 0 2.4" result="ink"/>
+  <feComposite in="ink" in2="SourceAlpha" operator="in" result="inkA"/>
+  <feComponentTransfer in="inkA" result="bin"><feFuncA type="discrete" tableValues="0 1"/></feComponentTransfer>
+  <feMorphology in="bin" operator="dilate" radius="6 4" result="grown"/>
+  <feFlood flood-color="#d9dde3" result="c"/>
+  <feComposite in="c" in2="grown" operator="in"/>
+</filter>
+<filter id="x-ske-f-light-B" color-interpolation-filters="sRGB" x="0" y="0" width="100%" height="100%">
+  <feColorMatrix type="matrix" values="0 0 0 0 0  0 0 0 0 0  0 0 0 0 0  -0.6378 -2.1456 -0.2166 0 2.4" result="ink"/>
+  <feComposite in="ink" in2="SourceAlpha" operator="in" result="inkA"/>
+  <feComponentTransfer in="inkA" result="bin"><feFuncA type="discrete" tableValues="0 1"/></feComponentTransfer>
+  <feMorphology in="bin" operator="dilate" radius="4 3" result="grown"/>
+  <feFlood flood-color="#d9dde3" result="c"/>
+  <feComposite in="c" in2="grown" operator="in" result="bone"/>
+  <feComposite in="SourceGraphic" in2="grown" operator="out" result="base"/>
+  <feMerge><feMergeNode in="base"/><feMergeNode in="bone"/></feMerge>
+</filter>
+<filter id="x-ske-f-light-C" color-interpolation-filters="sRGB" x="0" y="0" width="100%" height="100%">
+  <feColorMatrix type="matrix" values="0 0 0 0 0  0 0 0 0 0  0 0 0 0 0  -0.6378 -2.1456 -0.2166 0 2.4" result="ink"/>
+  <feComposite in="ink" in2="SourceAlpha" operator="in" result="inkA"/>
+  <feComponentTransfer in="inkA" result="bin"><feFuncA type="discrete" tableValues="0 1"/></feComponentTransfer>
+  <feMorphology in="bin" operator="dilate" radius="4 3" result="grown"/>
+  <feGaussianBlur in="grown" stdDeviation="2" result="blur"/>
+  <feComponentTransfer in="blur" result="grown2"><feFuncA type="discrete" tableValues="0 1"/></feComponentTransfer>
+  <feFlood flood-color="#d9dde3" result="c"/>
+  <feComposite in="c" in2="grown2" operator="in"/>
+</filter>
+<filter id="x-ske-f-dark" color-interpolation-filters="sRGB" x="0" y="0" width="100%" height="100%">
+  <feColorMatrix type="matrix" values="0 0 0 0 0  0 0 0 0 0  0 0 0 0 0  0.6378 2.1456 0.2166 0 -0.6" result="ink"/>
+  <feComposite in="ink" in2="SourceAlpha" operator="in" result="inkA"/>
+  <feComponentTransfer in="inkA" result="bin"><feFuncA type="discrete" tableValues="0 1"/></feComponentTransfer>
+  <feMorphology in="bin" operator="dilate" radius="4 3" result="grown"/>
+  <feFlood flood-color="#374151" result="c"/>
+  <feComposite in="c" in2="grown" operator="in"/>
+</filter>
+<filter id="x-ske-f-dark-r22" color-interpolation-filters="sRGB" x="0" y="0" width="100%" height="100%">
+  <feColorMatrix type="matrix" values="0 0 0 0 0  0 0 0 0 0  0 0 0 0 0  0.6378 2.1456 0.2166 0 -0.6" result="ink"/>
+  <feComposite in="ink" in2="SourceAlpha" operator="in" result="inkA"/>
+  <feComponentTransfer in="inkA" result="bin"><feFuncA type="discrete" tableValues="0 1"/></feComponentTransfer>
+  <feMorphology in="bin" operator="dilate" radius="2 2" result="grown"/>
+  <feFlood flood-color="#374151" result="c"/>
+  <feComposite in="c" in2="grown" operator="in"/>
+</filter>
+<filter id="x-ske-f-dark-r64" color-interpolation-filters="sRGB" x="0" y="0" width="100%" height="100%">
+  <feColorMatrix type="matrix" values="0 0 0 0 0  0 0 0 0 0  0 0 0 0 0  0.6378 2.1456 0.2166 0 -0.6" result="ink"/>
+  <feComposite in="ink" in2="SourceAlpha" operator="in" result="inkA"/>
+  <feComponentTransfer in="inkA" result="bin"><feFuncA type="discrete" tableValues="0 1"/></feComponentTransfer>
+  <feMorphology in="bin" operator="dilate" radius="6 4" result="grown"/>
+  <feFlood flood-color="#374151" result="c"/>
+  <feComposite in="c" in2="grown" operator="in"/>
+</filter>
+<filter id="x-ske-f-dark-B" color-interpolation-filters="sRGB" x="0" y="0" width="100%" height="100%">
+  <feColorMatrix type="matrix" values="0 0 0 0 0  0 0 0 0 0  0 0 0 0 0  0.6378 2.1456 0.2166 0 -0.6" result="ink"/>
+  <feComposite in="ink" in2="SourceAlpha" operator="in" result="inkA"/>
+  <feComponentTransfer in="inkA" result="bin"><feFuncA type="discrete" tableValues="0 1"/></feComponentTransfer>
+  <feMorphology in="bin" operator="dilate" radius="4 3" result="grown"/>
+  <feFlood flood-color="#374151" result="c"/>
+  <feComposite in="c" in2="grown" operator="in" result="bone"/>
+  <feComposite in="SourceGraphic" in2="grown" operator="out" result="base"/>
+  <feMerge><feMergeNode in="base"/><feMergeNode in="bone"/></feMerge>
+</filter>
+<filter id="x-ske-f-dark-C" color-interpolation-filters="sRGB" x="0" y="0" width="100%" height="100%">
+  <feColorMatrix type="matrix" values="0 0 0 0 0  0 0 0 0 0  0 0 0 0 0  0.6378 2.1456 0.2166 0 -0.6" result="ink"/>
+  <feComposite in="ink" in2="SourceAlpha" operator="in" result="inkA"/>
+  <feComponentTransfer in="inkA" result="bin"><feFuncA type="discrete" tableValues="0 1"/></feComponentTransfer>
+  <feMorphology in="bin" operator="dilate" radius="4 3" result="grown"/>
+  <feGaussianBlur in="grown" stdDeviation="2" result="blur"/>
+  <feComponentTransfer in="blur" result="grown2"><feFuncA type="discrete" tableValues="0 1"/></feComponentTransfer>
+  <feFlood flood-color="#374151" result="c"/>
+  <feComposite in="c" in2="grown2" operator="in"/>
+</filter>
+</svg>
+<div id="root">
+  <div class="card"><img src="../../docs/assets/tier0-top.png" alt=""><h3>真实截图卡片（tier0-top.png）</h3><p class="long">骨架屏把页面里的文字、图片、按钮折成灰色块，加载完成后再还原。这一段是正文，用来看换行后的行间是否粘连。</p><div class="row"><span class="tag t1">已发布</span><span class="tag t2">待审核</span><span class="tag t3">紧急</span></div></div>
+  <div class="card"><img src="../../docs/assets/sweep-light.png" alt=""><h3>浅色图片（sweep-light.png）</h3><p class="muted">浅灰小字：更新于 3 分钟前 · 作者 Jelon</p><p class="faint">更浅的灰字 #c5c9ce：提示信息</p><div class="row"><button class="btn">立即购买</button><button class="btn2">加入收藏</button></div></div>
+  <div class="card"><img src="../../docs/assets/sweep-dark.png" alt=""><h3>深色图片（sweep-dark.png）</h3><p class="long">深色图片区域在浅色滤镜下会被整块当作"墨迹"。</p><div class="row"><span class="tagl l1">浅蓝标签</span><span class="tagl l2">浅黄标签</span><span class="tag t4">紫色</span></div></div>
+  <div class="card lightimg"><img src="../../docs/assets/sweep-bg-light.png" alt=""><h3>浅色背景图（sweep-bg-light.png）</h3><div class="row"><img class="avatar" src="../../docs/assets/tier1-top.png" alt=""><div><b>用户名称</b><div class="muted">@username · 1 小时前</div></div></div></div>
+  <div class="card"><h3>带边框的空卡片</h3><div style="border:1px solid #d0d7de;height:60px;border-radius:4px"></div><p class="muted" style="margin-top:8px">边框 1px #d0d7de，内部无文字。</p><div style="height:6px;background:#2da44e;border-radius:3px;margin-top:8px"></div></div>
+  <div class="card"><h3>表单控件</h3><input value="输入框内容" style="width:100%;padding:6px;border:1px solid #d0d7de;border-radius:4px"><div class="row"><button class="btn">提交</button><span class="muted">未提交</span></div></div>
+  <div class="card wide"><h3>一段长文字</h3><p class="long">静态骨架屏的难点在于，不同页面的元素结构千差万别：文本可能被拆成多个内联节点，图片可能是背景图，按钮里的文字是白色。滤镜方案不关心 DOM 结构，只看渲染出来的像素亮度——深色像素当作内容，浅色当作留白，再把相邻的内容膨胀合并成条。这段文字有足够的行数，用来观察行与行之间是否会被膨胀半径粘到一起，以及字与字之间的缝隙是否被填满成连续的条。第二段：Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat.</p></div>
+</div>
+<script>
+const q = new URLSearchParams(location.search);
+const mode = q.get("mode") || "raw", theme = q.get("theme") || "light", r = q.get("r");
+if (theme === "dark") document.documentElement.setAttribute("data-x-ske-theme", "dark");
+// mbg=light：深色主题下把媒体兜底底色改成浅灰（#000 在深色里不是"墨迹"）
+if (q.get("mbg") === "light") document.head.insertAdjacentHTML("beforeend", "<style>[x-ske-f] :is(img, video, canvas, svg, i:empty, input, button){background-color:#ddd !important}</style>");
+const root = document.getElementById("root");
+if (mode !== "raw") { root.setAttribute("x-ske-f", mode === "A" ? "" : mode); if (r) root.setAttribute("x-ske-f-r", r); }
+</script></body></html>

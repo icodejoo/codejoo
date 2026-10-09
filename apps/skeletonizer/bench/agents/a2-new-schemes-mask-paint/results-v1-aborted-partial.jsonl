@@ -1,0 +1,3 @@
+{"name":"floor-solid-4k","elements":4000,"fps":60.8,"drawFps":0,"swapFps":0,"mainBusy":1.03,"compositor":0.73,"PrePaint":0.02,"Layerize":0,"Commit":0.11,"HitTest":0,"gpu":0}
+{"name":"floor-solid-16k","elements":16000,"fps":60.8,"drawFps":0,"swapFps":0,"mainBusy":0.83,"compositor":0.65,"PrePaint":0.01,"Layerize":0,"Commit":0.09,"HitTest":0,"gpu":0.01}
+{"name":"root-shimmer-4k","elements":4000,"fps":59.6,"drawFps":0,"swapFps":59.2,"PrePaint":1.33,"Paint":1.94,"Layerize":0.11,"Commit":0.09,"UpdateLayer":0.01,"compositor":3.88,"mainBusy":30.19,"UpdateLayoutTree":11.64,"gpu":7.15,"HitTest":0}

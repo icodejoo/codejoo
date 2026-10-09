@@ -1,0 +1,122 @@
+<!doctype html>
+<html lang="zh"><head><meta charset="utf-8" /><title>perf-a1</title><link id="css" rel="stylesheet" />
+<style>body{font:14px/1.5 system-ui,sans-serif;margin:0}.card{display:flex;gap:8px;padding:8px;border:1px solid #ddd;margin:4px}.card img{width:48px;height:48px;border-radius:50%}</style>
+</head><body><div id="root"></div>
+<script type="module">
+import { Bone, enable } from "../../src/index.ts";
+const q = new URLSearchParams(location.search);
+document.getElementById("css").href = `./${q.get("css") || "base"}.css`;
+const root = document.getElementById("root");
+const GIF = Bone.image();
+const nf = () => new Promise((r) => requestAnimationFrame(r));
+const to0 = () => new Promise((r) => setTimeout(r, 0));
+let off = null;
+
+/* ---------- 防火墙 / 计时器状态 ---------- */
+let io = null, ioFirst = null;
+let tk = null;
+let mode = { tokens: [], arg: 0 };
+const cards = () => Array.from(root.children);
+const FW = "x-ske-fw";
+
+function teardown() {
+  io?.disconnect(); io = null;
+  if (tk) { cancelAnimationFrame(tk.raf); tk = null; }
+  root.style.removeProperty("--x-ske-pulse-t"); root.style.removeProperty("--x-ske-shimmer-p");
+  for (const c of root.children) c.removeAttribute(FW);
+}
+
+/** 启动 IntersectionObserver 防火墙：离开视口的卡片打 x-ske-fw；返回首次回调完成的 Promise */
+function startIO(pretag) {
+  if (pretag) for (const c of root.children) c.setAttribute(FW, "");
+  let resolve; ioFirst = new Promise((r) => (resolve = r));
+  let first = true;
+  io = new IntersectionObserver((entries) => {
+    for (const e of entries) e.target.toggleAttribute(FW, !e.isIntersecting);
+    if (first) { first = false; resolve(); }
+  }, { rootMargin: "100px" });
+  for (const c of root.children) io.observe(c);
+}
+
+const EASE = (k) => (k < 0.5 ? 2 * k * k : 1 - (-2 * k + 2) ** 2 / 2);
+/** 原型计时器：共享 rAF、到点才写、值不变跳过。kind: pulse|shimmer；tm: "fixed"|"auto"；N: 固定帧间隔；cap: 自动档上限 */
+function startTick(kind, tm, N, cap = 4) {
+  const dur = 1500, start = performance.now();
+  const st = { kind, tm, N: tm === "auto" ? 1 : N, cap, writes: 0, frames: 0, nSum: 0, t0: performance.now(), raf: 0 };
+  let sinceWrite = 1e9, lastT = 0, wroteLast = false, okRun = 0, lp = "", ls = "";
+  const loop = (now) => {
+    st.raf = requestAnimationFrame(loop);
+    if (lastT) {
+      const dt = now - lastT;
+      if (tm === "auto") {
+        if (wroteLast && dt > 20) { st.N = Math.min(st.cap, st.N + 1); okRun = 0; }
+        else if (dt < 17) { if (++okRun >= 30) { st.N = Math.max(1, st.N - 1); okRun = 0; } }
+        else okRun = 0;
+      }
+    }
+    lastT = now; st.frames++; st.nSum += st.N;
+    wroteLast = false;
+    if (++sinceWrite < st.N) return;
+    const phase = ((now - start) % (dur * 2)) / dur;
+    const pulse = String(Math.round(EASE(phase <= 1 ? phase : 2 - phase) * 32) / 32);
+    let wrote = false;
+    if (pulse !== lp) { root.style.setProperty("--x-ske-pulse-t", pulse); lp = pulse; wrote = true; }
+    if (kind === "shimmer") { const s = (-60 + 170 * (phase % 1)).toFixed(1); if (s !== ls) { root.style.setProperty("--x-ske-shimmer-p", s); ls = s; wrote = true; } }
+    if (wrote) { st.writes++; wroteLast = true; sinceWrite = 0; }
+  };
+  st.raf = requestAnimationFrame(loop);
+  tk = st;
+}
+window.statReset = () => { if (tk) { tk.writes = 0; tk.frames = 0; tk.nSum = 0; tk.t0 = performance.now(); } };
+window.statGet = () => (tk ? { wps: +(tk.writes / ((performance.now() - tk.t0) / 1000)).toFixed(1), avgN: +(tk.nSum / Math.max(1, tk.frames)).toFixed(2) } : {});
+
+/** 按 mode 启动：tokens 里可含 fwall / fwhalf / io / iopre / tick:fixed / tick:auto / scrollmid */
+async function applyMode() {
+  const t = mode.tokens, cs = cards();
+  if (t.includes("fwall")) cs.forEach((c) => c.setAttribute(FW, ""));
+  if (t.includes("fwhalf")) cs.forEach((c, i) => i % 2 === 0 && c.setAttribute(FW, ""));
+  if (t.includes("io")) startIO(false);
+  if (t.includes("iopre")) startIO(true);
+  const kind = root.getAttribute("x-ske-effect");
+  if (t.includes("tick:fixed")) startTick(kind, "fixed", mode.arg);
+  if (t.includes("tick:auto")) startTick(kind, "auto", 1, mode.arg || 4);
+}
+
+/** 搭场景（同模板）。spec 数组：根属性；对象：enable() 选项 */
+window.setup = async (n, spec) => {
+  teardown(); off?.(); off = null; window.scrollTo(0, 0);
+  root.removeAttribute("x-ske");
+  root.innerHTML = Array.from({ length: n }, () => `<div class="card"><img src="${GIF}" alt=""><div><h3>${Bone.text(10)}</h3><p>${Bone.lines(2)}</p><span>${Bone.text(6)}</span> <i class="icon-star"></i><button>${Bone.text(4)}</button></div></div>`).join("");
+  root.getAttributeNames().forEach((a) => a !== "id" && root.removeAttribute(a));
+  if (Array.isArray(spec)) { spec.forEach(([k, v]) => root.setAttribute(k, v)); root.setAttribute("x-ske", ""); }
+  else off = enable(root, spec || {});
+  await nf(); await nf();
+  return root.querySelectorAll("*").length;
+};
+/** 场景后置驱动：modeStr 用逗号分隔 token，arg 为数字参数 */
+window.jsDrive = async (modeStr, arg) => {
+  mode = { tokens: modeStr ? modeStr.split(",") : [], arg };
+  await applyMode();
+  if (ioFirst) await ioFirst;
+  if (mode.tokens.includes("scrollmid")) { window.scrollTo(0, (document.documentElement.scrollHeight - innerHeight) / 2); }
+  for (let i = 0; i < 6; i++) await nf();
+};
+window.frames = async (ms) => { let f = 0; const end = performance.now() + ms; while (performance.now() < end) { await nf(); f++; } return f; };
+/** 开启耗时：关掉 → 重新打开 x-ske（并按 mode 启动防火墙/计时器）→ 等第一帧完成 + observer 初次回调后的下一帧。返回 settled，first 存 window.__tf */
+window.toggleCost = async () => {
+  root.removeAttribute("x-ske"); teardown(); window.scrollTo(0, 0); void root.offsetHeight; await nf(); await nf(); await to0();
+  const t = performance.now();
+  root.setAttribute("x-ske", "");
+  await applyMode();
+  void root.offsetHeight;
+  await nf(); await to0();
+  window.__tf = performance.now() - t;
+  if (ioFirst && mode.tokens.some((k) => k.startsWith("io"))) { await ioFirst; await nf(); await to0(); }
+  const settled = performance.now() - t;
+  teardown();
+  return settled;
+};
+/** 截图 / 验证用 */
+window.__dbg = { root, nf, cards, FW };
+window.ready = true;
+</script></body></html>

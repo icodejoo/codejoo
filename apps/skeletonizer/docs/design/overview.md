@@ -9,7 +9,7 @@ summary: 运行时 + mock + 覆盖标记的 Web 骨架屏方案：已定决策�
 
 - 照 Flutter skeletonizer 的路子：**真实 DOM 渲染 + mock 数据 + 例外标记**，不手画占位形状。
 - 核心是**纯 CSS**，靠 `@supports` 分四档渐进覆盖（兜底整块 → 标签白名单 → 下划线文字 → `:has` 叶子），不用 UA 嗅探，也不用 JS 闸门。
-- 产物只有 `core`（CSS + `enable()` + `Bone`）和一个 light DOM 的 `<x-ske>`；各框架只给文档示例，不发适配包。
+- 产物只有 `core`（CSS + `enable()` + `Bone`）和一个 light DOM 的 `<skz-box>`；各框架只给文档示例，不发适配包。
 - 原型已跑通，实测结论见 [原型验证报告](../reports/2026-10-08-prototype-verification.md)。
 
 ## 1. 为什么做，和三个参考物的关系
@@ -22,31 +22,31 @@ summary: 运行时 + mock + 覆盖标记的 Web 骨架屏方案：已定决策�
 
 ## 2. 已定决策
 
-| #        | 议题             | 结论                                                                                                                                                                                                                   |
-| -------- | ---------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Q1       | 渲染机制         | CSS 优先；运行时测量（覆盖层）暂不做，留作将来的逃生口                                                                                                                                                                 |
-| Q2 / Q19 | 产物形态         | `core` + `<x-ske>`（light DOM，不用 shadow）；**不发框架适配包**                                                                                                                                                       |
-| Q3 / Q14 | mock             | `Bone` 静态工具类，**只造数据不渲染**；图片用透明占位图，文字用 `█` 词                                                                                                                                                 |
-| Q4       | SSR / 无 JS 首屏 | 要。状态全在 class/属性里，CSS 即可出骨架                                                                                                                                                                              |
-| Q5 / Q24 | 浏览器基线       | 纯 CSS 层叠渐进增强，不声明版本号，不用 JS 闸门；认识 `@supports` 的进第 0 档及以上，其余落到兜底整块                                                                                                                  |
-| Q6 / Q23 | 本次产出         | 设计文档 + 最小原型（零依赖）                                                                                                                                                                                          |
-| Q7 / Q12 | 命中方式         | **默认自动**（整树按规则命中），标记只做例外；`x-ske-auto` 作用域标记不要了                                                                                                                                            |
-| Q8 / Q13 | 标记载体         | 裸属性：`sk` / `x-ske-leaf` / `x-ske-ignore`，不用 `data-sk`；根状态用 class `x-ske`                                                                                                                                   |
-| Q9       | 多行文字形状     | 被 Q16 的下划线法取代（`lh` 渐变分行没做）                                                                                                                                                                             |
-| Q10      | 交互锁           | 根上 `inert` + `aria-busy`；要保持可点的内容放到骨架根外面                                                                                                                                                             |
-| Q11      | 动效             | 默认 `fade`（根级 opacity，合成器线程，几乎零成本）；`solid`；`pulse` / `shimmer` 是元素级动画、很贵，`enable()` 在元素数超过 300 时自动降 fade；下划线文字不能 shimmer。**2026-10-08 由性能实测改了默认**，见性能报告 |
-| Q15      | 文字占位         | 按词切分、词长确定性（不用 `Math.random`）、`lines`、CJK 简单版                                                                                                                                                        |
-| Q16      | 文字骨头         | **两套都做**：下划线法（默认）+ 叶子背景法（根上写 `x-ske-text="leaf"`，需 `:has`）                                                                                                                                    |
-| Q17      | Web Component    | 支持：宿主 `visibility:hidden` + `::before` 铺骨头，运行时生成标签名样式表                                                                                                                                             |
-| Q18      | 图标             | 默认命中（空 `i`、类名含 `icon` 的空元素），白名单可扩展                                                                                                                                                               |
-| Q20      | 包名             | `skeletonizer`（npm 上目前未被占用，发布前再确认）                                                                                                                                                                     |
-| Q21      | 测试             | Vitest + Playwright 三引擎视觉快照（**待做**，原型只有 `node:test`）                                                                                                                                                   |
-| Q22      | 框架使用         | 只在文档里放可复制的最小示例，不发包                                                                                                                                                                                   |
-| Q25      | 支持口径         | 第 0、1 档标 best effort；CI 只做逻辑层验证                                                                                                                                                                            |
-| Q26      | 构建             | JS 目标 ES2015、不带 polyfill；PostCSS + autoprefixer 作开发依赖（**待做**，原型未接）                                                                                                                                 |
-| Q27      | iOS 流光         | 识别 iOS 后显式选了的 shimmer 降级 pulse（**iOS 上是否真的需要，未验证**）                                                                                                                                             |
-| Q28      | 兜底粒度         | 根的**直接子元素各一块**，后代 `visibility:hidden`                                                                                                                                                                     |
-| Q29      | 兜底层约束       | 见 §7                                                                                                                                                                                                                  |
+| #        | 议题             | 结论                                                                                                                                                                                                                                                                                                                                         |
+| -------- | ---------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Q1       | 渲染机制         | CSS 优先；运行时测量（覆盖层）暂不做，留作将来的逃生口                                                                                                                                                                                                                                                                                       |
+| Q2 / Q19 | 产物形态         | `core` + `<skz-box>`（light DOM，不用 shadow）；**不发框架适配包**                                                                                                                                                                                                                                                                           |
+| Q3 / Q14 | mock             | `Bone` 静态工具类，**只造数据不渲染**；图片用透明占位图，文字用 `█` 词                                                                                                                                                                                                                                                                       |
+| Q4       | SSR / 无 JS 首屏 | 要。状态全在 class/属性里，CSS 即可出骨架                                                                                                                                                                                                                                                                                                    |
+| Q5 / Q24 | 浏览器基线       | 纯 CSS 层叠渐进增强，不声明版本号，不用 JS 闸门；认识 `@supports` 的进第 0 档及以上，其余落到兜底整块                                                                                                                                                                                                                                        |
+| Q6 / Q23 | 本次产出         | 设计文档 + 最小原型（零依赖）                                                                                                                                                                                                                                                                                                                |
+| Q7 / Q12 | 命中方式         | **默认自动**（整树按规则命中），标记只做例外；`skz-auto` 作用域标记不要了                                                                                                                                                                                                                                                                    |
+| Q8 / Q13 | 标记载体         | 裸属性：`sk` / `skz-leaf` / `skz-ignore`，不用 `data-sk`；根状态用 class `skz`                                                                                                                                                                                                                                                               |
+| Q9       | 多行文字形状     | 被 Q16 的下划线法取代（`lh` 渐变分行没做）                                                                                                                                                                                                                                                                                                   |
+| Q10      | 交互锁           | 根上 `inert` + `aria-busy`；要保持可点的内容放到骨架根外面                                                                                                                                                                                                                                                                                   |
+| Q11      | 动效             | 默认 `fade`（根级 opacity，合成器线程，几乎零成本）；`solid`；`pulse` / `shimmer` 改为根驱动（`@property` 变量 + 根上一个动画），不支持 `@property` 时退回 fade；不自动降级（曾有 `maxAnimated` 阈值，已移除）。元素级旧方案备份在 `archive/2026-10-08-element-anim/`；下划线文字不能 shimmer。**2026-10-08 由性能实测改了默认**，见性能报告 |
+| Q15      | 文字占位         | 按词切分、词长确定性（不用 `Math.random`）、`lines`、CJK 简单版                                                                                                                                                                                                                                                                              |
+| Q16      | 文字骨头         | **两套都做**：下划线法（默认）+ 叶子背景法（根上写 `skz-text="leaf"`，需 `:has`）                                                                                                                                                                                                                                                            |
+| Q17      | Web Component    | 支持：宿主 `visibility:hidden` + `::before` 铺骨头，运行时生成标签名样式表                                                                                                                                                                                                                                                                   |
+| Q18      | 图标             | 默认命中（空 `i`、类名含 `icon` 的空元素），白名单可扩展                                                                                                                                                                                                                                                                                     |
+| Q20      | 包名             | `skeletonizer`（npm 上目前未被占用，发布前再确认）                                                                                                                                                                                                                                                                                           |
+| Q21      | 测试             | Vitest + Playwright 三引擎视觉快照（**待做**，原型只有 `node:test`）                                                                                                                                                                                                                                                                         |
+| Q22      | 框架使用         | 只在文档里放可复制的最小示例，不发包                                                                                                                                                                                                                                                                                                         |
+| Q25      | 支持口径         | 第 0、1 档标 best effort；CI 只做逻辑层验证                                                                                                                                                                                                                                                                                                  |
+| Q26      | 构建             | JS 目标 ES2015、不带 polyfill；PostCSS + autoprefixer 作开发依赖（**待做**，原型未接）                                                                                                                                                                                                                                                       |
+| Q27      | iOS 流光         | 识别 iOS 后显式选了的 shimmer 降级 pulse（**iOS 上是否真的需要，未验证**）                                                                                                                                                                                                                                                                   |
+| Q28      | 兜底粒度         | 根的**直接子元素各一块**，后代 `visibility:hidden`                                                                                                                                                                                                                                                                                           |
+| Q29      | 兜底层约束       | 见 §7                                                                                                                                                                                                                                                                                                                                        |
 
 ## 3. 四档层叠
 
@@ -63,35 +63,37 @@ effects.css   无条件（默认支持 CSS 变量）fade（默认）/ solid / pu
 - 兜底层只用 CSS2.1/3 基础语法，颜色写字面量；不认识 `@supports` 的浏览器会整段跳过后面的块，自然停在兜底。
 - 兜底层用 `background-image` 渐变图层上色（不是 `background-color`），这样第 0 档退出时只需 `background-image: none`，不会把业务自己的背景色一起抹掉。代价：根的直接子元素自己的 `background-image` 在第 0 档以上会丢。
 - 兜底层的规则全部 `!important`，否则压不住业务样式。
-- 未升级的 `<x-ske loading>`（没有 `customElements` 的环境）按 `[loading]` 命中兜底层，所以在这类环境里始终是整块。
+- SSR / 无 JS（或 `<skz-box>` 没升级）时，在骨架根上直接写 `skz`，如 `<skz-box loading><div skz>…</div></skz-box>`，按 `[skz]` 命中兜底层，这类环境里始终是整块；JS 起来后 `enable()` 幂等，不会重复加锁。
 
 ## 4. 标记词汇
 
-| 标记           | 含义                                               | 对应 skeletonizer          |
-| -------------- | -------------------------------------------------- | -------------------------- |
-| `sk`           | 本元素强制当骨头（装饰 div、背景图元素），不动子树 | `Skeleton.replace`         |
-| `x-ske-leaf`   | 本元素整块，子树全藏                               | `Skeleton.leaf` / `unite`  |
-| `x-ske-ignore` | 保持原样                                           | `Skeleton.keep` / `ignore` |
+| 标记         | 含义                                               | 对应 skeletonizer          |
+| ------------ | -------------------------------------------------- | -------------------------- |
+| `sk`         | 本元素强制当骨头（装饰 div、背景图元素），不动子树 | `Skeleton.replace`         |
+| `skz-leaf`   | 本元素整块，子树全藏                               | `Skeleton.leaf` / `unite`  |
+| `skz-ignore` | 保持原样                                           | `Skeleton.keep` / `ignore` |
 
-根元素上的属性：`x-ske-effect="fade|solid|sweep|pulse|shimmer"`（sweep 为原型）、`x-ske-text="underline|leaf"`。
+根元素上的属性：`skz-effect="fade|solid|sweep|pulse|shimmer"`（sweep 为原型）、`skz-text="underline|leaf"`。
 
-已知限制：`x-ske-ignore` 区里后代自带的颜色/背景，在第 0、1 档会丢（被 `color: inherit` 覆盖）；第 2 档的叶子背景模式才精确保留。
+已知限制：`skz-ignore` 区里后代自带的**背景**在第 0、1 档会丢，第 2 档的叶子背景模式才精确保留；文字色因为藏文字改用 `-webkit-text-fill-color`（不动 `color`），各档都保留。代价是容器上依赖 `currentColor` 的边框等会在骨架里露出来。
 
 ## 5. 根状态与 API
 
 ```js
-import { enable, disable, registerCustomElements, defineXSke, Bone } from "skeletonizer";
+import { enable, disable, registerCustomElements, defineSkzBox, Bone } from "skeletonizer";
 
 const off = enable(el, { effect: "pulse", text: "underline" }); // 返回关闭函数
 off(); // 或 disable(el)
 
-defineXSke(); // <x-ske loading effect="pulse">
+defineSkzBox(); // <skz-box loading effect="pulse"><div>…</div></skz-box>，skz 落在第一个元素子节点上
 registerCustomElements(document, { watch: true }); // 扫描自定义元素，生成宿主样式表
 ```
 
-- `enable()` 加 class、`aria-busy`、`inert`；对根上的 `class` 属性挂 `MutationObserver`，**框架重绘把 class 抹掉时会自动补回**。
+- `enable()` 加根标记属性 `skz`、`aria-busy`、`inert`（避开 `skz-ignore` 区）。根标记用属性而非 class：框架重绘整体改写 class 时不会冲掉它，所以不需要 MutationObserver 补回。根滚出视口时由全库共享的 `IntersectionObserver` 打上 `skz-paused` 暂停动画。
+- `fit: true`（默认关）：骨架自身不撑出滚动条。根带 `skz-fit`，CSS 兜底 `max-height: 100vh/100dvh` + `overflow: clip`（首帧零 JS 生效）；JS（`src/fit.ts`）找第一个 overflow 非 visible 的祖先（没有则视口），把根的内联 `max-height` 收成「边界可视底边 − 根顶」，并给完全落在其外的列表项（同防火墙的找法）打 `skz-fit-hide`（`display:none`）；收口后边界若仍可滚动（骨架在首屏以下，或下方有别的内容，滚动条不是骨架造成的），放宽为一屏高后重新打标记，只放宽一次；`ResizeObserver` 观察边界（视口监听 `resize`），rAF 合并重算；关闭或 `disable()` 时清干净。只管骨架自身，不扣掉它下方的内容（页脚等）。`<skz-box fit>` 与 React / Vue / Svelte 的 `fit` 透传同一选项。
+- `<skz-box>` 宿主只管自己的 `loading` 属性，`enable/disable/toggle` 作用在【第一个元素子节点】上，宿主自己不带 `skz`，因此没有重入保护；宿主断开时对子根 `disable`、重新连接时按 `loading` 恢复。不带 MutationObserver：子根被框架替换后由用户自己处理（如切一下 `loading`）。
 - 没有原生 `inert` 时退到 CSS `pointer-events:none` + 根上 `focusin` 捕获后 `blur()`（**该分支未在真机验证**）。
-- `registerCustomElements` 优先 `adoptedStyleSheets`，不支持时往 `<head>` 插 `<style data-x-ske-hosts>`（**降级分支未验证**）。
+- `registerCustomElements` 优先 `adoptedStyleSheets`，不支持时往 `<head>` 插 `<style data-skz-hosts>`（**降级分支未验证**）。
 
 ### Bone（只造数据）
 
@@ -107,8 +109,8 @@ registerCustomElements(document, { watch: true }); // 扫描自定义元素，�
 
 ## 6. 文字骨头：两种做法
 
-- **下划线法（默认，第 1 档）**：给所有文字画 `text-decoration: underline`，粗 `1em`、偏移 `-0.85em`（变量 `--x-ske-ul-thickness` / `--x-ske-ul-offset` 可调）。沿真实文字行延伸，最后一行自然变短，混合文字（`价格：<b>¥5</b>`）也覆盖。代价：不能渐变（只有 pulse），没有圆角，下划线会沿祖先传给后代文字。
-- **叶子背景法（第 2 档，`x-ske-text="leaf"`）**：`:not(:has(*)):not(:empty)` 的元素上背景色，可 shimmer、有圆角。代价：多行块级文字成一整块矩形，混合文字里的裸文字节点既不出骨头也被藏起来。
+- **下划线法（默认，第 1 档）**：给所有文字画 `text-decoration: underline`，粗 `1em`、偏移 `-0.85em`（变量 `--skz-ul-thickness` / `--skz-ul-offset` 可调）。沿真实文字行延伸，最后一行自然变短，混合文字（`价格：<b>¥5</b>`）也覆盖。代价：不能渐变（只有 pulse），没有圆角，下划线会沿祖先传给后代文字。
+- **叶子背景法（第 2 档，`skz-text="leaf"`）**：`:not(:has(*)):not(:empty)` 的元素上背景色，可 shimmer、有圆角。代价：多行块级文字成一整块矩形，混合文字里的裸文字节点既不出骨头也被藏起来。
 
 ## 7. 兜底层的使用约束（Q29）
 
@@ -117,7 +119,7 @@ registerCustomElements(document, { watch: true }); // 扫描自定义元素，�
 1. 根的直接子元素若是 `video`/`canvas`/`iframe`，真实内容仍会盖在灰块上，请自己包一层 `div`。
 2. 不要对根的直接子元素用 `display: contents`：它没有盒子，涂不上色，后代又被藏起来，那一块会变成**空白**。
 3. 直接放在根下的**裸文字不会被藏起来**（实测：会露出真实文字），请用元素包住。
-4. 绝对定位的悬浮角标会被涂成一块灰，需要保持原样就标 `x-ske-ignore`。
+4. 绝对定位的悬浮角标会被涂成一块灰，需要保持原样就标 `skz-ignore`。
 5. 第 0 档同样会露出容器里的**混合文字**（元素之间的裸文字节点），和图标字体 `<i>` 的字形（图标启发式在第 2 档才有）。
 
 ## 8. 待验证假设与实测状态

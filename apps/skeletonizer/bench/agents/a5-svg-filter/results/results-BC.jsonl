@@ -1,0 +1,8 @@
+{"name":"fB-static-n500","elements":4000,"fps":60.8,"mainBusy":0.68,"compositor":0.61,"PrePaint":0.01,"Layerize":0,"Commit":0.07,"HitTest":0,"gpu":0.04,"raster":0,"toggleMs":17,"toggleFrameMs":35.9}
+{"name":"fB-static-scroll-n500","elements":4000,"fps":60.8,"mainBusy":1.57,"compositor":2.83,"PrePaint":0.07,"Layerize":0.01,"Commit":0.11,"UpdateLayer":0,"gpu":2.4,"HitTest":0,"Paint":0}
+{"name":"fC-static-n500","elements":4000,"fps":60.8,"mainBusy":0.63,"compositor":0.57,"PrePaint":0.01,"Layerize":0,"Commit":0.08,"HitTest":0,"gpu":0.01,"toggleMs":16.8,"toggleFrameMs":50.7}
+{"name":"fC-static-scroll-n500","elements":4000,"fps":60.8,"mainBusy":1.21,"compositor":2.22,"PrePaint":0.05,"Layerize":0,"Commit":0.09,"UpdateLayer":0,"HitTest":0,"gpu":1.92,"Paint":0}
+{"name":"fB-static-n2000","elements":16000,"fps":60.8,"mainBusy":0.7,"compositor":0.55,"PrePaint":0.01,"Layerize":0,"Commit":0.07,"HitTest":0,"gpu":0.03,"toggleMs":75.8,"toggleFrameMs":149.7}
+{"name":"fB-static-scroll-n2000","elements":16000,"fps":60.4,"mainBusy":1.31,"compositor":2.46,"PrePaint":0.06,"Layerize":0.01,"Commit":0.11,"UpdateLayer":0,"HitTest":0.02,"gpu":2.14,"Paint":0.02}
+{"name":"fC-static-n2000","elements":16000,"fps":60.8,"mainBusy":0.66,"compositor":0.57,"PrePaint":0.01,"Layerize":0,"Commit":0.07,"HitTest":0,"gpu":0.01,"toggleMs":62.7,"toggleFrameMs":130.5}
+{"name":"fC-static-scroll-n2000","elements":16000,"fps":60.4,"mainBusy":1.39,"compositor":2.41,"PrePaint":0.05,"Layerize":0.03,"Commit":0.11,"UpdateLayer":0,"gpu":2.13,"HitTest":0.02,"Paint":0.02}

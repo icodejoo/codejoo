@@ -1,0 +1,4 @@
+{"name":"B pulse n=2000","elements":16000,"fps":24,"compositor":4.14,"gpu":2.59,"PrePaint":4.07,"Paint":1.66,"Layerize":0.07,"Commit":0.34,"UpdateLayer":0.21,"mainBusy":83.84,"UpdateLayoutTree":35.58,"HitTest":0.02,"raster":0,"toggleMs":66.4}
+{"name":"B shimmer n=2000","elements":16000,"fps":22.4,"PrePaint":4.72,"compositor":4.97,"Paint":2.42,"Layerize":0.08,"Commit":0.3,"UpdateLayer":0.21,"mainBusy":89.98,"UpdateLayoutTree":37.9,"gpu":3.41,"HitTest":0.01,"toggleMs":66.7}
+{"name":"B fade n=2000","elements":16000,"fps":60.4,"mainBusy":1.28,"gpu":1.32,"compositor":1.88,"UpdateLayoutTree":0.24,"PrePaint":0.01,"Layerize":0,"Commit":0.08,"HitTest":0.01,"toggleMs":81.4}
+{"name":"B shimmer-leaf n=2000","elements":16000,"fps":21.6,"gpu":4.69,"compositor":5.02,"PrePaint":5.27,"Paint":3.22,"Layerize":0.12,"Commit":0.11,"UpdateLayer":0.01,"mainBusy":94.63,"UpdateLayoutTree":39.66,"HitTest":0.02,"toggleMs":69.5}

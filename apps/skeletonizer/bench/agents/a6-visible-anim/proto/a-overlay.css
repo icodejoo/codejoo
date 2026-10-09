@@ -1,0 +1,25 @@
+/* 追加在 base.css（sass src/styles/entries/all.scss 编出）末尾即得 a.css */
+/* ===== 方案 A：根不跑动画，只给视口内列表项（skz-anim）各自挂动画 =====
+ * 根带 skz-a 时（JS 找到了列表项才打）：根上动画关掉，变量静态；视口内项自己是"根"：
+ * 动画变量写在项上，派生变量（--skz-fill / --skz-ul-fill / --skz-bg-pos）在项上重新声明（根上已展开成具体值）。
+ * 视口外的项：继承根上静态值，没有任何逐帧变化。 */
+@supports (color: rgb(from red r g b)) {
+  [skz][skz-a][skz-effect="pulse"],
+  [skz][skz-a][skz-effect="shimmer"] {
+    animation: none;
+    --skz-pulse-c: var(--skz-color);
+    --skz-shimmer-p: -60;
+  }
+  [skz][skz-a][skz-effect="pulse"] [skz-anim] {
+    --skz-fill: var(--skz-pulse-c);
+    --skz-ul-fill: var(--skz-pulse-c);
+    animation: skz-pulse-root var(--skz-duration) ease-in-out infinite alternate;
+  }
+  [skz][skz-a][skz-effect="shimmer"] [skz-anim] {
+    --skz-bg-pos: calc(var(--skz-shimmer-p) * 1vw) 0;
+    --skz-ul-fill: var(--skz-pulse-c);
+    animation:
+      skz-shimmer-root var(--skz-duration) var(--skz-shimmer-timing, linear) infinite,
+      skz-pulse-root var(--skz-duration) ease-in-out infinite alternate;
+  }
+}

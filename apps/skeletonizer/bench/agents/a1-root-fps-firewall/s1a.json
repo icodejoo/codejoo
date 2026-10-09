@@ -1,0 +1,290 @@
+[
+ {
+  "name": "1a pulse n500 baseline",
+  "css": "base",
+  "n": 500,
+  "attrs": [
+   [
+    "x-ske-effect",
+    "pulse"
+   ],
+   [
+    "x-ske-text",
+    "leaf"
+   ]
+  ]
+ },
+ {
+  "name": "1a pulse n500 fw0-literal all",
+  "css": "fw0",
+  "n": 500,
+  "attrs": [
+   [
+    "x-ske-effect",
+    "pulse"
+   ],
+   [
+    "x-ske-text",
+    "leaf"
+   ]
+  ],
+  "js": [
+   "fwall",
+   0
+  ]
+ },
+ {
+  "name": "1a pulse n500 fw1-extended all",
+  "css": "fw1",
+  "n": 500,
+  "attrs": [
+   [
+    "x-ske-effect",
+    "pulse"
+   ],
+   [
+    "x-ske-text",
+    "leaf"
+   ]
+  ],
+  "js": [
+   "fwall",
+   0
+  ]
+ },
+ {
+  "name": "1a pulse n500 fw1-extended half",
+  "css": "fw1",
+  "n": 500,
+  "attrs": [
+   [
+    "x-ske-effect",
+    "pulse"
+   ],
+   [
+    "x-ske-text",
+    "leaf"
+   ]
+  ],
+  "js": [
+   "fwhalf",
+   0
+  ]
+ },
+ {
+  "name": "1a pulse n2000 baseline",
+  "css": "base",
+  "n": 2000,
+  "attrs": [
+   [
+    "x-ske-effect",
+    "pulse"
+   ],
+   [
+    "x-ske-text",
+    "leaf"
+   ]
+  ]
+ },
+ {
+  "name": "1a pulse n2000 fw0-literal all",
+  "css": "fw0",
+  "n": 2000,
+  "attrs": [
+   [
+    "x-ske-effect",
+    "pulse"
+   ],
+   [
+    "x-ske-text",
+    "leaf"
+   ]
+  ],
+  "js": [
+   "fwall",
+   0
+  ]
+ },
+ {
+  "name": "1a pulse n2000 fw1-extended all",
+  "css": "fw1",
+  "n": 2000,
+  "attrs": [
+   [
+    "x-ske-effect",
+    "pulse"
+   ],
+   [
+    "x-ske-text",
+    "leaf"
+   ]
+  ],
+  "js": [
+   "fwall",
+   0
+  ]
+ },
+ {
+  "name": "1a pulse n2000 fw1-extended half",
+  "css": "fw1",
+  "n": 2000,
+  "attrs": [
+   [
+    "x-ske-effect",
+    "pulse"
+   ],
+   [
+    "x-ske-text",
+    "leaf"
+   ]
+  ],
+  "js": [
+   "fwhalf",
+   0
+  ]
+ },
+ {
+  "name": "1a shimmer n500 baseline",
+  "css": "base",
+  "n": 500,
+  "attrs": [
+   [
+    "x-ske-effect",
+    "shimmer"
+   ],
+   [
+    "x-ske-text",
+    "leaf"
+   ]
+  ]
+ },
+ {
+  "name": "1a shimmer n500 fw0-literal all",
+  "css": "fw0",
+  "n": 500,
+  "attrs": [
+   [
+    "x-ske-effect",
+    "shimmer"
+   ],
+   [
+    "x-ske-text",
+    "leaf"
+   ]
+  ],
+  "js": [
+   "fwall",
+   0
+  ]
+ },
+ {
+  "name": "1a shimmer n500 fw1-extended all",
+  "css": "fw1",
+  "n": 500,
+  "attrs": [
+   [
+    "x-ske-effect",
+    "shimmer"
+   ],
+   [
+    "x-ske-text",
+    "leaf"
+   ]
+  ],
+  "js": [
+   "fwall",
+   0
+  ]
+ },
+ {
+  "name": "1a shimmer n500 fw1-extended half",
+  "css": "fw1",
+  "n": 500,
+  "attrs": [
+   [
+    "x-ske-effect",
+    "shimmer"
+   ],
+   [
+    "x-ske-text",
+    "leaf"
+   ]
+  ],
+  "js": [
+   "fwhalf",
+   0
+  ]
+ },
+ {
+  "name": "1a shimmer n2000 baseline",
+  "css": "base",
+  "n": 2000,
+  "attrs": [
+   [
+    "x-ske-effect",
+    "shimmer"
+   ],
+   [
+    "x-ske-text",
+    "leaf"
+   ]
+  ]
+ },
+ {
+  "name": "1a shimmer n2000 fw0-literal all",
+  "css": "fw0",
+  "n": 2000,
+  "attrs": [
+   [
+    "x-ske-effect",
+    "shimmer"
+   ],
+   [
+    "x-ske-text",
+    "leaf"
+   ]
+  ],
+  "js": [
+   "fwall",
+   0
+  ]
+ },
+ {
+  "name": "1a shimmer n2000 fw1-extended all",
+  "css": "fw1",
+  "n": 2000,
+  "attrs": [
+   [
+    "x-ske-effect",
+    "shimmer"
+   ],
+   [
+    "x-ske-text",
+    "leaf"
+   ]
+  ],
+  "js": [
+   "fwall",
+   0
+  ]
+ },
+ {
+  "name": "1a shimmer n2000 fw1-extended half",
+  "css": "fw1",
+  "n": 2000,
+  "attrs": [
+   [
+    "x-ske-effect",
+    "shimmer"
+   ],
+   [
+    "x-ske-text",
+    "leaf"
+   ]
+  ],
+  "js": [
+   "fwhalf",
+   0
+  ]
+ }
+]

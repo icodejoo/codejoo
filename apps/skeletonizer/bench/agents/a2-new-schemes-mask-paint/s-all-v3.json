@@ -1,0 +1,452 @@
+[
+{
+"name": "floor-solid-4k-raf",
+"css": "prod",
+"n": 500,
+"attrs": [
+[
+"x-ske-effect",
+"solid"
+],
+[
+"x-ske-text",
+"leaf"
+]
+],
+"idle": false
+},
+{
+"name": "floor-solid-16k-raf",
+"css": "prod",
+"n": 2000,
+"attrs": [
+[
+"x-ske-effect",
+"solid"
+],
+[
+"x-ske-text",
+"leaf"
+]
+],
+"idle": false
+},
+{
+"name": "root-shimmer-4k-raf",
+"css": "prod",
+"n": 500,
+"attrs": [
+[
+"x-ske-effect",
+"shimmer"
+],
+[
+"x-ske-text",
+"leaf"
+]
+],
+"idle": false
+},
+{
+"name": "root-shimmer-16k-raf",
+"css": "prod",
+"n": 2000,
+"attrs": [
+[
+"x-ske-effect",
+"shimmer"
+],
+[
+"x-ske-text",
+"leaf"
+]
+],
+"idle": false
+},
+{
+"name": "svg-4k-raf",
+"css": "prod",
+"n": 500,
+"attrs": [
+[
+"x-ske-effect",
+"shimmer"
+],
+[
+"x-ske-text",
+"leaf"
+],
+[
+"x-ske-engine",
+"svg"
+]
+],
+"idle": false
+},
+{
+"name": "svg-16k-raf",
+"css": "prod",
+"n": 2000,
+"attrs": [
+[
+"x-ske-effect",
+"shimmer"
+],
+[
+"x-ske-text",
+"leaf"
+],
+[
+"x-ske-engine",
+"svg"
+]
+],
+"idle": false
+},
+{
+"name": "A-tiny-3cards-raf",
+"css": "prod",
+"n": 3,
+"attrs": [
+[
+"x-ske-effect",
+"solid"
+],
+[
+"x-ske-text",
+"leaf"
+]
+],
+"idle": false,
+"proto": "a"
+},
+{
+"name": "A-4k-raf",
+"css": "prod",
+"n": 500,
+"attrs": [
+[
+"x-ske-effect",
+"solid"
+],
+[
+"x-ske-text",
+"leaf"
+]
+],
+"idle": false,
+"proto": "a",
+"resize": true
+},
+{
+"name": "A-16k-raf",
+"css": "prod",
+"n": 2000,
+"attrs": [
+[
+"x-ske-effect",
+"solid"
+],
+[
+"x-ske-text",
+"leaf"
+]
+],
+"idle": false,
+"proto": "a",
+"resize": true
+},
+{
+"name": "B1-4k-raf",
+"css": "prod",
+"n": 500,
+"attrs": [
+[
+"x-ske-effect",
+"solid"
+],
+[
+"x-ske-text",
+"leaf"
+]
+],
+"idle": false,
+"proto": "b1"
+},
+{
+"name": "B1-16k-raf",
+"css": "prod",
+"n": 2000,
+"attrs": [
+[
+"x-ske-effect",
+"solid"
+],
+[
+"x-ske-text",
+"leaf"
+]
+],
+"idle": false,
+"proto": "b1"
+},
+{
+"name": "B2-4k-raf",
+"css": "prod",
+"n": 500,
+"attrs": [
+[
+"x-ske-effect",
+"solid"
+],
+[
+"x-ske-text",
+"leaf"
+]
+],
+"idle": false,
+"proto": "b2"
+},
+{
+"name": "B2-16k-raf",
+"css": "prod",
+"n": 2000,
+"attrs": [
+[
+"x-ske-effect",
+"solid"
+],
+[
+"x-ske-text",
+"leaf"
+]
+],
+"idle": false,
+"proto": "b2"
+},
+{
+"name": "floor-solid-4k-idle",
+"css": "prod",
+"n": 500,
+"attrs": [
+[
+"x-ske-effect",
+"solid"
+],
+[
+"x-ske-text",
+"leaf"
+]
+],
+"idle": true
+},
+{
+"name": "floor-solid-16k-idle",
+"css": "prod",
+"n": 2000,
+"attrs": [
+[
+"x-ske-effect",
+"solid"
+],
+[
+"x-ske-text",
+"leaf"
+]
+],
+"idle": true
+},
+{
+"name": "root-shimmer-4k-idle",
+"css": "prod",
+"n": 500,
+"attrs": [
+[
+"x-ske-effect",
+"shimmer"
+],
+[
+"x-ske-text",
+"leaf"
+]
+],
+"idle": true
+},
+{
+"name": "root-shimmer-16k-idle",
+"css": "prod",
+"n": 2000,
+"attrs": [
+[
+"x-ske-effect",
+"shimmer"
+],
+[
+"x-ske-text",
+"leaf"
+]
+],
+"idle": true
+},
+{
+"name": "svg-4k-idle",
+"css": "prod",
+"n": 500,
+"attrs": [
+[
+"x-ske-effect",
+"shimmer"
+],
+[
+"x-ske-text",
+"leaf"
+],
+[
+"x-ske-engine",
+"svg"
+]
+],
+"idle": true
+},
+{
+"name": "svg-16k-idle",
+"css": "prod",
+"n": 2000,
+"attrs": [
+[
+"x-ske-effect",
+"shimmer"
+],
+[
+"x-ske-text",
+"leaf"
+],
+[
+"x-ske-engine",
+"svg"
+]
+],
+"idle": true
+},
+{
+"name": "A-tiny-3cards-idle",
+"css": "prod",
+"n": 3,
+"attrs": [
+[
+"x-ske-effect",
+"solid"
+],
+[
+"x-ske-text",
+"leaf"
+]
+],
+"idle": true,
+"proto": "a"
+},
+{
+"name": "A-4k-idle",
+"css": "prod",
+"n": 500,
+"attrs": [
+[
+"x-ske-effect",
+"solid"
+],
+[
+"x-ske-text",
+"leaf"
+]
+],
+"idle": true,
+"proto": "a",
+"resize": false
+},
+{
+"name": "A-16k-idle",
+"css": "prod",
+"n": 2000,
+"attrs": [
+[
+"x-ske-effect",
+"solid"
+],
+[
+"x-ske-text",
+"leaf"
+]
+],
+"idle": true,
+"proto": "a",
+"resize": false
+},
+{
+"name": "B1-4k-idle",
+"css": "prod",
+"n": 500,
+"attrs": [
+[
+"x-ske-effect",
+"solid"
+],
+[
+"x-ske-text",
+"leaf"
+]
+],
+"idle": true,
+"proto": "b1"
+},
+{
+"name": "B1-16k-idle",
+"css": "prod",
+"n": 2000,
+"attrs": [
+[
+"x-ske-effect",
+"solid"
+],
+[
+"x-ske-text",
+"leaf"
+]
+],
+"idle": true,
+"proto": "b1"
+},
+{
+"name": "B2-4k-idle",
+"css": "prod",
+"n": 500,
+"attrs": [
+[
+"x-ske-effect",
+"solid"
+],
+[
+"x-ske-text",
+"leaf"
+]
+],
+"idle": true,
+"proto": "b2"
+},
+{
+"name": "B2-16k-idle",
+"css": "prod",
+"n": 2000,
+"attrs": [
+[
+"x-ske-effect",
+"solid"
+],
+[
+"x-ske-text",
+"leaf"
+]
+],
+"idle": true,
+"proto": "b2"
+}
+]

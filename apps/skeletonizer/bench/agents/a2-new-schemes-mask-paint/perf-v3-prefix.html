@@ -1,0 +1,183 @@
+<!doctype html>
+<html lang="zh"><head><meta charset="utf-8" /><title>perf-a2</title><link id="css" rel="stylesheet" />
+<style>body{font:14px/1.5 system-ui,sans-serif;margin:0}.card{display:flex;gap:8px;padding:8px;border:1px solid #ddd;margin:4px}.card img{width:48px;height:48px;border-radius:50%}
+/* ===== 原型 A：合成器光带 ===== */
+@keyframes xa-band{from{transform:translateX(-100%)}to{transform:translateX(167%)}}
+.xa-tile{position:absolute;left:0;overflow:hidden;pointer-events:none;-webkit-mask-repeat:no-repeat;mask-repeat:no-repeat;-webkit-mask-size:100% 100%;mask-size:100% 100%}
+.xa-band{position:absolute;left:0;top:0;width:60%;height:100%;pointer-events:none;will-change:transform;background:linear-gradient(90deg,transparent,var(--x-ske-highlight),transparent);animation:xa-band var(--x-ske-duration,1.5s) linear infinite}
+/* ===== 原型 B：paint worklet ===== */
+@property --x-ske-sp{syntax:'<number>';inherits:false;initial-value:0}
+@property --x-ske-spi{syntax:'<number>';inherits:true;initial-value:0}
+@property --x-ske-ox{syntax:'<number>';inherits:false;initial-value:0}
+@property --x-ske-vw{syntax:'<number>';inherits:true;initial-value:1280}
+@keyframes x-sp{from{--x-ske-sp:0}to{--x-ske-sp:1}}
+@keyframes x-spi{from{--x-ske-spi:0}to{--x-ske-spi:1}}
+/* 提高优先级盖过库里的 fixed 背景声明 */
+[x-ske][x-ske][x-ske][x-ske][x-ske][x-ske][x-ske][x-ske][x-ske-proto=b1] [x-ske-b]{background-image:paint(xske-shimmer)!important;background-attachment:scroll!important;background-size:auto!important;background-position:0 0!important;animation:x-sp var(--x-ske-duration,1.5s) linear infinite}
+[x-ske][x-ske][x-ske][x-ske][x-ske][x-ske][x-ske][x-ske][x-ske-proto=b2] [x-ske-b]{background-image:paint(xske-shimmer-i)!important;background-attachment:scroll!important;background-size:auto!important;background-position:0 0!important}
+[x-ske-proto=b2]{animation:x-spi var(--x-ske-duration,1.5s) linear infinite}
+</style>
+</head><body><div id="root"></div>
+<script type="module">
+import { Bone, enable } from "../../src/index.ts";
+const q = new URLSearchParams(location.search);
+document.getElementById("css").href = `./${q.get("css") || "prod"}.css`;
+const root = document.getElementById("root");
+const GIF = Bone.image();
+const nf = () => new Promise((r) => requestAnimationFrame(r));
+let off = null;
+window.setup = async (n, spec) => {
+  off?.(); off = null;
+  window.__cleanup?.(); window.__cleanup = null;
+  root.removeAttribute("x-ske");
+  root.removeAttribute("style");
+  root.innerHTML = Array.from({ length: n }, () => `<div class="card"><img src="${GIF}" alt=""><div><h3>${Bone.text(10)}</h3><p>${Bone.lines(2)}</p><span>${Bone.text(6)}</span> <i class="icon-star"></i><button>${Bone.text(4)}</button></div></div>`).join("");
+  root.getAttributeNames().forEach((a) => a !== "id" && root.removeAttribute(a));
+  if (Array.isArray(spec)) { spec.forEach(([k, v]) => root.setAttribute(k, v)); root.setAttribute("x-ske", ""); }
+  else off = enable(root, spec || {});
+  await nf(); await nf();
+  return root.querySelectorAll("*").length;
+};
+window.frames = async (ms) => { let f = 0; const end = performance.now() + ms; while (performance.now() < end) { await nf(); f++; } return f; };
+window.toggleCost = async () => { root.removeAttribute("x-ske"); void root.offsetHeight; await nf(); await nf(); const t = performance.now(); root.setAttribute("x-ske", ""); void root.offsetHeight; return performance.now() - t; };
+
+/* ------------------------------------------------------------------ 公共：收集骨头 */
+/** 取骨头底色的计算值（rgb 字符串） */
+function boneColor() {
+  const p = document.createElement("u"); p.style.backgroundColor = "var(--x-ske-color)"; root.appendChild(p);
+  const c = getComputedStyle(p).backgroundColor; p.remove(); return c;
+}
+/** 解析 border-radius 单个角（可能是 "4px" / "50%" / "4px 8px"） */
+function corner(v, w, h) {
+  const [a, b = a] = v.split(" ");
+  const f = (s, ref) => (s.endsWith("%") ? (parseFloat(s) / 100) * ref : parseFloat(s));
+  return { x: f(a, w), y: f(b, h) };
+}
+/** 收集骨头：返回 {els, rects:[x,y,w,h,[tl,tr,br,bl]]}，坐标相对根的左上角 */
+function collect() {
+  const col = boneColor();
+  const rr = root.getBoundingClientRect();
+  const els = [], rects = [];
+  for (const el of root.querySelectorAll("*")) {
+    if (el.hasAttribute("data-xa")) continue;
+    const cs = getComputedStyle(el);
+    if (cs.backgroundColor !== col || cs.visibility === "hidden" || cs.display === "none") continue;
+    let any = false;
+    for (const r of el.getClientRects()) {
+      if (r.width <= 0 || r.height <= 0) continue;
+      any = true;
+      rects.push([r.left - rr.left, r.top - rr.top, r.width, r.height, [cs.borderTopLeftRadius, cs.borderTopRightRadius, cs.borderBottomRightRadius, cs.borderBottomLeftRadius].map((v) => corner(v, r.width, r.height))]);
+    }
+    if (any) els.push(el);
+  }
+  return { els, rects, left: rr.left };
+}
+
+/* ------------------------------------------------------------------ 原型 A */
+const TILE = 2048; // 单张遮罩的高度（css px），避开 canvas / 纹理尺寸上限
+/** 把矩形画成若干张分块遮罩，返回 blob 数组 */
+async function buildMask(rects, W, H) {
+  const dpr = devicePixelRatio, nt = Math.max(1, Math.ceil(H / TILE));
+  const buckets = Array.from({ length: nt }, () => []);
+  for (const r of rects) { const a = Math.max(0, Math.floor(r[1] / TILE)), b = Math.min(nt - 1, Math.floor((r[1] + r[3]) / TILE)); for (let t = a; t <= b; t++) buckets[t].push(r); }
+  const BATCH = window.__batch || 6, FMT = window.__fmt || "image/png";
+  let tDraw = 0, tBlob = 0; const blobs = [];
+  for (let b0 = 0; b0 < nt; b0 += BATCH) {
+    const t0 = performance.now();
+    const canvases = [];
+    for (let t = b0; t < Math.min(nt, b0 + BATCH); t++) {
+      const th = Math.min(TILE, H - t * TILE);
+      const c = document.createElement("canvas"); c.width = Math.ceil(W * dpr); c.height = Math.ceil(th * dpr);
+      const ctx = c.getContext("2d"); ctx.scale(dpr, dpr); ctx.translate(0, -t * TILE); ctx.fillStyle = "#fff"; ctx.beginPath();
+      for (const [x, y, w, h, rad] of buckets[t]) ctx.roundRect(x, y, w, h, rad);
+      ctx.fill(); canvases.push(c);
+    }
+    tDraw += performance.now() - t0;
+    const t1 = performance.now();
+    blobs.push(...(await Promise.all(canvases.map((c) => new Promise((res) => c.toBlob(res, FMT, 1))))));
+    tBlob += performance.now() - t1;
+    canvases.forEach((c) => { c.width = 0; c.height = 0; });
+  }
+  return { blobs, tDraw, tBlob, nt, bytes: blobs.reduce((s, b) => s + b.size, 0) };
+}
+function mountOverlay(blobs, W, H) {
+  const ov = document.createElement("div"); ov.setAttribute("data-xa", "");
+  ov.style.cssText = `position:absolute;left:0;top:0;width:${W}px;height:${H}px;pointer-events:none`;
+  const urls = blobs.map((b) => URL.createObjectURL(b));
+  urls.forEach((u, t) => {
+    const tile = document.createElement("div"); tile.className = "xa-tile"; tile.setAttribute("data-xa", "");
+    const th = Math.min(TILE, H - t * TILE);
+    tile.style.cssText = `top:${t * TILE}px;width:${W}px;height:${th}px;-webkit-mask-image:url(${u});mask-image:url(${u})`;
+    const band = document.createElement("div"); band.className = "xa-band"; band.setAttribute("data-xa", ""); tile.appendChild(band);
+    ov.appendChild(tile);
+  });
+  root.style.position = "relative"; root.appendChild(ov);
+  return { ov, urls };
+}
+let aState = null;
+/** 完整构建一次（收集 + 画 + toBlob + 挂载），返回各阶段耗时 */
+async function buildA() {
+  const T = {}; const t0 = performance.now();
+  const c = collect(); T.collect = performance.now() - t0;
+  const W = Math.ceil(root.scrollWidth), H = Math.ceil(root.scrollHeight);
+  const m = await buildMask(c.rects, W, H);
+  T.draw = m.tDraw; T.toBlob = m.tBlob; T.tiles = m.nt; T.pngKB = Math.round(m.bytes / 1024); T.bones = c.rects.length;
+  const t2 = performance.now();
+  const prev = aState; const mt = mountOverlay(m.blobs, W, H);
+  T.mount = performance.now() - t2;
+  await nf(); await nf(); T.firstFrame = performance.now() - t2;
+  if (prev) { prev.ov.remove(); prev.urls.forEach(URL.revokeObjectURL); }
+  aState = mt; T.total = performance.now() - t0;
+  return T;
+}
+async function protoA() {
+  const T = await buildA();
+  // ResizeObserver：尺寸变化时重画
+  window.__aResize = null; let first = true;
+  const ro = new ResizeObserver(() => { if (first) { first = false; return; } const t = performance.now(); buildA().then((x) => { window.__aResize = { ms: performance.now() - t, ...x }; }); });
+  ro.observe(root);
+  window.__cleanup = () => { ro.disconnect(); aState?.ov.remove(); aState?.urls.forEach(URL.revokeObjectURL); aState = null; root.style.position = ""; };
+  return T;
+}
+window.testResize = async () => { root.style.width = "1000px"; for (let i = 0; i < 100 && !window.__aResize; i++) await new Promise((r) => setTimeout(r, 100)); root.style.width = ""; await nf(); const r = window.__aResize; return r; };
+
+/* ------------------------------------------------------------------ 原型 B */
+const workletSrc = (name, spProp, withRgb) => (withRgb ? `
+const rgb = (s) => { s = String(s).trim(); if (s[0] === '#') { let h = s.slice(1); if (h.length === 3) h = [...h].map((c) => c + c).join(''); return [0, 2, 4].map((i) => parseInt(h.slice(i, i + 2), 16)); } const m = s.match(/[\\d.]+/g); return m ? m.slice(0, 3).map(Number) : [255, 255, 255]; };` : '') + `
+registerPaint('${name}', class {
+  static get inputProperties() { return ['--x-ske-color', '--x-ske-highlight', '${spProp}', '--x-ske-ox', '--x-ske-vw']; }
+  paint(ctx, size, p) {
+    const num = (k) => parseFloat(p.get(k).toString());
+    const sp = num('${spProp}'), ox = num('--x-ske-ox'), vw = num('--x-ske-vw');
+    const c = rgb(p.get('--x-ske-color')), hc = rgb(p.get('--x-ske-highlight'));
+    ctx.fillStyle = 'rgb(' + c + ')'; ctx.fillRect(0, 0, size.width, size.height);
+    const left = (-0.6 + 1.7 * sp) * vw - ox, bw = 0.6 * vw;
+    const g = ctx.createLinearGradient(left, 0, left + bw, 0);
+    g.addColorStop(0, 'rgba(' + hc + ',0)'); g.addColorStop(0.5, 'rgba(' + hc + ',1)'); g.addColorStop(1, 'rgba(' + hc + ',0)');
+    ctx.fillStyle = g; ctx.fillRect(0, 0, size.width, size.height);
+  }
+});`;
+async function protoB(kind) {
+  const T = {}; const t0 = performance.now();
+  const url = URL.createObjectURL(new Blob([workletSrc("xske-shimmer", "--x-ske-sp", true), workletSrc("xske-shimmer-i", "--x-ske-spi", false)], { type: "text/javascript" }));
+  await CSS.paintWorklet.addModule(url);
+  T.addModule = performance.now() - t0;
+  const t1 = performance.now(); const c = collect(); T.collect = performance.now() - t1;
+  const t2 = performance.now();
+  // 每骨头的视口 x 偏移（滚动 x 为 0）；先读后写，避免布局抖动
+  const xs = c.els.map((el) => el.getBoundingClientRect().left);
+  T.readX = performance.now() - t2;
+  const t3 = performance.now();
+  c.els.forEach((el, i) => { el.style.setProperty("--x-ske-ox", xs[i]); el.setAttribute("x-ske-b", ""); });
+  root.style.setProperty("--x-ske-vw", document.documentElement.clientWidth);
+  root.setAttribute("x-ske-proto", kind);
+  void root.offsetHeight; T.writeStyle = performance.now() - t3;
+  await nf(); await nf(); T.firstFrame = performance.now() - t3;
+  T.total = performance.now() - t0; T.bones = c.els.length;
+  window.__cleanup = () => { root.removeAttribute("x-ske-proto"); root.style.removeProperty("--x-ske-vw"); };
+  return T;
+}
+window.clientBoneRects = () => collect().rects.map((r) => r.slice(0, 4));
+window.proto = (kind) => (kind === "a" ? protoA() : protoB(kind));
+window.ready = true;
+</script></body></html>

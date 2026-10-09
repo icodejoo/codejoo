@@ -1,0 +1,31 @@
+<!doctype html>
+<html lang="zh"><head><meta charset="utf-8" /><title>perf</title><link id="css" rel="stylesheet" />
+<style>body{font:14px/1.5 system-ui,sans-serif;margin:0}.card{display:flex;gap:8px;padding:8px;border:1px solid #ddd;margin:4px}.card img{width:48px;height:48px;border-radius:50%}</style>
+</head><body><div id="root"></div>
+<script src="./blob5.js"></script>
+<script type="module">
+import { Bone, enable } from "../../src/index.ts";
+const q = new URLSearchParams(location.search);
+document.getElementById("css").href = `./${q.get("css") || "prod"}.css`;
+const root = document.getElementById("root");
+const GIF = Bone.image();
+const nf = () => new Promise((r) => requestAnimationFrame(r));
+let off = null;
+/** 搭场景：n 张卡片（每张约 8 个元素）。spec 是数组则当作根属性 [[k,v]...] 直接写（纯 CSS 路径）；是对象则当作 enable() 选项 */
+window.setup = async (n, spec) => {
+  off?.(); off = null;
+  root.removeAttribute("x-ske");
+  root.innerHTML = Array.from({ length: n }, () => `<div class="card"><img src="${GIF}" alt=""><div><h3>${Bone.text(10)}</h3><p>${Bone.lines(2)}</p><span>${Bone.text(6)}</span> <i class="icon-star"></i><button>${Bone.text(4)}</button></div></div>`).join("");
+  root.getAttributeNames().forEach((a) => a !== "id" && root.removeAttribute(a));
+  if (Array.isArray(spec)) { spec.forEach(([k, v]) => root.setAttribute(k, v)); root.setAttribute("x-ske", ""); }
+  else off = enable(root, spec || {});
+  await nf(); await nf();
+  return root.querySelectorAll("*").length;
+};
+/** 数 ms 毫秒内的帧数 */
+window.frames = async (ms) => { let f = 0; const end = performance.now() + ms; while (performance.now() < end) { await nf(); f++; } return f; };
+/** 一次性开启耗时：切 x-ske 后强制样式 + 布局 */
+window.toggleCost = async () => { root.removeAttribute("x-ske"); void root.offsetHeight; await nf(); await nf(); const t = performance.now(); root.setAttribute("x-ske", ""); void root.offsetHeight; return performance.now() - t; };
+window.jsDrive = (k) => { if (k === "blob") return Blob5.apply(root); };
+window.ready = true;
+</script></body></html>

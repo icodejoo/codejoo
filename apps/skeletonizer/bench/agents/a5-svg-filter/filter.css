@@ -1,0 +1,28 @@
+/* ===== 方案指定的最小 CSS ===== */
+[x-ske-f] { filter: url(#x-ske-f-light); pointer-events: none; user-select: none; }
+:root[data-x-ske-theme="dark"] [x-ske-f] { filter: url(#x-ske-f-dark); }
+/* mock 图是透明 GIF，给媒体一个深色底让滤镜看得见 */
+[x-ske-f] :is(img, video, canvas, svg, i:empty, input, button) { background-color: #000 !important; }
+/* pulse：根整体 opacity，合成器线程 */
+[x-ske-f][x-ske-f-anim="pulse"] { animation: f-pulse 1.5s ease-in-out infinite alternate; }
+@keyframes f-pulse { to { opacity: .55; } }
+
+/* ===== shimmer：光带放在根的同级覆盖层里（伪元素会被滤镜吃掉）===== */
+.x-ske-f-wrap { position: relative; }
+.x-ske-f-ov { position: absolute; inset: 0; pointer-events: none; overflow: hidden; }
+.x-ske-f-band {
+  width: 35%; height: 100%;
+  background: linear-gradient(90deg, transparent, rgba(255,255,255,.5), transparent);
+  animation: f-shimmer 1.5s linear infinite; will-change: transform; mix-blend-mode: lighten;
+}
+@keyframes f-shimmer { from { transform: translateX(-100%); } to { transform: translateX(300%); } }
+
+/* ===== 以下为变体扩展（实验用）：x-ske-f="B|C"、x-ske-f-r="22|64" ===== */
+[x-ske-f="B"] { filter: url(#x-ske-f-light-B); }
+[x-ske-f="C"] { filter: url(#x-ske-f-light-C); }
+[x-ske-f-r="22"] { filter: url(#x-ske-f-light-r22); }
+[x-ske-f-r="64"] { filter: url(#x-ske-f-light-r64); }
+:root[data-x-ske-theme="dark"] [x-ske-f="B"] { filter: url(#x-ske-f-dark-B); }
+:root[data-x-ske-theme="dark"] [x-ske-f="C"] { filter: url(#x-ske-f-dark-C); }
+:root[data-x-ske-theme="dark"] [x-ske-f-r="22"] { filter: url(#x-ske-f-dark-r22); }
+:root[data-x-ske-theme="dark"] [x-ske-f-r="64"] { filter: url(#x-ske-f-dark-r64); }

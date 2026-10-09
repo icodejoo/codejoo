@@ -1,0 +1,75 @@
+<!doctype html>
+<html lang="zh"><head><meta charset="utf-8" /><title>perf-a5</title><link id="css" rel="stylesheet" />
+<style>
+body{font:14px/1.5 system-ui,sans-serif;margin:0}
+.card{display:flex;gap:8px;padding:8px;border:1px solid #ddd;margin:4px}
+.card img{width:48px;height:48px;border-radius:50%}
+/* 深色主题：html[data-x-ske-theme=dark] */
+:root[data-x-ske-theme="dark"] body{background:#111;color:#eee}
+:root[data-x-ske-theme="dark"] .card{border-color:#333}
+</style>
+</head><body>
+<!--FILTERS-->
+<div id="wrap"><div id="root"></div></div>
+<script type="module">
+import { Bone, enable } from "../../src/index.ts";
+const q = new URLSearchParams(location.search);
+document.getElementById("css").href = `./${q.get("css") || "prod"}.css`;
+const root = document.getElementById("root");
+const wrap = document.getElementById("wrap");
+const GIF = Bone.image();
+const nf = () => new Promise((r) => requestAnimationFrame(r));
+let off = null;
+/** 当前开关用的属性名：数组/enable 模式是 x-ske；滤镜模式是 x-ske-f */
+let toggleAttr = "x-ske", toggleVal = "";
+/**
+ * 搭场景：n 张卡片（每张约 8 个元素）。
+ * spec 是数组 -> 当作根属性 [[k,v]...] 直接写（纯 CSS 路径）；
+ * spec 含 filter 键 -> 滤镜模式 { filter:"light"|"dark", anim:"none"|"pulse"|"shimmer", variant:"A"|"B"|"C", r:"22"|"64" }；
+ * 其余对象 -> enable() 选项。
+ */
+window.setup = async (n, spec) => {
+  off?.(); off = null;
+  window.__scroll = false; window.scrollTo(0, 0);
+  wrap.querySelectorAll(".x-ske-f-ov").forEach((e) => e.remove());
+  document.documentElement.removeAttribute("data-x-ske-theme");
+  root.removeAttribute("x-ske");
+  root.innerHTML = Array.from({ length: n }, () => `<div class="card"><img src="${GIF}" alt=""><div><h3>${Bone.text(10)}</h3><p>${Bone.lines(2)}</p><span>${Bone.text(6)}</span> <i class="icon-star"></i><button>${Bone.text(4)}</button></div></div>`).join("");
+  root.getAttributeNames().forEach((a) => a !== "id" && root.removeAttribute(a));
+  toggleAttr = "x-ske"; toggleVal = "";
+  if (Array.isArray(spec)) { spec.forEach(([k, v]) => root.setAttribute(k, v)); root.setAttribute("x-ske", ""); }
+  else if (spec && spec.filter) {
+    if (spec.filter === "dark") document.documentElement.setAttribute("data-x-ske-theme", "dark");
+    const v = spec.variant || "A";
+    toggleAttr = "x-ske-f"; toggleVal = v === "A" ? "" : v;
+    if (spec.r) root.setAttribute("x-ske-f-r", spec.r);
+    if (spec.anim === "pulse") root.setAttribute("x-ske-f-anim", "pulse");
+    if (spec.anim === "shimmer") {
+      const ov = document.createElement("div"); ov.className = "x-ske-f-ov";
+      ov.innerHTML = '<div class="x-ske-f-band"></div>';
+      wrap.appendChild(ov);
+    }
+    wrap.classList.toggle("x-ske-f-wrap", spec.anim === "shimmer");
+    root.setAttribute("x-ske-f", toggleVal);
+  } else off = enable(root, spec || {});
+  await nf(); await nf();
+  return root.querySelectorAll("*").length;
+};
+/** 数 ms 毫秒内的帧数；__scroll 为真时每帧滚 6px，到底回顶 */
+window.frames = async (ms) => {
+  let f = 0; const end = performance.now() + ms;
+  while (performance.now() < end) {
+    await nf(); f++;
+    if (window.__scroll) { const max = document.documentElement.scrollHeight - innerHeight; if (scrollY + 6 >= max) scrollTo(0, 0); else scrollBy(0, 6); }
+  }
+  return f;
+};
+/** 一次性开启耗时：切开关属性后强制样式 + 布局（同步部分） */
+window.toggleCost = async () => { root.removeAttribute(toggleAttr); void root.offsetHeight; await nf(); await nf(); const t = performance.now(); root.setAttribute(toggleAttr, toggleVal); void root.offsetHeight; return performance.now() - t; };
+/** 开启耗时（含帧）：切开关后到下一次 rAF 回调之后再一帧（主线程层面的到首帧时间，不含 raster/gpu 异步） */
+window.toggleCostFrame = async () => { root.removeAttribute(toggleAttr); void root.offsetHeight; await nf(); await nf(); const t = performance.now(); root.setAttribute(toggleAttr, toggleVal); await nf(); await nf(); return performance.now() - t; };
+/** 供 trace-toggle-a5.mjs 取当前开关属性名 / 值 */
+window.toggleAttrName = () => toggleAttr;
+window.toggleValue = () => toggleVal;
+window.ready = true;
+</script></body></html>

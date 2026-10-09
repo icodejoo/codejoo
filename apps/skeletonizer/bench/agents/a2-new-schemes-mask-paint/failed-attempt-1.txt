@@ -1,0 +1,5 @@
+第一次完整跑 s-all.json（10:~13:35 UTC）失败原因：
+1) 起初在基准运行期间修改了 perf.html，vite 触发整页重载，trace 的 Runtime.evaluate 返回 undefined，崩溃，无输出。
+2) 第二次跑到 root-shimmer-16k 时测试 Chrome 窗口被遮挡/后台化，requestAnimationFrame 不再触发（probe.mjs 实测 rAF timeout），frames() 永久挂起约 20 分钟；手动 taskkill 结束并手动删除自己的 bench.lock（owner pid 30840 确认是自己）。
+3) 修复：run-locked.mjs 里给 Chrome 加 --disable-features=CalculateNativeWinOcclusion --disable-backgrounding-occluded-windows --disable-renderer-backgrounding --disable-background-timer-throttling；trace.mjs 的 ev 加 300s 超时。
+注意：perf.html 首版（未分批画 canvas，一次建全部分块）、run-locked.mjs / trace.mjs 原始改版因被原地覆盖没有单独保留，现存最早版本为 *-v2-*。

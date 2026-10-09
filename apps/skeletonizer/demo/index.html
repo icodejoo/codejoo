@@ -12,7 +12,7 @@
         --line: #e5e7eb;
         --accent: #2563eb;
       }
-      :root[data-x-ske-theme="dark"] {
+      :root[data-skz-theme="dark"] {
         --bg: #111827;
         --fg: #f3f4f6;
         --card: #1f2937;
@@ -204,10 +204,25 @@
         >效果
         <select id="sel-effect">
           <option>fade</option>
-          <option selected>sweep</option>
+          <option>sweep</option>
           <option>solid</option>
           <option>pulse</option>
-          <option>shimmer</option>
+          <option selected>shimmer</option>
+        </select>
+      </label>
+      <label
+        >动画实现
+        <select id="sel-engine">
+          <option value="global" selected>根驱动（global）</option>
+          <option value="svg">SVG 方案</option>
+        </select>
+      </label>
+      <label
+        >JS 计时器
+        <select id="sel-fps">
+          <option value="0" selected>关（CSS 动画）</option>
+          <option value="24">24fps</option>
+          <option value="30">30fps</option>
         </select>
       </label>
       <label
@@ -296,20 +311,20 @@
 
       <!-- 4 标记 -->
       <section>
-        <h2 class="sec">4 · 标记：x-ske-bone / x-ske-leaf / x-ske-ignore</h2>
+        <h2 class="sec">4 · 标记：skz-bone / skz-leaf / skz-ignore</h2>
         <div class="grid3" data-demo-root id="marks">
           <div class="box">
-            <h4>x-ske-ignore（Logo 保持原样）</h4>
-            <div x-ske-ignore style="font-weight: 700; font-size: 20px; color: var(--accent)">⌘ Brand<span style="color: #16a34a"> Logo</span></div>
+            <h4>skz-ignore（Logo 保持原样）</h4>
+            <div skz-ignore style="font-weight: 700; font-size: 20px; color: var(--accent)">⌘ Brand<span style="color: #16a34a"> Logo</span></div>
             <p>这段会变骨头：欢迎回来，今天也要加油。</p>
           </div>
           <div class="box">
-            <h4>x-ske-leaf（整块合并）</h4>
-            <div x-ske-leaf style="padding: 10px; border-radius: 8px; border: 1px solid var(--line)"><b>订单 #8841</b><br /><span>3 件商品 · ¥ 128.00</span><br /><small>预计明天送达</small></div>
+            <h4>skz-leaf（整块合并）</h4>
+            <div skz-leaf style="padding: 10px; border-radius: 8px; border: 1px solid var(--line)"><b>订单 #8841</b><br /><span>3 件商品 · ¥ 128.00</span><br /><small>预计明天送达</small></div>
           </div>
           <div class="box">
-            <h4>x-ske-bone（装饰 div 强制当骨头）</h4>
-            <div x-ske-bone style="height: 40px; border-radius: 8px; background: linear-gradient(90deg, #f97316, #ec4899)"></div>
+            <h4>skz-bone（装饰 div 强制当骨头）</h4>
+            <div skz-bone style="height: 40px; border-radius: 8px; background: linear-gradient(90deg, #f97316, #ec4899)"></div>
             <p class="tiny">上面是渐变装饰条，没有标记时不会被识别。</p>
           </div>
         </div>
@@ -348,10 +363,40 @@
           这是直接放在根下的裸文字，没有被元素包住。
         </div>
       </section>
+      <!-- 9 fit 选项 -->
+      <section>
+        <h2 class="sec">9 · fit：不撑出滚动条</h2>
+        <p class="note">
+          同一个 100 项列表骨架放进三种容器——固定高度滚动容器（300px overflow:auto）、无确定高度的普通 div（靠页面/视口）、应用壳布局（固定高度的 flex 列，标题下面 flex:1 的区域负责滚动，常见于后台/App 页面）；每个带 fit 开关对比。开启 fit 后骨架不会把容器撑出滚动条，多余项会被
+          display:none。本区在页面末尾（首屏以下），页面本来就能滚，所以「普通 div」放宽为一屏高；容器内的两个贴着容器底边。
+        </p>
+        <div style="margin-bottom: 10px">
+          <button id="btn-fit">fit：开</button>
+        </div>
+        <div class="grid3">
+          <div class="box" style="height: 300px; overflow: auto; padding-bottom: 0">
+            <h4>固定高度 (300px overflow:auto)</h4>
+            <div data-demo-fit id="fit-scroll"></div>
+          </div>
+          <div class="box" style="padding-bottom: 0">
+            <h4>普通 div (靠页面/视口)</h4>
+            <div data-demo-fit id="fit-viewport"></div>
+          </div>
+          <div class="box" style="display: flex; flex-direction: column; height: 300px; padding-bottom: 0">
+            <h4>应用壳：标题 + flex:1 滚动区</h4>
+            <div style="flex: 1; min-height: 0; overflow: auto">
+              <div data-demo-fit id="fit-flex"></div>
+            </div>
+          </div>
+        </div>
+      </section>
     </main>
 
     <script type="module">
-      import { Bone, enable, disable, registerCustomElements, defineXSke } from "../src/index.ts";
+      import { Bone, enable, disable, registerCustomElements, defineSkzBox } from "../src/index.ts";
+      // 注册 global / svg 两个方案（等同 import "skeletonizer/all/js"；样式由下方 loadTier 按档位加载）
+      import "../src/variants/global.ts";
+      import "../src/variants/svg.ts";
 
       // ---------- 自带 shadow DOM 的演示组件 ----------
       class DemoCard extends HTMLElement {
@@ -366,7 +411,7 @@
         }
       }
       customElements.define("demo-card", DemoCard);
-      defineXSke();
+      defineSkzBox();
 
       // ---------- 内容填充 ----------
       const $ = (s) => document.querySelector(s);
@@ -423,42 +468,58 @@
   <div class="box"><h4>Bone.cjk(40)</h4><p class="narrow">${Bone.cjk(40)}</p></div>
   <div class="box"><h4>Bone.number(5)</h4><h3>余额：${Bone.number(5)} 元</h3></div>`;
 
+      const list100 = Array.from({ length: 100 }, (_, i) => `<div style="padding: 10px; border-bottom: 1px solid var(--line)">列表项 ${i + 1}</div>`).join("");
+      document.querySelectorAll("[data-demo-fit]").forEach((el) => (el.innerHTML = list100));
+
       // ---------- 开关与控制 ----------
       const roots = [...document.querySelectorAll("[data-demo-root]")];
-      const state = { loading: true, dark: true, effect: "sweep", sweep: "bg", tier: 3, text: "underline" };
+      const fitRoots = [...document.querySelectorAll("[data-demo-fit]")];
+      const state = { loading: true, dark: true, effect: "shimmer", engine: "global", fps: 0, sweep: "bg", tier: 3, text: "underline", fit: true };
       let hosts;
 
       function apply() {
-        document.documentElement.toggleAttribute("data-x-ske-theme", false);
-        document.documentElement.setAttribute("data-x-ske-theme", state.dark ? "dark" : "light");
+        document.documentElement.toggleAttribute("data-skz-theme", false);
+        document.documentElement.setAttribute("data-skz-theme", state.dark ? "dark" : "light");
         roots.forEach((el) => {
           const text = el.dataset.fixedText ?? state.text;
-          if (state.loading) enable(el, { effect: state.effect, text });
+          if (state.loading) enable(el, { effect: state.effect, text, engine: state.engine, fps: state.fps });
           else disable(el);
-          el.setAttribute("x-ske-effect", state.effect);
-          el.setAttribute("x-ske-text", text);
-          if (state.sweep === "bg") el.setAttribute("x-ske-sweep", "bg");
-          else el.removeAttribute("x-ske-sweep");
+          el.setAttribute("skz-effect", state.effect);
+          el.setAttribute("skz-text", text);
+          if (state.sweep === "bg") el.setAttribute("skz-sweep", "bg");
+          else el.removeAttribute("skz-sweep");
+        });
+        fitRoots.forEach((el) => {
+          if (state.loading) enable(el, { effect: state.effect, text: state.text, engine: state.engine, fps: state.fps, fit: state.fit });
+          else disable(el);
         });
         $("#btn-loading").textContent = `loading：${state.loading ? "开" : "关"}`;
         $("#btn-dark").textContent = `深色：${state.dark ? "开" : "关"}`;
+        $("#btn-fit").textContent = `fit：${state.fit ? "开" : "关"}`;
       }
 
-      const CSS_FILES = ["base", "tier0", "tier1", "tier2", "effects"];
+      // 按层叠顺序排列的样式分片（与 src/styles/entries/all.scss 的组成一致）
+      const CSS_FILES = ["_theme", "base", "tier0", "_marks", "tier1", "tier2", "_effects-core", "_fit", "_global", "_svg", "_sweep"];
+      // 返回 Promise：样式表全部加载完才 resolve（fit 要按已生效的样式测量，所以 apply 要等它）
       function loadTier(n) {
-        document.querySelectorAll("link[data-x-ske-css]").forEach((l) => l.remove());
-        // n=0 仅 base；n=1 + tier0 + effects；n=2 + tier1；n=3 + tier2
-        const want = ["base"];
-        if (n >= 1) want.push("tier0", "effects");
+        document.querySelectorAll("link[data-skz-css]").forEach((l) => l.remove());
+        // n=0 仅兜底层（含主题、标记）；n=1 + 第 0 档和全部效果；n=2 + 第 1 档；n=3 + 第 2 档
+        const want = ["_theme", "base", "_marks", "_fit"];
+        if (n >= 1) want.push("tier0", "_effects-core", "_global", "_svg", "_sweep");
         if (n >= 2) want.push("tier1");
         if (n >= 3) want.push("tier2");
-        CSS_FILES.filter((f) => want.includes(f)).forEach((f) => {
-          const l = document.createElement("link");
-          l.rel = "stylesheet";
-          l.href = `../src/styles/${f}.scss`;
-          l.dataset.skCss = f;
-          document.head.appendChild(l);
-        });
+        const loads = CSS_FILES.filter((f) => want.includes(f)).map(
+          (f) =>
+            new Promise((resolve) => {
+              const l = document.createElement("link");
+              l.rel = "stylesheet";
+              l.href = `../src/styles/${f}.scss`;
+              l.dataset.skzCss = f;
+              l.onload = l.onerror = resolve;
+              document.head.appendChild(l);
+            }),
+        );
+        return Promise.all(loads);
       }
 
       $("#btn-loading").onclick = () => {
@@ -469,8 +530,20 @@
         state.dark = !state.dark;
         apply();
       };
+      $("#btn-fit").onclick = () => {
+        state.fit = !state.fit;
+        apply();
+      };
       $("#sel-effect").onchange = (e) => {
         state.effect = e.target.value;
+        apply();
+      };
+      $("#sel-fps").onchange = (e) => {
+        state.fps = +e.target.value;
+        apply();
+      };
+      $("#sel-engine").onchange = (e) => {
+        state.engine = e.target.value;
         apply();
       };
       $("#sel-sweep").onchange = (e) => {
@@ -479,14 +552,14 @@
       };
       $("#sel-tier").onchange = (e) => {
         state.tier = +e.target.value;
-        loadTier(state.tier);
+        loadTier(state.tier).then(apply);
       };
       $("#sel-text").onchange = (e) => {
         state.text = e.target.value;
         apply();
       };
 
-      loadTier(state.tier);
+      await loadTier(state.tier);
       hosts = registerCustomElements(document, { watch: true });
       apply();
       window.__sk = { state, apply, loadTier, hosts, enable, disable };

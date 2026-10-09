@@ -17,6 +17,7 @@ summary: skeletonizer 项目文档的唯一入口。
 
 - [原型验证报告（桌面 Chrome）](reports/2026-10-08-prototype-verification.md) — 各假设成立与否、最终参数、未验证项。active
 - [CSS 方案性能评估与优化复测](reports/2026-10-08-performance.md) — 开启耗时、动画每帧耗时、优化前后对比、没量清楚的地方。active
+- [性能实验存档](../bench/README.md) — 测试工具包、各轮脚本/场景/原始数据、五个子代理实验目录（各带 NOTES）。active
 
 ## 术语
 

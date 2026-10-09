@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="0" height="0" style="position:absolute">
+<filter id="x-ske-f-light-r22" color-interpolation-filters="sRGB" x="0" y="0" width="100%" height="100%">
+  <feColorMatrix type="matrix" values="0 0 0 0 0  0 0 0 0 0  0 0 0 0 0  -0.6378 -2.1456 -0.2166 0 2.4" result="ink"/>
+  <feComposite in="ink" in2="SourceAlpha" operator="in" result="inkA"/>
+  <feComponentTransfer in="inkA" result="bin"><feFuncA type="discrete" tableValues="0 1"/></feComponentTransfer>
+  <feMorphology in="bin" operator="dilate" radius="2 2" result="grown"/>
+  <feFlood flood-color="#d9dde3" result="c"/>
+  <feComposite in="c" in2="grown" operator="in"/>
+</filter>
+</svg>

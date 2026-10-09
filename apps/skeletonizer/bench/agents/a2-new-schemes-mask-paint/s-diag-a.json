@@ -1,0 +1,7 @@
+[
+{"name":"diagA-4k-asis","css":"prod","n":500,"attrs":[["x-ske-effect","solid"],["x-ske-text","leaf"]],"proto":"a"},
+{"name":"diagA-4k-nomask","css":"prod","n":500,"attrs":[["x-ske-effect","solid"],["x-ske-text","leaf"]],"proto":"a","pre":"document.querySelectorAll('.xa-tile').forEach(t=>{t.style.maskImage='none';t.style.webkitMaskImage='none'})"},
+{"name":"diagA-4k-nomask-nooverflow","css":"prod","n":500,"attrs":[["x-ske-effect","solid"],["x-ske-text","leaf"]],"proto":"a","pre":"document.querySelectorAll('.xa-tile').forEach(t=>{t.style.maskImage='none';t.style.webkitMaskImage='none';t.style.overflow='visible'})"},
+{"name":"diagA-4k-1tile-only","css":"prod","n":500,"attrs":[["x-ske-effect","solid"],["x-ske-text","leaf"]],"proto":"a","pre":"[...document.querySelectorAll('.xa-tile')].slice(1).forEach(t=>t.remove())"},
+{"name":"diagA-4k-bandonly-noleaf","css":"prod","n":500,"attrs":[["x-ske-effect","solid"],["x-ske-text","leaf"]],"proto":"a","pre":"document.querySelectorAll('.xa-tile').forEach(t=>{t.style.maskImage='none';t.style.webkitMaskImage='none'});document.getElementById('root').setAttribute('x-ske-text','')"}
+]

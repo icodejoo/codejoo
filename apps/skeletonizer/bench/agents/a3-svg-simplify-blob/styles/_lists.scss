@@ -1,0 +1,18 @@
+@use "sass:list";
+
+// 选择器清单：文字类、媒体控件类、图标启发式
+$text-tags: p, span, h1, h2, h3, h4, h5, h6, a, li, label, td, th, strong, b, em, small, button, dt, dd, blockquote, figcaption;
+$media-tags: img, video, canvas, picture, iframe, svg, input, textarea, select;
+$icon-selectors: "i:empty", '[class*="icon"]:empty';
+
+/// 给清单里每一项拼上前缀，并统一加 :not([x-ske-ignore])，返回逗号分隔的选择器列表。
+/// @param {String} $prefix 选择器前缀（含后代空格之前的部分），如 '[x-ske]'
+/// @param {List} $items 标签/选择器清单
+/// @return {List} 逗号分隔的选择器列表，用 #{} 插值使用
+@function sk-sel($prefix, $items) {
+  $out: ();
+  @each $t in $items {
+    $out: list.append($out, "#{$prefix} #{$t}:not([x-ske-ignore])", comma);
+  }
+  @return $out;
+}

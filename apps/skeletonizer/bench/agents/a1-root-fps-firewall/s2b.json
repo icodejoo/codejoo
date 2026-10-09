@@ -1,0 +1,246 @@
+[
+ {
+  "name": "2b shimmer n1000 css-animation",
+  "css": "base",
+  "n": 1000,
+  "attrs": [
+   [
+    "x-ske-effect",
+    "shimmer"
+   ],
+   [
+    "x-ske-text",
+    "leaf"
+   ]
+  ]
+ },
+ {
+  "name": "2b shimmer n1000 fixed-N1",
+  "css": "base",
+  "n": 1000,
+  "attrs": [
+   [
+    "x-ske-effect",
+    "shimmer"
+   ],
+   [
+    "x-ske-text",
+    "leaf"
+   ],
+   [
+    "x-ske-tick",
+    ""
+   ]
+  ],
+  "js": [
+   "tick:fixed",
+   1
+  ]
+ },
+ {
+  "name": "2b shimmer n1000 auto-cap4",
+  "css": "base",
+  "n": 1000,
+  "attrs": [
+   [
+    "x-ske-effect",
+    "shimmer"
+   ],
+   [
+    "x-ske-text",
+    "leaf"
+   ],
+   [
+    "x-ske-tick",
+    ""
+   ]
+  ],
+  "js": [
+   "tick:auto",
+   4
+  ]
+ },
+ {
+  "name": "2b pulse n1000 css-animation",
+  "css": "base",
+  "n": 1000,
+  "attrs": [
+   [
+    "x-ske-effect",
+    "pulse"
+   ],
+   [
+    "x-ske-text",
+    "leaf"
+   ]
+  ]
+ },
+ {
+  "name": "2b pulse n1000 fixed-N1",
+  "css": "base",
+  "n": 1000,
+  "attrs": [
+   [
+    "x-ske-effect",
+    "pulse"
+   ],
+   [
+    "x-ske-text",
+    "leaf"
+   ],
+   [
+    "x-ske-tick",
+    ""
+   ]
+  ],
+  "js": [
+   "tick:fixed",
+   1
+  ]
+ },
+ {
+  "name": "2b pulse n1000 auto-cap4",
+  "css": "base",
+  "n": 1000,
+  "attrs": [
+   [
+    "x-ske-effect",
+    "pulse"
+   ],
+   [
+    "x-ske-text",
+    "leaf"
+   ],
+   [
+    "x-ske-tick",
+    ""
+   ]
+  ],
+  "js": [
+   "tick:auto",
+   4
+  ]
+ },
+ {
+  "name": "2b shimmer n1400 css-animation",
+  "css": "base",
+  "n": 1400,
+  "attrs": [
+   [
+    "x-ske-effect",
+    "shimmer"
+   ],
+   [
+    "x-ske-text",
+    "leaf"
+   ]
+  ]
+ },
+ {
+  "name": "2b shimmer n1400 fixed-N1",
+  "css": "base",
+  "n": 1400,
+  "attrs": [
+   [
+    "x-ske-effect",
+    "shimmer"
+   ],
+   [
+    "x-ske-text",
+    "leaf"
+   ],
+   [
+    "x-ske-tick",
+    ""
+   ]
+  ],
+  "js": [
+   "tick:fixed",
+   1
+  ]
+ },
+ {
+  "name": "2b shimmer n1400 auto-cap4",
+  "css": "base",
+  "n": 1400,
+  "attrs": [
+   [
+    "x-ske-effect",
+    "shimmer"
+   ],
+   [
+    "x-ske-text",
+    "leaf"
+   ],
+   [
+    "x-ske-tick",
+    ""
+   ]
+  ],
+  "js": [
+   "tick:auto",
+   4
+  ]
+ },
+ {
+  "name": "2b pulse n1400 css-animation",
+  "css": "base",
+  "n": 1400,
+  "attrs": [
+   [
+    "x-ske-effect",
+    "pulse"
+   ],
+   [
+    "x-ske-text",
+    "leaf"
+   ]
+  ]
+ },
+ {
+  "name": "2b pulse n1400 fixed-N1",
+  "css": "base",
+  "n": 1400,
+  "attrs": [
+   [
+    "x-ske-effect",
+    "pulse"
+   ],
+   [
+    "x-ske-text",
+    "leaf"
+   ],
+   [
+    "x-ske-tick",
+    ""
+   ]
+  ],
+  "js": [
+   "tick:fixed",
+   1
+  ]
+ },
+ {
+  "name": "2b pulse n1400 auto-cap4",
+  "css": "base",
+  "n": 1400,
+  "attrs": [
+   [
+    "x-ske-effect",
+    "pulse"
+   ],
+   [
+    "x-ske-text",
+    "leaf"
+   ],
+   [
+    "x-ske-tick",
+    ""
+   ]
+  ],
+  "js": [
+   "tick:auto",
+   4
+  ]
+ }
+]

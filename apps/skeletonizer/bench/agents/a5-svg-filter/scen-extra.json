@@ -1,0 +1,78 @@
+[
+ {
+  "name": "fA-r22-static-n500",
+  "css": "filter",
+  "n": 500,
+  "attrs": {
+   "filter": "light",
+   "variant": "A",
+   "anim": "none",
+   "r": "22"
+  },
+  "toggle": true,
+  "toggleN": 9
+ },
+ {
+  "name": "fA-r64-static-n500",
+  "css": "filter",
+  "n": 500,
+  "attrs": {
+   "filter": "light",
+   "variant": "A",
+   "anim": "none",
+   "r": "64"
+  },
+  "toggle": true,
+  "toggleN": 9
+ },
+ {
+  "name": "fA-dark-static-n500",
+  "css": "filter",
+  "n": 500,
+  "attrs": {
+   "filter": "dark",
+   "variant": "A",
+   "anim": "none"
+  },
+  "toggle": true,
+  "toggleN": 9
+ },
+ {
+  "name": "fA-r22-static-n2000",
+  "css": "filter",
+  "n": 2000,
+  "attrs": {
+   "filter": "light",
+   "variant": "A",
+   "anim": "none",
+   "r": "22"
+  },
+  "toggle": true,
+  "toggleN": 9
+ },
+ {
+  "name": "fA-r64-static-n2000",
+  "css": "filter",
+  "n": 2000,
+  "attrs": {
+   "filter": "light",
+   "variant": "A",
+   "anim": "none",
+   "r": "64"
+  },
+  "toggle": true,
+  "toggleN": 9
+ },
+ {
+  "name": "fA-dark-static-n2000",
+  "css": "filter",
+  "n": 2000,
+  "attrs": {
+   "filter": "dark",
+   "variant": "A",
+   "anim": "none"
+  },
+  "toggle": true,
+  "toggleN": 9
+ }
+]

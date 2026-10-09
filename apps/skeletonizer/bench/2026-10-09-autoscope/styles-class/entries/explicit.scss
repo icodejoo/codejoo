@@ -1,0 +1,7 @@
+// skeletonizer/explicit.css：显式基底，不含任何推导规则，只有 skz-bone / skz-leaf 是骨头。
+// 和 base.css 二选一（显式模式只能靠引入本文件开启）。
+@use "../theme";
+@use "../marks" as marks;
+@use "../effects-core";
+
+@include marks.sk-explicit("[skz]");

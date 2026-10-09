@@ -1,0 +1,6 @@
+{"name":"fA-shimmer-n500","elements":4000,"fps":60.4,"mainBusy":1.43,"compositor":2.89,"gpu":2.93,"UpdateLayoutTree":0.12,"PrePaint":0.08,"Layerize":0,"Commit":0.09,"HitTest":0,"toggleMs":18.6,"toggleFrameMs":46.5}
+{"name":"fA-static-scroll-n500","elements":4000,"fps":60.4,"mainBusy":1.63,"compositor":2.96,"PrePaint":0.08,"Layerize":0.01,"Commit":0.12,"UpdateLayer":0,"HitTest":0,"gpu":2.11,"Paint":0}
+{"name":"fA-static-n2000","elements":16000,"fps":60.8,"mainBusy":0.76,"compositor":0.64,"PrePaint":0.01,"Layerize":0,"Commit":0.08,"HitTest":0,"gpu":0.01,"toggleMs":72,"toggleFrameMs":139}
+{"name":"fA-pulse-n2000","elements":16000,"fps":60.4,"mainBusy":1.43,"compositor":1.91,"gpu":1.51,"UpdateLayoutTree":0.24,"PrePaint":0.01,"Layerize":0,"Commit":0.09,"HitTest":0.01,"toggleMs":60.8,"toggleFrameMs":124.4}
+{"name":"fA-shimmer-n2000","elements":16000,"fps":60.4,"mainBusy":1.34,"compositor":2.18,"gpu":2.38,"UpdateLayoutTree":0.1,"PrePaint":0.07,"Layerize":0,"Commit":0.09,"HitTest":0.01,"toggleMs":63.7,"toggleFrameMs":141.3}
+{"name":"fA-static-scroll-n2000","elements":16000,"fps":60.8,"mainBusy":1.23,"compositor":2.17,"PrePaint":0.05,"Layerize":0.01,"Commit":0.09,"UpdateLayer":0,"HitTest":0.01,"gpu":2,"Paint":0.01}

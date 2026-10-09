@@ -1,0 +1,104 @@
+[
+ {
+  "name": "B3 L 纯CSS fade",
+  "css": "class&mode=mark",
+  "n": 2000,
+  "attrs": [
+   [
+    "skz-text",
+    "leaf"
+   ]
+  ],
+  "toggle": true,
+  "toggleN": 7
+ },
+ {
+  "name": "B3 L 纯CSS pulse",
+  "css": "class&mode=mark",
+  "n": 2000,
+  "attrs": [
+   [
+    "skz-effect",
+    "pulse"
+   ],
+   [
+    "skz-text",
+    "leaf"
+   ]
+  ],
+  "toggle": true,
+  "toggleN": 7
+ },
+ {
+  "name": "B3 L 纯CSS shimmer",
+  "css": "class&mode=mark",
+  "n": 2000,
+  "attrs": [
+   [
+    "skz-effect",
+    "shimmer"
+   ],
+   [
+    "skz-text",
+    "leaf"
+   ]
+  ],
+  "toggle": true,
+  "toggleN": 7
+ },
+ {
+  "name": "B3 L enable shimmer（防火墙）",
+  "css": "class&mode=mark",
+  "n": 2000,
+  "attrs": {
+   "effect": "shimmer",
+   "text": "leaf"
+  },
+  "toggle": true,
+  "toggleN": 7
+ },
+ {
+  "name": "B3 U 纯CSS fade",
+  "css": "class&mode=mark",
+  "n": 2000,
+  "attrs": [],
+  "toggle": true,
+  "toggleN": 7
+ },
+ {
+  "name": "B3 U 纯CSS pulse",
+  "css": "class&mode=mark",
+  "n": 2000,
+  "attrs": [
+   [
+    "skz-effect",
+    "pulse"
+   ]
+  ],
+  "toggle": true,
+  "toggleN": 7
+ },
+ {
+  "name": "B3 U 纯CSS shimmer",
+  "css": "class&mode=mark",
+  "n": 2000,
+  "attrs": [
+   [
+    "skz-effect",
+    "shimmer"
+   ]
+  ],
+  "toggle": true,
+  "toggleN": 7
+ },
+ {
+  "name": "B3 U enable shimmer（防火墙）",
+  "css": "class&mode=mark",
+  "n": 2000,
+  "attrs": {
+   "effect": "shimmer"
+  },
+  "toggle": true,
+  "toggleN": 7
+ }
+]

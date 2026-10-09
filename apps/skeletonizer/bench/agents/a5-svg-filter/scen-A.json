@@ -1,0 +1,96 @@
+[
+ {
+  "name": "fA-static-n500",
+  "css": "filter",
+  "n": 500,
+  "attrs": {
+   "filter": "light",
+   "variant": "A",
+   "anim": "none"
+  },
+  "toggle": true,
+  "toggleN": 9
+ },
+ {
+  "name": "fA-pulse-n500",
+  "css": "filter",
+  "n": 500,
+  "attrs": {
+   "filter": "light",
+   "variant": "A",
+   "anim": "pulse"
+  },
+  "toggle": true,
+  "toggleN": 9
+ },
+ {
+  "name": "fA-shimmer-n500",
+  "css": "filter",
+  "n": 500,
+  "attrs": {
+   "filter": "light",
+   "variant": "A",
+   "anim": "shimmer"
+  },
+  "toggle": true,
+  "toggleN": 9
+ },
+ {
+  "name": "fA-static-scroll-n500",
+  "css": "filter",
+  "n": 500,
+  "attrs": {
+   "filter": "light",
+   "variant": "A",
+   "anim": "none"
+  },
+  "scroll": true
+ },
+ {
+  "name": "fA-static-n2000",
+  "css": "filter",
+  "n": 2000,
+  "attrs": {
+   "filter": "light",
+   "variant": "A",
+   "anim": "none"
+  },
+  "toggle": true,
+  "toggleN": 9
+ },
+ {
+  "name": "fA-pulse-n2000",
+  "css": "filter",
+  "n": 2000,
+  "attrs": {
+   "filter": "light",
+   "variant": "A",
+   "anim": "pulse"
+  },
+  "toggle": true,
+  "toggleN": 9
+ },
+ {
+  "name": "fA-shimmer-n2000",
+  "css": "filter",
+  "n": 2000,
+  "attrs": {
+   "filter": "light",
+   "variant": "A",
+   "anim": "shimmer"
+  },
+  "toggle": true,
+  "toggleN": 9
+ },
+ {
+  "name": "fA-static-scroll-n2000",
+  "css": "filter",
+  "n": 2000,
+  "attrs": {
+   "filter": "light",
+   "variant": "A",
+   "anim": "none"
+  },
+  "scroll": true
+ }
+]

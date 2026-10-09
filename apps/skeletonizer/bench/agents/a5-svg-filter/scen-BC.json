@@ -1,0 +1,94 @@
+[
+ {
+  "name": "fB-static-n500",
+  "css": "filter",
+  "n": 500,
+  "attrs": {
+   "filter": "light",
+   "variant": "B",
+   "anim": "none"
+  },
+  "toggle": true,
+  "toggleN": 9
+ },
+ {
+  "name": "fB-static-scroll-n500",
+  "css": "filter",
+  "n": 500,
+  "attrs": {
+   "filter": "light",
+   "variant": "B",
+   "anim": "none"
+  },
+  "scroll": true
+ },
+ {
+  "name": "fC-static-n500",
+  "css": "filter",
+  "n": 500,
+  "attrs": {
+   "filter": "light",
+   "variant": "C",
+   "anim": "none"
+  },
+  "toggle": true,
+  "toggleN": 9
+ },
+ {
+  "name": "fC-static-scroll-n500",
+  "css": "filter",
+  "n": 500,
+  "attrs": {
+   "filter": "light",
+   "variant": "C",
+   "anim": "none"
+  },
+  "scroll": true
+ },
+ {
+  "name": "fB-static-n2000",
+  "css": "filter",
+  "n": 2000,
+  "attrs": {
+   "filter": "light",
+   "variant": "B",
+   "anim": "none"
+  },
+  "toggle": true,
+  "toggleN": 9
+ },
+ {
+  "name": "fB-static-scroll-n2000",
+  "css": "filter",
+  "n": 2000,
+  "attrs": {
+   "filter": "light",
+   "variant": "B",
+   "anim": "none"
+  },
+  "scroll": true
+ },
+ {
+  "name": "fC-static-n2000",
+  "css": "filter",
+  "n": 2000,
+  "attrs": {
+   "filter": "light",
+   "variant": "C",
+   "anim": "none"
+  },
+  "toggle": true,
+  "toggleN": 9
+ },
+ {
+  "name": "fC-static-scroll-n2000",
+  "css": "filter",
+  "n": 2000,
+  "attrs": {
+   "filter": "light",
+   "variant": "C",
+   "anim": "none"
+  },
+  "scroll": true
+ }
+]

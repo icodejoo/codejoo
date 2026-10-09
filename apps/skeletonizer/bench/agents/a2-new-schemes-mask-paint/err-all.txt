@@ -1,0 +1,63 @@
+[lock] 等待其他基准结束… 0s
+[lock] 等待其他基准结束… 30s
+[lock] 等待其他基准结束… 60s
+[lock] 等待其他基准结束… 90s
+[lock] 等待其他基准结束… 120s
+[lock] 等待其他基准结束… 150s
+[lock] 等待其他基准结束… 180s
+[lock] 等待其他基准结束… 210s
+[lock] 等待其他基准结束… 240s
+[lock] 等待其他基准结束… 270s
+[lock] 等待其他基准结束… 300s
+[lock] 等待其他基准结束… 330s
+[lock] 等待其他基准结束… 360s
+[lock] 等待其他基准结束… 390s
+[lock] 等待其他基准结束… 420s
+[lock] 等待其他基准结束… 450s
+[lock] 等待其他基准结束… 480s
+[lock] 等待其他基准结束… 510s
+[lock] 等待其他基准结束… 540s
+[lock] 等待其他基准结束… 570s
+[lock] 等待其他基准结束… 600s
+[lock] 等待其他基准结束… 630s
+[lock] 等待其他基准结束… 660s
+[lock] 等待其他基准结束… 690s
+[lock] 等待其他基准结束… 720s
+[lock] 等待其他基准结束… 750s
+[lock] 等待其他基准结束… 780s
+[lock] 等待其他基准结束… 810s
+[lock] 等待其他基准结束… 840s
+[lock] 等待其他基准结束… 870s
+[lock] 等待其他基准结束… 900s
+[lock] 等待其他基准结束… 930s
+[lock] 等待其他基准结束… 960s
+[lock] 等待其他基准结束… 990s
+[lock] 等待其他基准结束… 1020s
+[lock] 等待其他基准结束… 1050s
+[lock] 等待其他基准结束… 1080s
+[lock] 等待其他基准结束… 1110s
+[lock] 等待其他基准结束… 1140s
+[lock] 等待其他基准结束… 1170s
+[lock] 等待其他基准结束… 1200s
+[lock] 等待其他基准结束… 1230s
+[lock] 等待其他基准结束… 1260s
+[lock] 等待其他基准结束… 1290s
+[lock] 等待其他基准结束… 1320s
+[lock] 等待其他基准结束… 1350s
+[lock] 等待其他基准结束… 1380s
+[lock] 等待其他基准结束… 1410s
+[lock] 等待其他基准结束… 1440s
+[lock] 等待其他基准结束… 1470s
+[lock] 等待其他基准结束… 1500s
+[lock] 等待其他基准结束… 1530s
+[lock] 等待其他基准结束… 1560s
+[cpu] 15.9,19,14.3
+file:///E:/workspaces/codejoo/apps/skeletonizer/demo/.tmp-a2/trace.mjs:13
+const ev = async (e) => { const r = await Promise.race([send("Runtime.evaluate", { expression: e, awaitPromise: true, returnByValue: true }), new Promise((_, rej) => setTimeout(() => rej(new Error("ev 超时 300s: " + e.slice(0, 60))), 300000))]); if (r.result.exceptionDetails) throw new Error(JSON.stringify(r.result.exceptionDetails)); return r.result.result.value; };
+                                                                                                                                                                                                                                                                                         ^
+
+Error: {"exceptionId":1,"text":"Uncaught (in promise) SyntaxError: Identifier 'rgb' has already been declared (at blob:http://localhost:5188/45f4875b-3859-49e8-9370-eafcf3bc11b7:16)","lineNumber":0,"columnNumber":0,"exception":{"type":"object","subtype":"error","className":"SyntaxError","description":"SyntaxError: Identifier 'rgb' has already been declared (at blob:http://localhost:5188/45f4875b-3859-49e8-9370-eafcf3bc11b7:16)","objectId":"3508650556427634968.3.1"}}
+    at ev (file:///E:/workspaces/codejoo/apps/skeletonizer/demo/.tmp-a2/trace.mjs:13:282)
+    at async file:///E:/workspaces/codejoo/apps/skeletonizer/demo/.tmp-a2/trace.mjs:55:29
+
+Node.js v24.11.0

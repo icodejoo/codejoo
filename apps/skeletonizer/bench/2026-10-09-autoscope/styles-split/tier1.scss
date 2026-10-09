@@ -1,0 +1,33 @@
+@use "lists" as *;
+
+/* 实验（split 变体）：tier1/tier2 也展开成两套规则，不用 :is */
+@each $a in $auto-parts {
+  /* ===== 第 1 档：下划线法文字骨头（Safari 12.1+/Chrome 89+/Firefox 70+）=====
+   * 给所有文字画一根超粗下划线：沿真实文字行延伸，最后一行自然变短，混合文字也覆盖。
+   * 不能 shimmer、没有圆角；颜色读 --skz-ul-fill，pulse / shimmer 时由根驱动（见 effects）。 */
+  @supports (text-decoration-thickness: 1em) {
+    /* 文字标签上第 0 档的背景色退场，改用下划线 */
+    #{$a}:not([skz-text="leaf"]) {
+      --skz-tbg: transparent;
+      --skz-timg: none;
+      --skz-tradius: 0px;
+    }
+
+    #{$a}:not([skz-text="leaf"]) *:not([skz-ignore]) {
+      -webkit-text-fill-color: transparent !important;
+      text-decoration-line: underline !important;
+      text-decoration-style: solid !important;
+      text-decoration-color: var(--skz-ul-fill, var(--skz-color)) !important;
+      text-decoration-thickness: var(--skz-ul-thickness, 1em) !important;
+      text-decoration-skip-ink: none !important;
+      text-underline-offset: var(--skz-ul-offset, -0.85em) !important;
+    }
+
+    /* 叶子背景模式 / 媒体 / 标记元素不画下划线 */
+    [skz] [skz-leaf] *,
+    [skz] [skz-ignore] *:not([skz-ignore]):not([skz-x]) {
+      text-decoration: none !important;
+    }
+  }
+
+}

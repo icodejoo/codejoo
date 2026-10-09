@@ -1,0 +1,38 @@
+[
+ {
+  "name": "dbg mix enable L shimmer",
+  "css": "scoped&mode=mix",
+  "n": 2000,
+  "attrs": {
+   "effect": "shimmer",
+   "text": "leaf"
+  }
+ },
+ {
+  "name": "dbg mixplain enable L shimmer",
+  "css": "scoped&mode=mixplain",
+  "n": 2000,
+  "attrs": {
+   "effect": "shimmer",
+   "text": "leaf"
+  }
+ },
+ {
+  "name": "dbg mixautomarked enable L shimmer",
+  "css": "scoped&mode=mixautomarked",
+  "n": 2000,
+  "attrs": {
+   "effect": "shimmer",
+   "text": "leaf"
+  }
+ },
+ {
+  "name": "dbg mark enable L shimmer",
+  "css": "scoped&mode=mark",
+  "n": 2000,
+  "attrs": {
+   "effect": "shimmer",
+   "text": "leaf"
+  }
+ }
+]

@@ -1,0 +1,104 @@
+[
+ {
+  "name": "B L 纯CSS fade",
+  "css": "scoped&mode=mark",
+  "n": 2000,
+  "attrs": [
+   [
+    "skz-text",
+    "leaf"
+   ]
+  ],
+  "toggle": true,
+  "toggleN": 7
+ },
+ {
+  "name": "B L 纯CSS pulse",
+  "css": "scoped&mode=mark",
+  "n": 2000,
+  "attrs": [
+   [
+    "skz-effect",
+    "pulse"
+   ],
+   [
+    "skz-text",
+    "leaf"
+   ]
+  ],
+  "toggle": true,
+  "toggleN": 7
+ },
+ {
+  "name": "B L 纯CSS shimmer",
+  "css": "scoped&mode=mark",
+  "n": 2000,
+  "attrs": [
+   [
+    "skz-effect",
+    "shimmer"
+   ],
+   [
+    "skz-text",
+    "leaf"
+   ]
+  ],
+  "toggle": true,
+  "toggleN": 7
+ },
+ {
+  "name": "B L enable shimmer（防火墙）",
+  "css": "scoped&mode=mark",
+  "n": 2000,
+  "attrs": {
+   "effect": "shimmer",
+   "text": "leaf"
+  },
+  "toggle": true,
+  "toggleN": 7
+ },
+ {
+  "name": "B U 纯CSS fade",
+  "css": "scoped&mode=mark",
+  "n": 2000,
+  "attrs": [],
+  "toggle": true,
+  "toggleN": 7
+ },
+ {
+  "name": "B U 纯CSS pulse",
+  "css": "scoped&mode=mark",
+  "n": 2000,
+  "attrs": [
+   [
+    "skz-effect",
+    "pulse"
+   ]
+  ],
+  "toggle": true,
+  "toggleN": 7
+ },
+ {
+  "name": "B U 纯CSS shimmer",
+  "css": "scoped&mode=mark",
+  "n": 2000,
+  "attrs": [
+   [
+    "skz-effect",
+    "shimmer"
+   ]
+  ],
+  "toggle": true,
+  "toggleN": 7
+ },
+ {
+  "name": "B U enable shimmer（防火墙）",
+  "css": "scoped&mode=mark",
+  "n": 2000,
+  "attrs": {
+   "effect": "shimmer"
+  },
+  "toggle": true,
+  "toggleN": 7
+ }
+]

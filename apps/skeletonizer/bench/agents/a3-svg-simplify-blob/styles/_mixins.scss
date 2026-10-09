@@ -1,0 +1,29 @@
+/// 骨头的公共绘制声明：背景色 + 可选流光背景图（fixed 到视口，各骨头同步）。
+/// 骨头自己不挂动画：颜色和流光位置读根上逐帧变化的 --x-ske-fill / --x-ske-bg-pos。
+/// 颜色、圆角、文字透明等差异项由调用处自行补充。
+@mixin sk-bone {
+  background-color: var(--x-ske-fill, var(--x-ske-color)) !important;
+  background-position: var(--x-ske-bg-pos, 0 0);
+  background-image: var(--x-ske-bg-img, none) !important;
+  background-repeat: no-repeat !important;
+  background-attachment: var(--x-ske-bg-att, fixed) !important;
+  background-blend-mode: var(--x-ske-bg-blend, normal);
+  background-size: var(--x-ske-bg-size, 60vw 100vh) !important;
+}
+
+/// 深色主题：系统深色且没强制 light，或显式 data-x-ske-theme="dark"，两种情况下都应用 @content。
+/// @param {String} $sel 作用的选择器，如 '[x-ske]'；可以是逗号分隔的列表，@content 里可用 & 引用它
+@mixin sk-dark($sel) {
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-x-ske-theme="light"]) {
+      #{$sel} {
+        @content;
+      }
+    }
+  }
+  :root[data-x-ske-theme="dark"] {
+    #{$sel} {
+      @content;
+    }
+  }
+}

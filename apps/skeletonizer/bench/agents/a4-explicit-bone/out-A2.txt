@@ -1,0 +1,1 @@
+{"name":"A pulse n=2000 (rerun)","elements":16000,"fps":24.8,"compositor":3.87,"gpu":2.43,"PrePaint":3.53,"Paint":1.48,"Layerize":0.06,"Commit":0.3,"UpdateLayer":0.18,"mainBusy":81.19,"UpdateLayoutTree":34.41,"HitTest":0.02,"raster":0,"toggleMs":71.5}

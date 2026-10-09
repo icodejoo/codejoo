@@ -1,0 +1,56 @@
+[
+ {
+  "name": "toggle-fA-n500",
+  "css": "filter",
+  "n": 500,
+  "attrs": {
+   "filter": "light",
+   "variant": "A",
+   "anim": "none"
+  }
+ },
+ {
+  "name": "toggle-prod-default-n500",
+  "css": "prod",
+  "n": 500,
+  "attrs": []
+ },
+ {
+  "name": "toggle-prod-leaf-n500",
+  "css": "prod",
+  "n": 500,
+  "attrs": [
+   [
+    "x-ske-text",
+    "leaf"
+   ]
+  ]
+ },
+ {
+  "name": "toggle-fA-n2000",
+  "css": "filter",
+  "n": 2000,
+  "attrs": {
+   "filter": "light",
+   "variant": "A",
+   "anim": "none"
+  }
+ },
+ {
+  "name": "toggle-prod-default-n2000",
+  "css": "prod",
+  "n": 2000,
+  "attrs": []
+ },
+ {
+  "name": "toggle-prod-leaf-n2000",
+  "css": "prod",
+  "n": 2000,
+  "attrs": [
+   [
+    "x-ske-text",
+    "leaf"
+   ]
+  ]
+ }
+]

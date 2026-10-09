@@ -1,0 +1,116 @@
+[
+ {
+  "name": "base(current data URI)",
+  "css": "base",
+  "n": 2000,
+  "attrs": [
+   [
+    "x-ske-effect",
+    "shimmer"
+   ],
+   [
+    "x-ske-text",
+    "leaf"
+   ],
+   [
+    "x-ske-engine",
+    "svg"
+   ]
+  ]
+ },
+ {
+  "name": "p-1c-overlay",
+  "css": "p-1c-overlay",
+  "n": 2000,
+  "attrs": [
+   [
+    "x-ske-effect",
+    "shimmer"
+   ],
+   [
+    "x-ske-text",
+    "leaf"
+   ],
+   [
+    "x-ske-engine",
+    "svg"
+   ]
+  ]
+ },
+ {
+  "name": "p-1c-screen",
+  "css": "p-1c-screen",
+  "n": 2000,
+  "attrs": [
+   [
+    "x-ske-effect",
+    "shimmer"
+   ],
+   [
+    "x-ske-text",
+    "leaf"
+   ],
+   [
+    "x-ske-engine",
+    "svg"
+   ]
+  ]
+ },
+ {
+  "name": "p-1c-normal",
+  "css": "p-1c-normal",
+  "n": 2000,
+  "attrs": [
+   [
+    "x-ske-effect",
+    "shimmer"
+   ],
+   [
+    "x-ske-text",
+    "leaf"
+   ],
+   [
+    "x-ske-engine",
+    "svg"
+   ]
+  ]
+ },
+ {
+  "name": "p-1d-atten",
+  "css": "p-1d-atten",
+  "n": 2000,
+  "attrs": [
+   [
+    "x-ske-effect",
+    "shimmer"
+   ],
+   [
+    "x-ske-text",
+    "leaf"
+   ],
+   [
+    "x-ske-engine",
+    "svg"
+   ]
+  ]
+ },
+ {
+  "name": "p-2a",
+  "css": "p-2a",
+  "n": 2000,
+  "attrs": [
+   [
+    "x-ske-effect",
+    "shimmer"
+   ],
+   [
+    "x-ske-text",
+    "leaf"
+   ],
+   [
+    "x-ske-engine",
+    "svg"
+   ]
+  ]
+ }
+]

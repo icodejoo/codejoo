@@ -1,0 +1,3 @@
+{"name":"ref css-driven shimmer leaf","elements":16000,"fps":21.6,"gpu":5.45,"compositor":5.09,"PrePaint":5.25,"Paint":2.77,"Layerize":0.11,"Commit":0.1,"UpdateLayer":0.01,"mainBusy":93.27,"UpdateLayoutTree":39.09,"HitTest":0.02,"raster":0}
+{"name":"base(current data URI)","elements":16000,"fps":58.4,"gpu":4.97,"compositor":2.68,"Paint":1.74,"PrePaint":13.2,"Layerize":0.05,"Commit":0.12,"UpdateLayer":0.03,"mainBusy":30.55,"UpdateLayoutTree":0.04,"Layout":0.02,"HitTest":0}
+{"name":"prod(dist) ","elements":16000,"fps":54,"mainBusy":37.01,"PrePaint":16.37,"compositor":3.22,"Paint":2.14,"Layerize":0.06,"Commit":0.13,"UpdateLayer":0.04,"UpdateLayoutTree":0.05,"Layout":0.03,"gpu":5.8,"HitTest":0}

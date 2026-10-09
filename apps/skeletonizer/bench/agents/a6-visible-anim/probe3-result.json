@@ -1,0 +1,202 @@
+{
+ "probe3_cur-pulse": [
+  {
+   "fps": 59.8,
+   "p95Ms": 17.1,
+   "maxMs": 19.8,
+   "over33": 0,
+   "ioTotalMs": 0,
+   "ioMaxMs": 0
+  },
+  {
+   "fps": 59.8,
+   "p95Ms": 17,
+   "maxMs": 17.6,
+   "over33": 0,
+   "ioTotalMs": 0,
+   "ioMaxMs": 0
+  },
+  {
+   "fps": 59.7,
+   "p95Ms": 17.1,
+   "maxMs": 18.5,
+   "over33": 0,
+   "ioTotalMs": 0,
+   "ioMaxMs": 0
+  },
+  {
+   "fps": 59,
+   "p95Ms": 17,
+   "maxMs": 75.1,
+   "over33": 1,
+   "ioTotalMs": 0,
+   "ioMaxMs": 0
+  },
+  {
+   "fps": 59.8,
+   "p95Ms": 17,
+   "maxMs": 20,
+   "over33": 0,
+   "ioTotalMs": 0,
+   "ioMaxMs": 0
+  },
+  {
+   "fps": 59.7,
+   "p95Ms": 17.2,
+   "maxMs": 20.4,
+   "over33": 0,
+   "ioTotalMs": 0,
+   "ioMaxMs": 0
+  }
+ ],
+ "probe3_A-pulse": [
+  {
+   "fps": 59.6,
+   "p95Ms": 17.1,
+   "maxMs": 17.3,
+   "over33": 0,
+   "ioTotalMs": 129.5,
+   "ioMaxMs": 1.9
+  },
+  {
+   "fps": 59.6,
+   "p95Ms": 17,
+   "maxMs": 17.4,
+   "over33": 0,
+   "ioTotalMs": 112.6,
+   "ioMaxMs": 1.6
+  },
+  {
+   "fps": 59.6,
+   "p95Ms": 16.9,
+   "maxMs": 17.2,
+   "over33": 0,
+   "ioTotalMs": 119.3,
+   "ioMaxMs": 1.4
+  },
+  {
+   "fps": 59.6,
+   "p95Ms": 17,
+   "maxMs": 17.5,
+   "over33": 0,
+   "ioTotalMs": 103.9,
+   "ioMaxMs": 1.5
+  },
+  {
+   "fps": 59.6,
+   "p95Ms": 17,
+   "maxMs": 17.2,
+   "over33": 0,
+   "ioTotalMs": 107.6,
+   "ioMaxMs": 1.7
+  },
+  {
+   "fps": 59.6,
+   "p95Ms": 17,
+   "maxMs": 17.2,
+   "over33": 0,
+   "ioTotalMs": 106.6,
+   "ioMaxMs": 2
+  }
+ ],
+ "probe3_cur-shimmer": [
+  {
+   "fps": 56.8,
+   "p95Ms": 25.1,
+   "maxMs": 44.9,
+   "over33": 3,
+   "ioTotalMs": 0,
+   "ioMaxMs": 0
+  },
+  {
+   "fps": 59.7,
+   "p95Ms": 17,
+   "maxMs": 17.4,
+   "over33": 0,
+   "ioTotalMs": 0,
+   "ioMaxMs": 0
+  },
+  {
+   "fps": 59.8,
+   "p95Ms": 16.9,
+   "maxMs": 17.1,
+   "over33": 0,
+   "ioTotalMs": 0,
+   "ioMaxMs": 0
+  },
+  {
+   "fps": 55.3,
+   "p95Ms": 26.3,
+   "maxMs": 52.8,
+   "over33": 3,
+   "ioTotalMs": 0,
+   "ioMaxMs": 0
+  },
+  {
+   "fps": 58.1,
+   "p95Ms": 22.1,
+   "maxMs": 31.6,
+   "over33": 0,
+   "ioTotalMs": 0,
+   "ioMaxMs": 0
+  },
+  {
+   "fps": 55.1,
+   "p95Ms": 26.8,
+   "maxMs": 39.3,
+   "over33": 2,
+   "ioTotalMs": 0,
+   "ioMaxMs": 0
+  }
+ ],
+ "probe3_A-shimmer": [
+  {
+   "fps": 59.7,
+   "p95Ms": 17,
+   "maxMs": 17.3,
+   "over33": 0,
+   "ioTotalMs": 78.8,
+   "ioMaxMs": 0.9
+  },
+  {
+   "fps": 59.4,
+   "p95Ms": 17.1,
+   "maxMs": 45.9,
+   "over33": 1,
+   "ioTotalMs": 82.2,
+   "ioMaxMs": 1.3
+  },
+  {
+   "fps": 59.7,
+   "p95Ms": 17.1,
+   "maxMs": 18.5,
+   "over33": 0,
+   "ioTotalMs": 83,
+   "ioMaxMs": 1.3
+  },
+  {
+   "fps": 59,
+   "p95Ms": 21.4,
+   "maxMs": 27,
+   "over33": 0,
+   "ioTotalMs": 88.2,
+   "ioMaxMs": 2.3
+  },
+  {
+   "fps": 57,
+   "p95Ms": 24.6,
+   "maxMs": 37,
+   "over33": 1,
+   "ioTotalMs": 84.7,
+   "ioMaxMs": 2.3
+  },
+  {
+   "fps": 58.1,
+   "p95Ms": 23.3,
+   "maxMs": 31.6,
+   "over33": 0,
+   "ioTotalMs": 78.6,
+   "ioMaxMs": 2.4
+  }
+ ]
+}

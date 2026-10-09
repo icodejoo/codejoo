@@ -1,0 +1,539 @@
+[
+ {
+  "group": "A",
+  "series": "U",
+  "rootAttrs": [
+   "id",
+   "skz-effect",
+   "skz"
+  ],
+  "probeOut": {
+   "bg": "rgba(0, 0, 0, 0)",
+   "fill": "rgba(0, 0, 0, 0)",
+   "vis": "visible",
+   "ul": "underline"
+  },
+  "probeIn": null,
+  "firstH3": {
+   "bg": "rgba(0, 0, 0, 0)",
+   "fill": "rgba(0, 0, 0, 0)",
+   "vis": "visible",
+   "ul": "underline"
+  },
+  "firstImg": {
+   "bg": "rgb(217, 221, 227)",
+   "fill": "rgba(0, 0, 0, 0)",
+   "vis": "visible",
+   "ul": "underline"
+  },
+  "lastH3": {
+   "bg": "rgba(0, 0, 0, 0)",
+   "fill": "rgba(0, 0, 0, 0)",
+   "vis": "visible",
+   "ul": "underline"
+  },
+  "lastP": {
+   "bg": "rgba(0, 0, 0, 0)",
+   "fill": "rgba(0, 0, 0, 0)",
+   "vis": "visible",
+   "ul": "underline"
+  },
+  "lastSpan": {
+   "bg": "rgba(0, 0, 0, 0)",
+   "fill": "rgba(0, 0, 0, 0)",
+   "vis": "visible",
+   "ul": "underline"
+  },
+  "lastCardDiv": {
+   "bg": "rgba(0, 0, 0, 0)",
+   "fill": "rgba(0, 0, 0, 0)",
+   "vis": "visible",
+   "ul": "underline"
+  }
+ },
+ {
+  "group": "A",
+  "series": "L",
+  "rootAttrs": [
+   "id",
+   "skz-effect",
+   "skz-text",
+   "skz"
+  ],
+  "probeOut": {
+   "bg": "rgb(217, 221, 227)",
+   "fill": "rgba(0, 0, 0, 0)",
+   "vis": "visible",
+   "ul": "none"
+  },
+  "probeIn": null,
+  "firstH3": {
+   "bg": "rgb(217, 221, 227)",
+   "fill": "rgba(0, 0, 0, 0)",
+   "vis": "visible",
+   "ul": "none"
+  },
+  "firstImg": {
+   "bg": "rgb(217, 221, 227)",
+   "fill": "rgba(0, 0, 0, 0)",
+   "vis": "visible",
+   "ul": "none"
+  },
+  "lastH3": {
+   "bg": "rgb(217, 221, 227)",
+   "fill": "rgba(0, 0, 0, 0)",
+   "vis": "visible",
+   "ul": "none"
+  },
+  "lastP": {
+   "bg": "rgb(217, 221, 227)",
+   "fill": "rgba(0, 0, 0, 0)",
+   "vis": "visible",
+   "ul": "none"
+  },
+  "lastSpan": {
+   "bg": "rgb(217, 221, 227)",
+   "fill": "rgba(0, 0, 0, 0)",
+   "vis": "visible",
+   "ul": "none"
+  },
+  "lastCardDiv": {
+   "bg": "rgba(0, 0, 0, 0)",
+   "fill": "rgba(0, 0, 0, 0)",
+   "vis": "visible",
+   "ul": "none"
+  }
+ },
+ {
+  "group": "B",
+  "series": "U",
+  "rootAttrs": [
+   "id",
+   "skz-effect",
+   "skz"
+  ],
+  "probeOut": {
+   "bg": "rgba(0, 0, 0, 0)",
+   "fill": "rgb(0, 0, 0)",
+   "vis": "visible",
+   "ul": "none"
+  },
+  "probeIn": null,
+  "firstH3": {
+   "bg": "rgb(217, 221, 227)",
+   "fill": "rgba(0, 0, 0, 0)",
+   "vis": "visible",
+   "ul": "none"
+  },
+  "firstImg": {
+   "bg": "rgb(217, 221, 227)",
+   "fill": "rgba(0, 0, 0, 0)",
+   "vis": "visible",
+   "ul": "none"
+  },
+  "lastH3": {
+   "bg": "rgb(217, 221, 227)",
+   "fill": "rgba(0, 0, 0, 0)",
+   "vis": "visible",
+   "ul": "none"
+  },
+  "lastP": {
+   "bg": "rgb(217, 221, 227)",
+   "fill": "rgba(0, 0, 0, 0)",
+   "vis": "visible",
+   "ul": "none"
+  },
+  "lastSpan": {
+   "bg": "rgb(217, 221, 227)",
+   "fill": "rgba(0, 0, 0, 0)",
+   "vis": "visible",
+   "ul": "none"
+  },
+  "lastCardDiv": {
+   "bg": "rgba(0, 0, 0, 0)",
+   "fill": "rgb(0, 0, 0)",
+   "vis": "visible",
+   "ul": "none"
+  }
+ },
+ {
+  "group": "B",
+  "series": "L",
+  "rootAttrs": [
+   "id",
+   "skz-effect",
+   "skz-text",
+   "skz"
+  ],
+  "probeOut": {
+   "bg": "rgba(0, 0, 0, 0)",
+   "fill": "rgb(0, 0, 0)",
+   "vis": "visible",
+   "ul": "none"
+  },
+  "probeIn": null,
+  "firstH3": {
+   "bg": "rgb(217, 221, 227)",
+   "fill": "rgba(0, 0, 0, 0)",
+   "vis": "visible",
+   "ul": "none"
+  },
+  "firstImg": {
+   "bg": "rgb(217, 221, 227)",
+   "fill": "rgba(0, 0, 0, 0)",
+   "vis": "visible",
+   "ul": "none"
+  },
+  "lastH3": {
+   "bg": "rgb(217, 221, 227)",
+   "fill": "rgba(0, 0, 0, 0)",
+   "vis": "visible",
+   "ul": "none"
+  },
+  "lastP": {
+   "bg": "rgb(217, 221, 227)",
+   "fill": "rgba(0, 0, 0, 0)",
+   "vis": "visible",
+   "ul": "none"
+  },
+  "lastSpan": {
+   "bg": "rgb(217, 221, 227)",
+   "fill": "rgba(0, 0, 0, 0)",
+   "vis": "visible",
+   "ul": "none"
+  },
+  "lastCardDiv": {
+   "bg": "rgba(0, 0, 0, 0)",
+   "fill": "rgb(0, 0, 0)",
+   "vis": "visible",
+   "ul": "none"
+  }
+ },
+ {
+  "group": "C",
+  "series": "U",
+  "rootAttrs": [
+   "id",
+   "skz-effect",
+   "skz",
+   "skz-auto"
+  ],
+  "probeOut": {
+   "bg": "rgba(0, 0, 0, 0)",
+   "fill": "rgba(0, 0, 0, 0)",
+   "vis": "visible",
+   "ul": "underline"
+  },
+  "probeIn": null,
+  "firstH3": {
+   "bg": "rgba(0, 0, 0, 0)",
+   "fill": "rgba(0, 0, 0, 0)",
+   "vis": "visible",
+   "ul": "underline"
+  },
+  "firstImg": {
+   "bg": "rgb(217, 221, 227)",
+   "fill": "rgba(0, 0, 0, 0)",
+   "vis": "visible",
+   "ul": "underline"
+  },
+  "lastH3": {
+   "bg": "rgba(0, 0, 0, 0)",
+   "fill": "rgba(0, 0, 0, 0)",
+   "vis": "visible",
+   "ul": "underline"
+  },
+  "lastP": {
+   "bg": "rgba(0, 0, 0, 0)",
+   "fill": "rgba(0, 0, 0, 0)",
+   "vis": "visible",
+   "ul": "underline"
+  },
+  "lastSpan": {
+   "bg": "rgba(0, 0, 0, 0)",
+   "fill": "rgba(0, 0, 0, 0)",
+   "vis": "visible",
+   "ul": "underline"
+  },
+  "lastCardDiv": {
+   "bg": "rgba(0, 0, 0, 0)",
+   "fill": "rgba(0, 0, 0, 0)",
+   "vis": "visible",
+   "ul": "underline"
+  }
+ },
+ {
+  "group": "C",
+  "series": "L",
+  "rootAttrs": [
+   "id",
+   "skz-effect",
+   "skz-text",
+   "skz",
+   "skz-auto"
+  ],
+  "probeOut": {
+   "bg": "rgb(217, 221, 227)",
+   "fill": "rgba(0, 0, 0, 0)",
+   "vis": "visible",
+   "ul": "none"
+  },
+  "probeIn": null,
+  "firstH3": {
+   "bg": "rgb(217, 221, 227)",
+   "fill": "rgba(0, 0, 0, 0)",
+   "vis": "visible",
+   "ul": "none"
+  },
+  "firstImg": {
+   "bg": "rgb(217, 221, 227)",
+   "fill": "rgba(0, 0, 0, 0)",
+   "vis": "visible",
+   "ul": "none"
+  },
+  "lastH3": {
+   "bg": "rgb(217, 221, 227)",
+   "fill": "rgba(0, 0, 0, 0)",
+   "vis": "visible",
+   "ul": "none"
+  },
+  "lastP": {
+   "bg": "rgb(217, 221, 227)",
+   "fill": "rgba(0, 0, 0, 0)",
+   "vis": "visible",
+   "ul": "none"
+  },
+  "lastSpan": {
+   "bg": "rgb(217, 221, 227)",
+   "fill": "rgba(0, 0, 0, 0)",
+   "vis": "visible",
+   "ul": "none"
+  },
+  "lastCardDiv": {
+   "bg": "rgba(0, 0, 0, 0)",
+   "fill": "rgba(0, 0, 0, 0)",
+   "vis": "visible",
+   "ul": "none"
+  }
+ },
+ {
+  "group": "D",
+  "series": "U",
+  "rootAttrs": [
+   "id",
+   "skz-effect",
+   "skz"
+  ],
+  "probeOut": {
+   "bg": "rgba(0, 0, 0, 0)",
+   "fill": "rgb(0, 0, 0)",
+   "vis": "visible",
+   "ul": "none"
+  },
+  "probeIn": null,
+  "firstH3": {
+   "bg": "rgb(217, 221, 227)",
+   "fill": "rgba(0, 0, 0, 0)",
+   "vis": "visible",
+   "ul": "none"
+  },
+  "firstImg": {
+   "bg": "rgb(217, 221, 227)",
+   "fill": "rgba(0, 0, 0, 0)",
+   "vis": "visible",
+   "ul": "none"
+  },
+  "lastH3": {
+   "bg": "rgb(217, 221, 227)",
+   "fill": "rgba(0, 0, 0, 0)",
+   "vis": "visible",
+   "ul": "none"
+  },
+  "lastP": {
+   "bg": "rgb(217, 221, 227)",
+   "fill": "rgba(0, 0, 0, 0)",
+   "vis": "visible",
+   "ul": "none"
+  },
+  "lastSpan": {
+   "bg": "rgb(217, 221, 227)",
+   "fill": "rgba(0, 0, 0, 0)",
+   "vis": "visible",
+   "ul": "none"
+  },
+  "lastCardDiv": {
+   "bg": "rgba(0, 0, 0, 0)",
+   "fill": "rgb(0, 0, 0)",
+   "vis": "visible",
+   "ul": "none"
+  }
+ },
+ {
+  "group": "D",
+  "series": "L",
+  "rootAttrs": [
+   "id",
+   "skz-effect",
+   "skz-text",
+   "skz"
+  ],
+  "probeOut": {
+   "bg": "rgba(0, 0, 0, 0)",
+   "fill": "rgb(0, 0, 0)",
+   "vis": "visible",
+   "ul": "none"
+  },
+  "probeIn": null,
+  "firstH3": {
+   "bg": "rgb(217, 221, 227)",
+   "fill": "rgba(0, 0, 0, 0)",
+   "vis": "visible",
+   "ul": "none"
+  },
+  "firstImg": {
+   "bg": "rgb(217, 221, 227)",
+   "fill": "rgba(0, 0, 0, 0)",
+   "vis": "visible",
+   "ul": "none"
+  },
+  "lastH3": {
+   "bg": "rgb(217, 221, 227)",
+   "fill": "rgba(0, 0, 0, 0)",
+   "vis": "visible",
+   "ul": "none"
+  },
+  "lastP": {
+   "bg": "rgb(217, 221, 227)",
+   "fill": "rgba(0, 0, 0, 0)",
+   "vis": "visible",
+   "ul": "none"
+  },
+  "lastSpan": {
+   "bg": "rgb(217, 221, 227)",
+   "fill": "rgba(0, 0, 0, 0)",
+   "vis": "visible",
+   "ul": "none"
+  },
+  "lastCardDiv": {
+   "bg": "rgba(0, 0, 0, 0)",
+   "fill": "rgb(0, 0, 0)",
+   "vis": "visible",
+   "ul": "none"
+  }
+ },
+ {
+  "group": "E",
+  "series": "U",
+  "rootAttrs": [
+   "id",
+   "skz-effect",
+   "skz"
+  ],
+  "probeOut": {
+   "bg": "rgba(0, 0, 0, 0)",
+   "fill": "rgb(0, 0, 0)",
+   "vis": "visible",
+   "ul": "none"
+  },
+  "probeIn": {
+   "bg": "rgba(0, 0, 0, 0)",
+   "fill": "rgba(0, 0, 0, 0)",
+   "vis": "visible",
+   "ul": "underline"
+  },
+  "firstH3": {
+   "bg": "rgb(217, 221, 227)",
+   "fill": "rgba(0, 0, 0, 0)",
+   "vis": "visible",
+   "ul": "none"
+  },
+  "firstImg": {
+   "bg": "rgb(217, 221, 227)",
+   "fill": "rgba(0, 0, 0, 0)",
+   "vis": "visible",
+   "ul": "none"
+  },
+  "lastH3": {
+   "bg": "rgba(0, 0, 0, 0)",
+   "fill": "rgba(0, 0, 0, 0)",
+   "vis": "visible",
+   "ul": "underline"
+  },
+  "lastP": {
+   "bg": "rgba(0, 0, 0, 0)",
+   "fill": "rgba(0, 0, 0, 0)",
+   "vis": "visible",
+   "ul": "underline"
+  },
+  "lastSpan": {
+   "bg": "rgba(0, 0, 0, 0)",
+   "fill": "rgba(0, 0, 0, 0)",
+   "vis": "visible",
+   "ul": "underline"
+  },
+  "lastCardDiv": {
+   "bg": "rgba(0, 0, 0, 0)",
+   "fill": "rgba(0, 0, 0, 0)",
+   "vis": "visible",
+   "ul": "underline"
+  }
+ },
+ {
+  "group": "E",
+  "series": "L",
+  "rootAttrs": [
+   "id",
+   "skz-effect",
+   "skz-text",
+   "skz"
+  ],
+  "probeOut": {
+   "bg": "rgba(0, 0, 0, 0)",
+   "fill": "rgb(0, 0, 0)",
+   "vis": "visible",
+   "ul": "none"
+  },
+  "probeIn": {
+   "bg": "rgb(217, 221, 227)",
+   "fill": "rgba(0, 0, 0, 0)",
+   "vis": "visible",
+   "ul": "none"
+  },
+  "firstH3": {
+   "bg": "rgb(217, 221, 227)",
+   "fill": "rgba(0, 0, 0, 0)",
+   "vis": "visible",
+   "ul": "none"
+  },
+  "firstImg": {
+   "bg": "rgb(217, 221, 227)",
+   "fill": "rgba(0, 0, 0, 0)",
+   "vis": "visible",
+   "ul": "none"
+  },
+  "lastH3": {
+   "bg": "rgb(217, 221, 227)",
+   "fill": "rgba(0, 0, 0, 0)",
+   "vis": "visible",
+   "ul": "none"
+  },
+  "lastP": {
+   "bg": "rgb(217, 221, 227)",
+   "fill": "rgba(0, 0, 0, 0)",
+   "vis": "visible",
+   "ul": "none"
+  },
+  "lastSpan": {
+   "bg": "rgb(217, 221, 227)",
+   "fill": "rgba(0, 0, 0, 0)",
+   "vis": "visible",
+   "ul": "none"
+  },
+  "lastCardDiv": {
+   "bg": "rgba(0, 0, 0, 0)",
+   "fill": "rgba(0, 0, 0, 0)",
+   "vis": "visible",
+   "ul": "none"
+  }
+ }
+]

@@ -1,0 +1,53 @@
+<!doctype html>
+<html lang="zh"><head><meta charset="utf-8" /><title>perf-auto</title><link id="css" rel="stylesheet" />
+<style>body{font:14px/1.5 system-ui,sans-serif;margin:0}.card{display:flex;gap:8px;padding:8px;border:1px solid #ddd;margin:4px}.card img{width:48px;height:48px;border-radius:50%}</style>
+</head><body><div id="root"></div>
+<script type="module">
+// 页面参数：css=auto|explicit|scoped（CSS 文件名）；mode 决定内容怎么标：
+//   auto     内容不带标记，根只写 skz                  （A）
+//   mark     内容带 skz-bone，根只写 skz                （B、D）
+//   autoroot 内容不带标记，根写 skz + skz-auto           （C）
+//   mixplain / mixautomarked 为排查防火墙用的诊断模式，见 NOTES
+//   mix      前 90% 卡片带 skz-bone，后 10% 外包 <div skz-auto> 且不带标记（E）
+// trace.mjs 把 css 值直接拼进 URL，所以场景里写 "css": "scoped&mode=mark" 即可同时指定两个参数。
+import { Bone, enable } from "../../src/index.ts";
+import "../../src/variants/global.ts";
+const q = new URLSearchParams(location.search);
+const MODE = q.get("mode") || "auto";
+document.getElementById("css").href = `./${q.get("css") || "auto"}.css`;
+const root = document.getElementById("root");
+const GIF = Bone.image();
+const nf = () => new Promise((r) => requestAnimationFrame(r));
+let off = null;
+/** 一张卡片的 HTML；mk 为真时给 img/h3/p/span/i/button 加 skz-bone（和 entries 的 perf-bone.html 一致） */
+const card = (mk) => { const b = mk ? " skz-bone" : ""; return `<div class="card"><img${b} src="${GIF}" alt=""><div><h3${b}>${Bone.text(10)}</h3><p${b}>${Bone.lines(2)}</p><span${b}>${Bone.text(6)}</span> <i${b} class="icon-star"></i><button${b}>${Bone.text(4)}</button></div></div>`; };
+/** 搭场景：n 张卡片（每张约 8 个元素）。spec 是数组则当作根属性 [[k,v]...] 直接写（纯 CSS 路径，无防火墙）；是对象则走 enable()（带继承防火墙） */
+window.setup = async (n, spec) => {
+  off?.(); off = null;
+  root.removeAttribute("skz");
+  const textMode = Array.isArray(spec) ? (spec.find(([k]) => k === "skz-text") || [])[1] : (spec || {}).text;
+  const cut = Math.round(n * 0.9);
+  let html;
+  if (MODE === "mix" || MODE === "mixplain" || MODE === "mixautomarked") {
+    // 后 10% 放进 skz-auto 外壳；skz-text 是根属性，外壳上也同步一份，保证叶子模式规则能在外壳作用域里命中
+    const tx = textMode ? ` skz-text="${textMode}"` : "";
+    // 诊断模式：mixplain = 外壳不带 skz-auto、内容全带标记；mixautomarked = 外壳带 skz-auto、内容全带标记
+    const inMk = MODE !== "mix", shell = MODE === "mixplain" ? `<div${tx}>` : `<div skz-auto${tx}>`;
+    html = Array.from({ length: cut }, () => card(true)).join("") + shell + Array.from({ length: n - cut }, () => card(inMk)).join("") + "</div>";
+  } else {
+    html = Array.from({ length: n }, () => card(MODE === "mark")).join("");
+  }
+  root.innerHTML = html;
+  root.getAttributeNames().forEach((a) => a !== "id" && root.removeAttribute(a));
+  if (Array.isArray(spec)) { spec.forEach(([k, v]) => root.setAttribute(k, v)); root.setAttribute("skz", ""); }
+  else off = enable(root, spec || {});
+  if (MODE === "autoroot") root.setAttribute("skz-auto", "");
+  await nf(); await nf();
+  return root.querySelectorAll("*").length;
+};
+/** 数 ms 毫秒内的帧数 */
+window.frames = async (ms) => { let f = 0; const end = performance.now() + ms; while (performance.now() < end) { await nf(); f++; } return f; };
+/** 一次性开启耗时：切 skz 后强制样式 + 布局（skz-auto 保持在根上不动） */
+window.toggleCost = async () => { root.removeAttribute("skz"); void root.offsetHeight; await nf(); await nf(); const t = performance.now(); root.setAttribute("skz", ""); void root.offsetHeight; return performance.now() - t; };
+window.ready = true;
+</script></body></html>

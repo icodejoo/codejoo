@@ -1,0 +1,148 @@
+[
+ {
+  "name": "prod-default-n500",
+  "css": "prod",
+  "n": 500,
+  "attrs": [],
+  "toggle": true,
+  "toggleN": 9
+ },
+ {
+  "name": "prod-leaf-n500",
+  "css": "prod",
+  "n": 500,
+  "attrs": [
+   [
+    "x-ske-text",
+    "leaf"
+   ]
+  ],
+  "toggle": true,
+  "toggleN": 9
+ },
+ {
+  "name": "prod-leaf-shimmer-n500",
+  "css": "prod",
+  "n": 500,
+  "attrs": [
+   [
+    "x-ske-text",
+    "leaf"
+   ],
+   [
+    "x-ske-effect",
+    "shimmer"
+   ]
+  ],
+  "toggle": true,
+  "toggleN": 9
+ },
+ {
+  "name": "prod-default-scroll-n500",
+  "css": "prod",
+  "n": 500,
+  "attrs": [],
+  "scroll": true
+ },
+ {
+  "name": "prod-leaf-scroll-n500",
+  "css": "prod",
+  "n": 500,
+  "attrs": [
+   [
+    "x-ske-text",
+    "leaf"
+   ]
+  ],
+  "scroll": true
+ },
+ {
+  "name": "prod-leaf-shimmer-scroll-n500",
+  "css": "prod",
+  "n": 500,
+  "attrs": [
+   [
+    "x-ske-text",
+    "leaf"
+   ],
+   [
+    "x-ske-effect",
+    "shimmer"
+   ]
+  ],
+  "scroll": true
+ },
+ {
+  "name": "prod-default-n2000",
+  "css": "prod",
+  "n": 2000,
+  "attrs": [],
+  "toggle": true,
+  "toggleN": 9
+ },
+ {
+  "name": "prod-leaf-n2000",
+  "css": "prod",
+  "n": 2000,
+  "attrs": [
+   [
+    "x-ske-text",
+    "leaf"
+   ]
+  ],
+  "toggle": true,
+  "toggleN": 9
+ },
+ {
+  "name": "prod-leaf-shimmer-n2000",
+  "css": "prod",
+  "n": 2000,
+  "attrs": [
+   [
+    "x-ske-text",
+    "leaf"
+   ],
+   [
+    "x-ske-effect",
+    "shimmer"
+   ]
+  ],
+  "toggle": true,
+  "toggleN": 9
+ },
+ {
+  "name": "prod-default-scroll-n2000",
+  "css": "prod",
+  "n": 2000,
+  "attrs": [],
+  "scroll": true
+ },
+ {
+  "name": "prod-leaf-scroll-n2000",
+  "css": "prod",
+  "n": 2000,
+  "attrs": [
+   [
+    "x-ske-text",
+    "leaf"
+   ]
+  ],
+  "scroll": true
+ },
+ {
+  "name": "prod-leaf-shimmer-scroll-n2000",
+  "css": "prod",
+  "n": 2000,
+  "attrs": [
+   [
+    "x-ske-text",
+    "leaf"
+   ],
+   [
+    "x-ske-effect",
+    "shimmer"
+   ]
+  ],
+  "scroll": true
+ }
+]

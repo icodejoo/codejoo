@@ -1,0 +1,88 @@
+@use "svg";
+
+/* ===== global 方案：pulse / shimmer 根驱动（skeletonizer/global） =====
+ * 根上一个动画驱动注册过的 --skz-pulse-c（颜色）/ --skz-shimmer-p（流光位置），骨头只读继承下来的
+ * --skz-fill / --skz-ul-fill / --skz-bg-pos，自己不挂动画。颜色精确、跟主题走。
+ * 配合 JS（skeletonizer/global）的继承防火墙，长列表只有视口内的项参与逐帧重算。
+ * 不支持 @property 的浏览器由 JS（skeletonizer/global）把根切到 SVG 方案（skz-engine="svg"，规则在 _svg.scss，这里 @use 一份）；
+ * JS 执行前（SSR 首屏）和 blob 生成失败时，退回基底的 fade。 */
+@property --skz-shimmer-p {
+  syntax: "<number>";
+  inherits: true;
+  initial-value: -60;
+}
+@property --skz-pulse-c {
+  syntax: "<color>";
+  inherits: true;
+  initial-value: #d9dde3;
+}
+@keyframes skz-shimmer-root {
+  from {
+    --skz-shimmer-p: -60;
+  }
+  to {
+    --skz-shimmer-p: 110;
+  }
+}
+@keyframes skz-pulse-root {
+  from {
+    --skz-pulse-c: var(--skz-color);
+  }
+  to {
+    --skz-pulse-c: var(--skz-highlight);
+  }
+}
+
+/* @property 无法用 @supports 检测，借同版本落地的相对颜色语法判断（Safari 16.4 / Firefox 128 两者同时支持；
+ * Chrome 85~118 有 @property 但没有相对颜色，被保守地判为不支持，退回 fade） */
+@supports (color: rgb(from red r g b)) {
+  /* pulse：骨头背景色和下划线颜色一起脉冲 */
+  [skz][skz-effect="pulse"] {
+    --skz-fill: var(--skz-pulse-c);
+    --skz-ul-fill: var(--skz-pulse-c);
+    animation: skz-pulse-root var(--skz-duration) ease-in-out infinite alternate;
+  }
+  /* shimmer：fixed 渐变背景在视口坐标里平移，各骨头同步；下划线文字没法渐变，跟着脉冲颜色走。
+   * 时间函数可在根上用 --skz-shimmer-timing 覆盖，如 steps(36) 把刷新降到 24fps（1.5s × 24） */
+  [skz][skz-effect="shimmer"] {
+    --skz-bg-img: linear-gradient(100deg, transparent 0, var(--skz-highlight) 50%, transparent 100%);
+    --skz-bg-pos: calc(var(--skz-shimmer-p) * 1vw) 0;
+    --skz-ul-fill: var(--skz-pulse-c);
+    animation:
+      skz-shimmer-root var(--skz-duration) var(--skz-shimmer-timing, linear) infinite,
+      skz-pulse-root var(--skz-duration) ease-in-out infinite alternate;
+  }
+  /* JS 计时器模式（enable 的 fps 选项，根上带 skz-tick）：根上不跑 CSS 动画，
+   * 由 JS 按限定帧率写 --skz-pulse-t（0~1）和 --skz-shimmer-p；颜色在这里用 color-mix 算，跟着主题走 */
+  [skz][skz-tick][skz-effect="pulse"],
+  [skz][skz-tick][skz-effect="shimmer"] {
+    animation: none;
+    --skz-pulse-c: color-mix(in srgb, var(--skz-color), var(--skz-highlight) calc(var(--skz-pulse-t, 0) * 100%));
+  }
+  /* 继承防火墙（enable 给视口外的列表项打 skz-fw）：在它身上把会逐帧变化的变量钉成静态值。
+   * 根上变量变化时它自己重算一次，计算值不变，Chrome 就不再往它的后代传播重算；
+   * 派生变量（--skz-fill / --skz-ul-fill / --skz-bg-pos）在根上已展开成具体值，必须一起重声明才挡得住。
+   * 实测 16000 元素 shimmer 从约 19 帧到 60 帧。打了防火墙的项里骨头静止，所以只用于视口外 */
+  [skz] [skz-fw] {
+    --skz-pulse-c: var(--skz-color);
+    --skz-shimmer-p: -60;
+    /* JS 计时器写在根上的进度变量（未注册、会继承）也要钉住，否则会穿过防火墙 */
+    --skz-pulse-t: 0;
+  }
+  [skz][skz-effect="pulse"] [skz-fw] {
+    --skz-fill: var(--skz-pulse-c);
+    --skz-ul-fill: var(--skz-pulse-c);
+  }
+  [skz][skz-effect="shimmer"] [skz-fw] {
+    --skz-bg-pos: calc(var(--skz-shimmer-p) * 1vw) 0;
+    --skz-ul-fill: var(--skz-pulse-c);
+  }
+
+  /* iOS Safari 不支持 background-attachment:fixed，流光会各自为政，改成骨头颜色脉冲 */
+  @supports (-webkit-touch-callout: none) {
+    [skz][skz-effect="shimmer"] {
+      --skz-bg-img: none;
+      --skz-fill: var(--skz-pulse-c);
+    }
+  }
+}

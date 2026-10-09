@@ -1,0 +1,36 @@
+{"name":"E1 shimmer叶子 linear","elements":4000,"fps":60.4,"gpu":5.51,"mainBusy":28.89,"compositor":3.12,"UpdateLayoutTree":12.2,"PrePaint":0.79,"Paint":1.37,"Layerize":0.08,"Commit":0.07,"UpdateLayer":0.01,"HitTest":0}
+{"name":"E1 shimmer叶子 steps36(24fps)","elements":4000,"fps":60.4,"PrePaint":0.32,"Layerize":0.04,"Commit":0.06,"compositor":1.41,"mainBusy":25.75,"UpdateLayoutTree":11.58,"Paint":0.58,"UpdateLayer":0,"gpu":1.48,"HitTest":0}
+{"name":"E1 shimmer叶子 steps18(12fps)","elements":4000,"fps":60.4,"PrePaint":0.15,"Layerize":0.02,"Commit":0.06,"compositor":0.92,"mainBusy":24.38,"UpdateLayoutTree":11.3,"Paint":0.26,"UpdateLayer":0,"gpu":0.71,"HitTest":0}
+{"name":"E2 pulse叶子 全部","elements":4000,"fps":60.4,"Layerize":0.04,"Commit":0.06,"UpdateLayer":0,"compositor":1.39,"mainBusy":24.19,"gpu":1.21,"UpdateLayoutTree":10.91,"PrePaint":0.36,"Paint":0.52,"HitTest":0}
+{"name":"E2 pulse叶子 去第2档","elements":4000,"fps":60.4,"mainBusy":16.7,"gpu":1.25,"compositor":1.54,"UpdateLayoutTree":6.84,"PrePaint":0.58,"Paint":0.58,"Layerize":0.04,"Commit":0.08,"UpdateLayer":0,"HitTest":0}
+{"name":"E2 pulse下划线 全部","elements":4000,"fps":60.4,"Layerize":0.03,"Commit":0.19,"UpdateLayer":0.12,"compositor":1.43,"mainBusy":24.19,"gpu":1.14,"UpdateLayoutTree":10.69,"PrePaint":0.35,"Paint":0.46,"HitTest":0}
+{"name":"E2 pulse下划线 去第1档","elements":4000,"fps":60.4,"Paint":0.53,"Layerize":0.04,"Commit":0.07,"UpdateLayer":0,"compositor":1.41,"mainBusy":19.82,"gpu":1.19,"UpdateLayoutTree":8.74,"PrePaint":0.46,"HitTest":0}
+{"name":"E2 pulse下划线 去第1+2档","elements":4000,"fps":60.4,"mainBusy":14.77,"compositor":1.51,"gpu":1.2,"UpdateLayoutTree":6.07,"PrePaint":0.5,"Paint":0.52,"Layerize":0.04,"Commit":0.09,"UpdateLayer":0,"HitTest":0}
+{"name":"E4 sweep 原样","elements":4000,"fps":60.4,"mainBusy":4.61,"compositor":0.79,"UpdateLayoutTree":0.23,"PrePaint":1.59,"Layerize":0,"Commit":0.08,"HitTest":0,"gpu":0.01}
+{"name":"E4 sweep bg模式","elements":4000,"fps":60.4,"mainBusy":4.75,"compositor":0.81,"UpdateLayoutTree":0.28,"PrePaint":1.6,"Layerize":0,"Commit":0.1,"HitTest":0,"gpu":0.02}
+{"name":"E4 sweep 去skew","elements":4000,"fps":60.4,"mainBusy":5.18,"compositor":2.73,"gpu":2.3,"UpdateLayoutTree":0.26,"PrePaint":1.86,"Layerize":0,"Commit":0.11,"HitTest":0}
+{"name":"E4 sweep 去will-change","elements":4000,"fps":60.4,"mainBusy":4.95,"compositor":0.87,"UpdateLayoutTree":0.23,"PrePaint":1.67,"Layerize":0,"Commit":0.1,"HitTest":0,"gpu":0.02}
+{"name":"E4 sweep 去混合+遮罩","elements":4000,"fps":60.4,"mainBusy":4.85,"compositor":0.85,"UpdateLayoutTree":0.24,"PrePaint":1.69,"Layerize":0,"Commit":0.09,"HitTest":0,"gpu":0.01}
+{"name":"E4 sweep 去overflow clip","elements":4000,"fps":60.4,"mainBusy":6.26,"compositor":2.96,"UpdateLayoutTree":0.29,"PrePaint":2.02,"Paint":0.05,"Layerize":0.17,"Commit":0.14,"UpdateLayer":0.01,"HitTest":0,"gpu":1.99}
+{"name":"E5 开启 fade 全部","elements":4000,"fps":60.4,"mainBusy":1.11,"compositor":1.74,"gpu":1.3,"UpdateLayoutTree":0.12,"PrePaint":0.01,"Layerize":0,"Commit":0.08,"HitTest":0,"toggleMs":21.4}
+{"name":"E5 开启 fade 去第1档","elements":4000,"fps":60.4,"mainBusy":1.1,"compositor":1.77,"gpu":1.28,"UpdateLayoutTree":0.12,"PrePaint":0.02,"Layerize":0,"Commit":0.08,"HitTest":0,"toggleMs":17.9}
+{"name":"E5 开启 fade 去第2档","elements":4000,"fps":60.4,"mainBusy":1.23,"compositor":1.74,"gpu":1.22,"UpdateLayoutTree":0.12,"PrePaint":0.02,"Layerize":0,"Commit":0.08,"HitTest":0,"toggleMs":16.2}
+{"name":"E5 开启 fade 叶子","elements":4000,"fps":60.4,"mainBusy":1.12,"compositor":1.76,"gpu":1.26,"UpdateLayoutTree":0.13,"PrePaint":0.02,"Layerize":0,"Commit":0.08,"HitTest":0,"toggleMs":21.9}
+{"name":"E1 shimmer叶子 linear","elements":16000,"fps":19.2,"compositor":4.19,"PrePaint":3.97,"Paint":2.6,"Layerize":0.1,"Commit":0.08,"UpdateLayer":0.01,"mainBusy":104.79,"UpdateLayoutTree":46.5,"gpu":3.99,"HitTest":0.01}
+{"name":"E1 shimmer叶子 steps36(24fps)","elements":16000,"fps":16.8,"gpu":5.2,"compositor":5.46,"PrePaint":4.44,"Paint":2.79,"Layerize":0.13,"Commit":0.1,"UpdateLayer":0.01,"mainBusy":121.46,"UpdateLayoutTree":52.32,"HitTest":0.02}
+{"name":"E1 shimmer叶子 steps18(12fps)","elements":16000,"fps":19.6,"compositor":3.41,"PrePaint":2.29,"Paint":1.44,"Layerize":0.07,"Commit":0.09,"UpdateLayer":0,"mainBusy":102.99,"gpu":2.76,"UpdateLayoutTree":47.61,"HitTest":0.01}
+{"name":"E2 pulse叶子 全部","elements":16000,"fps":20.8,"compositor":3.63,"PrePaint":2.87,"Paint":1.55,"Layerize":0.08,"Commit":0.09,"UpdateLayer":0,"mainBusy":98,"UpdateLayoutTree":44.23,"gpu":2.32,"HitTest":0.01}
+{"name":"E2 pulse叶子 去第2档","elements":16000,"fps":36,"gpu":1.85,"compositor":2.55,"PrePaint":2.81,"Paint":1.21,"Layerize":0.06,"Commit":0.09,"UpdateLayer":0,"mainBusy":55.56,"UpdateLayoutTree":23.96,"HitTest":0.01}
+{"name":"E2 pulse下划线 全部","elements":16000,"fps":22,"Paint":1.44,"Layerize":0.06,"Commit":0.28,"UpdateLayer":0.19,"compositor":3.48,"mainBusy":91.62,"UpdateLayoutTree":40.46,"gpu":2.06,"PrePaint":3.25,"HitTest":0.01}
+{"name":"E2 pulse下划线 去第1档","elements":16000,"fps":28,"PrePaint":3.16,"compositor":2.82,"Paint":1.32,"Layerize":0.07,"Commit":0.08,"UpdateLayer":0,"mainBusy":72.29,"UpdateLayoutTree":32.22,"gpu":1.94,"HitTest":0.01}
+{"name":"E2 pulse下划线 去第1+2档","elements":16000,"fps":38.4,"compositor":2.36,"PrePaint":2.53,"Paint":1.16,"Layerize":0.06,"Commit":0.08,"UpdateLayer":0,"mainBusy":52.29,"UpdateLayoutTree":21.9,"gpu":1.76,"HitTest":0.01}
+{"name":"E4 sweep 原样","elements":16000,"fps":60.4,"mainBusy":13.89,"compositor":0.76,"UpdateLayoutTree":0.78,"PrePaint":5.74,"Layerize":0,"Commit":0.08,"gpu":0.01,"HitTest":0}
+{"name":"E4 sweep bg模式","elements":16000,"fps":60.4,"mainBusy":14.52,"compositor":0.71,"UpdateLayoutTree":0.93,"PrePaint":5.92,"Layerize":0,"Commit":0.08,"gpu":0.01,"HitTest":0.01}
+{"name":"E4 sweep 去skew","elements":16000,"fps":60.4,"mainBusy":17.86,"compositor":2.13,"gpu":2.58,"UpdateLayoutTree":0.95,"PrePaint":7.25,"Layerize":0,"Commit":0.09,"HitTest":0.01}
+{"name":"E4 sweep 去will-change","elements":16000,"fps":60,"mainBusy":15.29,"compositor":0.73,"UpdateLayoutTree":0.83,"PrePaint":6.18,"Layerize":0,"Commit":0.08,"HitTest":0.01,"gpu":0.01}
+{"name":"E4 sweep 去混合+遮罩","elements":16000,"fps":60.4,"mainBusy":16.04,"compositor":0.8,"UpdateLayoutTree":0.81,"PrePaint":6.45,"Layerize":0,"Commit":0.09,"HitTest":0,"gpu":0.02}
+{"name":"E4 sweep 去overflow clip","elements":16000,"fps":60.4,"mainBusy":17.97,"compositor":2.15,"UpdateLayoutTree":0.93,"PrePaint":7.1,"Paint":0.04,"Layerize":0.11,"Commit":0.1,"UpdateLayer":0.01,"HitTest":0.01,"gpu":1.45}
+{"name":"E5 开启 fade 全部","elements":16000,"fps":60.4,"mainBusy":1.79,"compositor":1.76,"gpu":1.39,"UpdateLayoutTree":0.24,"PrePaint":0.01,"Layerize":0,"Commit":0.08,"HitTest":0.01,"toggleMs":151}
+{"name":"E5 开启 fade 去第1档","elements":16000,"fps":60,"mainBusy":2.07,"compositor":1.98,"gpu":1.74,"UpdateLayoutTree":0.27,"PrePaint":0.02,"Layerize":0,"Commit":0.1,"HitTest":0.01,"toggleMs":131.2}
+{"name":"E5 开启 fade 去第2档","elements":16000,"fps":60.4,"mainBusy":1.34,"compositor":1.8,"gpu":1.35,"UpdateLayoutTree":0.23,"PrePaint":0.01,"Layerize":0,"Commit":0.08,"HitTest":0.01,"toggleMs":62.3}
+{"name":"E5 开启 fade 叶子","elements":16000,"fps":60,"mainBusy":1.37,"compositor":1.72,"gpu":1.31,"UpdateLayoutTree":0.23,"PrePaint":0.01,"Layerize":0,"Commit":0.08,"HitTest":0.01,"toggleMs":151.7}

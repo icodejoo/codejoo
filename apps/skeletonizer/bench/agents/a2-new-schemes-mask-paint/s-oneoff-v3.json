@@ -1,0 +1,74 @@
+[
+{
+"name": "A-4k-webp-idle",
+"css": "prod",
+"n": 500,
+"attrs": [
+[
+"x-ske-effect",
+"solid"
+],
+[
+"x-ske-text",
+"leaf"
+]
+],
+"proto": "a",
+"idle": true,
+"prepre": "window.__fmt='image/webp'"
+},
+{
+"name": "A-16k-webp-idle",
+"css": "prod",
+"n": 2000,
+"attrs": [
+[
+"x-ske-effect",
+"solid"
+],
+[
+"x-ske-text",
+"leaf"
+]
+],
+"proto": "a",
+"idle": true,
+"prepre": "window.__fmt='image/webp'"
+},
+{
+"name": "A-16k-png-batch16-idle",
+"css": "prod",
+"n": 2000,
+"attrs": [
+[
+"x-ske-effect",
+"solid"
+],
+[
+"x-ske-text",
+"leaf"
+]
+],
+"proto": "a",
+"idle": true,
+"prepre": "window.__batch=16"
+},
+{
+"name": "A-4k-webp-raf-resize",
+"css": "prod",
+"n": 500,
+"attrs": [
+[
+"x-ske-effect",
+"solid"
+],
+[
+"x-ske-text",
+"leaf"
+]
+],
+"proto": "a",
+"resize": true,
+"prepre": "window.__fmt='image/webp'"
+}
+]

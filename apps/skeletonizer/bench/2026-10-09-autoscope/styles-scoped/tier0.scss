@@ -1,0 +1,43 @@
+@use "lists" as *;
+@use "mixins" as *;
+
+/* 实验：作用域前缀展开成两套规则（根本身带 skz-auto / 根内后代带 skz-auto） */
+@each $a in $auto-parts {
+  /* ===== 第 0 档：默认浏览器支持 CSS 变量（Safari 9.1+/Chrome 49+/Firefox 31+），不再做 @supports 判断=====
+   * 标签白名单 + 背景色。粗糙：嵌套命中会连成更大一块（颜色不透明且一致，不会变深）。属于自动推导，explicit.css 里没有。 */
+  /* 退出兜底层：直接子元素不再整块涂灰，后代恢复可见 */
+  #{$a} > *:not([skz-ignore]) {
+    background-image: none !important;
+    color: inherit !important;
+  }
+  #{$a} > * * {
+    visibility: visible !important;
+  }
+
+  /* 文字类标签 -> 背景色骨头
+   * 注：藏文字统一使用 -webkit-text-fill-color 而不是 color。因为 color 会继承给子孙，导致忽略区也看不见；
+   * -webkit-text-fill-color 支持度极高（Chrome 1+、Safari 3+、Firefox 49+），且可以被忽略区低优先级覆盖。 */
+  #{sk-sel($a, $text-tags)} {
+    @include sk-bone(var(--skz-tbg, var(--skz-fill, var(--skz-color))), var(--skz-timg, var(--skz-bg-img, none)));
+    -webkit-text-fill-color: transparent !important;
+  }
+
+  /* 媒体与控件 -> 背景色骨头（图片靠透明 mock 图让背景透出来） */
+  #{sk-sel($a, $media-tags)} {
+    @include sk-bone;
+    -webkit-text-fill-color: transparent !important;
+    /* 把真实图片/视频/canvas 的内容推出盒子外（替换元素内容会被裁在盒内），背景色才露得出来 */
+    object-fit: none !important;
+    object-position: 99999px 0 !important;
+  }
+  /* svg 内部藏起来，背景由 svg 自己画 */
+  #{$a} svg:not([skz-ignore]) * {
+    visibility: hidden !important;
+  }
+
+  /* 骨头圆角：用 :where() 把优先级降到 0，元素自己写了 border-radius（如圆形头像）就保留它的形状 */
+  :where(#{sk-is-sel($a, $text-tags)}) {
+    border-radius: var(--skz-tradius, var(--skz-radius));
+  }
+
+}

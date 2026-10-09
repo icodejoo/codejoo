@@ -1,0 +1,1990 @@
+{
+ "p1_audit_top": {
+  "total": 2000,
+  "withAnim": 8,
+  "inView": 6,
+  "inViewAnim": 6,
+  "near": 8,
+  "nearAnim": 8,
+  "farWithAttr": 0,
+  "farWithAnimations": 0,
+  "nearWithoutAttr": 0,
+  "withFw": 0,
+  "withFwInView": 0,
+  "docAnimations": 16,
+  "rootAnimations": 0,
+  "rootHasSkzA": true,
+  "scrollY": 0
+ },
+ "p1_motion": {
+  "p_t1": -47.7353,
+  "p_t2": 9.00867,
+  "p_t3": 67.6247,
+  "bgx_t1": "-603.374px",
+  "bgx_t2": "113.87px",
+  "changed": true
+ },
+ "p1_far_card1000": {
+  "hasAttr": false,
+  "animations": 0,
+  "p": "-60",
+  "bgx": "-758.4px"
+ },
+ "p1_far_card1000_later": {
+  "p": "-60",
+  "bgx": "-758.4px"
+ },
+ "p1_sync_top_same_instant": {
+  "n": 6,
+  "pSpread": 0,
+  "pFirst": -43.782,
+  "pExpected": -43.782,
+  "pErrVsTimeline": 0,
+  "colorSpread": [
+   0,
+   0,
+   0
+  ],
+  "colorFirst": "rgb(217, 221, 227)",
+  "bgxDistinct": 1,
+  "bgDistinct": 1,
+  "ulDistinct": 1
+ },
+ "p1_sync_scroll_trials": [
+  {
+   "y": 26793,
+   "frames": [
+    {
+     "f": 0,
+     "n": 6,
+     "pSpread": 0,
+     "pErr": 169.354,
+     "bgx": 1
+    },
+    {
+     "f": 1,
+     "n": 6,
+     "pSpread": 0,
+     "pErr": 23.925,
+     "bgx": 1
+    },
+    {
+     "f": 2,
+     "n": 6,
+     "pSpread": 0,
+     "pErr": 0,
+     "bgx": 1
+    },
+    {
+     "f": 3,
+     "n": 6,
+     "pSpread": 0,
+     "pErr": 0,
+     "bgx": 1
+    },
+    {
+     "f": 4,
+     "n": 6,
+     "pSpread": 0,
+     "pErr": 0,
+     "bgx": 1
+    },
+    {
+     "f": 5,
+     "n": 6,
+     "pSpread": 0,
+     "pErr": 0,
+     "bgx": 1
+    }
+   ]
+  },
+  {
+   "y": 37434,
+   "frames": [
+    {
+     "f": 0,
+     "n": 7,
+     "pSpread": 0,
+     "pErr": 163.812,
+     "bgx": 1
+    },
+    {
+     "f": 1,
+     "n": 7,
+     "pSpread": 0,
+     "pErr": 16.501,
+     "bgx": 1
+    },
+    {
+     "f": 2,
+     "n": 7,
+     "pSpread": 0,
+     "pErr": 0,
+     "bgx": 1
+    },
+    {
+     "f": 3,
+     "n": 7,
+     "pSpread": 0,
+     "pErr": 0,
+     "bgx": 1
+    },
+    {
+     "f": 4,
+     "n": 7,
+     "pSpread": 0,
+     "pErr": 0,
+     "bgx": 1
+    },
+    {
+     "f": 5,
+     "n": 7,
+     "pSpread": 0,
+     "pErr": 0,
+     "bgx": 1
+    }
+   ]
+  },
+  {
+   "y": 75258,
+   "frames": [
+    {
+     "f": 0,
+     "n": 7,
+     "pSpread": 0,
+     "pErr": 79.027,
+     "bgx": 1
+    },
+    {
+     "f": 1,
+     "n": 7,
+     "pSpread": 0,
+     "pErr": 101.728,
+     "bgx": 1
+    },
+    {
+     "f": 2,
+     "n": 7,
+     "pSpread": 0,
+     "pErr": 0,
+     "bgx": 1
+    },
+    {
+     "f": 3,
+     "n": 7,
+     "pSpread": 0,
+     "pErr": 0,
+     "bgx": 1
+    },
+    {
+     "f": 4,
+     "n": 7,
+     "pSpread": 0,
+     "pErr": 0,
+     "bgx": 1
+    },
+    {
+     "f": 5,
+     "n": 7,
+     "pSpread": 0,
+     "pErr": 0,
+     "bgx": 1
+    }
+   ]
+  },
+  {
+   "y": 20355,
+   "frames": [
+    {
+     "f": 0,
+     "n": 7,
+     "pSpread": 0,
+     "pErr": 96.175,
+     "bgx": 1
+    },
+    {
+     "f": 1,
+     "n": 7,
+     "pSpread": 0,
+     "pErr": 0,
+     "bgx": 1
+    },
+    {
+     "f": 2,
+     "n": 7,
+     "pSpread": 0,
+     "pErr": 0,
+     "bgx": 1
+    },
+    {
+     "f": 3,
+     "n": 7,
+     "pSpread": 0,
+     "pErr": 0,
+     "bgx": 1
+    },
+    {
+     "f": 4,
+     "n": 7,
+     "pSpread": 0,
+     "pErr": 0,
+     "bgx": 1
+    },
+    {
+     "f": 5,
+     "n": 7,
+     "pSpread": 0,
+     "pErr": 0,
+     "bgx": 1
+    }
+   ]
+  },
+  {
+   "y": 77032,
+   "frames": [
+    {
+     "f": 0,
+     "n": 7,
+     "pSpread": 0,
+     "pErr": 128.463,
+     "bgx": 1
+    },
+    {
+     "f": 1,
+     "n": 7,
+     "pSpread": 0,
+     "pErr": 151.153,
+     "bgx": 1
+    },
+    {
+     "f": 2,
+     "n": 7,
+     "pSpread": 0,
+     "pErr": 0,
+     "bgx": 1
+    },
+    {
+     "f": 3,
+     "n": 7,
+     "pSpread": 0,
+     "pErr": 0,
+     "bgx": 1
+    },
+    {
+     "f": 4,
+     "n": 7,
+     "pSpread": 0,
+     "pErr": 0,
+     "bgx": 1
+    },
+    {
+     "f": 5,
+     "n": 7,
+     "pSpread": 0,
+     "pErr": 0,
+     "bgx": 1
+    }
+   ]
+  },
+  {
+   "y": 141753,
+   "frames": [
+    {
+     "f": 0,
+     "n": 7,
+     "pSpread": 0,
+     "pErr": 17.204,
+     "bgx": 1
+    },
+    {
+     "f": 1,
+     "n": 7,
+     "pSpread": 0,
+     "pErr": 41.786,
+     "bgx": 1
+    },
+    {
+     "f": 2,
+     "n": 7,
+     "pSpread": 0,
+     "pErr": 0,
+     "bgx": 1
+    },
+    {
+     "f": 3,
+     "n": 7,
+     "pSpread": 0,
+     "pErr": 0,
+     "bgx": 1
+    },
+    {
+     "f": 4,
+     "n": 7,
+     "pSpread": 0,
+     "pErr": 0,
+     "bgx": 1
+    },
+    {
+     "f": 5,
+     "n": 7,
+     "pSpread": 0,
+     "pErr": 0,
+     "bgx": 1
+    }
+   ]
+  },
+  {
+   "y": 100772,
+   "frames": [
+    {
+     "f": 0,
+     "n": 7,
+     "pSpread": 0,
+     "pErr": 58.945,
+     "bgx": 1
+    },
+    {
+     "f": 1,
+     "n": 7,
+     "pSpread": 0,
+     "pErr": 83.515,
+     "bgx": 1
+    },
+    {
+     "f": 2,
+     "n": 7,
+     "pSpread": 0,
+     "pErr": 0,
+     "bgx": 1
+    },
+    {
+     "f": 3,
+     "n": 7,
+     "pSpread": 0,
+     "pErr": 0,
+     "bgx": 1
+    },
+    {
+     "f": 4,
+     "n": 7,
+     "pSpread": 0,
+     "pErr": 0,
+     "bgx": 1
+    },
+    {
+     "f": 5,
+     "n": 7,
+     "pSpread": 0,
+     "pErr": 0,
+     "bgx": 1
+    }
+   ]
+  },
+  {
+   "y": 108390,
+   "frames": [
+    {
+     "f": 0,
+     "n": 6,
+     "pSpread": 0,
+     "pErr": 108.233,
+     "bgx": 1
+    },
+    {
+     "f": 1,
+     "n": 6,
+     "pSpread": 0,
+     "pErr": 130.911,
+     "bgx": 1
+    },
+    {
+     "f": 2,
+     "n": 6,
+     "pSpread": 0,
+     "pErr": 0,
+     "bgx": 1
+    },
+    {
+     "f": 3,
+     "n": 6,
+     "pSpread": 0,
+     "pErr": 0,
+     "bgx": 1
+    },
+    {
+     "f": 4,
+     "n": 6,
+     "pSpread": 0,
+     "pErr": 0,
+     "bgx": 1
+    },
+    {
+     "f": 5,
+     "n": 6,
+     "pSpread": 0,
+     "pErr": 0,
+     "bgx": 1
+    }
+   ]
+  },
+  {
+   "y": 54398,
+   "frames": [
+    {
+     "f": 0,
+     "n": 6,
+     "pSpread": 0,
+     "pErr": 51.805,
+     "bgx": 1
+    },
+    {
+     "f": 1,
+     "n": 6,
+     "pSpread": 0,
+     "pErr": 76.364,
+     "bgx": 1
+    },
+    {
+     "f": 2,
+     "n": 6,
+     "pSpread": 0,
+     "pErr": 0,
+     "bgx": 1
+    },
+    {
+     "f": 3,
+     "n": 6,
+     "pSpread": 0,
+     "pErr": 0,
+     "bgx": 1
+    },
+    {
+     "f": 4,
+     "n": 6,
+     "pSpread": 0,
+     "pErr": 0,
+     "bgx": 1
+    },
+    {
+     "f": 5,
+     "n": 6,
+     "pSpread": 0,
+     "pErr": 0,
+     "bgx": 1
+    }
+   ]
+  },
+  {
+   "y": 131644,
+   "frames": [
+    {
+     "f": 0,
+     "n": 7,
+     "pSpread": 0,
+     "pErr": 159.698,
+     "bgx": 1
+    },
+    {
+     "f": 1,
+     "n": 7,
+     "pSpread": 0,
+     "pErr": 0,
+     "bgx": 1
+    },
+    {
+     "f": 2,
+     "n": 7,
+     "pSpread": 0,
+     "pErr": 0,
+     "bgx": 1
+    },
+    {
+     "f": 3,
+     "n": 7,
+     "pSpread": 0,
+     "pErr": 0,
+     "bgx": 1
+    },
+    {
+     "f": 4,
+     "n": 7,
+     "pSpread": 0,
+     "pErr": 0,
+     "bgx": 1
+    },
+    {
+     "f": 5,
+     "n": 7,
+     "pSpread": 0,
+     "pErr": 0,
+     "bgx": 1
+    }
+   ]
+  }
+ ],
+ "p1_sync_scroll_summary": {
+  "maxPSpread": 0,
+  "maxPErrVsTimeline": 169.354,
+  "framesWithBgxMismatch": 0,
+  "framesTotal": 60,
+  "byFrame": [
+   {
+    "f": 0,
+    "maxPSpread": 0,
+    "maxPErr": 169.354
+   },
+   {
+    "f": 1,
+    "maxPSpread": 0,
+    "maxPErr": 151.153
+   },
+   {
+    "f": 2,
+    "maxPSpread": 0,
+    "maxPErr": 0
+   },
+   {
+    "f": 3,
+    "maxPSpread": 0,
+    "maxPErr": 0
+   },
+   {
+    "f": 4,
+    "maxPSpread": 0,
+    "maxPErr": 0
+   },
+   {
+    "f": 5,
+    "maxPSpread": 0,
+    "maxPErr": 0
+   }
+  ]
+ },
+ "p1_sync_partial_overlap": {
+  "n": 7,
+  "pSpread": 0,
+  "pFirst": 98.0773,
+  "pExpected": 98.077,
+  "pErrVsTimeline": 0,
+  "colorSpread": [
+   0,
+   0,
+   0
+  ],
+  "colorFirst": "rgb(236, 239, 243)",
+  "bgxDistinct": 1,
+  "bgDistinct": 1,
+  "ulDistinct": 1
+ },
+ "p1_audit_mid": {
+  "total": 2000,
+  "withAnim": 10,
+  "inView": 7,
+  "inViewAnim": 7,
+  "near": 10,
+  "nearAnim": 10,
+  "farWithAttr": 0,
+  "farWithAnimations": 0,
+  "nearWithoutAttr": 0,
+  "withFw": 0,
+  "withFwInView": 0,
+  "docAnimations": 20,
+  "rootAnimations": 0,
+  "rootHasSkzA": true,
+  "scrollY": 135311
+ },
+ "p1_dynamic_insert": {
+  "headAnim": [
+   true,
+   true,
+   true,
+   true,
+   true
+  ],
+  "headAnimations": [
+   2,
+   2,
+   2,
+   2,
+   2
+  ],
+  "tailAnim": [
+   false,
+   false,
+   false,
+   false,
+   false
+  ],
+  "spread": {
+   "n": 6,
+   "pSpread": 0,
+   "pFirst": 79.4567,
+   "pExpected": 79.457,
+   "pErrVsTimeline": 0,
+   "colorSpread": [
+    0,
+    0,
+    0
+   ],
+   "colorFirst": "rgb(235, 238, 242)",
+   "bgxDistinct": 1,
+   "bgDistinct": 1,
+   "ulDistinct": 1
+  }
+ },
+ "p1_dynamic_remove": {
+  "total": 2005,
+  "withAnim": 8,
+  "inView": 6,
+  "inViewAnim": 6,
+  "near": 8,
+  "nearAnim": 8,
+  "farWithAttr": 0,
+  "farWithAnimations": 0,
+  "nearWithoutAttr": 0,
+  "withFw": 0,
+  "withFwInView": 0,
+  "docAnimations": 16,
+  "rootAnimations": 0,
+  "rootHasSkzA": true,
+  "scrollY": 0
+ },
+ "p1_dark_sample": {
+  "rows0": {
+   "p": 92.83,
+   "c": "rgb(55, 65, 81)",
+   "bgx": "1173.37px",
+   "bg": "rgb(55, 65, 81)",
+   "ul": "rgb(0, 0, 0)"
+  },
+  "far": {
+   "bg": "rgb(55, 65, 81)",
+   "bgImg": "linear-gradient(100deg, rgba(0, 0, 0, 0) 0px, rgb(75, 85, 99) 50%, rgba(0, 0, 0, 0) 100%)",
+   "colorVar": "#374151"
+  }
+ },
+ "p1_light_sample": {
+  "rows0": {
+   "p": 15.4648,
+   "c": "rgb(225, 228, 233)",
+   "bgx": "195.475px",
+   "bg": "rgb(217, 221, 227)",
+   "ul": "rgb(0, 0, 0)"
+  },
+  "far": {
+   "bg": "rgb(217, 221, 227)",
+   "bgImg": "linear-gradient(100deg, rgba(0, 0, 0, 0) 0px, rgb(236, 239, 243) 50%, rgba(0, 0, 0, 0) 100%)"
+  }
+ },
+ "p1_effect_switch_to_pulse": {
+  "audit": {
+   "inView": 6,
+   "inViewAnim": 6,
+   "withFw": 0,
+   "docAnimations": 8
+  },
+  "c1": "rgb(235, 238, 242)",
+  "c2": "rgb(229, 233, 237)",
+  "changed": true
+ },
+ "p1_release": {
+  "skzAnimLeft": 0,
+  "docAnimations": 0,
+  "rootAttrs": [
+   "id"
+  ]
+ },
+ "p1_reenable": {
+  "inView": 6,
+  "inViewAnim": 6,
+  "docAnimations": 8
+ },
+ "p2_audit_top": {
+  "total": 2000,
+  "withAnim": 8,
+  "inView": 6,
+  "inViewAnim": 6,
+  "near": 8,
+  "nearAnim": 8,
+  "farWithAttr": 0,
+  "farWithAnimations": 0,
+  "nearWithoutAttr": 0,
+  "withFw": 0,
+  "withFwInView": 0,
+  "docAnimations": 8,
+  "rootAnimations": 0,
+  "rootHasSkzA": true,
+  "scrollY": 0
+ },
+ "p2_motion": {
+  "c1": "rgb(218, 222, 228)",
+  "c2": "rgb(227, 231, 236)",
+  "ul1": "rgb(218, 222, 228)",
+  "ul2": "rgb(227, 231, 236)",
+  "changed": true
+ },
+ "p2_far_card1000": {
+  "hasAttr": false,
+  "animations": 0,
+  "c": "rgb(217, 221, 227)",
+  "h3bg": "rgba(0, 0, 0, 0)"
+ },
+ "p2_pulse_range_light": {
+  "lo": [
+   217,
+   221,
+   227
+  ],
+  "hi": [
+   236,
+   239,
+   243
+  ],
+  "n": 199
+ },
+ "p2_pulse_range_dark": {
+  "lo": [
+   55,
+   65,
+   81
+  ],
+  "hi": [
+   75,
+   85,
+   99
+  ],
+  "n": 198
+ },
+ "p2_sync_scroll_summary": {
+  "maxChannelSpread": 0,
+  "framesWithUlMismatch": 0,
+  "framesTotal": 60
+ },
+ "p2_sync_scroll_perFrame": [
+  {
+   "f": 0,
+   "maxChannelSpread": 0
+  },
+  {
+   "f": 1,
+   "maxChannelSpread": 0
+  },
+  {
+   "f": 2,
+   "maxChannelSpread": 0
+  },
+  {
+   "f": 3,
+   "maxChannelSpread": 0
+  },
+  {
+   "f": 4,
+   "maxChannelSpread": 0
+  },
+  {
+   "f": 5,
+   "maxChannelSpread": 0
+  }
+ ],
+ "p3_cur_audit_top": {
+  "total": 2000,
+  "withAnim": 0,
+  "inView": 6,
+  "inViewAnim": 0,
+  "near": 8,
+  "nearAnim": 0,
+  "farWithAttr": 0,
+  "farWithAnimations": 0,
+  "nearWithoutAttr": 8,
+  "withFw": 1992,
+  "withFwInView": 0,
+  "docAnimations": 2,
+  "rootAnimations": 2,
+  "rootHasSkzA": false,
+  "scrollY": 0
+ },
+ "p4_scroll_2000_cur-shimmer": [
+  {
+   "px": 40,
+   "frames": 179,
+   "fps": 59.7,
+   "medMs": 16.7,
+   "p95Ms": 16.9,
+   "maxMs": 17.1,
+   "over20": 0,
+   "over33": 0,
+   "longTasks": 0,
+   "ioCalls": 0,
+   "ioEntries": 0,
+   "ioEnter": 0,
+   "ioTotalMs": 0,
+   "ioMaxMs": 0,
+   "ioAvgMs": 0
+  },
+  {
+   "px": 40,
+   "frames": 179,
+   "fps": 59.8,
+   "medMs": 16.7,
+   "p95Ms": 16.9,
+   "maxMs": 17,
+   "over20": 0,
+   "over33": 0,
+   "longTasks": 0,
+   "ioCalls": 0,
+   "ioEntries": 0,
+   "ioEnter": 0,
+   "ioTotalMs": 0,
+   "ioMaxMs": 0,
+   "ioAvgMs": 0
+  },
+  {
+   "px": 40,
+   "frames": 179,
+   "fps": 59.7,
+   "medMs": 16.7,
+   "p95Ms": 16.9,
+   "maxMs": 22.1,
+   "over20": 1,
+   "over33": 0,
+   "longTasks": 0,
+   "ioCalls": 0,
+   "ioEntries": 0,
+   "ioEnter": 0,
+   "ioTotalMs": 0,
+   "ioMaxMs": 0,
+   "ioAvgMs": 0
+  },
+  {
+   "px": 160,
+   "frames": 178,
+   "fps": 59.4,
+   "medMs": 16.7,
+   "p95Ms": 17,
+   "maxMs": 35.2,
+   "over20": 4,
+   "over33": 1,
+   "longTasks": 0,
+   "ioCalls": 0,
+   "ioEntries": 0,
+   "ioEnter": 0,
+   "ioTotalMs": 0,
+   "ioMaxMs": 0,
+   "ioAvgMs": 0
+  },
+  {
+   "px": 160,
+   "frames": 173,
+   "fps": 57.7,
+   "medMs": 16.7,
+   "p95Ms": 25.5,
+   "maxMs": 31.9,
+   "over20": 13,
+   "over33": 0,
+   "longTasks": 0,
+   "ioCalls": 0,
+   "ioEntries": 0,
+   "ioEnter": 0,
+   "ioTotalMs": 0,
+   "ioMaxMs": 0,
+   "ioAvgMs": 0
+  },
+  {
+   "px": 160,
+   "frames": 156,
+   "fps": 51.9,
+   "medMs": 16.7,
+   "p95Ms": 33.5,
+   "maxMs": 43.3,
+   "over20": 30,
+   "over33": 11,
+   "longTasks": 0,
+   "ioCalls": 0,
+   "ioEntries": 0,
+   "ioEnter": 0,
+   "ioTotalMs": 0,
+   "ioMaxMs": 0,
+   "ioAvgMs": 0
+  }
+ ],
+ "p4_jump_2000_cur-shimmer": [
+  [
+   "6/6",
+   "6/6",
+   "0/6",
+   "0/6",
+   "0/6",
+   "0/6",
+   "0/6",
+   "0/6",
+   "0/6",
+   "0/6",
+   "0/6",
+   "0/6"
+  ],
+  [
+   "6/6",
+   "6/6",
+   "0/6",
+   "0/6",
+   "0/6",
+   "0/6",
+   "0/6",
+   "0/6",
+   "0/6",
+   "0/6",
+   "0/6",
+   "0/6"
+  ],
+  [
+   "6/6",
+   "6/6",
+   "0/6",
+   "0/6",
+   "0/6",
+   "0/6",
+   "0/6",
+   "0/6",
+   "0/6",
+   "0/6",
+   "0/6",
+   "0/6"
+  ]
+ ],
+ "p4_scroll_2000_A-shimmer": [
+  {
+   "px": 40,
+   "frames": 178,
+   "fps": 59.3,
+   "medMs": 16.7,
+   "p95Ms": 17,
+   "maxMs": 25.3,
+   "over20": 3,
+   "over33": 0,
+   "longTasks": 0,
+   "ioCalls": 73,
+   "ioEntries": 104,
+   "ioEnter": 53,
+   "ioTotalMs": 16.9,
+   "ioMaxMs": 0.6,
+   "ioAvgMs": 0.232
+  },
+  {
+   "px": 40,
+   "frames": 179,
+   "fps": 59.7,
+   "medMs": 16.7,
+   "p95Ms": 17,
+   "maxMs": 17.1,
+   "over20": 0,
+   "over33": 0,
+   "longTasks": 0,
+   "ioCalls": 74,
+   "ioEntries": 104,
+   "ioEnter": 53,
+   "ioTotalMs": 17.3,
+   "ioMaxMs": 0.6,
+   "ioAvgMs": 0.234
+  },
+  {
+   "px": 40,
+   "frames": 177,
+   "fps": 59,
+   "medMs": 16.7,
+   "p95Ms": 18.8,
+   "maxMs": 31.1,
+   "over20": 5,
+   "over33": 0,
+   "longTasks": 0,
+   "ioCalls": 70,
+   "ioEntries": 102,
+   "ioEnter": 52,
+   "ioTotalMs": 22.4,
+   "ioMaxMs": 1.1,
+   "ioAvgMs": 0.32
+  },
+  {
+   "px": 160,
+   "frames": 180,
+   "fps": 59.8,
+   "medMs": 16.7,
+   "p95Ms": 17,
+   "maxMs": 24.6,
+   "over20": 4,
+   "over33": 0,
+   "longTasks": 0,
+   "ioCalls": 175,
+   "ioEntries": 424,
+   "ioEnter": 213,
+   "ioTotalMs": 82.6,
+   "ioMaxMs": 5,
+   "ioAvgMs": 0.472
+  },
+  {
+   "px": 160,
+   "frames": 179,
+   "fps": 59.7,
+   "medMs": 16.7,
+   "p95Ms": 17,
+   "maxMs": 17.2,
+   "over20": 0,
+   "over33": 0,
+   "longTasks": 0,
+   "ioCalls": 179,
+   "ioEntries": 422,
+   "ioEnter": 212,
+   "ioTotalMs": 87.6,
+   "ioMaxMs": 1.2,
+   "ioAvgMs": 0.489
+  },
+  {
+   "px": 160,
+   "frames": 177,
+   "fps": 59,
+   "medMs": 16.7,
+   "p95Ms": 18.3,
+   "maxMs": 30,
+   "over20": 6,
+   "over33": 0,
+   "longTasks": 0,
+   "ioCalls": 167,
+   "ioEntries": 416,
+   "ioEnter": 209,
+   "ioTotalMs": 108.1,
+   "ioMaxMs": 2.1,
+   "ioAvgMs": 0.647
+  }
+ ],
+ "p4_jump_2000_A-shimmer": [
+  [
+   "6/6",
+   "6/6",
+   "0/6",
+   "0/6",
+   "0/6",
+   "0/6",
+   "0/6",
+   "0/6",
+   "0/6",
+   "0/6",
+   "0/6",
+   "0/6"
+  ],
+  [
+   "6/6",
+   "6/6",
+   "0/6",
+   "0/6",
+   "0/6",
+   "0/6",
+   "0/6",
+   "0/6",
+   "0/6",
+   "0/6",
+   "0/6",
+   "0/6"
+  ],
+  [
+   "6/6",
+   "6/6",
+   "0/6",
+   "0/6",
+   "0/6",
+   "0/6",
+   "0/6",
+   "0/6",
+   "0/6",
+   "0/6",
+   "0/6",
+   "0/6"
+  ]
+ ],
+ "p4_scroll_2000_cur-pulse": [
+  {
+   "px": 40,
+   "frames": 180,
+   "fps": 59.8,
+   "medMs": 16.7,
+   "p95Ms": 17,
+   "maxMs": 17.6,
+   "over20": 0,
+   "over33": 0,
+   "longTasks": 0,
+   "ioCalls": 0,
+   "ioEntries": 0,
+   "ioEnter": 0,
+   "ioTotalMs": 0,
+   "ioMaxMs": 0,
+   "ioAvgMs": 0
+  },
+  {
+   "px": 40,
+   "frames": 179,
+   "fps": 59.7,
+   "medMs": 16.7,
+   "p95Ms": 17,
+   "maxMs": 17.2,
+   "over20": 0,
+   "over33": 0,
+   "longTasks": 0,
+   "ioCalls": 0,
+   "ioEntries": 0,
+   "ioEnter": 0,
+   "ioTotalMs": 0,
+   "ioMaxMs": 0,
+   "ioAvgMs": 0
+  },
+  {
+   "px": 40,
+   "frames": 179,
+   "fps": 59.7,
+   "medMs": 16.7,
+   "p95Ms": 16.9,
+   "maxMs": 17.1,
+   "over20": 0,
+   "over33": 0,
+   "longTasks": 0,
+   "ioCalls": 0,
+   "ioEntries": 0,
+   "ioEnter": 0,
+   "ioTotalMs": 0,
+   "ioMaxMs": 0,
+   "ioAvgMs": 0
+  },
+  {
+   "px": 160,
+   "frames": 179,
+   "fps": 59.7,
+   "medMs": 16.7,
+   "p95Ms": 17,
+   "maxMs": 17.5,
+   "over20": 0,
+   "over33": 0,
+   "longTasks": 0,
+   "ioCalls": 0,
+   "ioEntries": 0,
+   "ioEnter": 0,
+   "ioTotalMs": 0,
+   "ioMaxMs": 0,
+   "ioAvgMs": 0
+  },
+  {
+   "px": 160,
+   "frames": 179,
+   "fps": 59.7,
+   "medMs": 16.7,
+   "p95Ms": 17,
+   "maxMs": 29.8,
+   "over20": 1,
+   "over33": 0,
+   "longTasks": 0,
+   "ioCalls": 0,
+   "ioEntries": 0,
+   "ioEnter": 0,
+   "ioTotalMs": 0,
+   "ioMaxMs": 0,
+   "ioAvgMs": 0
+  },
+  {
+   "px": 160,
+   "frames": 179,
+   "fps": 59.7,
+   "medMs": 16.7,
+   "p95Ms": 17,
+   "maxMs": 17.2,
+   "over20": 0,
+   "over33": 0,
+   "longTasks": 0,
+   "ioCalls": 0,
+   "ioEntries": 0,
+   "ioEnter": 0,
+   "ioTotalMs": 0,
+   "ioMaxMs": 0,
+   "ioAvgMs": 0
+  }
+ ],
+ "p4_jump_2000_cur-pulse": [
+  [
+   "6/6",
+   "0/6",
+   "0/6",
+   "0/6",
+   "0/6",
+   "0/6",
+   "0/6",
+   "0/6",
+   "0/6",
+   "0/6",
+   "0/6",
+   "0/6"
+  ],
+  [
+   "6/6",
+   "0/6",
+   "0/6",
+   "0/6",
+   "0/6",
+   "0/6",
+   "0/6",
+   "0/6",
+   "0/6",
+   "0/6",
+   "0/6",
+   "0/6"
+  ],
+  [
+   "6/6",
+   "0/6",
+   "0/6",
+   "0/6",
+   "0/6",
+   "0/6",
+   "0/6",
+   "0/6",
+   "0/6",
+   "0/6",
+   "0/6",
+   "0/6"
+  ]
+ ],
+ "p4_scroll_2000_A-pulse": [
+  {
+   "px": 40,
+   "frames": 179,
+   "fps": 59.6,
+   "medMs": 16.7,
+   "p95Ms": 17.1,
+   "maxMs": 18,
+   "over20": 0,
+   "over33": 0,
+   "longTasks": 0,
+   "ioCalls": 74,
+   "ioEntries": 104,
+   "ioEnter": 53,
+   "ioTotalMs": 34,
+   "ioMaxMs": 2,
+   "ioAvgMs": 0.459
+  },
+  {
+   "px": 40,
+   "frames": 179,
+   "fps": 59.7,
+   "medMs": 16.7,
+   "p95Ms": 17.1,
+   "maxMs": 17.5,
+   "over20": 0,
+   "over33": 0,
+   "longTasks": 0,
+   "ioCalls": 74,
+   "ioEntries": 104,
+   "ioEnter": 53,
+   "ioTotalMs": 34.5,
+   "ioMaxMs": 2.2,
+   "ioAvgMs": 0.466
+  },
+  {
+   "px": 40,
+   "frames": 179,
+   "fps": 59.7,
+   "medMs": 16.7,
+   "p95Ms": 17,
+   "maxMs": 17.3,
+   "over20": 0,
+   "over33": 0,
+   "longTasks": 0,
+   "ioCalls": 74,
+   "ioEntries": 104,
+   "ioEnter": 53,
+   "ioTotalMs": 45.3,
+   "ioMaxMs": 1.6,
+   "ioAvgMs": 0.612
+  },
+  {
+   "px": 160,
+   "frames": 147,
+   "fps": 49,
+   "medMs": 16.7,
+   "p95Ms": 43.6,
+   "maxMs": 108.3,
+   "over20": 21,
+   "over33": 11,
+   "longTasks": 0,
+   "ioCalls": 143,
+   "ioEntries": 346,
+   "ioEnter": 174,
+   "ioTotalMs": 135.8,
+   "ioMaxMs": 2.7,
+   "ioAvgMs": 0.95
+  },
+  {
+   "px": 160,
+   "frames": 163,
+   "fps": 54.1,
+   "medMs": 16.7,
+   "p95Ms": 30.9,
+   "maxMs": 76.9,
+   "over20": 13,
+   "over33": 8,
+   "longTasks": 0,
+   "ioCalls": 161,
+   "ioEntries": 384,
+   "ioEnter": 193,
+   "ioTotalMs": 112.1,
+   "ioMaxMs": 3.7,
+   "ioAvgMs": 0.696
+  },
+  {
+   "px": 160,
+   "frames": 179,
+   "fps": 59.6,
+   "medMs": 16.7,
+   "p95Ms": 17.7,
+   "maxMs": 20,
+   "over20": 0,
+   "over33": 0,
+   "longTasks": 0,
+   "ioCalls": 177,
+   "ioEntries": 422,
+   "ioEnter": 212,
+   "ioTotalMs": 237,
+   "ioMaxMs": 5.3,
+   "ioAvgMs": 1.339
+  }
+ ],
+ "p4_jump_2000_A-pulse": [
+  [
+   "6/6",
+   "0/6",
+   "0/6",
+   "0/6",
+   "0/6",
+   "0/6",
+   "0/6",
+   "0/6",
+   "0/6",
+   "0/6",
+   "0/6",
+   "0/6"
+  ],
+  [
+   "6/6",
+   "0/6",
+   "0/6",
+   "0/6",
+   "0/6",
+   "0/6",
+   "0/6",
+   "0/6",
+   "0/6",
+   "0/6",
+   "0/6",
+   "0/6"
+  ],
+  [
+   "6/6",
+   "0/6",
+   "0/6",
+   "0/6",
+   "0/6",
+   "0/6",
+   "0/6",
+   "0/6",
+   "0/6",
+   "0/6",
+   "0/6",
+   "0/6"
+  ]
+ ],
+ "p4_scroll_500_cur-shimmer": [
+  {
+   "px": 40,
+   "frames": 179,
+   "fps": 59.7,
+   "medMs": 16.7,
+   "p95Ms": 16.9,
+   "maxMs": 17.2,
+   "over20": 0,
+   "over33": 0,
+   "longTasks": 0,
+   "ioCalls": 0,
+   "ioEntries": 0,
+   "ioEnter": 0,
+   "ioTotalMs": 0,
+   "ioMaxMs": 0,
+   "ioAvgMs": 0
+  },
+  {
+   "px": 40,
+   "frames": 179,
+   "fps": 59.7,
+   "medMs": 16.7,
+   "p95Ms": 16.9,
+   "maxMs": 17.3,
+   "over20": 0,
+   "over33": 0,
+   "longTasks": 0,
+   "ioCalls": 0,
+   "ioEntries": 0,
+   "ioEnter": 0,
+   "ioTotalMs": 0,
+   "ioMaxMs": 0,
+   "ioAvgMs": 0
+  },
+  {
+   "px": 40,
+   "frames": 178,
+   "fps": 59.3,
+   "medMs": 16.7,
+   "p95Ms": 17.3,
+   "maxMs": 24.1,
+   "over20": 4,
+   "over33": 0,
+   "longTasks": 0,
+   "ioCalls": 0,
+   "ioEntries": 0,
+   "ioEnter": 0,
+   "ioTotalMs": 0,
+   "ioMaxMs": 0,
+   "ioAvgMs": 0
+  },
+  {
+   "px": 160,
+   "frames": 177,
+   "fps": 59,
+   "medMs": 16.7,
+   "p95Ms": 20.8,
+   "maxMs": 34.2,
+   "over20": 11,
+   "over33": 1,
+   "longTasks": 0,
+   "ioCalls": 0,
+   "ioEntries": 0,
+   "ioEnter": 0,
+   "ioTotalMs": 0,
+   "ioMaxMs": 0,
+   "ioAvgMs": 0
+  },
+  {
+   "px": 160,
+   "frames": 179,
+   "fps": 59.7,
+   "medMs": 16.7,
+   "p95Ms": 16.9,
+   "maxMs": 17,
+   "over20": 0,
+   "over33": 0,
+   "longTasks": 0,
+   "ioCalls": 0,
+   "ioEntries": 0,
+   "ioEnter": 0,
+   "ioTotalMs": 0,
+   "ioMaxMs": 0,
+   "ioAvgMs": 0
+  },
+  {
+   "px": 160,
+   "frames": 179,
+   "fps": 59.7,
+   "medMs": 16.7,
+   "p95Ms": 16.9,
+   "maxMs": 17.1,
+   "over20": 0,
+   "over33": 0,
+   "longTasks": 0,
+   "ioCalls": 0,
+   "ioEntries": 0,
+   "ioEnter": 0,
+   "ioTotalMs": 0,
+   "ioMaxMs": 0,
+   "ioAvgMs": 0
+  }
+ ],
+ "p4_jump_500_cur-shimmer": [
+  [
+   "6/6",
+   "0/6",
+   "0/6",
+   "0/6",
+   "0/6",
+   "0/6",
+   "0/6",
+   "0/6",
+   "0/6",
+   "0/6",
+   "0/6",
+   "0/6"
+  ],
+  [
+   "6/6",
+   "0/6",
+   "0/6",
+   "0/6",
+   "0/6",
+   "0/6",
+   "0/6",
+   "0/6",
+   "0/6",
+   "0/6",
+   "0/6",
+   "0/6"
+  ],
+  [
+   "6/6",
+   "0/6",
+   "0/6",
+   "0/6",
+   "0/6",
+   "0/6",
+   "0/6",
+   "0/6",
+   "0/6",
+   "0/6",
+   "0/6",
+   "0/6"
+  ]
+ ],
+ "p4_scroll_500_A-shimmer": [
+  {
+   "px": 40,
+   "frames": 179,
+   "fps": 59.7,
+   "medMs": 16.7,
+   "p95Ms": 16.9,
+   "maxMs": 17.5,
+   "over20": 0,
+   "over33": 0,
+   "longTasks": 0,
+   "ioCalls": 74,
+   "ioEntries": 104,
+   "ioEnter": 53,
+   "ioTotalMs": 13.9,
+   "ioMaxMs": 0.5,
+   "ioAvgMs": 0.188
+  },
+  {
+   "px": 40,
+   "frames": 179,
+   "fps": 59.7,
+   "medMs": 16.7,
+   "p95Ms": 16.9,
+   "maxMs": 17.5,
+   "over20": 0,
+   "over33": 0,
+   "longTasks": 0,
+   "ioCalls": 74,
+   "ioEntries": 104,
+   "ioEnter": 53,
+   "ioTotalMs": 12.7,
+   "ioMaxMs": 0.4,
+   "ioAvgMs": 0.172
+  },
+  {
+   "px": 40,
+   "frames": 179,
+   "fps": 59.7,
+   "medMs": 16.7,
+   "p95Ms": 16.9,
+   "maxMs": 17.4,
+   "over20": 0,
+   "over33": 0,
+   "longTasks": 0,
+   "ioCalls": 74,
+   "ioEntries": 104,
+   "ioEnter": 53,
+   "ioTotalMs": 12.4,
+   "ioMaxMs": 0.5,
+   "ioAvgMs": 0.168
+  },
+  {
+   "px": 160,
+   "frames": 179,
+   "fps": 59.7,
+   "medMs": 16.7,
+   "p95Ms": 16.9,
+   "maxMs": 17.1,
+   "over20": 0,
+   "over33": 0,
+   "longTasks": 0,
+   "ioCalls": 179,
+   "ioEntries": 422,
+   "ioEnter": 212,
+   "ioTotalMs": 60.6,
+   "ioMaxMs": 0.8,
+   "ioAvgMs": 0.339
+  },
+  {
+   "px": 160,
+   "frames": 179,
+   "fps": 59.7,
+   "medMs": 16.7,
+   "p95Ms": 16.9,
+   "maxMs": 17.3,
+   "over20": 0,
+   "over33": 0,
+   "longTasks": 0,
+   "ioCalls": 179,
+   "ioEntries": 422,
+   "ioEnter": 212,
+   "ioTotalMs": 67.1,
+   "ioMaxMs": 0.8,
+   "ioAvgMs": 0.375
+  },
+  {
+   "px": 160,
+   "frames": 180,
+   "fps": 59.9,
+   "medMs": 16.7,
+   "p95Ms": 16.9,
+   "maxMs": 17.1,
+   "over20": 0,
+   "over33": 0,
+   "longTasks": 0,
+   "ioCalls": 180,
+   "ioEntries": 424,
+   "ioEnter": 213,
+   "ioTotalMs": 75,
+   "ioMaxMs": 1,
+   "ioAvgMs": 0.417
+  }
+ ],
+ "p4_jump_500_A-shimmer": [
+  [
+   "6/6",
+   "0/6",
+   "0/6",
+   "0/6",
+   "0/6",
+   "0/6",
+   "0/6",
+   "0/6",
+   "0/6",
+   "0/6",
+   "0/6",
+   "0/6"
+  ],
+  [
+   "6/6",
+   "0/6",
+   "0/6",
+   "0/6",
+   "0/6",
+   "0/6",
+   "0/6",
+   "0/6",
+   "0/6",
+   "0/6",
+   "0/6",
+   "0/6"
+  ],
+  [
+   "6/6",
+   "0/6",
+   "0/6",
+   "0/6",
+   "0/6",
+   "0/6",
+   "0/6",
+   "0/6",
+   "0/6",
+   "0/6",
+   "0/6",
+   "0/6"
+  ]
+ ],
+ "p4_scroll_500_cur-pulse": [
+  {
+   "px": 40,
+   "frames": 179,
+   "fps": 59.7,
+   "medMs": 16.7,
+   "p95Ms": 16.9,
+   "maxMs": 18,
+   "over20": 0,
+   "over33": 0,
+   "longTasks": 0,
+   "ioCalls": 0,
+   "ioEntries": 0,
+   "ioEnter": 0,
+   "ioTotalMs": 0,
+   "ioMaxMs": 0,
+   "ioAvgMs": 0
+  },
+  {
+   "px": 40,
+   "frames": 179,
+   "fps": 59.6,
+   "medMs": 16.7,
+   "p95Ms": 16.8,
+   "maxMs": 21.5,
+   "over20": 1,
+   "over33": 0,
+   "longTasks": 0,
+   "ioCalls": 0,
+   "ioEntries": 0,
+   "ioEnter": 0,
+   "ioTotalMs": 0,
+   "ioMaxMs": 0,
+   "ioAvgMs": 0
+  },
+  {
+   "px": 40,
+   "frames": 179,
+   "fps": 59.7,
+   "medMs": 16.7,
+   "p95Ms": 16.9,
+   "maxMs": 17,
+   "over20": 0,
+   "over33": 0,
+   "longTasks": 0,
+   "ioCalls": 0,
+   "ioEntries": 0,
+   "ioEnter": 0,
+   "ioTotalMs": 0,
+   "ioMaxMs": 0,
+   "ioAvgMs": 0
+  },
+  {
+   "px": 160,
+   "frames": 179,
+   "fps": 59.7,
+   "medMs": 16.7,
+   "p95Ms": 16.9,
+   "maxMs": 17.1,
+   "over20": 0,
+   "over33": 0,
+   "longTasks": 0,
+   "ioCalls": 0,
+   "ioEntries": 0,
+   "ioEnter": 0,
+   "ioTotalMs": 0,
+   "ioMaxMs": 0,
+   "ioAvgMs": 0
+  },
+  {
+   "px": 160,
+   "frames": 179,
+   "fps": 59.6,
+   "medMs": 16.7,
+   "p95Ms": 16.8,
+   "maxMs": 29.6,
+   "over20": 1,
+   "over33": 0,
+   "longTasks": 0,
+   "ioCalls": 0,
+   "ioEntries": 0,
+   "ioEnter": 0,
+   "ioTotalMs": 0,
+   "ioMaxMs": 0,
+   "ioAvgMs": 0
+  },
+  {
+   "px": 160,
+   "frames": 179,
+   "fps": 59.7,
+   "medMs": 16.7,
+   "p95Ms": 16.9,
+   "maxMs": 17.2,
+   "over20": 0,
+   "over33": 0,
+   "longTasks": 0,
+   "ioCalls": 0,
+   "ioEntries": 0,
+   "ioEnter": 0,
+   "ioTotalMs": 0,
+   "ioMaxMs": 0,
+   "ioAvgMs": 0
+  }
+ ],
+ "p4_jump_500_cur-pulse": [
+  [
+   "6/6",
+   "0/6",
+   "0/6",
+   "0/6",
+   "0/6",
+   "0/6",
+   "0/6",
+   "0/6",
+   "0/6",
+   "0/6",
+   "0/6",
+   "0/6"
+  ],
+  [
+   "6/6",
+   "0/6",
+   "0/6",
+   "0/6",
+   "0/6",
+   "0/6",
+   "0/6",
+   "0/6",
+   "0/6",
+   "0/6",
+   "0/6",
+   "0/6"
+  ],
+  [
+   "6/6",
+   "0/6",
+   "0/6",
+   "0/6",
+   "0/6",
+   "0/6",
+   "0/6",
+   "0/6",
+   "0/6",
+   "0/6",
+   "0/6",
+   "0/6"
+  ]
+ ],
+ "p4_scroll_500_A-pulse": [
+  {
+   "px": 40,
+   "frames": 179,
+   "fps": 59.6,
+   "medMs": 16.7,
+   "p95Ms": 16.9,
+   "maxMs": 17.2,
+   "over20": 0,
+   "over33": 0,
+   "longTasks": 0,
+   "ioCalls": 74,
+   "ioEntries": 104,
+   "ioEnter": 53,
+   "ioTotalMs": 15.3,
+   "ioMaxMs": 0.7,
+   "ioAvgMs": 0.207
+  },
+  {
+   "px": 40,
+   "frames": 179,
+   "fps": 59.7,
+   "medMs": 16.7,
+   "p95Ms": 16.9,
+   "maxMs": 17.3,
+   "over20": 0,
+   "over33": 0,
+   "longTasks": 0,
+   "ioCalls": 74,
+   "ioEntries": 104,
+   "ioEnter": 53,
+   "ioTotalMs": 15.5,
+   "ioMaxMs": 0.6,
+   "ioAvgMs": 0.209
+  },
+  {
+   "px": 40,
+   "frames": 179,
+   "fps": 59.7,
+   "medMs": 16.7,
+   "p95Ms": 16.9,
+   "maxMs": 17.1,
+   "over20": 0,
+   "over33": 0,
+   "longTasks": 0,
+   "ioCalls": 74,
+   "ioEntries": 104,
+   "ioEnter": 53,
+   "ioTotalMs": 14.5,
+   "ioMaxMs": 0.5,
+   "ioAvgMs": 0.196
+  },
+  {
+   "px": 160,
+   "frames": 179,
+   "fps": 59.6,
+   "medMs": 16.7,
+   "p95Ms": 16.9,
+   "maxMs": 17.1,
+   "over20": 0,
+   "over33": 0,
+   "longTasks": 0,
+   "ioCalls": 179,
+   "ioEntries": 422,
+   "ioEnter": 212,
+   "ioTotalMs": 68.4,
+   "ioMaxMs": 1,
+   "ioAvgMs": 0.382
+  },
+  {
+   "px": 160,
+   "frames": 179,
+   "fps": 59.6,
+   "medMs": 16.7,
+   "p95Ms": 16.9,
+   "maxMs": 17.3,
+   "over20": 0,
+   "over33": 0,
+   "longTasks": 0,
+   "ioCalls": 179,
+   "ioEntries": 422,
+   "ioEnter": 212,
+   "ioTotalMs": 72.7,
+   "ioMaxMs": 1,
+   "ioAvgMs": 0.406
+  },
+  {
+   "px": 160,
+   "frames": 179,
+   "fps": 59.6,
+   "medMs": 16.7,
+   "p95Ms": 16.9,
+   "maxMs": 17.5,
+   "over20": 0,
+   "over33": 0,
+   "longTasks": 0,
+   "ioCalls": 179,
+   "ioEntries": 422,
+   "ioEnter": 212,
+   "ioTotalMs": 64.7,
+   "ioMaxMs": 0.9,
+   "ioAvgMs": 0.361
+  }
+ ],
+ "p4_jump_500_A-pulse": [
+  [
+   "6/6",
+   "0/6",
+   "0/6",
+   "0/6",
+   "0/6",
+   "0/6",
+   "0/6",
+   "0/6",
+   "0/6",
+   "0/6",
+   "0/6",
+   "0/6"
+  ],
+  [
+   "6/6",
+   "0/6",
+   "0/6",
+   "0/6",
+   "0/6",
+   "0/6",
+   "0/6",
+   "0/6",
+   "0/6",
+   "0/6",
+   "0/6",
+   "0/6"
+  ],
+  [
+   "6/6",
+   "0/6",
+   "0/6",
+   "0/6",
+   "0/6",
+   "0/6",
+   "0/6",
+   "0/6",
+   "0/6",
+   "0/6",
+   "0/6",
+   "0/6"
+  ]
+ ]
+}

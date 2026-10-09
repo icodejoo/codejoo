@@ -1,0 +1,11 @@
+[cpu] 41.4,39.7,61.5
+file:///E:/workspaces/codejoo/apps/skeletonizer/demo/.tmp-a5/trace-a5.mjs:13
+const ev = async (e) => { const r = await Promise.race([send("Runtime.evaluate", { expression: e, awaitPromise: true, returnByValue: true }), new Promise((_, rej) => setTimeout(() => rej(new Error("ev 超时 180s: " + e.slice(0, 60))), 180000))]); if (r.result.exceptionDetails) throw new Error(JSON.stringify(r.result.exceptionDetails)); return r.result.result.value; };
+                                                                                                                                                                                                                                                                 ^
+
+TypeError: Cannot read properties of undefined (reading 'exceptionDetails')
+    at ev (file:///E:/workspaces/codejoo/apps/skeletonizer/demo/.tmp-a5/trace-a5.mjs:13:258)
+    at async traceOnce (file:///E:/workspaces/codejoo/apps/skeletonizer/demo/.tmp-a5/trace-a5.mjs:22:18)
+    at async file:///E:/workspaces/codejoo/apps/skeletonizer/demo/.tmp-a5/trace-a5.mjs:49:80
+
+Node.js v24.11.0

@@ -1,0 +1,5 @@
+{"name":"C pulse n=2000 (rerun)","elements":16000,"fps":36.4,"compositor":2.57,"PrePaint":2.8,"Layerize":0.06,"Commit":0.1,"mainBusy":55.07,"UpdateLayoutTree":23.58,"Paint":1.25,"UpdateLayer":0,"gpu":2.12,"HitTest":0.01,"toggleMs":52.4}
+{"name":"C shimmer n=2000 (rerun)","elements":16000,"fps":29.2,"gpu":4.56,"compositor":4.46,"PrePaint":5.38,"Paint":3.02,"Layerize":0.12,"Commit":0.1,"UpdateLayer":0.01,"HitTest":0.01,"mainBusy":68.77,"UpdateLayoutTree":26.35,"toggleMs":55.8}
+{"name":"C fade n=2000 (rerun)","elements":16000,"fps":60.4,"mainBusy":1.27,"compositor":1.79,"gpu":1.34,"UpdateLayoutTree":0.23,"PrePaint":0.01,"Layerize":0,"Commit":0.07,"HitTest":0.01,"toggleMs":68.3}
+{"name":"C2 pulse n=2000 (rerun)","elements":16000,"fps":37.6,"compositor":2.65,"gpu":1.83,"PrePaint":3.25,"Paint":1.38,"Layerize":0.06,"Commit":0.11,"UpdateLayer":0,"mainBusy":53.26,"UpdateLayoutTree":21.96,"HitTest":0.01,"toggleMs":49.8}
+{"name":"C2 shimmer n=2000 (rerun)","elements":16000,"fps":29.6,"compositor":4.01,"PrePaint":5.42,"Paint":3.45,"Layerize":0.11,"Commit":0.1,"UpdateLayer":0.01,"mainBusy":68.47,"UpdateLayoutTree":26.32,"gpu":4.47,"HitTest":0.01,"toggleMs":62.9}

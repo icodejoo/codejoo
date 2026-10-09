@@ -1,0 +1,43 @@
+<!doctype html>
+<html lang="zh"><head><meta charset="utf-8" /><title>perf</title><link id="css" rel="stylesheet" />
+<style>body{font:14px/1.5 system-ui,sans-serif;margin:0}.card{display:flex;gap:8px;padding:8px;border:1px solid #ddd;margin:4px}.card img{width:48px;height:48px;border-radius:50%}</style>
+</head><body><div id="root"></div>
+<script type="module">
+import { Bone, enable } from "../../src/index.ts";
+import "../../src/variants/global.ts"; // 注册 global 方案：enable() 自动挂继承防火墙（现行）
+import { stopFirewall } from "../../src/firewall.ts";
+import { startSchemeA, stopSchemeA, stats, resetStats } from "./scheme-a.js";
+const q = new URLSearchParams(location.search);
+document.getElementById("css").href = `./${q.get("css") || "base"}.css`;
+const root = document.getElementById("root");
+const GIF = Bone.image();
+const nf = () => new Promise((r) => requestAnimationFrame(r));
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+let off = null, opts = {}, modeA = false;
+/** 开启：现行 = 真实 enable()（自动防火墙）；A = enable() 后撤掉防火墙，改挂方案 A */
+const doEnable = () => { off = enable(root, opts); if (modeA) { stopFirewall(root); startSchemeA(root); } };
+const doDisable = () => { stopSchemeA(root); off?.(); off = null; };
+/** 搭场景：n 张卡片（每张约 8 个元素）。spec 是 enable() 选项；spec.a=true 走方案 A */
+window.setup = async (n, spec) => {
+  doDisable();
+  root.innerHTML = Array.from({ length: n }, () => `<div class="card"><img src="${GIF}" alt=""><div><h3>${Bone.text(10)}</h3><p>${Bone.lines(2)}</p><span>${Bone.text(6)}</span> <i class="icon-star"></i><button>${Bone.text(4)}</button></div></div>`).join("");
+  const { a, ...o } = spec || {};
+  opts = o; modeA = !!a;
+  doEnable();
+  await nf(); await nf();
+  return root.querySelectorAll("*").length;
+};
+/** 滚动：top / mid；等观察器回调落地 */
+window.jsDrive = async (mode) => {
+  window.scrollTo(0, mode === "mid" ? document.body.scrollHeight / 2 : 0);
+  await nf(); await nf(); await sleep(300); await nf();
+};
+/** 数 ms 毫秒内的帧数 */
+window.frames = async (ms) => { let f = 0; const end = performance.now() + ms; while (performance.now() < end) { await nf(); f++; } return f; };
+/** 开启耗时：从完全关闭到 enable()（含防火墙/方案 A 挂载）+ 强制样式布局完成 */
+window.toggleCost = async () => { doDisable(); void root.offsetHeight; await nf(); await nf(); const t = performance.now(); doEnable(); void root.offsetHeight; return performance.now() - t; };
+/** 开启到第一帧画完（rAF 后 setTimeout 0）；A 另含观察器首次回调后再一帧 */
+window.toggleFirst = async () => { doDisable(); void root.offsetHeight; await nf(); await nf(); const t = performance.now(); doEnable(); void root.offsetHeight; await nf(); await sleep(0); const first = performance.now() - t; await nf(); await sleep(0); return { first, settled: performance.now() - t }; };
+Object.assign(window, { root, doEnable, doDisable, nf, sleep, aStats: () => stats, aReset: resetStats, getOpts: () => opts, setOpts: (o) => { opts = o; }, startSchemeA, stopSchemeA });
+window.ready = true;
+</script></body></html>

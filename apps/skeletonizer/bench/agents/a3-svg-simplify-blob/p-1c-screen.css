@@ -1,0 +1,517 @@
+@charset "UTF-8";
+/* ===== 兜底层：无条件生效，只用 CSS2.1/3 基础语法，颜色写字面量 =====
+ * 效果：根的直接子元素各自变成一整块灰，后代全部藏起来。
+ * 后面的档位会覆盖掉这一层。
+ * 选择器同时写 [x-ske] 和 x-ske[loading]：自定义元素没升级时 JS 没跑，只能靠属性命中。 */
+/* 自定义元素没升级时是 inline，先变块级 */
+x-ske {
+  display: block;
+}
+
+/* 交互锁（inert 之外的兜底，鼠标和选中） */
+[x-ske] {
+  pointer-events: none !important;
+  -webkit-user-select: none !important;
+  user-select: none !important;
+}
+
+/* 根的直接子元素：整块半透明灰（用渐变图层，退出兜底时只需清掉 background-image） */
+[x-ske] > *:not([x-ske-ignore]),
+x-ske[loading] > *:not([x-ske-ignore]) {
+  background-image: linear-gradient(rgba(128, 128, 128, 0.2), rgba(128, 128, 128, 0.2)) !important;
+  color: transparent !important;
+}
+
+/* 后代藏起来：只藏后代，保住直接子元素自己的背景 */
+[x-ske] > * *,
+x-ske[loading] > * * {
+  visibility: hidden !important;
+}
+
+/* 忽略区恢复鼠标交互和选中（pointer-events 可以在后代上重新打开） */
+[x-ske] [x-ske-ignore] {
+  pointer-events: auto !important;
+  -webkit-user-select: auto !important;
+  user-select: auto !important;
+}
+
+/* x-ske-ignore 例外：保持原样可见 */
+[x-ske] [x-ske-ignore],
+[x-ske] [x-ske-ignore] *,
+x-ske[loading] [x-ske-ignore],
+x-ske[loading] [x-ske-ignore] * {
+  visibility: visible !important;
+}
+
+/* ===== 第 0 档：默认浏览器支持 CSS 变量（Safari 9.1+/Chrome 49+/Firefox 31+），不再做 @supports 判断=====
+ * 标签白名单 + 背景色。粗糙：嵌套命中会连成更大一块（颜色不透明且一致，不会变深）。 */
+/* 主题变量 */
+[x-ske] {
+  --x-ske-color: #d9dde3;
+  --x-ske-highlight: #eceff3;
+  --x-ske-radius: 4px;
+  --x-ske-duration: 1.5s;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-x-ske-theme=light]) [x-ske] {
+    --x-ske-color: #374151;
+    --x-ske-highlight: #4b5563;
+  }
+}
+:root[data-x-ske-theme=dark] [x-ske] {
+  --x-ske-color: #374151;
+  --x-ske-highlight: #4b5563;
+}
+
+/* 退出兜底层：直接子元素不再整块涂灰，后代恢复可见 */
+[x-ske] > *:not([x-ske-ignore]) {
+  background-image: none !important;
+  color: inherit !important;
+}
+
+[x-ske] > * * {
+  visibility: visible !important;
+}
+
+/* 文字类标签 -> 背景色骨头 */
+[x-ske] p:not([x-ske-ignore]), [x-ske] span:not([x-ske-ignore]), [x-ske] h1:not([x-ske-ignore]), [x-ske] h2:not([x-ske-ignore]), [x-ske] h3:not([x-ske-ignore]), [x-ske] h4:not([x-ske-ignore]), [x-ske] h5:not([x-ske-ignore]), [x-ske] h6:not([x-ske-ignore]), [x-ske] a:not([x-ske-ignore]), [x-ske] li:not([x-ske-ignore]), [x-ske] label:not([x-ske-ignore]), [x-ske] td:not([x-ske-ignore]), [x-ske] th:not([x-ske-ignore]), [x-ske] strong:not([x-ske-ignore]), [x-ske] b:not([x-ske-ignore]), [x-ske] em:not([x-ske-ignore]), [x-ske] small:not([x-ske-ignore]), [x-ske] button:not([x-ske-ignore]), [x-ske] dt:not([x-ske-ignore]), [x-ske] dd:not([x-ske-ignore]), [x-ske] blockquote:not([x-ske-ignore]), [x-ske] figcaption:not([x-ske-ignore]) {
+  background-color: var(--x-ske-fill, var(--x-ske-color)) !important;
+  background-position: var(--x-ske-bg-pos, 0 0);
+  background-image: var(--x-ske-bg-img, none) !important;
+  background-repeat: no-repeat !important;
+  background-attachment: var(--x-ske-bg-att, fixed) !important;
+  background-blend-mode: var(--x-ske-bg-blend, normal);
+  background-size: var(--x-ske-bg-size, 60vw 100vh) !important;
+  color: transparent !important;
+  border-radius: var(--x-ske-radius);
+}
+
+/* 媒体与控件 -> 背景色骨头（图片靠透明 mock 图让背景透出来） */
+[x-ske] img:not([x-ske-ignore]), [x-ske] video:not([x-ske-ignore]), [x-ske] canvas:not([x-ske-ignore]), [x-ske] picture:not([x-ske-ignore]), [x-ske] iframe:not([x-ske-ignore]), [x-ske] svg:not([x-ske-ignore]), [x-ske] input:not([x-ske-ignore]), [x-ske] textarea:not([x-ske-ignore]), [x-ske] select:not([x-ske-ignore]) {
+  background-color: var(--x-ske-fill, var(--x-ske-color)) !important;
+  background-position: var(--x-ske-bg-pos, 0 0);
+  background-image: var(--x-ske-bg-img, none) !important;
+  background-repeat: no-repeat !important;
+  background-attachment: var(--x-ske-bg-att, fixed) !important;
+  background-blend-mode: var(--x-ske-bg-blend, normal);
+  background-size: var(--x-ske-bg-size, 60vw 100vh) !important;
+  color: transparent !important;
+  /* 把真实图片/视频/canvas 的内容推出盒子外（替换元素内容会被裁在盒内），背景色才露得出来 */
+  object-fit: none !important;
+  object-position: 99999px 0 !important;
+}
+
+/* svg 内部藏起来，背景由 svg 自己画 */
+[x-ske] svg:not([x-ske-ignore]) * {
+  visibility: hidden !important;
+}
+
+/* 显式标记：x-ske-bone = 本元素当骨头；x-ske-leaf = 本元素整块，子树全藏 */
+[x-ske] [x-ske-bone],
+[x-ske] [x-ske-leaf] {
+  background-color: var(--x-ske-fill, var(--x-ske-color)) !important;
+  background-position: var(--x-ske-bg-pos, 0 0);
+  background-image: var(--x-ske-bg-img, none) !important;
+  background-repeat: no-repeat !important;
+  background-attachment: var(--x-ske-bg-att, fixed) !important;
+  background-blend-mode: var(--x-ske-bg-blend, normal);
+  background-size: var(--x-ske-bg-size, 60vw 100vh) !important;
+  color: transparent !important;
+  border-radius: var(--x-ske-radius);
+}
+
+[x-ske] [x-ske-leaf] * {
+  visibility: hidden !important;
+  text-decoration: none !important;
+}
+
+/* x-ske-ignore 子树：撤销骨头效果（注意：忽略区内后代自带的背景/颜色会丢，第 2 档才完整保留） */
+[x-ske] [x-ske-ignore] *:not([x-ske-ignore]):not([x-ske-x]) {
+  background-color: transparent !important;
+  background-image: none !important;
+  color: inherit !important;
+}
+
+/* ===== 第 1 档：下划线法文字骨头（Safari 12.1+/Chrome 89+/Firefox 70+）=====
+ * 给所有文字画一根超粗下划线：沿真实文字行延伸，最后一行自然变短，混合文字也覆盖。
+ * 不能 shimmer、没有圆角；颜色读 --x-ske-ul-fill，pulse / shimmer 时由根驱动（见 effects）。 */
+@supports (text-decoration-thickness: 1em) {
+  /* 文字标签上第 0 档的背景色退场，改用下划线 */
+  [x-ske]:not([x-ske-text=leaf]) p:not([x-ske-ignore]), [x-ske]:not([x-ske-text=leaf]) span:not([x-ske-ignore]), [x-ske]:not([x-ske-text=leaf]) h1:not([x-ske-ignore]), [x-ske]:not([x-ske-text=leaf]) h2:not([x-ske-ignore]), [x-ske]:not([x-ske-text=leaf]) h3:not([x-ske-ignore]), [x-ske]:not([x-ske-text=leaf]) h4:not([x-ske-ignore]), [x-ske]:not([x-ske-text=leaf]) h5:not([x-ske-ignore]), [x-ske]:not([x-ske-text=leaf]) h6:not([x-ske-ignore]), [x-ske]:not([x-ske-text=leaf]) a:not([x-ske-ignore]), [x-ske]:not([x-ske-text=leaf]) li:not([x-ske-ignore]), [x-ske]:not([x-ske-text=leaf]) label:not([x-ske-ignore]), [x-ske]:not([x-ske-text=leaf]) td:not([x-ske-ignore]), [x-ske]:not([x-ske-text=leaf]) th:not([x-ske-ignore]), [x-ske]:not([x-ske-text=leaf]) strong:not([x-ske-ignore]), [x-ske]:not([x-ske-text=leaf]) b:not([x-ske-ignore]), [x-ske]:not([x-ske-text=leaf]) em:not([x-ske-ignore]), [x-ske]:not([x-ske-text=leaf]) small:not([x-ske-ignore]), [x-ske]:not([x-ske-text=leaf]) button:not([x-ske-ignore]), [x-ske]:not([x-ske-text=leaf]) dt:not([x-ske-ignore]), [x-ske]:not([x-ske-text=leaf]) dd:not([x-ske-ignore]), [x-ske]:not([x-ske-text=leaf]) blockquote:not([x-ske-ignore]), [x-ske]:not([x-ske-text=leaf]) figcaption:not([x-ske-ignore]) {
+    background-color: transparent !important;
+    background-image: none !important;
+    border-radius: 0;
+  }
+  [x-ske]:not([x-ske-text=leaf]) *:not([x-ske-ignore]) {
+    color: transparent !important;
+    text-decoration-line: underline !important;
+    text-decoration-style: solid !important;
+    text-decoration-color: var(--x-ske-ul-fill, var(--x-ske-color)) !important;
+    text-decoration-thickness: var(--x-ske-ul-thickness, 1em) !important;
+    text-decoration-skip-ink: none !important;
+    text-underline-offset: var(--x-ske-ul-offset, -0.85em) !important;
+  }
+  /* 叶子背景模式 / 媒体 / 标记元素不画下划线 */
+  [x-ske] [x-ske-leaf] *,
+  [x-ske] [x-ske-ignore] *:not([x-ske-ignore]):not([x-ske-x]) {
+    text-decoration: none !important;
+  }
+}
+/* ===== 第 2 档：:has() 结构判断（Safari 15.4+/Chrome 105+/Firefox 121+）=====
+ * 叶子背景法（根上写 x-ske-text="leaf" 启用）、图标启发式、精确的 x-ske-ignore。 */
+@supports selector(:has(*)) {
+  /* 叶子背景法：没有子元素、但有文字节点的元素 -> 一块骨头，可 shimmer、有圆角 */
+  [x-ske][x-ske-text=leaf] *:not([x-ske-ignore]) {
+    color: transparent !important;
+  }
+  /* 用 :has(> *) 而不是 :has(*)：含义相同（有子元素即有后代元素），但只看直接子元素，
+   * 实测 16000 元素下每帧样式重算少约 7ms */
+  [x-ske][x-ske-text=leaf] :not([x-ske-ignore] *):not([x-ske-ignore]):not(:has(> *)):not(:empty) {
+    background-color: var(--x-ske-fill, var(--x-ske-color)) !important;
+    background-position: var(--x-ske-bg-pos, 0 0);
+    background-image: var(--x-ske-bg-img, none) !important;
+    background-repeat: no-repeat !important;
+    background-attachment: var(--x-ske-bg-att, fixed) !important;
+    background-blend-mode: var(--x-ske-bg-blend, normal);
+    background-size: var(--x-ske-bg-size, 60vw 100vh) !important;
+    border-radius: var(--x-ske-radius);
+  }
+  /* 图标启发式：空的 <i> 和类名带 icon 的空元素 -> 骨头 */
+  [x-ske] i:empty:not([x-ske-ignore]), [x-ske] [class*=icon]:empty:not([x-ske-ignore]) {
+    background-color: var(--x-ske-fill, var(--x-ske-color)) !important;
+    background-position: var(--x-ske-bg-pos, 0 0);
+    background-image: var(--x-ske-bg-img, none) !important;
+    background-repeat: no-repeat !important;
+    background-attachment: var(--x-ske-bg-att, fixed) !important;
+    background-blend-mode: var(--x-ske-bg-blend, normal);
+    background-size: var(--x-ske-bg-size, 60vw 100vh) !important;
+    border-radius: 50%;
+  }
+  /* 图标字体靠伪元素出字形，一并藏掉 */
+  [x-ske] i:empty::before,
+  [x-ske] [class*=icon]:empty::before {
+    color: transparent !important;
+    visibility: hidden !important;
+  }
+  /* 下划线会沿祖先一路传给后代文字，包括 x-ske-ignore 区，所以含 x-ske-ignore 的祖先不再画下划线。
+   * 只在根上有 x-ske-has-ignore（enable() 检测到忽略区时自动加）时生效：这条规则要对每个元素做一次 :has，
+   * 门控后没有忽略区的根能被浏览器直接跳过，实测 16000 元素下每帧样式重算少约 10ms */
+  [x-ske][x-ske-has-ignore]:not([x-ske-text=leaf]) *:has([x-ske-ignore]):not([x-ske-ignore]) {
+    text-decoration: none !important;
+  }
+}
+/* ===== 动画效果：fade（默认）/ solid / sweep（原型）/ pulse / shimmer =====
+ * 通过根上的 x-ske-effect 属性切换。所有动画都只挂在根上：
+ * - fade：根整体 opacity 脉冲，跑在合成器线程，几乎零成本；
+ * - pulse / shimmer：根驱动。根上一个动画驱动注册过的 --x-ske-pulse-c（颜色）/ --x-ske-shimmer-p（流光位置），
+ *   骨头只读继承下来的 --x-ske-fill / --x-ske-ul-fill / --x-ske-bg-pos，自己不挂动画；
+ *   变量逐帧变化仍要重算样式、重绘骨头，但没有成百上千个动画对象。
+ * 降级：不支持 @property 的浏览器里 pulse / shimmer 退回 fade（可用 x-ske-fallback 改成 solid / sweep）；iOS 没有 fixed 背景，shimmer 改成颜色脉冲；
+ * prefers-reduced-motion 全部静止。 */
+[x-ske] {
+  --x-ske-bg-img: none;
+  --x-ske-fade-min: 0.55;
+  /* 浅色：lighten（逐通道取较大值）+ 比骨头略亮的高光色，只有比高光暗的像素会被提亮，
+  * 近白的卡片背景比它亮，原样不动 */
+  --x-ske-sweep-a: 0.5;
+  --x-ske-sweep-rgb: 236, 239, 243;
+  --x-ske-sweep-blend: lighten;
+  --x-ske-sweep-bleed: 16px;
+  /* sweep 光带宽度，相对根宽，可在根上覆盖 */
+  --x-ske-sweep-w: 35%;
+}
+
+/* fade：根整体 opacity 脉冲。没写 x-ske-effect 时的默认；显式写 fade 则强制开启；
+ * pulse / shimmer 在不支持 @property 的浏览器里也落到这里（下方 @supports 块会覆盖它） */
+[x-ske]:not([x-ske-effect]),
+[x-ske][x-ske-effect=fade],
+[x-ske][x-ske-effect=pulse],
+[x-ske][x-ske-effect=shimmer] {
+  animation: x-ske-fade var(--x-ske-duration) ease-in-out infinite alternate;
+}
+
+@keyframes x-ske-fade {
+  from {
+    opacity: 1;
+  }
+  to {
+    opacity: var(--x-ske-fade-min, 0.55);
+  }
+}
+/* 深色：卡片背景比骨头还暗，lighten 区分不开，维持 soft-light + 淡白色高光（强度调淡，减轻漏到容器背景） */
+@media (prefers-color-scheme: dark) {
+  :root:not([data-x-ske-theme=light]) [x-ske] {
+    --x-ske-sweep-a: 0.22;
+    --x-ske-sweep-rgb: 255, 255, 255;
+    --x-ske-sweep-blend: soft-light;
+  }
+}
+:root[data-x-ske-theme=dark] [x-ske] {
+  --x-ske-sweep-a: 0.22;
+  --x-ske-sweep-rgb: 255, 255, 255;
+  --x-ske-sweep-blend: soft-light;
+}
+
+@keyframes x-ske-sweep {
+  from {
+    transform: translateX(-100%) skewX(-12deg);
+  }
+  to {
+    transform: translateX(100%) skewX(-12deg);
+  }
+}
+/* sweep（原型）：浅色用 lighten、深色用 soft-light 混合，让它主要提亮骨头，容器背景尽量不动。
+ * 代价：根会变成 position:relative + 左右裁剪（overflow-x: clip）；根自己的 ::after 会被占用；根里的 x-ske-ignore 内容也会被扫到。 */
+[x-ske][x-ske-effect=sweep] {
+  position: relative;
+  /* 只裁左右，上下放开让光带多出一截。
+   * 必须用 overflow-x: clip：它不产生层叠上下文，mix-blend-mode 才能和页面背景混合；
+   * 换成 clip-path 会让根变成独立图层，光带就只在空隙里亮、扫不到骨头上 */
+  overflow-x: clip;
+  /* 根自己不做动画（降级到 sweep 时关掉 fade） */
+  animation: none;
+}
+[x-ske][x-ske-effect=sweep]::after {
+  content: "";
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 0;
+  /* 伪元素铺满根宽，光带只是渐变里居中的一段（宽度 --x-ske-sweep-w），
+   * 这样平移距离永远相对根宽，改光带宽度不用动动画 */
+  width: 100%;
+  pointer-events: none;
+  /* 渐变必须水平（90deg）：倾斜的渐变线比盒子宽，水平方向一行只覆盖其中一段，
+   * 盒子边缘处透明度到不了 0，会被硬截断成一道断崖；斜的观感改用 skewX。
+   * 渐变本身就是 透明 → 高光 → 透明；用 background-size 把它缩成宽 --x-ske-sweep-w 并居中，其余留白。 */
+  background: linear-gradient(90deg, rgba(var(--x-ske-sweep-rgb), 0), rgba(var(--x-ske-sweep-rgb), var(--x-ske-sweep-a)) 30%, rgba(var(--x-ske-sweep-rgb), var(--x-ske-sweep-a)), rgba(var(--x-ske-sweep-rgb), var(--x-ske-sweep-a)) 70%, rgba(var(--x-ske-sweep-rgb), 0)) center/var(--x-ske-sweep-w) 100% no-repeat;
+  transform: translateX(-100%) skewX(-12deg);
+  animation: x-ske-sweep var(--x-ske-duration) ease-out infinite;
+  will-change: transform;
+}
+[x-ske][x-ske-effect=sweep]:not([x-ske-sweep=bg])::after {
+  top: calc(var(--x-ske-sweep-bleed) * -1);
+  bottom: calc(var(--x-ske-sweep-bleed) * -1);
+  -webkit-mask-image: linear-gradient(to bottom, transparent 0, #000 var(--x-ske-sweep-bleed), #000 calc(100% - var(--x-ske-sweep-bleed)), transparent 100%);
+  mask-image: linear-gradient(to bottom, transparent 0, #000 var(--x-ske-sweep-bleed), #000 calc(100% - var(--x-ske-sweep-bleed)), transparent 100%);
+  mix-blend-mode: var(--x-ske-sweep-blend);
+}
+[x-ske][x-ske-effect=sweep][x-ske-sweep=bg] {
+  --x-ske-sweep-bg-rgb: 249, 250, 251;
+  --x-ske-sweep-rgb: var(--x-ske-sweep-bg-rgb);
+  --x-ske-sweep-a: 0.4;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-x-ske-theme=light]) [x-ske][x-ske-effect=sweep][x-ske-sweep=bg] {
+    --x-ske-sweep-bg-rgb: 31, 41, 55;
+  }
+}
+:root[data-x-ske-theme=dark] [x-ske][x-ske-effect=sweep][x-ske-sweep=bg] {
+  --x-ske-sweep-bg-rgb: 31, 41, 55;
+}
+
+/* ===== pulse / shimmer：根驱动 ===== */
+@property --x-ske-shimmer-p {
+  syntax: "<number>";
+  inherits: true;
+  initial-value: -60;
+}
+@property --x-ske-pulse-c {
+  syntax: "<color>";
+  inherits: true;
+  initial-value: #d9dde3;
+}
+@keyframes x-ske-shimmer-root {
+  from {
+    --x-ske-shimmer-p: -60;
+  }
+  to {
+    --x-ske-shimmer-p: 110;
+  }
+}
+@keyframes x-ske-pulse-root {
+  from {
+    --x-ske-pulse-c: var(--x-ske-color);
+  }
+  to {
+    --x-ske-pulse-c: var(--x-ske-highlight);
+  }
+}
+/* @property 无法用 @supports 检测，借同版本落地的相对颜色语法判断（Safari 16.4 / Firefox 128 两者同时支持；
+ * Chrome 85~118 有 @property 但没有相对颜色，被保守地判为不支持，退回 fade） */
+@supports (color: rgb(from red r g b)) {
+  /* pulse：骨头背景色和下划线颜色一起脉冲 */
+  [x-ske][x-ske-effect=pulse] {
+    --x-ske-fill: var(--x-ske-pulse-c);
+    --x-ske-ul-fill: var(--x-ske-pulse-c);
+    animation: x-ske-pulse-root var(--x-ske-duration) ease-in-out infinite alternate;
+  }
+  /* shimmer：fixed 渐变背景在视口坐标里平移，各骨头同步；下划线文字没法渐变，跟着脉冲颜色走。
+   * 时间函数可在根上用 --x-ske-shimmer-timing 覆盖，如 steps(36) 把刷新降到 24fps（1.5s × 24） */
+  [x-ske][x-ske-effect=shimmer] {
+    --x-ske-bg-img: linear-gradient(100deg, transparent 0, var(--x-ske-highlight) 50%, transparent 100%);
+    --x-ske-bg-pos: calc(var(--x-ske-shimmer-p) * 1vw) 0;
+    --x-ske-ul-fill: var(--x-ske-pulse-c);
+    animation: x-ske-shimmer-root var(--x-ske-duration) var(--x-ske-shimmer-timing, linear) infinite, x-ske-pulse-root var(--x-ske-duration) ease-in-out infinite alternate;
+  }
+  /* JS 计时器模式（enable 的 fps 选项，根上带 x-ske-tick）：根上不跑 CSS 动画，
+   * 由 JS 按限定帧率写 --x-ske-pulse-t（0~1）和 --x-ske-shimmer-p；颜色在这里用 color-mix 算，跟着主题走 */
+  [x-ske][x-ske-tick][x-ske-effect=pulse],
+  [x-ske][x-ske-tick][x-ske-effect=shimmer] {
+    animation: none;
+    --x-ske-pulse-c: color-mix(in srgb, var(--x-ske-color), var(--x-ske-highlight) calc(var(--x-ske-pulse-t, 0) * 100%));
+  }
+  /* iOS Safari 不支持 background-attachment:fixed，流光会各自为政，改成骨头颜色脉冲 */
+  @supports (-webkit-touch-callout: none) {
+    [x-ske][x-ske-effect=shimmer] {
+      --x-ske-bg-img: none;
+      --x-ske-fill: var(--x-ske-pulse-c);
+    }
+  }
+}
+/* ===== SVG 方案（根上写 x-ske-engine="svg"，或 enable 的 engine: "svg"） =====
+ * 骨头背景叠一张带 SMIL 动画的 SVG（data URI），所有骨头共用这一张图，CSS 每帧不变，没有样式重算，
+ * 实测 16000 元素下 shimmer 叶子从 22 帧到约 60 帧；也不依赖 @property，老浏览器同样有动画。
+ * 骨头底色仍读 --x-ske-color；SVG 只叠半透明白色高光（浅色 / 深色各一张），所以自定义 --x-ske-highlight
+ * 只是近似、--x-ske-duration 不生效，需要时用 --x-ske-svg-shimmer / --x-ske-svg-pulse 换成自己的图。
+ * 下划线文字无法贴图，保持静止；iOS 不支持 fixed 背景，shimmer 改用 pulse 图。 */
+[x-ske] {
+  --x-ske-svg-shimmer: url("data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%20100%20100%22%20preserveAspectRatio%3D%22none%22%3E%3Cdefs%3E%3ClinearGradient%20id%3D%22g%22%3E%3Cstop%20offset%3D%220%22%20stop-color%3D%22%23fff%22%20stop-opacity%3D%220%22%2F%3E%3Cstop%20offset%3D%22.5%22%20stop-color%3D%22%23fff%22%20stop-opacity%3D%22.55%22%2F%3E%3Cstop%20offset%3D%221%22%20stop-color%3D%22%23fff%22%20stop-opacity%3D%220%22%2F%3E%3C%2FlinearGradient%3E%3C%2Fdefs%3E%3Crect%20width%3D%2260%22%20height%3D%22100%22%20fill%3D%22url%28%23g%29%22%3E%3CanimateTransform%20attributeName%3D%22transform%22%20type%3D%22translate%22%20from%3D%22-60%200%22%20to%3D%22110%200%22%20dur%3D%221.5s%22%20repeatCount%3D%22indefinite%22%2F%3E%3C%2Frect%3E%3C%2Fsvg%3E");
+  --x-ske-svg-pulse: url("data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2010%2010%22%20preserveAspectRatio%3D%22none%22%3E%3Crect%20width%3D%2210%22%20height%3D%2210%22%20fill%3D%22%23fff%22%20opacity%3D%220%22%3E%3Canimate%20attributeName%3D%22opacity%22%20values%3D%220%3B.55%3B0%22%20dur%3D%223s%22%20calcMode%3D%22spline%22%20keySplines%3D%22.42%200%20.58%201%3B.42%200%20.58%201%22%20repeatCount%3D%22indefinite%22%2F%3E%3C%2Frect%3E%3C%2Fsvg%3E");
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-x-ske-theme=light]) [x-ske] {
+    --x-ske-svg-shimmer: url("data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%20100%20100%22%20preserveAspectRatio%3D%22none%22%3E%3Cdefs%3E%3ClinearGradient%20id%3D%22g%22%3E%3Cstop%20offset%3D%220%22%20stop-color%3D%22%23fff%22%20stop-opacity%3D%220%22%2F%3E%3Cstop%20offset%3D%22.5%22%20stop-color%3D%22%23fff%22%20stop-opacity%3D%22.1%22%2F%3E%3Cstop%20offset%3D%221%22%20stop-color%3D%22%23fff%22%20stop-opacity%3D%220%22%2F%3E%3C%2FlinearGradient%3E%3C%2Fdefs%3E%3Crect%20width%3D%2260%22%20height%3D%22100%22%20fill%3D%22url%28%23g%29%22%3E%3CanimateTransform%20attributeName%3D%22transform%22%20type%3D%22translate%22%20from%3D%22-60%200%22%20to%3D%22110%200%22%20dur%3D%221.5s%22%20repeatCount%3D%22indefinite%22%2F%3E%3C%2Frect%3E%3C%2Fsvg%3E");
+    --x-ske-svg-pulse: url("data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2010%2010%22%20preserveAspectRatio%3D%22none%22%3E%3Crect%20width%3D%2210%22%20height%3D%2210%22%20fill%3D%22%23fff%22%20opacity%3D%220%22%3E%3Canimate%20attributeName%3D%22opacity%22%20values%3D%220%3B.1%3B0%22%20dur%3D%223s%22%20calcMode%3D%22spline%22%20keySplines%3D%22.42%200%20.58%201%3B.42%200%20.58%201%22%20repeatCount%3D%22indefinite%22%2F%3E%3C%2Frect%3E%3C%2Fsvg%3E");
+  }
+}
+:root[data-x-ske-theme=dark] [x-ske] {
+  --x-ske-svg-shimmer: url("data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%20100%20100%22%20preserveAspectRatio%3D%22none%22%3E%3Cdefs%3E%3ClinearGradient%20id%3D%22g%22%3E%3Cstop%20offset%3D%220%22%20stop-color%3D%22%23fff%22%20stop-opacity%3D%220%22%2F%3E%3Cstop%20offset%3D%22.5%22%20stop-color%3D%22%23fff%22%20stop-opacity%3D%22.1%22%2F%3E%3Cstop%20offset%3D%221%22%20stop-color%3D%22%23fff%22%20stop-opacity%3D%220%22%2F%3E%3C%2FlinearGradient%3E%3C%2Fdefs%3E%3Crect%20width%3D%2260%22%20height%3D%22100%22%20fill%3D%22url%28%23g%29%22%3E%3CanimateTransform%20attributeName%3D%22transform%22%20type%3D%22translate%22%20from%3D%22-60%200%22%20to%3D%22110%200%22%20dur%3D%221.5s%22%20repeatCount%3D%22indefinite%22%2F%3E%3C%2Frect%3E%3C%2Fsvg%3E");
+  --x-ske-svg-pulse: url("data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2010%2010%22%20preserveAspectRatio%3D%22none%22%3E%3Crect%20width%3D%2210%22%20height%3D%2210%22%20fill%3D%22%23fff%22%20opacity%3D%220%22%3E%3Canimate%20attributeName%3D%22opacity%22%20values%3D%220%3B.1%3B0%22%20dur%3D%223s%22%20calcMode%3D%22spline%22%20keySplines%3D%22.42%200%20.58%201%3B.42%200%20.58%201%22%20repeatCount%3D%22indefinite%22%2F%3E%3C%2Frect%3E%3C%2Fsvg%3E");
+}
+
+[x-ske][x-ske-engine=svg][x-ske-effect=pulse],
+[x-ske][x-ske-engine=svg][x-ske-effect=shimmer] {
+  /* 根上不跑动画（盖掉 fade 兜底和根驱动），骨头颜色、位置回到静态 */
+  animation: none;
+  --x-ske-fill: var(--x-ske-color);
+  --x-ske-ul-fill: var(--x-ske-color);
+  --x-ske-bg-pos: 0 0;
+  --x-ske-bg-size: 100vw 100vh;
+}
+
+[x-ske][x-ske-engine=svg][x-ske-effect=pulse] {
+  --x-ske-bg-img: var(--x-ske-svg-pulse);
+}
+
+[x-ske][x-ske-engine=svg][x-ske-effect=shimmer] {
+  --x-ske-bg-img: var(--x-ske-svg-shimmer);
+}
+
+@supports (-webkit-touch-callout: none) {
+  [x-ske][x-ske-engine=svg][x-ske-effect=shimmer] {
+    --x-ske-bg-img: var(--x-ske-svg-pulse);
+  }
+}
+/* 降级目标（根上写 x-ske-fallback）：只在不支持 @property 时生效，pulse / shimmer 退回到它；不写则退回 fade。
+ * 只能选不依赖 @property 的效果：fade / solid / sweep */
+@supports not (color: rgb(from red r g b)) {
+  [x-ske][x-ske-effect=pulse][x-ske-fallback=solid]:not([x-ske-engine=svg]),
+  [x-ske][x-ske-effect=shimmer][x-ske-fallback=solid]:not([x-ske-engine=svg]) {
+    animation: none;
+  }
+  [x-ske][x-ske-effect=pulse][x-ske-fallback=sweep]:not([x-ske-engine=svg]), [x-ske][x-ske-effect=shimmer][x-ske-fallback=sweep]:not([x-ske-engine=svg]) {
+    position: relative;
+    /* 只裁左右，上下放开让光带多出一截。
+     * 必须用 overflow-x: clip：它不产生层叠上下文，mix-blend-mode 才能和页面背景混合；
+     * 换成 clip-path 会让根变成独立图层，光带就只在空隙里亮、扫不到骨头上 */
+    overflow-x: clip;
+    /* 根自己不做动画（降级到 sweep 时关掉 fade） */
+    animation: none;
+  }
+  [x-ske][x-ske-effect=pulse][x-ske-fallback=sweep]:not([x-ske-engine=svg])::after, [x-ske][x-ske-effect=shimmer][x-ske-fallback=sweep]:not([x-ske-engine=svg])::after {
+    content: "";
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    left: 0;
+    /* 伪元素铺满根宽，光带只是渐变里居中的一段（宽度 --x-ske-sweep-w），
+     * 这样平移距离永远相对根宽，改光带宽度不用动动画 */
+    width: 100%;
+    pointer-events: none;
+    /* 渐变必须水平（90deg）：倾斜的渐变线比盒子宽，水平方向一行只覆盖其中一段，
+     * 盒子边缘处透明度到不了 0，会被硬截断成一道断崖；斜的观感改用 skewX。
+     * 渐变本身就是 透明 → 高光 → 透明；用 background-size 把它缩成宽 --x-ske-sweep-w 并居中，其余留白。 */
+    background: linear-gradient(90deg, rgba(var(--x-ske-sweep-rgb), 0), rgba(var(--x-ske-sweep-rgb), var(--x-ske-sweep-a)) 30%, rgba(var(--x-ske-sweep-rgb), var(--x-ske-sweep-a)), rgba(var(--x-ske-sweep-rgb), var(--x-ske-sweep-a)) 70%, rgba(var(--x-ske-sweep-rgb), 0)) center/var(--x-ske-sweep-w) 100% no-repeat;
+    transform: translateX(-100%) skewX(-12deg);
+    animation: x-ske-sweep var(--x-ske-duration) ease-out infinite;
+    will-change: transform;
+  }
+  [x-ske][x-ske-effect=pulse][x-ske-fallback=sweep]:not([x-ske-engine=svg]):not([x-ske-sweep=bg])::after, [x-ske][x-ske-effect=shimmer][x-ske-fallback=sweep]:not([x-ske-engine=svg]):not([x-ske-sweep=bg])::after {
+    top: calc(var(--x-ske-sweep-bleed) * -1);
+    bottom: calc(var(--x-ske-sweep-bleed) * -1);
+    -webkit-mask-image: linear-gradient(to bottom, transparent 0, #000 var(--x-ske-sweep-bleed), #000 calc(100% - var(--x-ske-sweep-bleed)), transparent 100%);
+    mask-image: linear-gradient(to bottom, transparent 0, #000 var(--x-ske-sweep-bleed), #000 calc(100% - var(--x-ske-sweep-bleed)), transparent 100%);
+    mix-blend-mode: var(--x-ske-sweep-blend);
+  }
+  [x-ske][x-ske-effect=pulse][x-ske-fallback=sweep]:not([x-ske-engine=svg])[x-ske-sweep=bg], [x-ske][x-ske-effect=shimmer][x-ske-fallback=sweep]:not([x-ske-engine=svg])[x-ske-sweep=bg] {
+    --x-ske-sweep-bg-rgb: 249, 250, 251;
+    --x-ske-sweep-rgb: var(--x-ske-sweep-bg-rgb);
+    --x-ske-sweep-a: 0.4;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-x-ske-theme=light]) [x-ske][x-ske-effect=pulse][x-ske-fallback=sweep]:not([x-ske-engine=svg])[x-ske-sweep=bg], :root:not([data-x-ske-theme=light]) [x-ske][x-ske-effect=shimmer][x-ske-fallback=sweep]:not([x-ske-engine=svg])[x-ske-sweep=bg] {
+      --x-ske-sweep-bg-rgb: 31, 41, 55;
+    }
+  }
+  :root[data-x-ske-theme=dark] [x-ske][x-ske-effect=pulse][x-ske-fallback=sweep]:not([x-ske-engine=svg])[x-ske-sweep=bg], :root[data-x-ske-theme=dark] [x-ske][x-ske-effect=shimmer][x-ske-fallback=sweep]:not([x-ske-engine=svg])[x-ske-sweep=bg] {
+    --x-ske-sweep-bg-rgb: 31, 41, 55;
+  }
+}
+/* 懒渲染：根在视口外（enable() 打上 x-ske-paused）时移除根上和 sweep 光带的动画，SVG 方案去掉背景图 */
+[x-ske][x-ske-paused],
+[x-ske][x-ske-paused]::after {
+  animation: none !important;
+}
+
+[x-ske][x-ske-paused] {
+  --x-ske-bg-img: none !important;
+}
+
+/* 减少动态效果：全部静止 */
+@media (prefers-reduced-motion: reduce) {
+  [x-ske][x-ske] {
+    --x-ske-bg-img: none !important;
+    animation: none !important;
+  }
+  [x-ske][x-ske]::after {
+    animation: none !important;
+  }
+}
+/* 根里有 x-ske-ignore 时，fade 会连带把它也淡掉，所以隐式默认下不开 fade（想强制开就显式写 x-ske-effect="fade"）；
+ * pulse / shimmer 退回 fade 时同理。根驱动的 pulse / shimmer 不碰忽略区，照常运行。
+ * 判断依据是根上的 x-ske-has-ignore（enable() 自动加；纯 HTML 自己写）。曾用 :has([x-ske-ignore])，
+ * 实测 16000 元素下开启耗时多约 85ms */
+[x-ske]:not([x-ske-effect])[x-ske-has-ignore] {
+  animation: none;
+}
+
+@supports not (color: rgb(from red r g b)) {
+  [x-ske][x-ske-effect=pulse][x-ske-has-ignore]:not([x-ske-fallback=sweep]):not([x-ske-engine=svg]),
+  [x-ske][x-ske-effect=shimmer][x-ske-has-ignore]:not([x-ske-fallback=sweep]):not([x-ske-engine=svg]) {
+    animation: none;
+  }
+}
+/* ===== 视口外内容跳过渲染（根上写 x-ske-cv 开启） =====
+ * 根的直接子元素在视口外时，浏览器跳过它们的样式、布局、绘制，动画也不用算；
+ * 补上懒渲染"大根露一角就整体动"的盲区。代价：子元素溢出部分会被裁掉；
+ * 从没渲染过的子元素按 --x-ske-cv-size 估高，估不准滚动时会跳。 */
+[x-ske][x-ske-cv] > * {
+  content-visibility: auto;
+  contain-intrinsic-size: auto var(--x-ske-cv-size, 200px);
+}
+
+[x-ske][x-ske-engine="svg"][x-ske-effect="shimmer"]{--x-ske-bg-img:url("data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100' preserveAspectRatio='none'><defs><linearGradient id='g'><stop stop-color='%23fff' stop-opacity='0'/><stop offset='.5' stop-color='%23fff' stop-opacity='0.5'/><stop offset='1' stop-color='%23fff' stop-opacity='0'/></linearGradient></defs><rect width='60' height='100' fill='url(%23g)'><animateTransform attributeName='transform' type='translate' from='-60 0' to='110 0' dur='1.5s' repeatCount='indefinite'/></rect></svg>");--x-ske-bg-blend:screen;}

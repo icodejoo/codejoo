@@ -1,0 +1,77 @@
+{
+ "base-root": {
+  "distinctLiveShots": 3,
+  "analysis": null,
+  "animations": 2
+ },
+ "base-root-red": {
+  "distinctLiveShots": 1,
+  "analysis": {
+   "redIn": 96195,
+   "redOut": 11544,
+   "tot": 107739,
+   "bones": 18
+  },
+  "animations": 2
+ },
+ "svg": {
+  "distinctLiveShots": 3,
+  "analysis": null,
+  "animations": 0
+ },
+ "svg-red": {
+  "distinctLiveShots": 3,
+  "analysis": {
+   "redIn": 0,
+   "redOut": 0,
+   "tot": 0,
+   "bones": 18
+  },
+  "animations": 0
+ },
+ "A": {
+  "distinctLiveShots": 3,
+  "analysis": null,
+  "animations": 3
+ },
+ "A-red": {
+  "distinctLiveShots": 3,
+  "analysis": {
+   "redIn": 95295,
+   "redOut": 12491,
+   "tot": 107786,
+   "bones": 18
+  },
+  "animations": 3
+ },
+ "B1": {
+  "distinctLiveShots": 3,
+  "analysis": null,
+  "animations": 200
+ },
+ "B1-red": {
+  "distinctLiveShots": 3,
+  "analysis": {
+   "redIn": 96128,
+   "redOut": 11530,
+   "tot": 107658,
+   "bones": 18
+  },
+  "animations": 200
+ },
+ "B2": {
+  "distinctLiveShots": 3,
+  "analysis": null,
+  "animations": 1
+ },
+ "B2-red": {
+  "distinctLiveShots": 3,
+  "analysis": {
+   "redIn": 96128,
+   "redOut": 11530,
+   "tot": 107658,
+   "bones": 18
+  },
+  "animations": 1
+ }
+}

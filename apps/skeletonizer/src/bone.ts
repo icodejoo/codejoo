@@ -1,6 +1,3 @@
-/** 1×1 透明 GIF 的 data URI，没有尺寸参数时的兜底占位图 */
-const GIF_1PX = "data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7";
-
 /** 占位字符：全宽实心方块 */
 const BLOCK = "█";
 
@@ -20,9 +17,26 @@ function hash(n: number): number {
   return x >>> 0;
 }
 
+/** seed 的步长：不同 seed 落到哈希序列的不同区段 */
+const SEED_STRIDE = 131;
+
+/**
+ * 第 i 个片段的长度：base + hash % span，由 (i, seed) 唯一决定。
+ * @param i 片段序号
+ * @param seed 分布种子
+ * @param base 最小长度
+ * @param span 长度变化范围
+ * @returns 片段长度
+ */
+function pick(i: number, seed: number, base: number, span: number): number {
+  return base + (hash(i + seed * SEED_STRIDE) % span);
+}
+
 /**
  * 骨架 mock 数据工具集：只造"数据"，不渲染；渲染仍由你自己的真实组件负责。
  * 全部是静态方法，不可实例化；所有结果都是确定性的，不使用 Math.random。
+ * 用法：加载中把 mock 对象传给真实组件（`loading ? mock : data`），列表按预期条数造 mock 项；
+ * 图片用 `Bone.image(w, h)` 保住盒子尺寸。
  *
  * @example
  * const user = { name: Bone.text(8), bio: Bone.lines(3), avatar: Bone.image(48, 48) };
@@ -33,8 +47,8 @@ export class Bone {
     if (new.target === Bone) throw new TypeError("Bone 是抽象类，只能使用静态方法");
   }
 
-  /** 1×1 透明 GIF 的 data URI */
-  static GIF_1PX: string = GIF_1PX;
+  /** 1×1 透明 GIF 的 data URI，没有尺寸参数时的兜底占位图 */
+  static readonly GIF_1PX = "data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7";
 
   /**
    * 生成 n 个字符的「方块词」文本，词与词之间用空格，长文本可以自然换行。
@@ -48,7 +62,7 @@ export class Bone {
     if (!(n > 0)) return "";
     let out = "";
     for (let i = 0; out.length < n; i++) {
-      const wordLen = 2 + (hash(i + seed * 131) % 6);
+      const wordLen = pick(i, seed, 2, 6);
       if (out) out += " ";
       out += BLOCK.repeat(wordLen);
     }
@@ -79,7 +93,7 @@ export class Bone {
     let out = "";
     let count = 0;
     for (let i = 0; count < n; i++) {
-      const run = Math.min(3 + (hash(i + seed * 131) % 4), n - count);
+      const run = Math.min(pick(i, seed, 3, 4), n - count);
       out += BLOCK.repeat(run) + (count + run < n ? ZWSP : "");
       count += run;
     }
@@ -112,7 +126,7 @@ export class Bone {
    * @example <img :src="Bone.image(120, 80)" />
    */
   static image(width?: number, height: number | undefined = width): string {
-    if (!width || !height || !(width > 0) || !(height > 0)) return GIF_1PX;
+    if (!width || !height || !(width > 0) || !(height > 0)) return Bone.GIF_1PX;
     const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}" viewBox="0 0 ${width} ${height}"/>`;
     return `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}`;
   }

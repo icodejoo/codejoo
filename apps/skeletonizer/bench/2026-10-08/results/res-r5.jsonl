@@ -1,0 +1,11 @@
+{"name":"开启 隐式fade","elements":16000,"fps":60.4,"mainBusy":1.41,"compositor":1.74,"gpu":1.55,"UpdateLayoutTree":0.25,"PrePaint":0.02,"Layerize":0,"Commit":0.09,"HitTest":0.01,"toggleMs":146.3}
+{"name":"开启 显式fade","elements":16000,"fps":60.4,"mainBusy":1.31,"compositor":1.67,"gpu":1.46,"UpdateLayoutTree":0.24,"PrePaint":0.02,"Layerize":0,"Commit":0.09,"HitTest":0.01,"toggleMs":78.4}
+{"name":"开启 隐式fade 去:has","elements":16000,"fps":60.4,"mainBusy":1.27,"compositor":1.69,"gpu":1.43,"UpdateLayoutTree":0.23,"PrePaint":0.01,"Layerize":0,"Commit":0.09,"HitTest":0.01,"toggleMs":95.2}
+{"name":"开启 solid","elements":16000,"fps":60.4,"mainBusy":1.19,"compositor":0.58,"PrePaint":0.01,"Layerize":0,"Commit":0.08,"HitTest":0,"gpu":0,"toggleMs":94.5}
+{"name":"开启 solid+cv","elements":16000,"fps":60.8,"mainBusy":1.53,"compositor":0.57,"PrePaint":0.01,"Layerize":0,"Commit":0.24,"HitTest":0,"gpu":0.02,"toggleMs":225.9}
+{"name":"开启 显式fade+cv","elements":16000,"fps":60.4,"mainBusy":2.55,"compositor":1.94,"gpu":1.48,"UpdateLayoutTree":0.18,"PrePaint":0.16,"Layerize":0,"Commit":0.26,"HitTest":0.05,"toggleMs":238.9}
+{"name":"sweep base","elements":16000,"fps":60.4,"mainBusy":16.09,"compositor":0.69,"UpdateLayoutTree":1.07,"PrePaint":6.59,"Layerize":0,"Commit":0.07,"HitTest":0.01,"gpu":0.02}
+{"name":"sweep swContainPaint","elements":16000,"fps":60.4,"mainBusy":17.19,"compositor":0.68,"UpdateLayoutTree":0.88,"PrePaint":7.34,"Layerize":0,"Commit":0.07,"gpu":0.01,"HitTest":0.01}
+{"name":"sweep swIsolate","elements":16000,"fps":60,"mainBusy":18.41,"compositor":0.64,"UpdateLayoutTree":0.91,"PrePaint":7.83,"Layerize":0,"Commit":0.07,"HitTest":0,"gpu":0.01}
+{"name":"sweep swContainLayout","elements":16000,"fps":60.4,"mainBusy":17.38,"compositor":0.66,"UpdateLayoutTree":1.01,"PrePaint":7.32,"Layerize":0,"Commit":0.07,"gpu":0.01,"HitTest":0}
+{"name":"sweep swContainLP","elements":16000,"fps":60,"mainBusy":16.29,"compositor":0.73,"UpdateLayoutTree":0.84,"PrePaint":6.63,"Layerize":0,"Commit":0.07,"HitTest":0,"gpu":0}

@@ -1,0 +1,122 @@
+[
+{
+"name": "thr-floor-16k-idle",
+"css": "prod",
+"n": 2000,
+"attrs": [
+[
+"x-ske-effect",
+"solid"
+],
+[
+"x-ske-text",
+"leaf"
+]
+],
+"idle": true
+},
+{
+"name": "thr-root-16k-idle",
+"css": "prod",
+"n": 2000,
+"attrs": [
+[
+"x-ske-effect",
+"shimmer"
+],
+[
+"x-ske-text",
+"leaf"
+]
+],
+"idle": true
+},
+{
+"name": "thr-svg-16k-idle",
+"css": "prod",
+"n": 2000,
+"attrs": [
+[
+"x-ske-effect",
+"shimmer"
+],
+[
+"x-ske-text",
+"leaf"
+],
+[
+"x-ske-engine",
+"svg"
+]
+],
+"idle": true
+},
+{
+"name": "thr-A-16k-idle",
+"css": "prod",
+"n": 2000,
+"attrs": [
+[
+"x-ske-effect",
+"solid"
+],
+[
+"x-ske-text",
+"leaf"
+]
+],
+"idle": true,
+"proto": "a"
+},
+{
+"name": "thr-B1-4k-idle",
+"css": "prod",
+"n": 500,
+"attrs": [
+[
+"x-ske-effect",
+"solid"
+],
+[
+"x-ske-text",
+"leaf"
+]
+],
+"idle": true,
+"proto": "b1"
+},
+{
+"name": "thr-B1-16k-idle",
+"css": "prod",
+"n": 2000,
+"attrs": [
+[
+"x-ske-effect",
+"solid"
+],
+[
+"x-ske-text",
+"leaf"
+]
+],
+"idle": true,
+"proto": "b1"
+},
+{
+"name": "thr-B2-16k-idle",
+"css": "prod",
+"n": 2000,
+"attrs": [
+[
+"x-ske-effect",
+"solid"
+],
+[
+"x-ske-text",
+"leaf"
+]
+],
+"idle": true,
+"proto": "b2"
+}
+]

@@ -1,0 +1,8 @@
+// skeletonizer/base.css：自动推导基底（主题、交互锁、四档推导、显式标记、fade / solid）
+@use "../theme";
+@use "../base";
+@use "../tier0";
+@use "../marks" as marks;
+@use "../tier1";
+@use "../tier2";
+@use "../effects-core";

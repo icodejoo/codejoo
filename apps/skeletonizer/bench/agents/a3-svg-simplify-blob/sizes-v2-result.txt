@@ -1,0 +1,16 @@
+cur 现役(浅色 .55)                     raw  485 safe  567 short  519 (url("...") 含 data:image/svg+xml, 头)
+2a rect+animateTransform           raw  473 safe  555 short  507 (url("...") 含 data:image/svg+xml, 头)
+2b-1 渐变 x1/x2 animate              raw  517 safe  591 short  551 (url("...") 含 data:image/svg+xml, 头)
+2b-2 gradientTransform             raw  471 safe  541 short  505 (url("...") 含 data:image/svg+xml, 头)
+2c viewBox animate                 raw  443 safe  513 short  477 (url("...") 含 data:image/svg+xml, 头)
+2e animate x                       raw  422 safe  496 short  456 (url("...") 含 data:image/svg+xml, 头)
+2d reflect 两 stop + animate x      raw  399 safe  467 short  431 (url("...") 含 data:image/svg+xml, 头)
+2f(起点算错，作废)                        raw  373 safe  437 short  401 (url("...") 含 data:image/svg+xml, 头)
+2g 最短(α=1,to-only,viewBox 60)      raw  372 safe  436 short  400 (url("...") 含 data:image/svg+xml, 头)
+1b 凹口(黑)                           raw  439 safe  515 short  467 (url("...") 含 data:image/svg+xml, 头)
+
+2g 源码：
+<svg xmlns='http://www.w3.org/2000/svg' viewBox='60 0 100 100' preserveAspectRatio='none'><linearGradient id='g' x2='.5' spreadMethod='reflect'><stop stop-color='white' stop-opacity='0'/><stop offset='1' stop-color='white'/></linearGradient><rect width='60' height='100' fill='url(#g)'><animate attributeName='x' to='170' dur='1.5s' repeatCount='indefinite'/></rect></svg>
+
+2g safe URI：
+url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='60 0 100 100' preserveAspectRatio='none'%3E%3ClinearGradient id='g' x2='.5' spreadMethod='reflect'%3E%3Cstop stop-color='white' stop-opacity='0'/%3E%3Cstop offset='1' stop-color='white'/%3E%3C/linearGradient%3E%3Crect width='60' height='100' fill='url(%23g)'%3E%3Canimate attributeName='x' to='170' dur='1.5s' repeatCount='indefinite'/%3E%3C/rect%3E%3C/svg%3E")

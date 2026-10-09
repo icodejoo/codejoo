@@ -1,0 +1,989 @@
+{
+ "light": {
+  "cost": {
+   "cold": {
+    "gen": 25,
+    "decode": 7.5,
+    "frame2": 8.7,
+    "hit": false
+   },
+   "warm": {
+    "gen": 0.8,
+    "decode": 0.4,
+    "frame2": 28.3,
+    "hit": true
+   },
+   "themeSwitch": {
+    "gen": 43.1,
+    "decode": 8.4,
+    "frame2": 31.9,
+    "hit": false
+   },
+   "themeBack": {
+    "gen": 1.6,
+    "decode": 0.5,
+    "frame2": 31.3,
+    "hit": true
+   },
+   "frag": "blob:http://localhost:5188/a57"
+  },
+  "speed": {},
+  "rows": [
+   {
+    "id": "ref",
+    "base": [
+     216,
+     220,
+     227
+    ],
+    "peak": [
+     237,
+     240,
+     244
+    ],
+    "dPeak": [
+     1,
+     1,
+     1
+    ],
+    "dEPeak": 0.35,
+    "dBase": [
+     -1,
+     -1,
+     0
+    ],
+    "dEBase": 0.62
+   },
+   {
+    "id": "prod-light",
+    "base": [
+     217,
+     221,
+     227
+    ],
+    "peak": [
+     238,
+     240,
+     242
+    ],
+    "dPeak": [
+     2,
+     1,
+     -1
+    ],
+    "dEPeak": 1.14,
+    "dBase": [
+     0,
+     0,
+     0
+    ],
+    "dEBase": 0
+   },
+   {
+    "id": "prod-dark",
+    "base": [
+     217,
+     221,
+     227
+    ],
+    "peak": [
+     221,
+     224,
+     230
+    ],
+    "dPeak": [
+     -15,
+     -15,
+     -13
+    ],
+    "dEPeak": 5.33,
+    "dBase": [
+     0,
+     0,
+     0
+    ],
+    "dEBase": 0
+   },
+   {
+    "id": "blob",
+    "base": [
+     217,
+     221,
+     227
+    ],
+    "peak": [
+     217,
+     221,
+     227
+    ],
+    "dPeak": [
+     -19,
+     -18,
+     -16
+    ],
+    "dEPeak": 6.45,
+    "dBase": [
+     0,
+     0,
+     0
+    ],
+    "dEBase": 0
+   },
+   {
+    "id": "blobfrag",
+    "base": [
+     217,
+     221,
+     227
+    ],
+    "peak": [
+     238,
+     240,
+     242
+    ],
+    "dPeak": [
+     2,
+     1,
+     -1
+    ],
+    "dEPeak": 1.14,
+    "dBase": [
+     0,
+     0,
+     0
+    ],
+    "dEBase": 0,
+    "xtrace": "179,471,737,1047,1271,1271,8,8,119,399,614,904"
+   }
+  ]
+ },
+ "dark": {
+  "cost": {
+   "cold": {
+    "gen": 17,
+    "decode": 2.8,
+    "frame2": 3.6,
+    "hit": false
+   },
+   "warm": {
+    "gen": 0.5,
+    "decode": 0.3,
+    "frame2": 26.9,
+    "hit": true
+   },
+   "themeSwitch": {
+    "gen": 4,
+    "decode": 5.2,
+    "frame2": 24.4,
+    "hit": false
+   },
+   "themeBack": {
+    "gen": 0.9,
+    "decode": 0.2,
+    "frame2": 32,
+    "hit": true
+   },
+   "frag": "blob:http://localhost:5188/6f8"
+  },
+  "speed": {},
+  "rows": [
+   {
+    "id": "ref",
+    "base": [
+     55,
+     65,
+     81
+    ],
+    "peak": [
+     75,
+     86,
+     100
+    ],
+    "dPeak": [
+     0,
+     1,
+     1
+    ],
+    "dEPeak": 0.51,
+    "dBase": [
+     0,
+     0,
+     0
+    ],
+    "dEBase": 0
+   },
+   {
+    "id": "prod-light",
+    "base": [
+     55,
+     65,
+     81
+    ],
+    "peak": [
+     165,
+     169,
+     177
+    ],
+    "dPeak": [
+     90,
+     84,
+     78
+    ],
+    "dEPeak": 33.72,
+    "dBase": [
+     0,
+     0,
+     0
+    ],
+    "dEBase": 0
+   },
+   {
+    "id": "prod-dark",
+    "base": [
+     55,
+     65,
+     81
+    ],
+    "peak": [
+     75,
+     84,
+     98
+    ],
+    "dPeak": [
+     0,
+     -1,
+     -1
+    ],
+    "dEPeak": 0.51,
+    "dBase": [
+     0,
+     0,
+     0
+    ],
+    "dEBase": 0
+   },
+   {
+    "id": "blob",
+    "base": [
+     55,
+     65,
+     81
+    ],
+    "peak": [
+     55,
+     65,
+     81
+    ],
+    "dPeak": [
+     -20,
+     -20,
+     -18
+    ],
+    "dEPeak": 8.69,
+    "dBase": [
+     0,
+     0,
+     0
+    ],
+    "dEBase": 0
+   },
+   {
+    "id": "blobfrag",
+    "base": [
+     55,
+     65,
+     81
+    ],
+    "peak": [
+     165,
+     169,
+     177
+    ],
+    "dPeak": [
+     90,
+     84,
+     78
+    ],
+    "dEPeak": 33.72,
+    "dBase": [
+     0,
+     0,
+     0
+    ],
+    "dEBase": 0,
+    "xtrace": "258,552,870,1152,1271,8,8,64,309,585,870,1154"
+   }
+  ]
+ },
+ "custom": {
+  "cost": {
+   "cold": {
+    "gen": 12.9,
+    "decode": 4.9,
+    "frame2": 4.7,
+    "hit": false
+   },
+   "warm": {
+    "gen": 1.2,
+    "decode": 0.5,
+    "frame2": 24.1,
+    "hit": true
+   },
+   "themeSwitch": {
+    "gen": 1,
+    "decode": 0.2,
+    "frame2": 31.7,
+    "hit": true
+   },
+   "themeBack": {
+    "gen": 0.4,
+    "decode": 0.2,
+    "frame2": 32.8,
+    "hit": true
+   },
+   "frag": "blob:http://localhost:5188/8ae"
+  },
+  "speed": {},
+  "rows": [
+   {
+    "id": "ref",
+    "base": [
+     206,
+     227,
+     255
+    ],
+    "peak": [
+     233,
+     243,
+     255
+    ],
+    "dPeak": [
+     1,
+     1,
+     0
+    ],
+    "dEPeak": 0.61,
+    "dBase": [
+     -1,
+     0,
+     0
+    ],
+    "dEBase": 0.33
+   },
+   {
+    "id": "prod-light",
+    "base": [
+     207,
+     227,
+     255
+    ],
+    "peak": [
+     233,
+     242,
+     255
+    ],
+    "dPeak": [
+     1,
+     0,
+     0
+    ],
+    "dEPeak": 0.35,
+    "dBase": [
+     0,
+     0,
+     0
+    ],
+    "dEBase": 0
+   },
+   {
+    "id": "prod-dark",
+    "base": [
+     207,
+     227,
+     255
+    ],
+    "peak": [
+     212,
+     230,
+     255
+    ],
+    "dPeak": [
+     -20,
+     -12,
+     0
+    ],
+    "dEPeak": 8.04,
+    "dBase": [
+     0,
+     0,
+     0
+    ],
+    "dEBase": 0
+   },
+   {
+    "id": "blob",
+    "base": [
+     207,
+     227,
+     255
+    ],
+    "peak": [
+     207,
+     227,
+     255
+    ],
+    "dPeak": [
+     -25,
+     -15,
+     0
+    ],
+    "dEPeak": 10.06,
+    "dBase": [
+     0,
+     0,
+     0
+    ],
+    "dEBase": 0
+   },
+   {
+    "id": "blobfrag",
+    "base": [
+     207,
+     227,
+     255
+    ],
+    "peak": [
+     233,
+     242,
+     255
+    ],
+    "dPeak": [
+     1,
+     0,
+     0
+    ],
+    "dEPeak": 0.35,
+    "dBase": [
+     0,
+     0,
+     0
+    ],
+    "dEBase": 0,
+    "xtrace": "220,495,762,1018,1271,1267,8,8,141,379,578,835"
+   }
+  ]
+ },
+ "dur3": {
+  "cost": {
+   "cold": {
+    "gen": 24.6,
+    "decode": 16.4,
+    "frame2": 11.2,
+    "hit": false
+   },
+   "warm": {
+    "gen": 0.8,
+    "decode": 0.3,
+    "frame2": 32,
+    "hit": true
+   },
+   "themeSwitch": {
+    "gen": 2.4,
+    "decode": 4.4,
+    "frame2": 25.6,
+    "hit": false
+   },
+   "themeBack": {
+    "gen": 1,
+    "decode": 0.2,
+    "frame2": 32.1,
+    "hit": true
+   },
+   "frag": "blob:http://localhost:5188/d3e"
+  },
+  "speed": {
+   "blob": {
+    "medianPxPerS": 0,
+    "n": 0
+   },
+   "prod-light": {
+    "medianPxPerS": 1356,
+    "n": 7
+   }
+  },
+  "rows": [
+   {
+    "id": "ref",
+    "base": [
+     216,
+     220,
+     227
+    ],
+    "peak": [
+     237,
+     240,
+     244
+    ],
+    "dPeak": [
+     1,
+     1,
+     1
+    ],
+    "dEPeak": 0.35,
+    "dBase": [
+     -1,
+     -1,
+     0
+    ],
+    "dEBase": 0.62,
+    "xtrace": "715,715,715,715,715,715,715,715,715,715,715,715"
+   },
+   {
+    "id": "prod-light",
+    "base": [
+     217,
+     221,
+     227
+    ],
+    "peak": [
+     238,
+     240,
+     242
+    ],
+    "dPeak": [
+     2,
+     1,
+     -1
+    ],
+    "dEPeak": 1.14,
+    "dBase": [
+     0,
+     0,
+     0
+    ],
+    "dEBase": 0,
+    "xtrace": "1271,8,8,253,518,778,1053,1262,1269,8,8,303"
+   },
+   {
+    "id": "prod-dark",
+    "base": [
+     217,
+     221,
+     227
+    ],
+    "peak": [
+     221,
+     224,
+     230
+    ],
+    "dPeak": [
+     -15,
+     -15,
+     -13
+    ],
+    "dEPeak": 5.33,
+    "dBase": [
+     0,
+     0,
+     0
+    ],
+    "dEBase": 0,
+    "xtrace": "8,8,8,224,488,749,1024,1214,1219,8,8,273"
+   },
+   {
+    "id": "blob",
+    "base": [
+     217,
+     221,
+     227
+    ],
+    "peak": [
+     217,
+     221,
+     227
+    ],
+    "dPeak": [
+     -19,
+     -18,
+     -16
+    ],
+    "dEPeak": 6.45,
+    "dBase": [
+     0,
+     0,
+     0
+    ],
+    "dEBase": 0,
+    "xtrace": "8,8,8,8,8,8,8,8,8,8,8,8"
+   },
+   {
+    "id": "blobfrag",
+    "base": [
+     217,
+     221,
+     227
+    ],
+    "peak": [
+     238,
+     240,
+     242
+    ],
+    "dPeak": [
+     2,
+     1,
+     -1
+    ],
+    "dEPeak": 1.14,
+    "dBase": [
+     0,
+     0,
+     0
+    ],
+    "dEBase": 0,
+    "xtrace": "202,447,751,1015,1262,1271,8,8,120,436,748,1063"
+   }
+  ]
+ },
+ "dur300ms": {
+  "cost": {
+   "cold": {
+    "gen": 24.2,
+    "decode": 9.6,
+    "frame2": 2.9,
+    "hit": false
+   },
+   "warm": {
+    "gen": 0.6,
+    "decode": 0.2,
+    "frame2": 31.4,
+    "hit": true
+   },
+   "themeSwitch": {
+    "gen": 4.9,
+    "decode": 7.6,
+    "frame2": 20.7,
+    "hit": false
+   },
+   "themeBack": {
+    "gen": 1,
+    "decode": 0.2,
+    "frame2": 32,
+    "hit": true
+   },
+   "frag": "blob:http://localhost:5188/2a8"
+  },
+  "speed": {
+   "blob": {
+    "medianPxPerS": 0,
+    "n": 0
+   },
+   "prod-light": {
+    "medianPxPerS": 1402,
+    "n": 6
+   }
+  },
+  "rows": [
+   {
+    "id": "ref",
+    "base": [
+     216,
+     220,
+     227
+    ],
+    "peak": [
+     237,
+     240,
+     244
+    ],
+    "dPeak": [
+     1,
+     1,
+     1
+    ],
+    "dEPeak": 0.35,
+    "dBase": [
+     -1,
+     -1,
+     0
+    ],
+    "dEBase": 0.62,
+    "xtrace": "715,715,715,715,715,715,715,715,715,715,715,715"
+   },
+   {
+    "id": "prod-light",
+    "base": [
+     217,
+     221,
+     227
+    ],
+    "peak": [
+     238,
+     240,
+     242
+    ],
+    "dPeak": [
+     2,
+     1,
+     -1
+    ],
+    "dEPeak": 1.14,
+    "dBase": [
+     0,
+     0,
+     0
+    ],
+    "dEBase": 0,
+    "xtrace": "1270,8,8,155,450,741,1034,1263,1262,8,8,195"
+   },
+   {
+    "id": "prod-dark",
+    "base": [
+     217,
+     221,
+     227
+    ],
+    "peak": [
+     221,
+     224,
+     230
+    ],
+    "dPeak": [
+     -15,
+     -15,
+     -13
+    ],
+    "dEPeak": 5.33,
+    "dBase": [
+     0,
+     0,
+     0
+    ],
+    "dEBase": 0,
+    "xtrace": "1266,8,8,123,413,710,1003,1248,1258,8,8,165"
+   },
+   {
+    "id": "blob",
+    "base": [
+     217,
+     221,
+     227
+    ],
+    "peak": [
+     217,
+     221,
+     227
+    ],
+    "dPeak": [
+     -19,
+     -18,
+     -16
+    ],
+    "dEPeak": 6.45,
+    "dBase": [
+     0,
+     0,
+     0
+    ],
+    "dEBase": 0,
+    "xtrace": "8,8,8,8,8,8,8,8,8,8,8,8"
+   },
+   {
+    "id": "blobfrag",
+    "base": [
+     217,
+     221,
+     227
+    ],
+    "peak": [
+     238,
+     240,
+     242
+    ],
+    "dPeak": [
+     2,
+     1,
+     -1
+    ],
+    "dEPeak": 1.14,
+    "dBase": [
+     0,
+     0,
+     0
+    ],
+    "dEBase": 0,
+    "xtrace": "265,530,799,1104,1268,8,8,53,364,605,872,1145"
+   }
+  ]
+ },
+ "dur1.5": {
+  "cost": {
+   "cold": {
+    "gen": 26.2,
+    "decode": 5.8,
+    "frame2": 7.5,
+    "hit": false
+   },
+   "warm": {
+    "gen": 1.4,
+    "decode": 0.7,
+    "frame2": 23.3,
+    "hit": true
+   },
+   "themeSwitch": {
+    "gen": 3.7,
+    "decode": 6,
+    "frame2": 23.5,
+    "hit": false
+   },
+   "themeBack": {
+    "gen": 1.9,
+    "decode": 0.6,
+    "frame2": 31.4,
+    "hit": true
+   },
+   "frag": "blob:http://localhost:5188/a51"
+  },
+  "speed": {
+   "blob": {
+    "medianPxPerS": 0,
+    "n": 0
+   },
+   "prod-light": {
+    "medianPxPerS": 1445,
+    "n": 8
+   }
+  },
+  "rows": [
+   {
+    "id": "ref",
+    "base": [
+     216,
+     220,
+     227
+    ],
+    "peak": [
+     237,
+     240,
+     244
+    ],
+    "dPeak": [
+     1,
+     1,
+     1
+    ],
+    "dEPeak": 0.35,
+    "dBase": [
+     -1,
+     -1,
+     0
+    ],
+    "dEBase": 0.62,
+    "xtrace": "715,715,715,715,715,715,715,715,715,715,715,715"
+   },
+   {
+    "id": "prod-light",
+    "base": [
+     217,
+     221,
+     227
+    ],
+    "peak": [
+     238,
+     240,
+     242
+    ],
+    "dPeak": [
+     2,
+     1,
+     -1
+    ],
+    "dEPeak": 1.14,
+    "dBase": [
+     0,
+     0,
+     0
+    ],
+    "dEBase": 0,
+    "xtrace": "1267,1269,8,69,358,647,931,1221,1264,8,8,120"
+   },
+   {
+    "id": "prod-dark",
+    "base": [
+     217,
+     221,
+     227
+    ],
+    "peak": [
+     221,
+     224,
+     230
+    ],
+    "dPeak": [
+     -15,
+     -15,
+     -13
+    ],
+    "dEPeak": 5.33,
+    "dBase": [
+     0,
+     0,
+     0
+    ],
+    "dEBase": 0,
+    "xtrace": "1228,8,8,37,328,617,901,1191,1259,8,8,90"
+   },
+   {
+    "id": "blob",
+    "base": [
+     217,
+     221,
+     227
+    ],
+    "peak": [
+     217,
+     221,
+     227
+    ],
+    "dPeak": [
+     -19,
+     -18,
+     -16
+    ],
+    "dEPeak": 6.45,
+    "dBase": [
+     0,
+     0,
+     0
+    ],
+    "dEBase": 0,
+    "xtrace": "8,8,8,8,8,8,8,8,8,8,8,8"
+   },
+   {
+    "id": "blobfrag",
+    "base": [
+     217,
+     221,
+     227
+    ],
+    "peak": [
+     238,
+     240,
+     242
+    ],
+    "dPeak": [
+     2,
+     1,
+     -1
+    ],
+    "dEPeak": 1.14,
+    "dBase": [
+     0,
+     0,
+     0
+    ],
+    "dEBase": 0,
+    "xtrace": "244,548,797,1154,1263,8,8,131,380,646,937,1204"
+   }
+  ]
+ }
+}

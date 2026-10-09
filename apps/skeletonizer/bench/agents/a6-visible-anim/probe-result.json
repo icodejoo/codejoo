@@ -1,0 +1,704 @@
+{
+ "probe_shimmer_waapi": {
+  "slow": {
+   "frames": 120,
+   "maxPSpread": 0,
+   "maxPErr": 0,
+   "maxChSpread": 0,
+   "framesBgxMismatch": 0,
+   "framesPSpreadOver1": 0,
+   "framesChOver2": 0
+  },
+  "still": {
+   "maxPSpread": 0,
+   "maxPErr": 0,
+   "maxChSpread": 0
+  },
+  "jump": [
+   {
+    "f": 0,
+    "tl": 41777.6,
+    "attr": false,
+    "p": -60,
+    "anims": []
+   },
+   {
+    "f": 1,
+    "tl": 41977.9,
+    "attr": false,
+    "p": -60,
+    "anims": []
+   },
+   {
+    "f": 2,
+    "tl": 42178.1,
+    "attr": true,
+    "p": -39.8153,
+    "anims": [
+     {
+      "name": "skz-shimmer-root",
+      "st": 0,
+      "ct": 42178.1,
+      "pending": false,
+      "state": "running"
+     },
+     {
+      "name": "skz-pulse-root",
+      "st": 0,
+      "ct": 42178.1,
+      "pending": false,
+      "state": "running"
+     }
+    ]
+   },
+   {
+    "f": 3,
+    "tl": 42378.2,
+    "attr": true,
+    "p": -17.1373,
+    "anims": [
+     {
+      "name": "skz-shimmer-root",
+      "st": 0,
+      "ct": 42378.2,
+      "pending": false,
+      "state": "running"
+     },
+     {
+      "name": "skz-pulse-root",
+      "st": 0,
+      "ct": 42378.2,
+      "pending": false,
+      "state": "running"
+     }
+    ]
+   },
+   {
+    "f": 4,
+    "tl": 42578.4,
+    "attr": true,
+    "p": 5.552,
+    "anims": [
+     {
+      "name": "skz-shimmer-root",
+      "st": 0,
+      "ct": 42578.4,
+      "pending": false,
+      "state": "running"
+     },
+     {
+      "name": "skz-pulse-root",
+      "st": 0,
+      "ct": 42578.4,
+      "pending": false,
+      "state": "running"
+     }
+    ]
+   },
+   {
+    "f": 5,
+    "tl": 42778.4,
+    "attr": true,
+    "p": 28.2187,
+    "anims": [
+     {
+      "name": "skz-shimmer-root",
+      "st": 0,
+      "ct": 42778.4,
+      "pending": false,
+      "state": "running"
+     },
+     {
+      "name": "skz-pulse-root",
+      "st": 0,
+      "ct": 42778.4,
+      "pending": false,
+      "state": "running"
+     }
+    ]
+   }
+  ],
+  "io": {
+   "calls": 65,
+   "entries": 328,
+   "enter": 164,
+   "ms": 36.4,
+   "maxMs": 1.9
+  }
+ },
+ "probe_shimmer_delay": {
+  "slow": {
+   "frames": 120,
+   "maxPSpread": 168.1297,
+   "maxPErr": 147.311,
+   "maxChSpread": 5,
+   "framesBgxMismatch": 115,
+   "framesPSpreadOver1": 115,
+   "framesChOver2": 12
+  },
+  "still": {
+   "maxPSpread": 0,
+   "maxPErr": 168.107,
+   "maxChSpread": 0
+  },
+  "jump": [
+   {
+    "f": 0,
+    "tl": 91201.9,
+    "attr": false,
+    "p": -60,
+    "anims": []
+   },
+   {
+    "f": 1,
+    "tl": 91452,
+    "attr": false,
+    "p": -60,
+    "anims": []
+   },
+   {
+    "f": 2,
+    "tl": 91685.5,
+    "attr": true,
+    "p": 104.56,
+    "anims": [
+     {
+      "name": "skz-shimmer-root",
+      "st": null,
+      "ct": 0,
+      "pending": true,
+      "state": "running"
+     },
+     {
+      "name": "skz-pulse-root",
+      "st": null,
+      "ct": 0,
+      "pending": true,
+      "state": "running"
+     }
+    ]
+   },
+   {
+    "f": 3,
+    "tl": 91902.4,
+    "attr": true,
+    "p": -40.858,
+    "anims": [
+     {
+      "name": "skz-shimmer-root",
+      "st": 91685.5,
+      "ct": 216.9,
+      "pending": false,
+      "state": "running"
+     },
+     {
+      "name": "skz-pulse-root",
+      "st": 91685.5,
+      "ct": 216.9,
+      "pending": false,
+      "state": "running"
+     }
+    ]
+   },
+   {
+    "f": 4,
+    "tl": 92119.3,
+    "attr": true,
+    "p": -16.276,
+    "anims": [
+     {
+      "name": "skz-shimmer-root",
+      "st": 91685.5,
+      "ct": 433.8,
+      "pending": false,
+      "state": "running"
+     },
+     {
+      "name": "skz-pulse-root",
+      "st": 91685.5,
+      "ct": 433.8,
+      "pending": false,
+      "state": "running"
+     }
+    ]
+   },
+   {
+    "f": 5,
+    "tl": 92336,
+    "attr": true,
+    "p": 8.28333,
+    "anims": [
+     {
+      "name": "skz-shimmer-root",
+      "st": 91685.5,
+      "ct": 650.5,
+      "pending": false,
+      "state": "running"
+     },
+     {
+      "name": "skz-pulse-root",
+      "st": 91685.5,
+      "ct": 650.5,
+      "pending": false,
+      "state": "running"
+     }
+    ]
+   }
+  ],
+  "io": {
+   "calls": 66,
+   "entries": 342,
+   "enter": 171,
+   "ms": 4.2,
+   "maxMs": 0.2
+  }
+ },
+ "probe_shimmer_none": {
+  "slow": {
+   "frames": 120,
+   "maxPSpread": 164.4693,
+   "maxPErr": 150.734,
+   "maxChSpread": 19,
+   "framesBgxMismatch": 115,
+   "framesPSpreadOver1": 115,
+   "framesChOver2": 115
+  },
+  "still": {
+   "maxPSpread": 0,
+   "maxPErr": 81.373,
+   "maxChSpread": 0
+  },
+  "jump": [
+   {
+    "f": 0,
+    "tl": 133920.2,
+    "attr": false,
+    "p": -60,
+    "anims": []
+   },
+   {
+    "f": 1,
+    "tl": 134120.4,
+    "attr": false,
+    "p": -60,
+    "anims": []
+   },
+   {
+    "f": 2,
+    "tl": 134320.6,
+    "attr": true,
+    "p": 82.018,
+    "anims": [
+     {
+      "name": "skz-shimmer-root",
+      "st": null,
+      "ct": 0,
+      "pending": true,
+      "state": "running"
+     },
+     {
+      "name": "skz-pulse-root",
+      "st": null,
+      "ct": 0,
+      "pending": true,
+      "state": "running"
+     }
+    ]
+   },
+   {
+    "f": 3,
+    "tl": 134520.7,
+    "attr": true,
+    "p": 104.696,
+    "anims": [
+     {
+      "name": "skz-shimmer-root",
+      "st": 134320.6,
+      "ct": 200.1,
+      "pending": false,
+      "state": "running"
+     },
+     {
+      "name": "skz-pulse-root",
+      "st": 134320.6,
+      "ct": 200.1,
+      "pending": false,
+      "state": "running"
+     }
+    ]
+   },
+   {
+    "f": 4,
+    "tl": 134737.6,
+    "attr": true,
+    "p": -40.722,
+    "anims": [
+     {
+      "name": "skz-shimmer-root",
+      "st": 134320.6,
+      "ct": 417,
+      "pending": false,
+      "state": "running"
+     },
+     {
+      "name": "skz-pulse-root",
+      "st": 134320.6,
+      "ct": 417,
+      "pending": false,
+      "state": "running"
+     }
+    ]
+   },
+   {
+    "f": 5,
+    "tl": 134937.8,
+    "attr": true,
+    "p": -18.0327,
+    "anims": [
+     {
+      "name": "skz-shimmer-root",
+      "st": 134320.6,
+      "ct": 617.2,
+      "pending": false,
+      "state": "running"
+     },
+     {
+      "name": "skz-pulse-root",
+      "st": 134320.6,
+      "ct": 617.2,
+      "pending": false,
+      "state": "running"
+     }
+    ]
+   }
+  ],
+  "io": {
+   "calls": 65,
+   "entries": 340,
+   "enter": 170,
+   "ms": 0.9,
+   "maxMs": 0.2
+  }
+ },
+ "probe_pulse_waapi": {
+  "slow": {
+   "frames": 120,
+   "maxPSpread": 0,
+   "maxPErr": 168.901,
+   "maxChSpread": 0,
+   "framesBgxMismatch": 0,
+   "framesPSpreadOver1": 0,
+   "framesChOver2": 0
+  },
+  "still": {
+   "maxPSpread": 0,
+   "maxPErr": 165.965,
+   "maxChSpread": 0
+  },
+  "jump": [
+   {
+    "f": 0,
+    "tl": 154003.5,
+    "attr": false,
+    "p": -60,
+    "anims": []
+   },
+   {
+    "f": 1,
+    "tl": 154020.2,
+    "attr": true,
+    "p": -60,
+    "anims": [
+     {
+      "name": "skz-pulse-root",
+      "st": 0,
+      "ct": 154020.2,
+      "pending": false,
+      "state": "running"
+     }
+    ]
+   },
+   {
+    "f": 2,
+    "tl": 154036.9,
+    "attr": true,
+    "p": -60,
+    "anims": [
+     {
+      "name": "skz-pulse-root",
+      "st": 0,
+      "ct": 154036.9,
+      "pending": false,
+      "state": "running"
+     }
+    ]
+   },
+   {
+    "f": 3,
+    "tl": 154053.5,
+    "attr": true,
+    "p": -60,
+    "anims": [
+     {
+      "name": "skz-pulse-root",
+      "st": 0,
+      "ct": 154053.5,
+      "pending": false,
+      "state": "running"
+     }
+    ]
+   },
+   {
+    "f": 4,
+    "tl": 154070.2,
+    "attr": true,
+    "p": -60,
+    "anims": [
+     {
+      "name": "skz-pulse-root",
+      "st": 0,
+      "ct": 154070.2,
+      "pending": false,
+      "state": "running"
+     }
+    ]
+   },
+   {
+    "f": 5,
+    "tl": 154086.9,
+    "attr": true,
+    "p": -60,
+    "anims": [
+     {
+      "name": "skz-pulse-root",
+      "st": 0,
+      "ct": 154086.9,
+      "pending": false,
+      "state": "running"
+     }
+    ]
+   }
+  ],
+  "io": {
+   "calls": 81,
+   "entries": 334,
+   "enter": 167,
+   "ms": 65.7,
+   "maxMs": 8
+  }
+ },
+ "probe_pulse_delay": {
+  "slow": {
+   "frames": 120,
+   "maxPSpread": 0,
+   "maxPErr": 168.833,
+   "maxChSpread": 0,
+   "framesBgxMismatch": 0,
+   "framesPSpreadOver1": 0,
+   "framesChOver2": 0
+  },
+  "still": {
+   "maxPSpread": 0,
+   "maxPErr": 156.717,
+   "maxChSpread": 0
+  },
+  "jump": [
+   {
+    "f": 0,
+    "tl": 175337.7,
+    "attr": false,
+    "p": -60,
+    "anims": []
+   },
+   {
+    "f": 1,
+    "tl": 175354.4,
+    "attr": true,
+    "p": -60,
+    "anims": [
+     {
+      "name": "skz-pulse-root",
+      "st": null,
+      "ct": 0,
+      "pending": true,
+      "state": "running"
+     }
+    ]
+   },
+   {
+    "f": 2,
+    "tl": 175371.1,
+    "attr": true,
+    "p": -60,
+    "anims": [
+     {
+      "name": "skz-pulse-root",
+      "st": 175354.4,
+      "ct": 16.7,
+      "pending": false,
+      "state": "running"
+     }
+    ]
+   },
+   {
+    "f": 3,
+    "tl": 175387.8,
+    "attr": true,
+    "p": -60,
+    "anims": [
+     {
+      "name": "skz-pulse-root",
+      "st": 175354.4,
+      "ct": 33.4,
+      "pending": false,
+      "state": "running"
+     }
+    ]
+   },
+   {
+    "f": 4,
+    "tl": 175404.4,
+    "attr": true,
+    "p": -60,
+    "anims": [
+     {
+      "name": "skz-pulse-root",
+      "st": 175354.4,
+      "ct": 50,
+      "pending": false,
+      "state": "running"
+     }
+    ]
+   },
+   {
+    "f": 5,
+    "tl": 175421.1,
+    "attr": true,
+    "p": -60,
+    "anims": [
+     {
+      "name": "skz-pulse-root",
+      "st": 175354.4,
+      "ct": 66.7,
+      "pending": false,
+      "state": "running"
+     }
+    ]
+   }
+  ],
+  "io": {
+   "calls": 81,
+   "entries": 340,
+   "enter": 170,
+   "ms": 3.8,
+   "maxMs": 0.2
+  }
+ },
+ "probe_pulse_none": {
+  "slow": {
+   "frames": 120,
+   "maxPSpread": 0,
+   "maxPErr": 168.901,
+   "maxChSpread": 16,
+   "framesBgxMismatch": 0,
+   "framesPSpreadOver1": 0,
+   "framesChOver2": 13
+  },
+  "still": {
+   "maxPSpread": 0,
+   "maxPErr": 160.854,
+   "maxChSpread": 0
+  },
+  "jump": [
+   {
+    "f": 0,
+    "tl": 196388.4,
+    "attr": false,
+    "p": -60,
+    "anims": []
+   },
+   {
+    "f": 1,
+    "tl": 196405.1,
+    "attr": true,
+    "p": -60,
+    "anims": [
+     {
+      "name": "skz-pulse-root",
+      "st": null,
+      "ct": 0,
+      "pending": true,
+      "state": "running"
+     }
+    ]
+   },
+   {
+    "f": 2,
+    "tl": 196421.8,
+    "attr": true,
+    "p": -60,
+    "anims": [
+     {
+      "name": "skz-pulse-root",
+      "st": 196405.1,
+      "ct": 16.7,
+      "pending": false,
+      "state": "running"
+     }
+    ]
+   },
+   {
+    "f": 3,
+    "tl": 196438.5,
+    "attr": true,
+    "p": -60,
+    "anims": [
+     {
+      "name": "skz-pulse-root",
+      "st": 196405.1,
+      "ct": 33.4,
+      "pending": false,
+      "state": "running"
+     }
+    ]
+   },
+   {
+    "f": 4,
+    "tl": 196455.1,
+    "attr": true,
+    "p": -60,
+    "anims": [
+     {
+      "name": "skz-pulse-root",
+      "st": 196405.1,
+      "ct": 50,
+      "pending": false,
+      "state": "running"
+     }
+    ]
+   },
+   {
+    "f": 5,
+    "tl": 196471.9,
+    "attr": true,
+    "p": -60,
+    "anims": [
+     {
+      "name": "skz-pulse-root",
+      "st": 196405.1,
+      "ct": 66.8,
+      "pending": false,
+      "state": "running"
+     }
+    ]
+   }
+  ],
+  "io": {
+   "calls": 81,
+   "entries": 342,
+   "enter": 171,
+   "ms": 1.8,
+   "maxMs": 0.1
+  }
+ }
+}

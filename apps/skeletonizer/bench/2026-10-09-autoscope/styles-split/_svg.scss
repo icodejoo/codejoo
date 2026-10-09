@@ -1,0 +1,25 @@
+/* ===== SVG 方案（skeletonizer/svg；根上 skz-engine="svg" 由 JS 在 blob 图真正挂上后写入） =====
+ * 同时被 global.css @use：老浏览器上 global 会把根切到这套方案，Sass 同一模块只输出一次，all.css 里只有一份。
+ * 没有 JS、JS 未执行或 blob 生成失败时根上没有 engine 属性，自动退回基底的 fade。
+ * 骨头背景叠一张带 SMIL 动画的 SVG，所有骨头共用这一张图，CSS 每帧不变，没有样式重算；不依赖 @property，老浏览器同样有动画。
+ * 骨头底色读 --skz-color；高光由 JS 按主题现生成（精确）。
+ * 下划线文字无法贴图，保持静止；iOS 不支持 fixed 背景，shimmer 改用 pulse 图。 */
+[skz][skz-engine="svg"][skz-effect="pulse"],
+[skz][skz-engine="svg"][skz-effect="shimmer"] {
+  animation: none;
+  --skz-fill: var(--skz-color);
+  --skz-ul-fill: var(--skz-color);
+  --skz-bg-pos: 0 0;
+  --skz-bg-size: 100vw 100vh;
+}
+[skz][skz-engine="svg"][skz-effect="pulse"] {
+  --skz-bg-img: var(--skz-svg-pulse);
+}
+[skz][skz-engine="svg"][skz-effect="shimmer"] {
+  --skz-bg-img: var(--skz-svg-shimmer);
+}
+@supports (-webkit-touch-callout: none) {
+  [skz][skz-engine="svg"][skz-effect="shimmer"] {
+    --skz-bg-img: var(--skz-svg-pulse);
+  }
+}

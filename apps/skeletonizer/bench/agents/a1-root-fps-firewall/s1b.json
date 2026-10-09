@@ -1,0 +1,674 @@
+[
+ {
+  "name": "1b shimmer n2000 baseline-top",
+  "css": "base",
+  "n": 2000,
+  "attrs": [
+   [
+    "x-ske-effect",
+    "shimmer"
+   ],
+   [
+    "x-ske-text",
+    "leaf"
+   ]
+  ],
+  "toggle": true,
+  "toggleN": 7
+ },
+ {
+  "name": "1b shimmer n2000 baseline-mid",
+  "css": "base",
+  "n": 2000,
+  "attrs": [
+   [
+    "x-ske-effect",
+    "shimmer"
+   ],
+   [
+    "x-ske-text",
+    "leaf"
+   ]
+  ],
+  "js": [
+   "scrollmid",
+   0
+  ],
+  "toggle": true,
+  "toggleN": 7
+ },
+ {
+  "name": "1b shimmer n2000 io-top",
+  "css": "fw1",
+  "n": 2000,
+  "attrs": [
+   [
+    "x-ske-effect",
+    "shimmer"
+   ],
+   [
+    "x-ske-text",
+    "leaf"
+   ]
+  ],
+  "js": [
+   "io",
+   0
+  ],
+  "toggle": true,
+  "toggleN": 7
+ },
+ {
+  "name": "1b shimmer n2000 io-mid",
+  "css": "fw1",
+  "n": 2000,
+  "attrs": [
+   [
+    "x-ske-effect",
+    "shimmer"
+   ],
+   [
+    "x-ske-text",
+    "leaf"
+   ]
+  ],
+  "js": [
+   "io,scrollmid",
+   0
+  ],
+  "toggle": true,
+  "toggleN": 7
+ },
+ {
+  "name": "1b shimmer n2000 iopre-top",
+  "css": "fw1",
+  "n": 2000,
+  "attrs": [
+   [
+    "x-ske-effect",
+    "shimmer"
+   ],
+   [
+    "x-ske-text",
+    "leaf"
+   ]
+  ],
+  "js": [
+   "iopre",
+   0
+  ],
+  "toggle": true,
+  "toggleN": 7
+ },
+ {
+  "name": "1b shimmer n2000 iopre-mid",
+  "css": "fw1",
+  "n": 2000,
+  "attrs": [
+   [
+    "x-ske-effect",
+    "shimmer"
+   ],
+   [
+    "x-ske-text",
+    "leaf"
+   ]
+  ],
+  "js": [
+   "iopre,scrollmid",
+   0
+  ],
+  "toggle": true,
+  "toggleN": 7
+ },
+ {
+  "name": "1b shimmer n2000 cv-top",
+  "css": "base",
+  "n": 2000,
+  "attrs": [
+   [
+    "x-ske-effect",
+    "shimmer"
+   ],
+   [
+    "x-ske-text",
+    "leaf"
+   ],
+   [
+    "x-ske-cv",
+    ""
+   ]
+  ],
+  "toggle": true,
+  "toggleN": 7
+ },
+ {
+  "name": "1b shimmer n2000 cv-mid",
+  "css": "base",
+  "n": 2000,
+  "attrs": [
+   [
+    "x-ske-effect",
+    "shimmer"
+   ],
+   [
+    "x-ske-text",
+    "leaf"
+   ],
+   [
+    "x-ske-cv",
+    ""
+   ]
+  ],
+  "js": [
+   "scrollmid",
+   0
+  ],
+  "toggle": true,
+  "toggleN": 7
+ },
+ {
+  "name": "1b pulse n2000 baseline-top",
+  "css": "base",
+  "n": 2000,
+  "attrs": [
+   [
+    "x-ske-effect",
+    "pulse"
+   ],
+   [
+    "x-ske-text",
+    "leaf"
+   ]
+  ],
+  "toggle": true,
+  "toggleN": 7
+ },
+ {
+  "name": "1b pulse n2000 baseline-mid",
+  "css": "base",
+  "n": 2000,
+  "attrs": [
+   [
+    "x-ske-effect",
+    "pulse"
+   ],
+   [
+    "x-ske-text",
+    "leaf"
+   ]
+  ],
+  "js": [
+   "scrollmid",
+   0
+  ],
+  "toggle": true,
+  "toggleN": 7
+ },
+ {
+  "name": "1b pulse n2000 io-top",
+  "css": "fw1",
+  "n": 2000,
+  "attrs": [
+   [
+    "x-ske-effect",
+    "pulse"
+   ],
+   [
+    "x-ske-text",
+    "leaf"
+   ]
+  ],
+  "js": [
+   "io",
+   0
+  ],
+  "toggle": true,
+  "toggleN": 7
+ },
+ {
+  "name": "1b pulse n2000 io-mid",
+  "css": "fw1",
+  "n": 2000,
+  "attrs": [
+   [
+    "x-ske-effect",
+    "pulse"
+   ],
+   [
+    "x-ske-text",
+    "leaf"
+   ]
+  ],
+  "js": [
+   "io,scrollmid",
+   0
+  ],
+  "toggle": true,
+  "toggleN": 7
+ },
+ {
+  "name": "1b pulse n2000 iopre-top",
+  "css": "fw1",
+  "n": 2000,
+  "attrs": [
+   [
+    "x-ske-effect",
+    "pulse"
+   ],
+   [
+    "x-ske-text",
+    "leaf"
+   ]
+  ],
+  "js": [
+   "iopre",
+   0
+  ],
+  "toggle": true,
+  "toggleN": 7
+ },
+ {
+  "name": "1b pulse n2000 iopre-mid",
+  "css": "fw1",
+  "n": 2000,
+  "attrs": [
+   [
+    "x-ske-effect",
+    "pulse"
+   ],
+   [
+    "x-ske-text",
+    "leaf"
+   ]
+  ],
+  "js": [
+   "iopre,scrollmid",
+   0
+  ],
+  "toggle": true,
+  "toggleN": 7
+ },
+ {
+  "name": "1b pulse n2000 cv-top",
+  "css": "base",
+  "n": 2000,
+  "attrs": [
+   [
+    "x-ske-effect",
+    "pulse"
+   ],
+   [
+    "x-ske-text",
+    "leaf"
+   ],
+   [
+    "x-ske-cv",
+    ""
+   ]
+  ],
+  "toggle": true,
+  "toggleN": 7
+ },
+ {
+  "name": "1b pulse n2000 cv-mid",
+  "css": "base",
+  "n": 2000,
+  "attrs": [
+   [
+    "x-ske-effect",
+    "pulse"
+   ],
+   [
+    "x-ske-text",
+    "leaf"
+   ],
+   [
+    "x-ske-cv",
+    ""
+   ]
+  ],
+  "js": [
+   "scrollmid",
+   0
+  ],
+  "toggle": true,
+  "toggleN": 7
+ },
+ {
+  "name": "1b shimmer n500 baseline-top",
+  "css": "base",
+  "n": 500,
+  "attrs": [
+   [
+    "x-ske-effect",
+    "shimmer"
+   ],
+   [
+    "x-ske-text",
+    "leaf"
+   ]
+  ],
+  "toggle": true,
+  "toggleN": 7
+ },
+ {
+  "name": "1b shimmer n500 baseline-mid",
+  "css": "base",
+  "n": 500,
+  "attrs": [
+   [
+    "x-ske-effect",
+    "shimmer"
+   ],
+   [
+    "x-ske-text",
+    "leaf"
+   ]
+  ],
+  "js": [
+   "scrollmid",
+   0
+  ],
+  "toggle": true,
+  "toggleN": 7
+ },
+ {
+  "name": "1b shimmer n500 io-top",
+  "css": "fw1",
+  "n": 500,
+  "attrs": [
+   [
+    "x-ske-effect",
+    "shimmer"
+   ],
+   [
+    "x-ske-text",
+    "leaf"
+   ]
+  ],
+  "js": [
+   "io",
+   0
+  ],
+  "toggle": true,
+  "toggleN": 7
+ },
+ {
+  "name": "1b shimmer n500 io-mid",
+  "css": "fw1",
+  "n": 500,
+  "attrs": [
+   [
+    "x-ske-effect",
+    "shimmer"
+   ],
+   [
+    "x-ske-text",
+    "leaf"
+   ]
+  ],
+  "js": [
+   "io,scrollmid",
+   0
+  ],
+  "toggle": true,
+  "toggleN": 7
+ },
+ {
+  "name": "1b shimmer n500 iopre-top",
+  "css": "fw1",
+  "n": 500,
+  "attrs": [
+   [
+    "x-ske-effect",
+    "shimmer"
+   ],
+   [
+    "x-ske-text",
+    "leaf"
+   ]
+  ],
+  "js": [
+   "iopre",
+   0
+  ],
+  "toggle": true,
+  "toggleN": 7
+ },
+ {
+  "name": "1b shimmer n500 iopre-mid",
+  "css": "fw1",
+  "n": 500,
+  "attrs": [
+   [
+    "x-ske-effect",
+    "shimmer"
+   ],
+   [
+    "x-ske-text",
+    "leaf"
+   ]
+  ],
+  "js": [
+   "iopre,scrollmid",
+   0
+  ],
+  "toggle": true,
+  "toggleN": 7
+ },
+ {
+  "name": "1b shimmer n500 cv-top",
+  "css": "base",
+  "n": 500,
+  "attrs": [
+   [
+    "x-ske-effect",
+    "shimmer"
+   ],
+   [
+    "x-ske-text",
+    "leaf"
+   ],
+   [
+    "x-ske-cv",
+    ""
+   ]
+  ],
+  "toggle": true,
+  "toggleN": 7
+ },
+ {
+  "name": "1b shimmer n500 cv-mid",
+  "css": "base",
+  "n": 500,
+  "attrs": [
+   [
+    "x-ske-effect",
+    "shimmer"
+   ],
+   [
+    "x-ske-text",
+    "leaf"
+   ],
+   [
+    "x-ske-cv",
+    ""
+   ]
+  ],
+  "js": [
+   "scrollmid",
+   0
+  ],
+  "toggle": true,
+  "toggleN": 7
+ },
+ {
+  "name": "1b pulse n500 baseline-top",
+  "css": "base",
+  "n": 500,
+  "attrs": [
+   [
+    "x-ske-effect",
+    "pulse"
+   ],
+   [
+    "x-ske-text",
+    "leaf"
+   ]
+  ],
+  "toggle": true,
+  "toggleN": 7
+ },
+ {
+  "name": "1b pulse n500 baseline-mid",
+  "css": "base",
+  "n": 500,
+  "attrs": [
+   [
+    "x-ske-effect",
+    "pulse"
+   ],
+   [
+    "x-ske-text",
+    "leaf"
+   ]
+  ],
+  "js": [
+   "scrollmid",
+   0
+  ],
+  "toggle": true,
+  "toggleN": 7
+ },
+ {
+  "name": "1b pulse n500 io-top",
+  "css": "fw1",
+  "n": 500,
+  "attrs": [
+   [
+    "x-ske-effect",
+    "pulse"
+   ],
+   [
+    "x-ske-text",
+    "leaf"
+   ]
+  ],
+  "js": [
+   "io",
+   0
+  ],
+  "toggle": true,
+  "toggleN": 7
+ },
+ {
+  "name": "1b pulse n500 io-mid",
+  "css": "fw1",
+  "n": 500,
+  "attrs": [
+   [
+    "x-ske-effect",
+    "pulse"
+   ],
+   [
+    "x-ske-text",
+    "leaf"
+   ]
+  ],
+  "js": [
+   "io,scrollmid",
+   0
+  ],
+  "toggle": true,
+  "toggleN": 7
+ },
+ {
+  "name": "1b pulse n500 iopre-top",
+  "css": "fw1",
+  "n": 500,
+  "attrs": [
+   [
+    "x-ske-effect",
+    "pulse"
+   ],
+   [
+    "x-ske-text",
+    "leaf"
+   ]
+  ],
+  "js": [
+   "iopre",
+   0
+  ],
+  "toggle": true,
+  "toggleN": 7
+ },
+ {
+  "name": "1b pulse n500 iopre-mid",
+  "css": "fw1",
+  "n": 500,
+  "attrs": [
+   [
+    "x-ske-effect",
+    "pulse"
+   ],
+   [
+    "x-ske-text",
+    "leaf"
+   ]
+  ],
+  "js": [
+   "iopre,scrollmid",
+   0
+  ],
+  "toggle": true,
+  "toggleN": 7
+ },
+ {
+  "name": "1b pulse n500 cv-top",
+  "css": "base",
+  "n": 500,
+  "attrs": [
+   [
+    "x-ske-effect",
+    "pulse"
+   ],
+   [
+    "x-ske-text",
+    "leaf"
+   ],
+   [
+    "x-ske-cv",
+    ""
+   ]
+  ],
+  "toggle": true,
+  "toggleN": 7
+ },
+ {
+  "name": "1b pulse n500 cv-mid",
+  "css": "base",
+  "n": 500,
+  "attrs": [
+   [
+    "x-ske-effect",
+    "pulse"
+   ],
+   [
+    "x-ske-text",
+    "leaf"
+   ],
+   [
+    "x-ske-cv",
+    ""
+   ]
+  ],
+  "js": [
+   "scrollmid",
+   0
+  ],
+  "toggle": true,
+  "toggleN": 7
+ }
+]

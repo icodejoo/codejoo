@@ -1,0 +1,139 @@
+[
+ {
+  "name": "base(current data URI)",
+  "css": "base",
+  "n": 2000,
+  "attrs": [
+   [
+    "x-ske-effect",
+    "shimmer"
+   ],
+   [
+    "x-ske-text",
+    "leaf"
+   ],
+   [
+    "x-ske-engine",
+    "svg"
+   ]
+  ]
+ },
+ {
+  "name": "e4-sprite",
+  "css": "e4-sprite",
+  "n": 2000,
+  "attrs": [
+   [
+    "x-ske-effect",
+    "shimmer"
+   ],
+   [
+    "x-ske-text",
+    "leaf"
+   ],
+   [
+    "x-ske-engine",
+    "svg"
+   ]
+  ]
+ },
+ {
+  "name": "e4-svgview",
+  "css": "e4-svgview",
+  "n": 2000,
+  "attrs": [
+   [
+    "x-ske-effect",
+    "shimmer"
+   ],
+   [
+    "x-ske-text",
+    "leaf"
+   ],
+   [
+    "x-ske-engine",
+    "svg"
+   ]
+  ]
+ },
+ {
+  "name": "e4-svgview-par",
+  "css": "e4-svgview-par",
+  "n": 2000,
+  "attrs": [
+   [
+    "x-ske-effect",
+    "shimmer"
+   ],
+   [
+    "x-ske-text",
+    "leaf"
+   ],
+   [
+    "x-ske-engine",
+    "svg"
+   ]
+  ]
+ },
+ {
+  "name": "e4-dataview",
+  "css": "e4-dataview",
+  "n": 2000,
+  "attrs": [
+   [
+    "x-ske-effect",
+    "shimmer"
+   ],
+   [
+    "x-ske-text",
+    "leaf"
+   ],
+   [
+    "x-ske-engine",
+    "svg"
+   ]
+  ]
+ },
+ {
+  "name": "e4-b64",
+  "css": "e4-b64",
+  "n": 2000,
+  "attrs": [
+   [
+    "x-ske-effect",
+    "shimmer"
+   ],
+   [
+    "x-ske-text",
+    "leaf"
+   ],
+   [
+    "x-ske-engine",
+    "svg"
+   ]
+  ]
+ },
+ {
+  "name": "e5-blob",
+  "css": "base",
+  "n": 2000,
+  "attrs": [
+   [
+    "x-ske-effect",
+    "shimmer"
+   ],
+   [
+    "x-ske-text",
+    "leaf"
+   ],
+   [
+    "x-ske-engine",
+    "svg"
+   ]
+  ],
+  "js": [
+   "blob",
+   0
+  ]
+ }
+]

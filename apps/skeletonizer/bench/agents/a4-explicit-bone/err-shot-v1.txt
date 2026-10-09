@@ -1,0 +1,11 @@
+[cpu] 15,19,16.3
+file:///E:/workspaces/codejoo/apps/skeletonizer/demo/.tmp-a4/run-shot.mjs:37
+    const p = spawn(process.execPath, [path.resolve("shot.mjs")], { env: { ...process.env, PERF_PORT: port, PERF_HOST: host }, stdio: ["ignore", "inherit", "inherit"] });
+                                                                                                                       ^
+
+ReferenceError: host is not defined
+    at file:///E:/workspaces/codejoo/apps/skeletonizer/demo/.tmp-a4/run-shot.mjs:37:120
+    at new Promise (<anonymous>)
+    at file:///E:/workspaces/codejoo/apps/skeletonizer/demo/.tmp-a4/run-shot.mjs:36:9
+
+Node.js v24.11.0

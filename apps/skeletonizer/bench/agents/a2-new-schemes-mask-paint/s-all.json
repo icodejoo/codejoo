@@ -1,0 +1,14 @@
+[
+{"name":"floor-solid-4k","css":"prod","n":500,"attrs":[["x-ske-effect","solid"],["x-ske-text","leaf"]]},
+{"name":"floor-solid-16k","css":"prod","n":2000,"attrs":[["x-ske-effect","solid"],["x-ske-text","leaf"]]},
+{"name":"root-shimmer-4k","css":"prod","n":500,"attrs":[["x-ske-effect","shimmer"],["x-ske-text","leaf"]]},
+{"name":"root-shimmer-16k","css":"prod","n":2000,"attrs":[["x-ske-effect","shimmer"],["x-ske-text","leaf"]]},
+{"name":"svg-4k","css":"prod","n":500,"attrs":[["x-ske-effect","shimmer"],["x-ske-text","leaf"],["x-ske-engine","svg"]]},
+{"name":"svg-16k","css":"prod","n":2000,"attrs":[["x-ske-effect","shimmer"],["x-ske-text","leaf"],["x-ske-engine","svg"]]},
+{"name":"A-4k","css":"prod","n":500,"attrs":[["x-ske-effect","solid"],["x-ske-text","leaf"]],"proto":"a","resize":true},
+{"name":"A-16k","css":"prod","n":2000,"attrs":[["x-ske-effect","solid"],["x-ske-text","leaf"]],"proto":"a","resize":true},
+{"name":"B1-4k","css":"prod","n":500,"attrs":[["x-ske-effect","solid"],["x-ske-text","leaf"]],"proto":"b1"},
+{"name":"B1-16k","css":"prod","n":2000,"attrs":[["x-ske-effect","solid"],["x-ske-text","leaf"]],"proto":"b1"},
+{"name":"B2-4k","css":"prod","n":500,"attrs":[["x-ske-effect","solid"],["x-ske-text","leaf"]],"proto":"b2"},
+{"name":"B2-16k","css":"prod","n":2000,"attrs":[["x-ske-effect","solid"],["x-ske-text","leaf"]],"proto":"b2"}
+]

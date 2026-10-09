@@ -1,0 +1,522 @@
+[
+ {
+  "name": "2 shimmer n2000 css-animation",
+  "css": "base",
+  "n": 2000,
+  "attrs": [
+   [
+    "x-ske-effect",
+    "shimmer"
+   ],
+   [
+    "x-ske-text",
+    "leaf"
+   ]
+  ]
+ },
+ {
+  "name": "2 shimmer n2000 fixed-N1",
+  "css": "base",
+  "n": 2000,
+  "attrs": [
+   [
+    "x-ske-effect",
+    "shimmer"
+   ],
+   [
+    "x-ske-text",
+    "leaf"
+   ],
+   [
+    "x-ske-tick",
+    ""
+   ]
+  ],
+  "js": [
+   "tick:fixed",
+   1
+  ]
+ },
+ {
+  "name": "2 shimmer n2000 fixed-N2",
+  "css": "base",
+  "n": 2000,
+  "attrs": [
+   [
+    "x-ske-effect",
+    "shimmer"
+   ],
+   [
+    "x-ske-text",
+    "leaf"
+   ],
+   [
+    "x-ske-tick",
+    ""
+   ]
+  ],
+  "js": [
+   "tick:fixed",
+   2
+  ]
+ },
+ {
+  "name": "2 shimmer n2000 fixed-N3",
+  "css": "base",
+  "n": 2000,
+  "attrs": [
+   [
+    "x-ske-effect",
+    "shimmer"
+   ],
+   [
+    "x-ske-text",
+    "leaf"
+   ],
+   [
+    "x-ske-tick",
+    ""
+   ]
+  ],
+  "js": [
+   "tick:fixed",
+   3
+  ]
+ },
+ {
+  "name": "2 shimmer n2000 auto-cap4",
+  "css": "base",
+  "n": 2000,
+  "attrs": [
+   [
+    "x-ske-effect",
+    "shimmer"
+   ],
+   [
+    "x-ske-text",
+    "leaf"
+   ],
+   [
+    "x-ske-tick",
+    ""
+   ]
+  ],
+  "js": [
+   "tick:auto",
+   4
+  ]
+ },
+ {
+  "name": "2 shimmer n2000 auto-cap8",
+  "css": "base",
+  "n": 2000,
+  "attrs": [
+   [
+    "x-ske-effect",
+    "shimmer"
+   ],
+   [
+    "x-ske-text",
+    "leaf"
+   ],
+   [
+    "x-ske-tick",
+    ""
+   ]
+  ],
+  "js": [
+   "tick:auto",
+   8
+  ]
+ },
+ {
+  "name": "2 pulse n2000 css-animation",
+  "css": "base",
+  "n": 2000,
+  "attrs": [
+   [
+    "x-ske-effect",
+    "pulse"
+   ],
+   [
+    "x-ske-text",
+    "leaf"
+   ]
+  ]
+ },
+ {
+  "name": "2 pulse n2000 fixed-N1",
+  "css": "base",
+  "n": 2000,
+  "attrs": [
+   [
+    "x-ske-effect",
+    "pulse"
+   ],
+   [
+    "x-ske-text",
+    "leaf"
+   ],
+   [
+    "x-ske-tick",
+    ""
+   ]
+  ],
+  "js": [
+   "tick:fixed",
+   1
+  ]
+ },
+ {
+  "name": "2 pulse n2000 fixed-N2",
+  "css": "base",
+  "n": 2000,
+  "attrs": [
+   [
+    "x-ske-effect",
+    "pulse"
+   ],
+   [
+    "x-ske-text",
+    "leaf"
+   ],
+   [
+    "x-ske-tick",
+    ""
+   ]
+  ],
+  "js": [
+   "tick:fixed",
+   2
+  ]
+ },
+ {
+  "name": "2 pulse n2000 fixed-N3",
+  "css": "base",
+  "n": 2000,
+  "attrs": [
+   [
+    "x-ske-effect",
+    "pulse"
+   ],
+   [
+    "x-ske-text",
+    "leaf"
+   ],
+   [
+    "x-ske-tick",
+    ""
+   ]
+  ],
+  "js": [
+   "tick:fixed",
+   3
+  ]
+ },
+ {
+  "name": "2 pulse n2000 auto-cap4",
+  "css": "base",
+  "n": 2000,
+  "attrs": [
+   [
+    "x-ske-effect",
+    "pulse"
+   ],
+   [
+    "x-ske-text",
+    "leaf"
+   ],
+   [
+    "x-ske-tick",
+    ""
+   ]
+  ],
+  "js": [
+   "tick:auto",
+   4
+  ]
+ },
+ {
+  "name": "2 pulse n2000 auto-cap8",
+  "css": "base",
+  "n": 2000,
+  "attrs": [
+   [
+    "x-ske-effect",
+    "pulse"
+   ],
+   [
+    "x-ske-text",
+    "leaf"
+   ],
+   [
+    "x-ske-tick",
+    ""
+   ]
+  ],
+  "js": [
+   "tick:auto",
+   8
+  ]
+ },
+ {
+  "name": "2 shimmer n500 css-animation",
+  "css": "base",
+  "n": 500,
+  "attrs": [
+   [
+    "x-ske-effect",
+    "shimmer"
+   ],
+   [
+    "x-ske-text",
+    "leaf"
+   ]
+  ]
+ },
+ {
+  "name": "2 shimmer n500 fixed-N1",
+  "css": "base",
+  "n": 500,
+  "attrs": [
+   [
+    "x-ske-effect",
+    "shimmer"
+   ],
+   [
+    "x-ske-text",
+    "leaf"
+   ],
+   [
+    "x-ske-tick",
+    ""
+   ]
+  ],
+  "js": [
+   "tick:fixed",
+   1
+  ]
+ },
+ {
+  "name": "2 shimmer n500 fixed-N2",
+  "css": "base",
+  "n": 500,
+  "attrs": [
+   [
+    "x-ske-effect",
+    "shimmer"
+   ],
+   [
+    "x-ske-text",
+    "leaf"
+   ],
+   [
+    "x-ske-tick",
+    ""
+   ]
+  ],
+  "js": [
+   "tick:fixed",
+   2
+  ]
+ },
+ {
+  "name": "2 shimmer n500 fixed-N3",
+  "css": "base",
+  "n": 500,
+  "attrs": [
+   [
+    "x-ske-effect",
+    "shimmer"
+   ],
+   [
+    "x-ske-text",
+    "leaf"
+   ],
+   [
+    "x-ske-tick",
+    ""
+   ]
+  ],
+  "js": [
+   "tick:fixed",
+   3
+  ]
+ },
+ {
+  "name": "2 shimmer n500 auto-cap4",
+  "css": "base",
+  "n": 500,
+  "attrs": [
+   [
+    "x-ske-effect",
+    "shimmer"
+   ],
+   [
+    "x-ske-text",
+    "leaf"
+   ],
+   [
+    "x-ske-tick",
+    ""
+   ]
+  ],
+  "js": [
+   "tick:auto",
+   4
+  ]
+ },
+ {
+  "name": "2 shimmer n500 auto-cap8",
+  "css": "base",
+  "n": 500,
+  "attrs": [
+   [
+    "x-ske-effect",
+    "shimmer"
+   ],
+   [
+    "x-ske-text",
+    "leaf"
+   ],
+   [
+    "x-ske-tick",
+    ""
+   ]
+  ],
+  "js": [
+   "tick:auto",
+   8
+  ]
+ },
+ {
+  "name": "2 pulse n500 css-animation",
+  "css": "base",
+  "n": 500,
+  "attrs": [
+   [
+    "x-ske-effect",
+    "pulse"
+   ],
+   [
+    "x-ske-text",
+    "leaf"
+   ]
+  ]
+ },
+ {
+  "name": "2 pulse n500 fixed-N1",
+  "css": "base",
+  "n": 500,
+  "attrs": [
+   [
+    "x-ske-effect",
+    "pulse"
+   ],
+   [
+    "x-ske-text",
+    "leaf"
+   ],
+   [
+    "x-ske-tick",
+    ""
+   ]
+  ],
+  "js": [
+   "tick:fixed",
+   1
+  ]
+ },
+ {
+  "name": "2 pulse n500 fixed-N2",
+  "css": "base",
+  "n": 500,
+  "attrs": [
+   [
+    "x-ske-effect",
+    "pulse"
+   ],
+   [
+    "x-ske-text",
+    "leaf"
+   ],
+   [
+    "x-ske-tick",
+    ""
+   ]
+  ],
+  "js": [
+   "tick:fixed",
+   2
+  ]
+ },
+ {
+  "name": "2 pulse n500 fixed-N3",
+  "css": "base",
+  "n": 500,
+  "attrs": [
+   [
+    "x-ske-effect",
+    "pulse"
+   ],
+   [
+    "x-ske-text",
+    "leaf"
+   ],
+   [
+    "x-ske-tick",
+    ""
+   ]
+  ],
+  "js": [
+   "tick:fixed",
+   3
+  ]
+ },
+ {
+  "name": "2 pulse n500 auto-cap4",
+  "css": "base",
+  "n": 500,
+  "attrs": [
+   [
+    "x-ske-effect",
+    "pulse"
+   ],
+   [
+    "x-ske-text",
+    "leaf"
+   ],
+   [
+    "x-ske-tick",
+    ""
+   ]
+  ],
+  "js": [
+   "tick:auto",
+   4
+  ]
+ },
+ {
+  "name": "2 pulse n500 auto-cap8",
+  "css": "base",
+  "n": 500,
+  "attrs": [
+   [
+    "x-ske-effect",
+    "pulse"
+   ],
+   [
+    "x-ske-text",
+    "leaf"
+   ],
+   [
+    "x-ske-tick",
+    ""
+   ]
+  ],
+  "js": [
+   "tick:auto",
+   8
+  ]
+ }
+]

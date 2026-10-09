@@ -1,0 +1,8 @@
+cur    raw 485 safe 567 short 519
+2a     raw 473 safe 555 short 507
+2b-1   raw 517 safe 591 short 551
+2b-2   raw 471 safe 541 short 505
+2c     raw 443 safe 513 short 477
+2e     raw 422 safe 496 short 456
+2d     raw 399 safe 467 short 431
+dip    raw 439 safe 515 short 467

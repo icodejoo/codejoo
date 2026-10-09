@@ -1,0 +1,6 @@
+// 合并入口：按档位顺序汇总，产出 dist/skeletonizer.css
+@use "base";
+@use "tier0";
+@use "tier1";
+@use "tier2";
+@use "effects";

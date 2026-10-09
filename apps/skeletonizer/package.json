@@ -1,5 +1,5 @@
 {
-  "name": "@codejoo/skeletonizer",
+  "name": "skeletonizer",
   "version": "0.1.0",
   "description": "Web skeleton screens from your real DOM + mock data + pure CSS. 运行时 + mock + 覆盖标记的 Web 骨架屏。",
   "keywords": [
@@ -14,7 +14,12 @@
     "web-component",
     "骨架屏"
   ],
+  "homepage": "https://github.com/icodejoo/codejoo/tree/main/apps/skeletonizer#readme",
+  "bugs": {
+    "url": "https://github.com/icodejoo/codejoo/issues"
+  },
   "license": "MIT",
+  "author": "icodejoo",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/icodejoo/codejoo.git",
@@ -23,12 +28,17 @@
   "files": [
     "dist",
     "README.md",
-    "README.zh-CN.md"
+    "README.zh-CN.md",
+    "CHANGELOG.md",
+    "llms.md"
   ],
   "type": "module",
   "sideEffects": [
-    "**/*.css"
+    "**/*.css",
+    "./src/variants/*.ts",
+    "./dist/*.mjs"
   ],
+  "main": "./dist/index.mjs",
   "module": "./dist/index.mjs",
   "types": "./dist/index.d.mts",
   "exports": {
@@ -52,7 +62,43 @@
       "import": "./dist/svelte.mjs",
       "default": "./dist/svelte.mjs"
     },
-    "./style.css": "./dist/skeletonizer.css",
+    "./global": {
+      "types": "./dist/global.d.mts",
+      "import": "./dist/global.mjs",
+      "default": "./dist/global.mjs"
+    },
+    "./global/js": {
+      "types": "./dist/global-js.d.mts",
+      "import": "./dist/global-js.mjs",
+      "default": "./dist/global-js.mjs"
+    },
+    "./svg": {
+      "types": "./dist/svg.d.mts",
+      "import": "./dist/svg.mjs",
+      "default": "./dist/svg.mjs"
+    },
+    "./svg/js": {
+      "types": "./dist/svg-js.d.mts",
+      "import": "./dist/svg-js.mjs",
+      "default": "./dist/svg-js.mjs"
+    },
+    "./all": {
+      "types": "./dist/all.d.mts",
+      "import": "./dist/all.mjs",
+      "default": "./dist/all.mjs"
+    },
+    "./all/js": {
+      "types": "./dist/all-js.d.mts",
+      "import": "./dist/all-js.mjs",
+      "default": "./dist/all-js.mjs"
+    },
+    "./base.css": "./dist/base.css",
+    "./explicit.css": "./dist/explicit.css",
+    "./global.css": "./dist/global.css",
+    "./svg.css": "./dist/svg.css",
+    "./sweep.css": "./dist/sweep.css",
+    "./all.css": "./dist/all.css",
+    "./style.css": "./dist/all.css",
     "./package.json": "./package.json"
   },
   "publishConfig": {

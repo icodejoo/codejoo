@@ -1,0 +1,16 @@
+{"name":"基线 pulse叶子","elements":4000,"fps":60.4,"mainBusy":21.06,"gpu":1.29,"compositor":1.6,"UpdateLayoutTree":9.21,"PrePaint":0.48,"Paint":0.53,"Layerize":0.04,"Commit":0.1,"UpdateLayer":0,"HitTest":0}
+{"name":"A 根动画但骨头不读","elements":4000,"fps":60.4,"UpdateLayoutTree":8.9,"PrePaint":0.02,"Layerize":0,"Commit":0.13,"compositor":0.7,"mainBusy":18.99,"gpu":0.01,"HitTest":0}
+{"name":"B JS 60fps pulse","elements":4000,"fps":60.8,"mainBusy":12.45,"compositor":1.61,"gpu":1.38,"PrePaint":0.48,"Layerize":0.04,"Commit":0.08,"UpdateLayoutTree":4.81,"Paint":0.63,"UpdateLayer":0,"HitTest":0}
+{"name":"B JS 30fps pulse","elements":4000,"fps":60.8,"mainBusy":7.94,"gpu":0.87,"compositor":1.3,"PrePaint":0.3,"Layerize":0.03,"Commit":0.08,"UpdateLayoutTree":2.98,"Paint":0.41,"UpdateLayer":0,"HitTest":0}
+{"name":"B JS 24fps pulse","elements":4000,"fps":60.4,"mainBusy":6.58,"compositor":1.19,"gpu":0.76,"PrePaint":0.25,"Layerize":0.02,"Commit":0.08,"UpdateLayoutTree":2.45,"Paint":0.31,"UpdateLayer":0,"HitTest":0}
+{"name":"B JS 30fps shimmer","elements":4000,"fps":60.4,"mainBusy":13.34,"compositor":1.71,"gpu":2.13,"UpdateLayoutTree":5.17,"PrePaint":0.49,"Paint":0.76,"Layerize":0.05,"Commit":0.07,"UpdateLayer":0,"HitTest":0}
+{"name":"C color 传色 pulse","elements":4000,"fps":60.4,"PrePaint":1.1,"Paint":1.38,"Layerize":0.09,"Commit":0.08,"UpdateLayer":0.01,"compositor":3.24,"mainBusy":25.84,"gpu":3.8,"UpdateLayoutTree":10.52,"HitTest":0}
+{"name":"D 去第1+2档 pulse叶子","elements":4000,"fps":60.4,"mainBusy":16.93,"compositor":1.8,"gpu":1.45,"UpdateLayoutTree":6.78,"PrePaint":0.76,"Layerize":0.05,"Commit":0.1,"Paint":0.66,"UpdateLayer":0,"HitTest":0}
+{"name":"基线 pulse叶子","elements":16000,"fps":26.4,"PrePaint":3.4,"compositor":3.29,"Paint":1.4,"Layerize":0.06,"Commit":0.09,"UpdateLayer":0,"mainBusy":76.57,"UpdateLayoutTree":32.87,"gpu":2.18,"HitTest":0.01}
+{"name":"A 根动画但骨头不读","elements":16000,"fps":30.4,"compositor":1.22,"PrePaint":0.01,"Layerize":0,"Commit":0.09,"mainBusy":66.05,"UpdateLayoutTree":32.62,"gpu":0.03,"HitTest":0.01}
+{"name":"B JS 60fps pulse","elements":16000,"fps":36.4,"compositor":2.36,"PrePaint":2.29,"Paint":1.22,"Layerize":0.06,"Commit":0.09,"UpdateLayer":0,"mainBusy":39.22,"UpdateLayoutTree":16.17,"gpu":1.58,"HitTest":0.01}
+{"name":"B JS 30fps pulse","elements":16000,"fps":40,"Paint":0.96,"Layerize":0.05,"Commit":0.09,"UpdateLayer":0,"mainBusy":33.15,"compositor":1.97,"UpdateLayoutTree":13.71,"gpu":1.29,"PrePaint":2.06,"HitTest":0.01}
+{"name":"B JS 24fps pulse","elements":16000,"fps":39.2,"compositor":1.94,"PrePaint":1.98,"Paint":0.97,"Layerize":0.04,"Commit":0.08,"UpdateLayer":0,"mainBusy":33.37,"UpdateLayoutTree":13.8,"gpu":1.25,"HitTest":0.01}
+{"name":"B JS 30fps shimmer","elements":16000,"fps":22.4,"Paint":2.82,"Layerize":0.11,"Commit":0.1,"UpdateLayer":0.01,"mainBusy":88.31,"compositor":4.44,"UpdateLayoutTree":37.15,"gpu":4.87,"PrePaint":4.54,"HitTest":0.01}
+{"name":"C color 传色 pulse","elements":16000,"fps":22.4,"compositor":4.56,"PrePaint":5.27,"Paint":2.59,"Layerize":0.11,"Commit":0.1,"UpdateLayer":0.01,"mainBusy":89.83,"UpdateLayoutTree":37.52,"gpu":3.53,"HitTest":0.01}
+{"name":"D 去第1+2档 pulse叶子","elements":16000,"fps":35.2,"gpu":1.95,"compositor":2.56,"PrePaint":2.94,"Paint":1.51,"Layerize":0.06,"Commit":0.1,"UpdateLayer":0,"mainBusy":56.79,"UpdateLayoutTree":24.12,"HitTest":0.01}

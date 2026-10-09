@@ -1,0 +1,33 @@
+@use "../../src/styles/mixins" as *;
+@use "../../src/styles/effects";
+/* 根：交互锁 + 主题变量（取自 tier0） */
+[x-ske] {
+  pointer-events: none !important;
+  -webkit-user-select: none !important;
+  user-select: none !important;
+  --x-ske-color: #d9dde3;
+  --x-ske-highlight: #eceff3;
+  --x-ske-radius: 4px;
+  --x-ske-duration: 1.5s;
+}
+@include sk-dark("[x-ske]") {
+  --x-ske-color: #374151;
+  --x-ske-highlight: #4b5563;
+}
+/* 只认显式标记 */
+[x-ske] [x-ske-bone] {
+  @include sk-bone;
+  color: transparent !important;
+  border-radius: var(--x-ske-radius);
+}
+/* 媒体骨头：把真实内容推出盒子 */
+[x-ske] img[x-ske-bone],
+[x-ske] video[x-ske-bone],
+[x-ske] canvas[x-ske-bone] {
+  object-fit: none !important;
+  object-position: 99999px 0 !important;
+}
+/* 骨头内部的后代藏起来 */
+[x-ske] [x-ske-bone] * {
+  visibility: hidden !important;
+}

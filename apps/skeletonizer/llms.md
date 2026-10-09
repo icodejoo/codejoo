@@ -1,0 +1,96 @@
+# skeletonizer — usage guide for coding agents
+
+Skeleton screens from the **real component tree**: while loading, render the same components the page uses, fed with **mock data** from `Bone`, inside a skeleton **root**. Pure CSS turns the leaves into grey bones. There are no separate placeholder components to write.
+
+## Steps
+
+1. **Import one base and the variants you need, once, at the app entry.** Without a base stylesheet nothing changes on screen.
+
+   ```ts
+   import "skeletonizer/base.css"; // base: bones inferred from markup, fade / solid (or "skeletonizer/explicit.css": only skz-bone)
+   import "skeletonizer/global"; // pulse / shimmer, root-driven + inheritance firewall + JS-driven SVG on old browsers; brings global.css
+   // alternatives: "skeletonizer/svg" (SVG-animated pulse / shimmer), "skeletonizer/sweep.css", or "skeletonizer/all" for everything
+   ```
+
+   - No bundler, or code that runs in Node / SSR: use the `/js` entries (`skeletonizer/global/js`, `/svg/js`, `/all/js`) and link the matching `.css` (`skeletonizer/global.css` …) yourself. Entries without `/js` import a `.css` file and need a bundler.
+   - The core `skeletonizer` entry has no CSS and is safe to import anywhere.
+
+2. **Wrap the loading region in a root**, using the adapter for the project's framework:
+
+   | Stack        | Code                                                                                                                                                                                                                                                                                                                                              |
+   | ------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+   | React        | `import { SkzBox } from "skeletonizer/react"` → `<SkzBox loading={loading} effect="shimmer">…</SkzBox>`                                                                                                                                                                                                                                           |
+   | React (hook) | `useSkeleton(ref, loading, { effect })` with `ref` attached to an existing element                                                                                                                                                                                                                                                                |
+   | Vue 3        | `import { vSkeleton } from "skeletonizer/vue"` → `<div v-skeleton="loading">` or `v-skeleton="{ loading, effect: 'shimmer' }"`                                                                                                                                                                                                                    |
+   | Vue 3 (comp) | `<SkzBox :loading="loading">…</SkzBox>` (register via `app.use(SkzPlugin)` or import `SkzBox`)                                                                                                                                                                                                                                                    |
+   | Svelte       | `import { skeleton } from "skeletonizer/svelte"` → `<div use:skeleton={{ loading }}>`                                                                                                                                                                                                                                                             |
+   | Vanilla JS   | `const off = enable(el, { effect })`, then `off()` when data arrives                                                                                                                                                                                                                                                                              |
+   | HTML / CE    | `import { defineSkzBox } from "skeletonizer"; defineSkzBox();` → `<skz-box loading>…</skz-box>` (`loading` on the host is the switch; `skz` lands on the first element child. SSR / no-JS: write `skz` on that child, e.g. `<skz-box loading><div skz>…</div></skz-box>`. No MutationObserver: if the child gets replaced, toggle `loading` once) |
+
+3. **Feed the real components mock data while loading.** Every text node and image box needs content or size, otherwise there is nothing to paint. Build mock objects with `Bone` and render the normal component with them:
+
+   ```ts
+   import { Bone } from "skeletonizer";
+   const mockUser = { name: Bone.text(8), bio: Bone.lines(2), avatar: Bone.image(48, 48), score: Bone.number(3) };
+   const user = loading ? mockUser : data;
+   ```
+
+   - `Bone.text(n)`: exactly `n` chars of block "words".
+   - `Bone.lines(k, { perLine })`: about `k` lines.
+   - `Bone.cjk(n)`: CJK-width blocks.
+   - `Bone.number(d)`: `d` digit-wide blocks.
+   - `Bone.image(w, h)`: transparent image with intrinsic size; `Bone.image()` is a 1px GIF that needs width/height from CSS.
+
+   All output is deterministic (SSR / hydration safe). For lists, render the expected number of mock items (e.g. `Array.from({ length: 5 }, () => mockItem)`).
+
+4. **Done when** the page shows grey bones in the shape of the real layout while `loading` is true, and the real content with no leftover `skz*` attributes once it is false.
+
+## Reference
+
+### Markers (HTML attributes)
+
+| Attribute    | Where   | Effect                                                                                                     |
+| ------------ | ------- | ---------------------------------------------------------------------------------------------------------- |
+| `skz`        | root    | Skeleton on. Set by every adapter; write it yourself only for pure HTML / SSR output.                      |
+| `skz-effect` | root    | `fade` (default) / `solid` / `shimmer` / `pulse` / `sweep`. Adapters take it as the `effect` option.       |
+| `skz-text`   | root    | `underline` (default, bars follow real text lines) / `leaf` (rounded block per text leaf, needs `:has()`). |
+| `skz-bone`   | element | Force this element to be one bone. Use it on a `div` acting as an image, avatar, icon or colour block.     |
+| `skz-leaf`   | element | Merge the whole subtree into one bone.                                                                     |
+| `skz-ignore` | element | Keep as real content and keep it clickable/focusable (e.g. a "cancel" button).                             |
+
+### Choosing an effect
+
+- `fade`: root-level opacity pulse, composited, free at any size. The default.
+- `shimmer` / `pulse`: the most polished look; need the `global` or `svg` variant (otherwise they fall back to `fade`). With `global`, browsers without `@property` get an SVG animation attached by JS (`fallback: "fade"` keeps the base fade instead); before JS runs, and if the blob cannot be built, they show `fade`.
+- `solid`: no animation.
+- `sweep`: needs `skeletonizer/sweep.css`; experimental, see Gotchas before using.
+- Lists (cards, rows) with `shimmer` / `pulse`: import `skeletonizer/global`; nothing else to configure. `enable()` / the adapters automatically "firewall" off-screen items so only visible items animate (16,000 elements stays at 60 fps). Keep the items as children of the root or of a single wrapper inside it.
+- Large skeletons without list structure: pass `fps: "auto"` (or 24) with `global`, or use `skeletonizer/svg` (one shared animated SVG background; exact theme colours when enabled through JS; underline text stays static). With both variants loaded, pick svg per root via `engine: "svg"`.
+- Exact control over which elements become bones: use `skeletonizer/explicit.css` instead of `base.css` and mark bones with `skz-bone` (descendants of a bone are hidden). This is also the fastest base (no inference selectors). Explicit mode is only available through `explicit.css`; there is no per-root switch or `mode` option.
+- Long lists: add `skz-cv` on the root (enabling gets slower with thousands of children, animation gets much faster) so off-screen children skip rendering (clips each child's overflow; set `--skz-cv-size` to the typical child height).
+
+### Theming
+
+Variables are declared on the root itself, so override them **on the root element** (inline `style` or a selector that targets the root), not on `:root`:
+
+```html
+<div skz style="--skz-color:#e5e7eb; --skz-highlight:#f3f4f6; --skz-radius:6px; --skz-duration:1.2s">…</div>
+```
+
+Dark mode follows `prefers-color-scheme`. Force it with `data-skz-theme="dark"` or `"light"` on `<html>`.
+
+## Gotchas
+
+- **Vue component name is `SkzBox`.** In templates write `<SkzBox>`; `<skz-box>` resolves to the native custom element instead (the switch there is the `loading` attribute / property on the host; the skeleton state lands on its first element child).
+- **Empty elements produce no bones.** A `div` with no text and no size renders nothing; give it mock text, a size, or `skz-bone`.
+- **Images:** pass `Bone.image(w, h)` as `src` so the box keeps its size; real image URLs still download and may show through.
+- **Pure HTML attributes skip the JS features.** Writing `skz` by hand gives the CSS look only: no `inert` lock, no off-screen pause. Use an adapter or `enable()` when those matter.
+- **Off-screen roots pause** (`skz-paused` is added automatically). One huge root keeps animating while any part is visible; split long pages into several roots.
+- **`skz-ignore` inside a root disables the implicit `fade`**, since fading would dim the ignored content. Set `effect="fade"` explicitly to force it.
+- **Pure HTML roots with `skz-ignore` need `skz-has-ignore` on the root.** Adapters and `enable()` add it automatically; the CSS keys off this attribute instead of a slow `:has()`.
+- **Old browsers (no `@property`) and `pulse` / `shimmer`?** With `global` they get a JS-attached SVG animation by default (`fallback: "svg"`); pass `fallback: "fade"` to keep the base fade. They show `fade` until JS runs. The SVG is a blob URL, so a strict CSP needs `img-src blob:` (`data:` is only needed by `Bone.image`).
+- **`sweep`** sets `position: relative` and `overflow-x: clip` on the root and uses the root's `::after`. Wrap content in a dedicated unstyled root element before choosing it.
+- **Shadow DOM components** (third-party web components) are opaque to page CSS. Call `registerCustomElements(document, { watch: true })` once; each host becomes one bone. Call `dispose()` on teardown.
+- **React `useSkeleton`**: pass `effect` / `text` as plain values; the hook re-runs when they change.
+- **`prefers-reduced-motion`** stops all animations, including `fade`. This is intended.
+- **Verified on desktop Chrome only.** Safari, Firefox and mobile are untested.

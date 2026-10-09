@@ -1,0 +1,2 @@
+{"name":"B2 L 纯CSS fade","elements":16000,"fps":60.4,"mainBusy":1.45,"compositor":2.08,"gpu":1.69,"UpdateLayoutTree":0.27,"PrePaint":0.01,"Layerize":0,"Commit":0.07,"HitTest":0.01,"raster":0,"toggleMs":80.3}
+{"name":"B2 L 纯CSS pulse","elements":16000,"fps":25.6,"compositor":2.74,"gpu":1.99,"PrePaint":4.04,"Paint":1.48,"Layerize":0.07,"Commit":0.07,"UpdateLayer":0,"mainBusy":79.23,"UpdateLayoutTree":35.03,"HitTest":0.01,"toggleMs":67}

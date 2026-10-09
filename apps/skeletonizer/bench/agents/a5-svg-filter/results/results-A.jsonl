@@ -1,0 +1,2 @@
+{"name":"fA-static-n500","elements":4000,"fps":60.8,"mainBusy":0.74,"compositor":0.64,"PrePaint":0.01,"Layerize":0,"Commit":0.08,"HitTest":0,"gpu":0,"toggleMs":26,"toggleFrameMs":33.4}
+{"name":"fA-pulse-n500","elements":4000,"fps":60.4,"mainBusy":1.31,"compositor":2.06,"gpu":1.65,"UpdateLayoutTree":0.15,"PrePaint":0.02,"Layerize":0,"Commit":0.1,"HitTest":0,"toggleMs":15.2,"toggleFrameMs":34}

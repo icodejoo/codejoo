@@ -1,0 +1,27 @@
+@use "mixins" as *;
+
+/* ===== 主题与交互锁：所有基底（base.css / explicit.css）共用 ===== */
+
+/* 自定义元素没升级时是 inline，先变块级 */
+skz-box {
+  display: block;
+}
+
+/* 交互锁（inert 之外的兜底，鼠标和选中） */
+[skz] {
+  pointer-events: none !important;
+  -webkit-user-select: none !important;
+  user-select: none !important;
+}
+
+/* 主题变量 */
+[skz] {
+  --skz-color: #d9dde3;
+  --skz-highlight: #eceff3;
+  --skz-radius: 4px;
+  --skz-duration: 1.5s;
+}
+@include sk-dark("[skz]") {
+  --skz-color: #374151;
+  --skz-highlight: #4b5563;
+}

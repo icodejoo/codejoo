@@ -1,0 +1,32 @@
+@use "lists" as *;
+@use "mixins" as *;
+
+/* ===== 第 2 档：:has() 结构判断（Safari 15.4+/Chrome 105+/Firefox 121+）=====
+ * 叶子背景法（根上写 x-ske-text="leaf" 启用）、图标启发式、精确的 x-ske-ignore。 */
+@supports selector(:has(*)) {
+  /* 叶子背景法：没有子元素、但有文字节点的元素 -> 一块骨头，可 shimmer、有圆角 */
+  [x-ske][x-ske-text="leaf"] *:not([x-ske-ignore]) {
+    color: transparent !important;
+  }
+  [x-ske][x-ske-text="leaf"] :not([x-ske-ignore] *):not([x-ske-ignore]):not(:has(*)):not(:empty) {
+    @include sk-bone;
+    border-radius: var(--x-ske-radius);
+  }
+
+  /* 图标启发式：空的 <i> 和类名带 icon 的空元素 -> 骨头 */
+  #{sk-sel('[x-ske]', $icon-selectors)} {
+    @include sk-bone;
+    border-radius: 50%;
+  }
+  /* 图标字体靠伪元素出字形，一并藏掉 */
+  [x-ske] i:empty::before,
+  [x-ske] [class*="icon"]:empty::before {
+    color: transparent !important;
+    visibility: hidden !important;
+  }
+
+  /* 下划线会沿祖先一路传给后代文字，包括 x-ske-ignore 区，所以含 x-ske-ignore 的祖先不再画下划线 */
+  [x-ske]:not([x-ske-text="leaf"]) *:has([x-ske-ignore]):not([x-ske-ignore]) {
+    text-decoration: none !important;
+  }
+}

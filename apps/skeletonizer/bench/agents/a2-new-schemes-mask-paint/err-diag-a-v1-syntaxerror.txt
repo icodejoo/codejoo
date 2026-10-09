@@ -1,0 +1,72 @@
+[lock] 等待其他基准结束… 0s
+[lock] 等待其他基准结束… 30s
+[lock] 等待其他基准结束… 60s
+[lock] 等待其他基准结束… 90s
+[lock] 等待其他基准结束… 120s
+[lock] 等待其他基准结束… 150s
+[lock] 等待其他基准结束… 180s
+[lock] 等待其他基准结束… 210s
+[lock] 等待其他基准结束… 240s
+[lock] 等待其他基准结束… 270s
+[lock] 等待其他基准结束… 300s
+[lock] 等待其他基准结束… 330s
+[lock] 等待其他基准结束… 360s
+[lock] 等待其他基准结束… 390s
+[lock] 等待其他基准结束… 420s
+[lock] 等待其他基准结束… 450s
+[lock] 等待其他基准结束… 480s
+[lock] 等待其他基准结束… 510s
+[lock] 等待其他基准结束… 540s
+[lock] 等待其他基准结束… 570s
+[lock] 等待其他基准结束… 600s
+[lock] 等待其他基准结束… 630s
+[lock] 等待其他基准结束… 660s
+[lock] 等待其他基准结束… 690s
+[lock] 等待其他基准结束… 720s
+[lock] 等待其他基准结束… 750s
+[lock] 等待其他基准结束… 780s
+[lock] 等待其他基准结束… 810s
+[lock] 等待其他基准结束… 840s
+[lock] 等待其他基准结束… 870s
+[lock] 等待其他基准结束… 900s
+[lock] 等待其他基准结束… 930s
+[lock] 等待其他基准结束… 960s
+[lock] 等待其他基准结束… 990s
+[lock] 等待其他基准结束… 1020s
+[lock] 等待其他基准结束… 1050s
+[lock] 等待其他基准结束… 1080s
+[lock] 等待其他基准结束… 1110s
+[lock] 等待其他基准结束… 1140s
+[lock] 等待其他基准结束… 1170s
+[lock] 等待其他基准结束… 1200s
+[lock] 等待其他基准结束… 1230s
+[lock] 等待其他基准结束… 1260s
+[lock] 等待其他基准结束… 1290s
+[lock] 等待其他基准结束… 1320s
+[lock] 等待其他基准结束… 1350s
+[lock] 等待其他基准结束… 1380s
+[lock] 等待其他基准结束… 1410s
+[lock] 等待其他基准结束… 1440s
+[lock] 等待其他基准结束… 1470s
+[lock] 等待其他基准结束… 1500s
+[lock] 等待其他基准结束… 1530s
+[lock] 等待其他基准结束… 1560s
+[lock] 等待其他基准结束… 1590s
+[lock] 等待其他基准结束… 1620s
+[cpu] 15.6,17.7,16.7
+file:///E:/workspaces/codejoo/apps/skeletonizer/demo/.tmp-a2/trace3.mjs:40
+  { const an = events.filter((e) => e.name === "Animation" && e.args && e.args.data).map((e) => ({ ph: e.ph, ...e.args.data })); if (an.length) { const o = {}; for (const a of an) o[JSON.stringify({ state: a.state, compositeFailed: a.compositeFailed, unsupportedProperties: a.unsupportedProperties, displayName: a.displayName })] = (o[JSON.stringify({ state: a.state, compositeFailed: a.compositeFailed, unsupportedProperties: a.unsupportedProperties, displayName: a.displayName })] || 0) + 1; fs.appendFileSync("diag-animation-events.jsonl", JSON.stringify({ scen: globalThis.__curName, summary: o }) + "
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            ^
+
+SyntaxError: Invalid or unexpected token
+    at compileSourceTextModule (node:internal/modules/esm/utils:357:16)
+    at ModuleLoader.moduleStrategy (node:internal/modules/esm/translators:109:18)
+    at #translate (node:internal/modules/esm/loader:564:20)
+    at afterLoad (node:internal/modules/esm/loader:614:29)
+    at ModuleLoader.loadAndTranslate (node:internal/modules/esm/loader:619:12)
+    at #createModuleJob (node:internal/modules/esm/loader:643:36)
+    at #getJobFromResolveResult (node:internal/modules/esm/loader:353:34)
+    at ModuleLoader.getModuleJobForImport (node:internal/modules/esm/loader:318:41)
+    at async onImport.tracePromise.__proto__ (node:internal/modules/esm/loader:685:25)
+
+Node.js v24.11.0
