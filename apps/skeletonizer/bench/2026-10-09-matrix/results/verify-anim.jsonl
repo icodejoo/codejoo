@@ -1,0 +1,9 @@
+{"name":"fade","unique":12,"of":12,"hashes":"e41732,f5104c,a5f9d2,9dbdfd,fdbac9,b391f1,6fe6dd,c1b300,0fe57d,218efd,dfc227,026482","anims":{"count":1,"sample":[{"name":"skz-fade","pseudo":null,"state":"running"}]}}
+{"name":"sweep","unique":1,"of":12,"hashes":"218efd,218efd,218efd,218efd,218efd,218efd,218efd,218efd,218efd,218efd,218efd,218efd","anims":{"count":1,"sample":[{"name":"skz-sweep","pseudo":"::after","state":"running"}]}}
+{"name":"sweep-bg","unique":1,"of":12,"hashes":"1e951b,1e951b,1e951b,1e951b,1e951b,1e951b,1e951b,1e951b,1e951b,1e951b,1e951b,1e951b","anims":{"count":1,"sample":[{"name":"skz-sweep","pseudo":"::after","state":"running"}]}}
+{"name":"shimmer-svg","unique":8,"of":12,"hashes":"5a9120,8766dc,76a55d,c4ef3b,772a32,499fe6,07e9da,07e9da,07e9da,07e9da,07e9da,0b35d7","anims":{"count":0,"sample":[]}}
+{"name":"pulse-svg","unique":12,"of":12,"hashes":"12247c,49ce7a,4092a5,f7b06a,420404,6ef9f2,1a4a50,b2d4a9,147b54,bee042,d1c24f,07e9da","anims":{"count":0,"sample":[]}}
+{"name":"shimmer-leaf-svg","unique":12,"of":12,"hashes":"b577f4,8cce75,425279,d4662b,aa7cf3,d317c5,a432d2,7287a2,9969db,a6d2ff,0e5010,bf6479","anims":{"count":0,"sample":[]}}
+{"name":"form-shimmer-svg","unique":9,"of":12,"hashes":"5017ba,43ded7,fd9135,fd9135,afcfa7,a04a89,fe268e,e3f640,5dd29e,fd9135,fd9135,25c307","anims":{"count":0,"sample":[]}}
+{"name":"form-shimmer-default","unique":12,"of":12,"hashes":"f766f6,8e1e57,8b24ff,edca5c,6251e9,a27d2b,acc8fc,332a33,b1f074,b23ad4,9f6f48,342c9d","anims":{"count":2,"sample":[{"name":"skz-shimmer-root","pseudo":null,"state":"running"},{"name":"skz-pulse-root","pseudo":null,"state":"running"}]}}
+{"name":"shimmer-enable","unique":12,"of":12,"hashes":"ea98d9,bddbff,be1005,3a64fa,8d6b24,eea18e,3d4a86,cf440f,d1457a,170775,ac9421,e3033e","anims":{"count":2,"sample":[{"name":"skz-shimmer-root","pseudo":null,"state":"running"},{"name":"skz-pulse-root","pseudo":null,"state":"running"}]}}

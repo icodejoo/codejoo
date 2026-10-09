@@ -66,6 +66,17 @@ describe("样式入口的组成", () => {
     expect(out).toContain("skz-effect=sweep");
   });
 
+  it("sweep：只有一种，没有 skz-sweep 属性；深色走容器色（无混合模式、无遮罩），默认光带竖直", () => {
+    const out = css("sweep");
+    expect(out).not.toContain("skz-sweep=");
+    expect(out).not.toContain("soft-light");
+    expect(out).toContain("--skz-sweep-bg-rgb: 31, 41, 55");
+    expect(out).toContain("--skz-sweep-skew: 0deg");
+    expect(out).toContain("--skz-sweep-blend: normal");
+    expect(out).toContain("--skz-sweep-mask: none");
+    expect(out.match(/@keyframes skz-sweep/g)).toHaveLength(1);
+  });
+
   it("所有入口：不含 data URI 和 skz-mode；all、global 不含 skz-fallback", () => {
     for (const name of ALL_ENTRIES) {
       const out = css(name);

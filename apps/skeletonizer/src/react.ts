@@ -10,19 +10,19 @@ import type { EnableOptions } from "./enable.js";
  * 加载中照常渲染真实组件，用 `Bone` 造的 mock 数据填充；空元素没有尺寸，不会出骨头。
  * @param ref 目标元素的 ref
  * @param loading 是否加载中
- * @param opts 骨架选项（effect / text / fallback / engine / fps / fit）
+ * @param opts 骨架选项（effect / text / fallback / engine / fit）
  * @example
  * const ref = useRef<HTMLDivElement>(null);
  * useSkeleton(ref, loading, { effect: 'pulse' });
  * return <div ref={ref}>...</div>;
  */
 export function useSkeleton(ref: RefObject<HTMLElement | null>, loading: boolean, opts: EnableOptions = {}): void {
-  const { effect, text, fallback, engine, fps, fit } = opts;
+  const { effect, text, fallback, engine, fit } = opts;
   useEffect(() => {
     const el = ref.current;
     if (!loading || !el) return undefined;
-    return enable(el, { effect, text, fallback, engine, fps, fit });
-  }, [ref, loading, effect, text, fallback, engine, fps, fit]);
+    return enable(el, { effect, text, fallback, engine, fit });
+  }, [ref, loading, effect, text, fallback, engine, fit]);
 }
 
 /** SkzBox 组件的 props */

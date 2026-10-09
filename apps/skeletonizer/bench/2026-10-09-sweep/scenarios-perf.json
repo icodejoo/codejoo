@@ -1,0 +1,166 @@
+[
+ {
+  "name": "orig-blend-n100",
+  "css": "base,sweep&v=orig",
+  "n": 100,
+  "attrs": {
+   "effect": "sweep"
+  }
+ },
+ {
+  "name": "orig-blend-n500",
+  "css": "base,sweep&v=orig",
+  "n": 500,
+  "attrs": {
+   "effect": "sweep"
+  }
+ },
+ {
+  "name": "orig-blend-n2000",
+  "css": "base,sweep&v=orig",
+  "n": 2000,
+  "attrs": {
+   "effect": "sweep"
+  }
+ },
+ {
+  "name": "orig-bg-n100",
+  "css": "base,sweep&v=orig",
+  "n": 100,
+  "attrs": {
+   "effect": "sweep",
+   "_attrs": [
+    [
+     "skz-sweep",
+     "bg"
+    ]
+   ]
+  }
+ },
+ {
+  "name": "orig-bg-n500",
+  "css": "base,sweep&v=orig",
+  "n": 500,
+  "attrs": {
+   "effect": "sweep",
+   "_attrs": [
+    [
+     "skz-sweep",
+     "bg"
+    ]
+   ]
+  }
+ },
+ {
+  "name": "orig-bg-n2000",
+  "css": "base,sweep&v=orig",
+  "n": 2000,
+  "attrs": {
+   "effect": "sweep",
+   "_attrs": [
+    [
+     "skz-sweep",
+     "bg"
+    ]
+   ]
+  }
+ },
+ {
+  "name": "new-blend-n100",
+  "css": "base,sweep&v=new",
+  "n": 100,
+  "attrs": {
+   "effect": "sweep"
+  }
+ },
+ {
+  "name": "new-blend-n500",
+  "css": "base,sweep&v=new",
+  "n": 500,
+  "attrs": {
+   "effect": "sweep"
+  }
+ },
+ {
+  "name": "new-blend-n2000",
+  "css": "base,sweep&v=new",
+  "n": 2000,
+  "attrs": {
+   "effect": "sweep"
+  }
+ },
+ {
+  "name": "new-bg-n100",
+  "css": "base,sweep&v=new",
+  "n": 100,
+  "attrs": {
+   "effect": "sweep",
+   "_attrs": [
+    [
+     "skz-sweep",
+     "bg"
+    ]
+   ]
+  }
+ },
+ {
+  "name": "new-bg-n500",
+  "css": "base,sweep&v=new",
+  "n": 500,
+  "attrs": {
+   "effect": "sweep",
+   "_attrs": [
+    [
+     "skz-sweep",
+     "bg"
+    ]
+   ]
+  }
+ },
+ {
+  "name": "new-bg-n2000",
+  "css": "base,sweep&v=new",
+  "n": 2000,
+  "attrs": {
+   "effect": "sweep",
+   "_attrs": [
+    [
+     "skz-sweep",
+     "bg"
+    ]
+   ]
+  }
+ },
+ {
+  "name": "orig-blend-dark-n500",
+  "css": "base,sweep&v=orig&theme=dark",
+  "n": 500,
+  "attrs": {
+   "effect": "sweep"
+  }
+ },
+ {
+  "name": "new-blend-dark-n500",
+  "css": "base,sweep&v=new&theme=dark",
+  "n": 500,
+  "attrs": {
+   "effect": "sweep"
+  }
+ },
+ {
+  "name": "orig-solid-ref-n500",
+  "css": "base,sweep&v=orig",
+  "n": 500,
+  "attrs": {
+   "effect": "solid"
+  }
+ },
+ {
+  "name": "new-solid-ref-n500",
+  "css": "base,sweep&v=new",
+  "n": 500,
+  "attrs": {
+   "effect": "solid"
+  }
+ }
+]

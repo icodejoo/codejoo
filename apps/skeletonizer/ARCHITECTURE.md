@@ -11,13 +11,12 @@ src/
 ├─ bone.ts       Bone：确定性 mock 数据（文字 / 段落 / CJK / 数字 / 占位图）
 ├─ enable.ts     enable/disable 开关加载态；registerCustomElements 处理第三方自定义元素宿主
 ├─ element.ts    <skz-box loading> 自定义元素（light DOM，SSR 安全）：宿主只管 loading，skz 落在第一个元素子节点上，不带 MutationObserver
-├─ ticker.ts     JS 计时器：fps 选项下按限定帧率（或自动档）写根变量，代替根上的 CSS 动画
 ├─ firewall.ts   继承防火墙：给视口外的列表项打 skz-fw，阻断根变量逐帧变化引起的子树重算
 ├─ svg.ts        SVG 方案的运行时图：按主题高光色和时长生成 blob SVG，引用计数释放
 ├─ dom.ts        小工具：清空 style 属性、CSS 时长换算
 ├─ vue.ts / react.ts / svelte.ts   框架适配层（子路径导出）
 ├─ index.ts      核心入口（skeletonizer），不带 CSS
-├─ variants/     方案扩展：global.ts（防火墙 + 计时器）、svg.ts（运行时 SVG），导入即通过 registerExtension 注册到核心
+├─ variants/     方案扩展：global.ts（防火墙）、svg.ts（运行时 SVG），导入即通过 registerExtension 注册到核心
 ├─ entries/      变体入口外壳：global / svg / all（构建时产物开头加 import "./xxx.css"）与 *-js（纯 JS）
 └─ styles/
    ├─ entries/   CSS 入口：base / explicit（基底二选一）、global / svg / sweep（变体）、all

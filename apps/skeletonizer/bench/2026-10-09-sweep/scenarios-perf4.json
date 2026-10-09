@@ -1,0 +1,98 @@
+[
+ {
+  "name": "new-blend-n37-r1",
+  "css": "base,sweep&v=new",
+  "n": 37,
+  "attrs": {
+   "effect": "sweep"
+  }
+ },
+ {
+  "name": "orig-blend-n37-r1",
+  "css": "base,sweep&v=orig",
+  "n": 37,
+  "attrs": {
+   "effect": "sweep"
+  }
+ },
+ {
+  "name": "new-blend-n100-r1",
+  "css": "base,sweep&v=new",
+  "n": 100,
+  "attrs": {
+   "effect": "sweep"
+  }
+ },
+ {
+  "name": "orig-blend-n100-r1",
+  "css": "base,sweep&v=orig",
+  "n": 100,
+  "attrs": {
+   "effect": "sweep"
+  }
+ },
+ {
+  "name": "new-blend-n37-r2",
+  "css": "base,sweep&v=new",
+  "n": 37,
+  "attrs": {
+   "effect": "sweep"
+  }
+ },
+ {
+  "name": "orig-blend-n37-r2",
+  "css": "base,sweep&v=orig",
+  "n": 37,
+  "attrs": {
+   "effect": "sweep"
+  }
+ },
+ {
+  "name": "new-blend-n100-r2",
+  "css": "base,sweep&v=new",
+  "n": 100,
+  "attrs": {
+   "effect": "sweep"
+  }
+ },
+ {
+  "name": "orig-blend-n100-r2",
+  "css": "base,sweep&v=orig",
+  "n": 100,
+  "attrs": {
+   "effect": "sweep"
+  }
+ },
+ {
+  "name": "new-blend-n37-r3",
+  "css": "base,sweep&v=new",
+  "n": 37,
+  "attrs": {
+   "effect": "sweep"
+  }
+ },
+ {
+  "name": "orig-blend-n37-r3",
+  "css": "base,sweep&v=orig",
+  "n": 37,
+  "attrs": {
+   "effect": "sweep"
+  }
+ },
+ {
+  "name": "new-blend-n100-r3",
+  "css": "base,sweep&v=new",
+  "n": 100,
+  "attrs": {
+   "effect": "sweep"
+  }
+ },
+ {
+  "name": "orig-blend-n100-r3",
+  "css": "base,sweep&v=orig",
+  "n": 100,
+  "attrs": {
+   "effect": "sweep"
+  }
+ }
+]

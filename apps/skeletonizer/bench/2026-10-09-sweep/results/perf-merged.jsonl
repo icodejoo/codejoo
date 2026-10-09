@@ -1,0 +1,4 @@
+{"name":"merged-light-n500","elements":4000,"fps":60,"mainBusy":4.65,"UpdateLayoutTree":0.24,"compositor":2.2,"gpu":2.2,"PrePaint":1.68,"Layerize":0,"Commit":0.1,"HitTest":0,"stalls":0}
+{"name":"merged-light-n2000","elements":16000,"fps":58.4,"mainBusy":20.7,"UpdateLayoutTree":2.15,"compositor":1.83,"gpu":2.25,"PrePaint":5.75,"Layerize":0,"Commit":2.2,"HitTest":0,"raster":0,"stalls":1}
+{"name":"merged-dark-n500","elements":4000,"fps":60.4,"mainBusy":6.42,"UpdateLayoutTree":0.6,"compositor":2.04,"gpu":1.49,"PrePaint":1.62,"Layerize":0,"Commit":0.71,"HitTest":0,"stalls":0}
+{"name":"merged-dark-n2000","elements":16000,"fps":58.4,"gpu":1.45,"compositor":1.56,"mainBusy":19.75,"UpdateLayoutTree":2.6,"PrePaint":4.84,"Layerize":0,"Commit":2.31,"HitTest":0,"stalls":0}

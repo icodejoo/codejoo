@@ -1,0 +1,16 @@
+{"name":"orig-blend-n100","elements":800,"fps":60.4,"mainBusy":1.5,"UpdateLayoutTree":0.1,"compositor":1.14,"PrePaint":0.29,"Layerize":0,"Commit":0.07,"gpu":0.99,"HitTest":0,"stalls":0}
+{"name":"orig-blend-n500","elements":4000,"fps":60.4,"mainBusy":3.23,"UpdateLayoutTree":0.19,"compositor":0.79,"PrePaint":1.07,"Layerize":0,"Commit":0.08,"HitTest":0,"gpu":0,"stalls":0}
+{"name":"orig-blend-n2000","elements":16000,"fps":60.4,"mainBusy":11.32,"UpdateLayoutTree":0.59,"compositor":0.61,"PrePaint":4.77,"Layerize":0,"Commit":0.07,"gpu":0,"HitTest":0,"stalls":0}
+{"name":"orig-bg-n100","elements":800,"fps":60.4,"mainBusy":1.31,"UpdateLayoutTree":0.1,"compositor":1,"PrePaint":0.26,"Layerize":0,"Commit":0.06,"HitTest":0,"gpu":0.54,"stalls":0}
+{"name":"orig-bg-n500","elements":4000,"fps":60.4,"mainBusy":4.18,"UpdateLayoutTree":0.24,"compositor":0.72,"PrePaint":1.5,"Layerize":0,"Commit":0.09,"gpu":0.01,"HitTest":0,"stalls":0}
+{"name":"orig-bg-n2000","elements":16000,"fps":60.4,"mainBusy":13.09,"UpdateLayoutTree":0.73,"compositor":0.6,"PrePaint":5.5,"gpu":0.01,"Layerize":0,"Commit":0.07,"HitTest":0.01,"stalls":0}
+{"name":"new-blend-n100","elements":800,"fps":60.4,"mainBusy":1.41,"UpdateLayoutTree":0.11,"compositor":1.91,"gpu":2.18,"PrePaint":0.28,"Layerize":0,"Commit":0.07,"HitTest":0,"raster":0,"stalls":0}
+{"name":"new-blend-n500","elements":4000,"fps":60.4,"mainBusy":6.21,"UpdateLayoutTree":0.33,"compositor":2.47,"gpu":2.15,"PrePaint":2.29,"Layerize":0,"Commit":0.12,"HitTest":0,"stalls":0}
+{"name":"new-blend-n2000","elements":16000,"fps":60.4,"mainBusy":14.84,"UpdateLayoutTree":0.82,"compositor":1.89,"gpu":2.28,"PrePaint":6.2,"Layerize":0,"Commit":0.08,"HitTest":0.01,"stalls":0}
+{"name":"new-bg-n100","elements":800,"fps":60.4,"mainBusy":1.59,"compositor":1.68,"gpu":1.34,"UpdateLayoutTree":0.14,"PrePaint":0.32,"Layerize":0,"Commit":0.07,"HitTest":0,"stalls":0}
+{"name":"new-bg-n500","elements":4000,"fps":60.4,"mainBusy":5.44,"compositor":1.98,"gpu":1.28,"UpdateLayoutTree":0.3,"PrePaint":2.04,"Layerize":0,"Commit":0.1,"HitTest":0,"stalls":0}
+{"name":"new-bg-n2000","elements":16000,"fps":60.4,"mainBusy":13.73,"UpdateLayoutTree":0.8,"compositor":1.46,"gpu":1.4,"PrePaint":5.75,"Layerize":0,"Commit":0.07,"HitTest":0,"stalls":0}
+{"name":"orig-blend-dark-n500","elements":4000,"fps":60.4,"mainBusy":5.03,"UpdateLayoutTree":0.21,"compositor":0.83,"PrePaint":1.95,"Layerize":0,"Commit":0.1,"gpu":0.06,"HitTest":0,"raster":0,"stalls":1}
+{"name":"new-blend-dark-n500","elements":4000,"fps":60.4,"mainBusy":6.85,"UpdateLayoutTree":0.69,"compositor":2.3,"gpu":2.02,"PrePaint":1.78,"Layerize":0,"Commit":0.73,"HitTest":0,"stalls":0}
+{"name":"orig-solid-ref-n500","elements":4000,"fps":60.8,"mainBusy":0.46,"compositor":0.41,"PrePaint":0.01,"Layerize":0,"Commit":0.06,"gpu":0.01,"HitTest":0,"stalls":0}
+{"name":"new-solid-ref-n500","elements":4000,"fps":60.8,"mainBusy":0.48,"compositor":0.42,"PrePaint":0.01,"Layerize":0,"Commit":0.06,"gpu":0.01,"HitTest":0,"stalls":0}

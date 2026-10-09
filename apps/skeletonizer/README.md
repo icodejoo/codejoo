@@ -1,5 +1,7 @@
 # skeletonizer
 
+**Live demo: <https://icodejoo.github.io/codejoo/skeletonizer/>** (switch effects, tiers, dark mode, fit and more)
+
 Skeleton screens for the web, Flutter-`skeletonizer` style: render your **real DOM** with **mock data**, and let **pure CSS** turn the leaves into skeleton bones. No hand-drawn placeholder shapes to maintain.
 
 > 中文文档（更详细）：[README.zh-CN.md](./README.zh-CN.md)
@@ -8,12 +10,26 @@ Skeleton screens for the web, Flutter-`skeletonizer` style: render your **real D
 
 ## Contents
 
+- [How it works](#how-it-works)
 - [Quick start](#quick-start)
 - [Entry points](#entry-points): a base plus opt-in variants
-- [Which setup to use](#which-setup-to-use)
+- [Feature reference](#feature-reference): effects / entries / options / automatic behaviour / markers / theme variables / API: what, usage, limits
+- [Which setup to use](#which-setup-to-use): recommendations by scenario
 - [Comparison](#comparison): measured performance, colour, compatibility
-- [Schemes in detail](#schemes-in-detail)
-- [Markers](#markers) · [Theming](#theming) · [Browser support](#browser-support) · [AI coding agents](#ai-coding-agents) · [Develop](#develop)
+- [Schemes in detail](#schemes-in-detail): fade / solid, global, svg, sweep, explicit markers, lazy rendering
+- [Bone helpers](#bone-helpers) · [Theming](#theming)
+- [Browser support and fallbacks](#browser-support-and-fallbacks) · [Known limitations and constraints](#known-limitations-and-constraints)
+- [Using with frameworks](#using-with-frameworks) · [AI coding agents](#ai-coding-agents) · [Develop](#develop)
+
+## How it works
+
+Three parts:
+
+1. **Real DOM rendering**: write components in your usual JSX / Vue templates, just feed them mock data instead of real data.
+2. **Mock data**: use `Bone` helpers to generate text, images and other placeholders; all deterministic (SSR friendly, no `Math.random`).
+3. **CSS picks the leaves**: heuristics based on tag names, element content and whether text is empty automatically turn leaves into grey bones; the bare attributes `skz-bone` / `skz-leaf` / `skz-ignore` mark the exceptions.
+
+The skeleton styles are pure CSS in four progressive layers (fallback → Tier 0 → Tier 1 → Tier 2), from the oldest browsers to the newest, with no UA sniffing and no JS gate.
 
 ## Quick start
 
@@ -45,7 +61,6 @@ Everything at once: `import "skeletonizer/all";`.
 | `text`     | `underline` (default) / `leaf`                             | how text bones are drawn                                                                                                                                                                                                                               |
 | `engine`   | `global` / `svg`                                           | implementation of `pulse` / `shimmer`; defaults to whichever variant is loaded (`global` wins when both are)                                                                                                                                           |
 | `fallback` | `svg` (default) / `fade`                                   | what the `global` scheme does on browsers without `@property`: JS attaches an SVG animation (`svg`) or keeps the base fade (`fade`); old browsers show fade until JS runs                                                                              |
-| `fps`      | number (24–30) / `"auto"`                                  | `global` scheme without list markup: drive the animation from a throttled JS ticker; ignored when the firewall finds list items                                                                                                                        |
 | `fit`      | boolean (default `false`)                                  | the skeleton never grows a scrollbar: the root is capped at the space left in its scroll ancestor (or the viewport) and list items fully outside it get `display: none`; re-measured on resize. `<skz-box fit>` / React / Vue / Svelte pass it through |
 
 Calling `enable()` again is safe: attributes are re-synced, omitted options are cleared, list items / ignore regions / theme variables are re-read.
@@ -71,116 +86,549 @@ defineSkzBox();
 <skz-box loading effect="shimmer"><div class="card" skz>…</div></skz-box>
 <!-- `loading` on the host is the switch; `skz` lands on its FIRST element child (the skeleton root), never on the host itself -->
 <!-- SSR / no JS: write `skz` on that child yourself, e.g. <skz-box loading><div skz>…</div></skz-box>; it hits the CSS fallback layer, and enable() is idempotent once JS boots -->
-<!-- no JS: write the root attributes yourself (no firewall, ticker, runtime SVG or inert lock) -->
+<!-- no JS: write the root attributes yourself (no firewall, runtime SVG or inert lock) -->
 <div skz skz-effect="shimmer">…</div>
 ```
 
-`<skz-box>` only tracks its own `loading` attribute (plus `effect` / `text` / `fallback` / `engine` / `fps`). It does not use a MutationObserver: if a framework replaces the first child, toggle `loading` once (off, then on) so the new child is picked up and the old one is disabled. Moving the host to another parent keeps the loading state.
+`<skz-box>` only tracks its own `loading` attribute (plus `effect` / `text` / `fallback` / `engine`). It does not use a MutationObserver: if a framework replaces the first child, toggle `loading` once (off, then on) so the new child is picked up and the old one is disabled. Moving the host to another parent keeps the loading state.
+
+SSR-safe: the `skeletonizer` core and `/global/js`, `/svg/js`, `/all/js` import without errors in Node; the variant entries that ship CSS (`/global`, `/svg`, `/all`) need a bundler that handles CSS, see the next section.
 
 ## Entry points
 
-Styles and runtime are split into a base plus variants. Sizes are gzip.
+Styles and runtime are split into a base plus variants. Sizes are `gzip -9` of the `pnpm build` output (1 KB = 1024 bytes; core = `index.mjs` + the shared `enable` chunk; the JS increment of `global` / `svg` includes the SVG chunk they share).
 
 | Entry                                                   | What                                                                                                                                               | Size                    |
 | ------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------- |
-| `skeletonizer/base.css`                                 | **Base (pick one):** theme, interaction lock, four-tier bone inference, explicit markers, ignore regions, fade / solid, lazy pause, reduced motion | 1.30 KB                 |
-| `skeletonizer/explicit.css`                             | **Base (pick one):** same, but **no inference rules**: only `skz-bone` / `skz-leaf` become bones; cheaper style recalc                             | 0.76 KB                 |
-| `skeletonizer`                                          | Runtime core: `enable` / `disable`, `Bone`, `<skz-box>`, `registerCustomElements`. No CSS, SSR-safe                                                | 3.3 KB                  |
+| `skeletonizer/base.css`                                 | **Base (pick one):** theme, interaction lock, four-tier bone inference, explicit markers, ignore regions, fade / solid, lazy pause, reduced motion | 1.28 KB                 |
+| `skeletonizer/explicit.css`                             | **Base (pick one):** same, but **no inference rules**: only `skz-bone` / `skz-leaf` become bones; cheaper style recalc                             | 0.77 KB                 |
+| `skeletonizer`                                          | Runtime core: `enable` / `disable`, `Bone`, `<skz-box>`, `registerCustomElements`. No CSS, SSR-safe                                                | 4.1 KB                  |
 | `skeletonizer/vue`, `/react`, `/svelte`                 | Framework adapters                                                                                                                                 | +0.1–0.5 KB             |
-| `skeletonizer/global` (`/global/js`, `global.css`)      | Root-driven `pulse` / `shimmer`, inheritance firewall, JS ticker, JS-driven SVG for old browsers                                                   | +2.4 KB JS, 0.56 KB CSS |
-| `skeletonizer/svg` (`/svg/js`, `svg.css`)               | `pulse` / `shimmer` from one shared animated SVG background, exact theme colours generated at runtime                                              | +1.0 KB JS, 0.20 KB CSS |
-| `skeletonizer/sweep.css`                                | Sweep highlight bar (CSS only)                                                                                                                     | 0.59 KB                 |
-| `skeletonizer/all` (`/all/js`, `all.css` = `style.css`) | `base` + every variant                                                                                                                             | +2.4 KB JS, 2.07 KB CSS |
+| `skeletonizer/global` (`/global/js`, `global.css`)      | Root-driven `pulse` / `shimmer`, inheritance firewall, JS-driven SVG for old browsers                                                              | +1.3 KB JS, 0.48 KB CSS |
+| `skeletonizer/svg` (`/svg/js`, `svg.css`)               | `pulse` / `shimmer` from one shared animated SVG background, exact theme colours generated at runtime                                              | +1.2 KB JS, 0.19 KB CSS |
+| `skeletonizer/sweep.css`                                | Sweep highlight bar (CSS only)                                                                                                                     | 0.55 KB                 |
+| `skeletonizer/all` (`/all/js`, `all.css` = `style.css`) | `base` + every variant                                                                                                                             | +1.4 KB JS, 1.97 KB CSS |
 
-- Variant entries with CSS start with `import "./<name>.css"`, so bundlers (Vite, webpack, Next.js, Rollup) pull the styles in; `sideEffects` is declared so they are not tree-shaken.
-- **No bundler / Node / SSR:** import the `/js` entry and link the matching `.css` file yourself. The core and `/js` entries import fine in Node.
-- Importing only `skeletonizer/svg` leaves the firewall, ticker and root-driven CSS out of the bundle (verified with a Vite build).
+- The trade-offs between the CSS-bundled, JS-only and CSS-only entries are in the "Entry points / variants" rows of the [Feature reference](#feature-reference).
+- Importing only `skeletonizer/svg` leaves the firewall and root-driven CSS out of the bundle (verified with a Vite build).
+
+## Feature reference
+
+Everything the library offers (effects, entry points, options, automatic behaviour, markers, theme variables, API) with what it does, the shortest working usage and its limits. Details that do not fit a cell are in [Schemes in detail](#schemes-in-detail) and [Known limitations and constraints](#known-limitations-and-constraints). Performance numbers in the "Limits" column (fps / per-frame style recalc / enable time, shown as "4,000 / 16,000 elements") come from the matrix in [Comparison](#comparison): desktop Chrome, one forward pass; do not trust differences under 2x.
+
+| Item                                     | What it does                                                                                                                                                                                                                                                                                                                | Usage                                                                                              | Limits                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    |
+| ---------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Effects**                              |                                                                                                                                                                                                                                                                                                                             |                                                                                                    |                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                           |
+| `fade` (default)                         | Opacity pulse on the whole root (1 → `--skz-fade-min`, default 0.55), runs on the compositor, nearly free; it is what you get without `skz-effect`                                                                                                                                                                          | `enable(el)`<br>`enable(el, { effect: "fade" })`<br>`<div skz>`                                    | With `skz-ignore` inside the root the implicit default does not fade, so write `effect: "fade"` to force it; dims everything in the root (ignore regions included); `pulse` / `shimmer` also fall back to it when no variant is imported<br>60 fps at 4,000 / 16,000 elements, style recalc 0.10 / 0.24 ms, enable 24 / 76 ms                                                                                                                                                                                                             |
+| `solid`                                  | Static bone colour, no animation                                                                                                                                                                                                                                                                                            | `enable(el, { effect: "solid" })`<br>`skz-effect="solid"`                                          | Ships with the base, no extra limits<br>60 fps, style recalc 0.00 ms, enable 22 / 69 ms                                                                                                                                                                                                                                                                                                                                                                                                                                                   |
+| `sweep`                                  | One `::after` highlight bar over the whole root, moved by `transform` on the compositor; light uses a lighten blend that only brightens bones, dark uses a container-colour overlay, switched by theme                                                                                                                      | `import "skeletonizer/sweep.css"`<br>`enable(el, { effect: "sweep" })`                             | Requires `sweep.css`; sets `position: relative` + `overflow-x: clip` on the root, takes the root's `::after`, and also sweeps ignore regions; needs `mix-blend-mode` (light); the bar is vertical by default, tilt it with care on long roots<br>60 fps at 16,000 elements, style recalc 0.67 ms (dark 0.61 ms), plus ~5–6 ms PrePaint and ~1.4–2.2 ms GPU; enable 16 / 63 ms (reused from the original matrix, not re-measured for the merged version)<br>See [sweep](#sweep-highlight-bar-pure-css)                                     |
+| `pulse`                                  | Bone colour pulses between `--skz-color` and `--skz-highlight` (global: one animation on the root; svg: a shared animated SVG)                                                                                                                                                                                              | `import "skeletonizer/global"`<br>`enable(el, { effect: "pulse" })`                                | Needs the `global` or `svg` variant, otherwise falls back to fade; global needs `@property` (Chrome 119+ / Safari 16.4+ / Firefox 128+), older browsers get an SVG animation attached by JS; slow at scale as pure CSS<br>Numbers match shimmer (pulse vs shimmer differences in the matrix are within noise)                                                                                                                                                                                                                             |
+| `shimmer`                                | A highlight band slides through viewport coordinates, all bones in sync (`background-attachment: fixed` gradient)                                                                                                                                                                                                           | `import "skeletonizer/global"`<br>`enable(el, { effect: "shimmer" })`                              | As pulse; underline text cannot take a gradient (global: colour pulse, svg: static); iOS Safari has no fixed backgrounds (global: colour pulse, svg: pulse image)<br>`global` + `enable()`: 60 fps / 4.89 ms (16,000), enable 63 ms; pure CSS without JS: 20.8 fps / 41.3 ms; `explicit.css` + `global`: 2.60 ms, enable 50 ms; `svg`: 0.05 ms, enable 111 ms<br>Page without list structure (two-column form): `global` 17.2 fps / 49.1 ms, `svg` 60 fps / 0.04 ms                                                                       |
+| **Entry points / variants**              |                                                                                                                                                                                                                                                                                                                             |                                                                                                    |                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                           |
+| `base.css`                               | Base (pick one of two): theme variables, interaction lock, four-tier bone inference, explicit markers, ignore regions, fade / solid, lazy pause, reduced motion, CSS for `skz-cv` and `fit`                                                                                                                                 | `import "skeletonizer/base.css"`                                                                   | 1.28 KB; only fade / solid, `pulse` / `shimmer` / `sweep` need a variant; the inference selectors make per-frame style recalc costlier than `explicit.css`                                                                                                                                                                                                                                                                                                                                                                                |
+| `explicit.css`                           | Explicit base: **no inference rules at all**, only `skz-bone` / `skz-leaf` are bones and everything else renders as-is                                                                                                                                                                                                      | `import "skeletonizer/explicit.css"` (instead of `base.css`)                                       | 0.77 KB; explicit mode is only available by loading this file, there is no per-root switch; every bone must be marked; no inference rules, so `skz-text` has no effect<br>Cheaper: style recalc 4.89 → 2.60 ms (16,000, firewall path), enable 62 → 50 ms, no fps difference (both 60)                                                                                                                                                                                                                                                    |
+| Core `skeletonizer`                      | Runtime: `enable` / `disable`, `Bone`, `<skz-box>`, `registerCustomElements`                                                                                                                                                                                                                                                | `import { enable, Bone } from "skeletonizer"`                                                      | 4.1 KB; no CSS, import a base separately; importing it in SSR / Node is fine                                                                                                                                                                                                                                                                                                                                                                                                                                                              |
+| `global`                                 | Root-driven pulse / shimmer + inheritance firewall + JS-attached SVG fallback for old browsers                                                                                                                                                                                                                              | `import "skeletonizer/global"`                                                                     | +1.3 KB JS + 0.48 KB CSS; entries with CSS need a bundler; on large skeletons without list structure the firewall cannot help (use `svg`); see [global](#global-root-driven-pulse--shimmer)                                                                                                                                                                                                                                                                                                                                               |
+| `svg`                                    | pulse / shimmer from one shared animated SVG background, exact colours generated from the theme at runtime, no `@property` needed                                                                                                                                                                                           | `import "skeletonizer/svg"`                                                                        | +1.2 KB JS + 0.19 KB CSS; underline text stays static; strict CSP must allow `img-src blob:`; without JS it falls back to fade; costlier to enable than global (111 ms at 16,000 elements, 134 ms on the form page) and 4.7–8 ms PrePaint; see [svg](#svg-shared-svg-animation-background)                                                                                                                                                                                                                                                |
+| `sweep.css`                              | The CSS-only sweep effect (no JS variant)                                                                                                                                                                                                                                                                                   | `import "skeletonizer/sweep.css"`                                                                  | 0.55 KB; side effects as in the `sweep` row above                                                                                                                                                                                                                                                                                                                                                                                                                                                                                         |
+| `all`                                    | `base` + every variant (global, svg, sweep)                                                                                                                                                                                                                                                                                 | `import "skeletonizer/all"`                                                                        | 1.4 KB JS + 1.97 KB CSS; global and svg are both present, so `engine` defaults to global; skip it when bundle size matters                                                                                                                                                                                                                                                                                                                                                                                                                |
+| `/js` JS-only entries                    | Runtime only, no CSS: `skeletonizer/global/js`, `/svg/js`, `/all/js`                                                                                                                                                                                                                                                        | `import "skeletonizer/global/js"`                                                                  | Link the matching `.css` yourself (`<link>` or import); meant for no-bundler / SSR; importing in Node is fine                                                                                                                                                                                                                                                                                                                                                                                                                             |
+| `.css` CSS-only entries                  | `base.css`, `explicit.css`, `global.css`, `svg.css`, `sweep.css`, `all.css` (= `style.css`)                                                                                                                                                                                                                                 | `<link rel="stylesheet" href="…/skeletonizer/base.css">`                                           | Without JS there is no firewall, no runtime SVG and no `inert` lock; pure-CSS global at 16,000 elements is ~21 fps / 41 ms                                                                                                                                                                                                                                                                                                                                                                                                                |
+| Entries with CSS                         | `skeletonizer/global`, `/svg`, `/all` start with `import "./x.css"` so bundlers pull the styles in                                                                                                                                                                                                                          | `import "skeletonizer/all"`                                                                        | Needs a bundler that handles CSS (Vite / webpack / Next.js / Rollup); use `/js` in Node / SSR; `sideEffects` is declared so they are not tree-shaken                                                                                                                                                                                                                                                                                                                                                                                      |
+| **`enable()` options**                   |                                                                                                                                                                                                                                                                                                                             |                                                                                                    |                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                           |
+| `effect`                                 | Animation effect, written to the root's `skz-effect`                                                                                                                                                                                                                                                                        | `enable(el, { effect: "shimmer" })`                                                                | `fade` (default) / `solid` / `sweep` / `pulse` / `shimmer`; `sweep` needs `sweep.css`, `pulse` / `shimmer` need `global` or `svg`, otherwise they fall back to fade                                                                                                                                                                                                                                                                                                                                                                       |
+| `text`                                   | How text bones are drawn, written to the root's `skz-text`                                                                                                                                                                                                                                                                  | `enable(el, { text: "leaf" })`                                                                     | `underline` (default, needs `text-decoration-thickness`): no gradient, no rounded corners; `leaf` (needs `:has()`): multi-line block text becomes one rectangle and bare text nodes in mixed content get no bone; no effect with `explicit.css` (no inference rules)                                                                                                                                                                                                                                                                      |
+| `engine`                                 | Implementation of pulse / shimmer: `global` / `svg`                                                                                                                                                                                                                                                                         | `enable(el, { effect: "shimmer", engine: "svg" })`                                                 | Only affects pulse / shimmer; when omitted it follows the loaded variants: `global` if present, `svg` if only svg is loaded, `global` (pure CSS root-driven) if neither; naming a scheme that was not imported falls back to fade by the code's logic (not separately verified)                                                                                                                                                                                                                                                           |
+| `fallback`                               | What `global` does on browsers without `@property`: `svg` (default, JS attaches a blob SVG animation) / `fade` (keep the base fade)                                                                                                                                                                                         | `enable(el, { effect: "shimmer", fallback: "fade" })`                                              | Only applies to the global scheme on browsers without `@property`; the `svg` fallback needs the `global` variant's JS and a CSP that allows `img-src blob:`; before JS runs (SSR first paint) and when blob generation fails it is always fade; the fallback branch could only be simulated in local Chrome, `fallback: "fade"` was not measured                                                                                                                                                                                          |
+| `fit`                                    | The skeleton never grows a scrollbar: the root height is capped at the space left in its scroll ancestor (or the viewport) and list items fully outside it get `display: none`                                                                                                                                              | `enable(el, { fit: true })`<br>`<skz-box loading fit>`                                             | Costly to enable: ~520 ms for 2,000 cards (16,000 elements) vs 61 ms, ~48 ms for 500 cards; cheap per frame (60 fps / 3.31 ms) but 1,994 of 2,000 items are hidden; writes an inline `max-height` on the root and `skz-fit-hide` on items; re-measures only on boundary / window resize, call `enable()` again after content changes; does nothing in SSR; without `ResizeObserver` a scroll ancestor is measured once                                                                                                                    |
+| Calling `enable()` again                 | Idempotent: re-syncs attributes for the given options and re-reads list items, ignore regions and theme variables                                                                                                                                                                                                           | `enable(el, opts)` repeatedly                                                                      | Omitted options are cleared (not merged); list items inserted after enabling and changed ignore regions are only picked up by calling `enable()` again                                                                                                                                                                                                                                                                                                                                                                                    |
+| **Automatic behaviour**                  |                                                                                                                                                                                                                                                                                                                             |                                                                                                    |                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                           |
+| Inheritance firewall                     | Marks off-screen list items with `skz-fw`; CSS pins the animated variables to static values there, so their descendants stop recalculating every frame; 16,000 elements are back to 60 fps                                                                                                                                  | Automatic: `enable()` / an adapter + the `global` variant, nothing to write                        | Only for global's pulse / shimmer; needs JS and `IntersectionObserver` (skipped without it); needs list structure: from the root it skips single-child wrappers and takes the first level with several children, fewer than 2 items disables it; does nothing on pages like a two-column form (use `svg`); bones in off-screen items are static and resume 200px before scrolling in; items inserted after enabling need another `enable()`; not included when only `svg` is imported<br>See [global](#global-root-driven-pulse--shimmer) |
+| Old-browser SVG fallback                 | Without `@property`, JS attaches a blob-generated SVG animation to the root, with exact colours                                                                                                                                                                                                                             | Automatic: import `global` + `enable()`; `fallback: "fade"` turns it off                           | Detected via `CSS.supports("color", "rgb(from red r g b)")` (Chrome 119+ / Safari 16.4+ / Firefox 128+), so Chrome 85–118 is conservatively treated as unsupported; fade before JS runs and when blob generation fails; strict CSP needs `img-src blob:`; the fallback path was not verified on real devices                                                                                                                                                                                                                              |
+| Lazy rendering (`skz-paused`)            | A root enabled via `enable()` that scrolls out of the viewport (100px margin) loses its animation in CSS and gets it back on return; one shared `IntersectionObserver` for the whole library                                                                                                                                | Automatic, nothing to configure                                                                    | Observes roots only: a huge root with one corner in view animates as a whole (`skz-cv` covers that blind spot); skipped without `IntersectionObserver`; roots written by hand in plain HTML do not get it                                                                                                                                                                                                                                                                                                                                 |
+| Interaction lock (`inert`)               | `enable()` adds `aria-busy="true"` and sets native `inert` on the root; with `skz-ignore` inside, it only locks the branches that contain no ignore region, which stay clickable and focusable                                                                                                                              | Automatic                                                                                          | After the ignore regions change, call `enable()` again to re-lock; browsers without `inert` fall back to CSS `pointer-events: none` + a `focusin` interceptor (ignore regions let through), a branch not verified on real devices; hand-written plain-HTML roots only get the CSS `pointer-events` / `user-select` lock, no `inert`<br>See [`inert` support](#inert-support)                                                                                                                                                              |
+| Reduced motion                           | Under `prefers-reduced-motion: reduce` every animation stops and bones render static                                                                                                                                                                                                                                        | Automatic                                                                                          | No off switch, and it cannot be disabled for a single root                                                                                                                                                                                                                                                                                                                                                                                                                                                                                |
+| Bone inference                           | Text tags (`p` `span` `h1`–`h6` `a` `li` `label` `td` `th` `strong` `b` `em` `small` `button` `dt` `dd` `blockquote` `figcaption`), media and controls (`img` `video` `canvas` `picture` `iframe` `svg` `input` `textarea` `select`), empty `<i>` and empty elements whose class contains `icon` become bones automatically | Import `base.css`, put `skz` on the root                                                           | Not in `explicit.css`; on pages made of divs the text inside divs is covered by the default underline mode, but empty divs used as images / avatars / colour blocks are not inferred and need `skz-bone`; browser capabilities form four progressive tiers (see [Browser support and fallbacks](#browser-support-and-fallbacks)), icon detection and leaf mode need `:has()`                                                                                                                                                              |
+| CSS fallback layer                       | Browsers without CSS variables: each direct child of the root becomes one grey block, descendants are hidden, static                                                                                                                                                                                                        | Import `base.css`, put `skz` on the root                                                           | Crude; edge cases such as `video` / `canvas` / `iframe` as direct children, `display: contents` wrappers, bare text and floating badges, see [Edge cases of the fallback layer](#edge-cases-of-the-fallback-layer)                                                                                                                                                                                                                                                                                                                        |
+| **Marker attributes**                    |                                                                                                                                                                                                                                                                                                                             |                                                                                                    |                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                           |
+| `skz`                                    | Root: skeleton on                                                                                                                                                                                                                                                                                                           | Added by `enable()` / adapters; plain HTML: `<div skz>`                                            | An attribute, not a class; with `<skz-box>` it goes on the host's first element child, never on the host; hand-written roots get no firewall, no runtime SVG and no `inert`                                                                                                                                                                                                                                                                                                                                                               |
+| `skz-effect`                             | Root: effect, same values as the `effect` option                                                                                                                                                                                                                                                                            | `<div skz skz-effect="shimmer">`                                                                   | Written by `enable()` and overwritten / cleared on repeated calls; hand-written pulse / shimmer has no firewall and the svg scheme has no runtime image (falls back to fade)                                                                                                                                                                                                                                                                                                                                                              |
+| `skz-text`                               | Root: text bone mode, same values as the `text` option                                                                                                                                                                                                                                                                      | `<div skz skz-text="leaf">`                                                                        | Same limits as the `text` option                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          |
+| `skz-engine`                             | Root: `svg`, written by JS once the SVG scheme's blob image is attached                                                                                                                                                                                                                                                     | Do not write by hand                                                                               | No attribute means the base fade (the svg scheme ships no built-in SVG fallback image); JS does not write it when theme variables cannot be read or blobs are unsupported                                                                                                                                                                                                                                                                                                                                                                 |
+| `skz-has-ignore`                         | Root: contains `skz-ignore`; CSS uses it to turn off the implicit fade and fix underlines                                                                                                                                                                                                                                   | Added by `enable()`; add it yourself on hand-written roots                                         | Forgetting it on a hand-written root means the ignore region gets faded along with everything else and underlines propagate to its text; the underline fix needs `:has()` (Tier 2)                                                                                                                                                                                                                                                                                                                                                        |
+| `skz-cv`                                 | Root: gives direct children `content-visibility: auto`, so children outside the viewport skip style, layout and paint; `--skz-cv-size` (default `200px`) is the estimated height of never-rendered children                                                                                                                 | `<div skz skz-cv>`<br>`<div skz skz-cv style="--skz-cv-size: 120px">`                              | Overflow of the children is clipped; a bad estimate makes scrolling jump; enabling is ~3.5x slower (207 ms at 16,000 elements vs 58 ms); needs browser `content-visibility` support<br>Pure CSS without JS: 60 fps / 6.76 ms at 16,000 elements (25 fps / 35.3 ms without); stacked on `enable()` it is worse (style 6.63 ms + PrePaint 1.38 ms vs 4.67 + 0.15); prefer the firewall when there is list structure<br>See [Lazy rendering and `skz-cv`](#lazy-rendering-and-skz-cv)                                                        |
+| `skz-bone`                               | Element: force this element to be a bone (a div used as image, avatar, colour block)                                                                                                                                                                                                                                        | `<div class="avatar" skz-bone></div>`                                                              | Descendants of a bone are hidden; `img` / `video` / `canvas` bones push their real content out of the box; the radius defaults to `var(--skz-radius)` but an element's own `border-radius` is kept (relies on `:where()`); with `explicit.css` it is the only source of bones                                                                                                                                                                                                                                                             |
+| `skz-leaf`                               | Element: this element as one whole bone, the subtree hidden                                                                                                                                                                                                                                                                 | `<div skz-leaf>…</div>`                                                                            | Text and underlines in the subtree are hidden; radius rule as `skz-bone`                                                                                                                                                                                                                                                                                                                                                                                                                                                                  |
+| `skz-ignore`                             | Element: keep as-is, clickable and focusable (e.g. a "cancel loading" button)                                                                                                                                                                                                                                               | `<button skz-ignore>Cancel</button>`                                                               | Backgrounds on descendants of an ignore region are still cleared in Tier 0 and 1; borders / outlines / shadows that rely on `currentColor` show through; a floating absolutely-positioned badge turns into a grey block unless marked; the sweep bar also passes over it<br>See [Colours and backgrounds in `skz-ignore` regions](#colours-and-backgrounds-in-skz-ignore-regions)                                                                                                                                                         |
+| `skz-paused` / `skz-fw`                  | Internal runtime state: lazy rendering / inheritance firewall                                                                                                                                                                                                                                                               | Do not write by hand                                                                               | Read and written by `enable()`'s shared observers; hand-written values get overwritten                                                                                                                                                                                                                                                                                                                                                                                                                                                    |
+| `skz-fit` / `skz-fit-hide`               | Internal runtime state: the `fit` root marker (CSS fallback `max-height: 100dvh` + `overflow: clip`) / hidden list items                                                                                                                                                                                                    | Do not write by hand (use `fit: true`)                                                             | Written by `enable()`, cleared on disable                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 |
+| **Theme variables**                      |                                                                                                                                                                                                                                                                                                                             |                                                                                                    |                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                           |
+| `--skz-color`                            | Bone base colour, default `#d9dde3` (dark `#374151`)                                                                                                                                                                                                                                                                        | `[skz] { --skz-color: #e0e0e0 }`                                                                   | Declared on the root itself, so set it on the root element (inline `style` or a selector that hits the root); setting it on `:root` has no effect                                                                                                                                                                                                                                                                                                                                                                                         |
+| `--skz-highlight`                        | Highlight colour: shimmer band / pulse peak, default `#eceff3` (dark `#4b5563`)                                                                                                                                                                                                                                             | `[skz] { --skz-highlight: #f0f0f0 }`                                                               | As above; the svg scheme's image is generated from it by JS, so call `enable()` again after changing it                                                                                                                                                                                                                                                                                                                                                                                                                                   |
+| `--skz-radius`                           | Bone corner radius, default `4px`                                                                                                                                                                                                                                                                                           | `[skz] { --skz-radius: 6px }`                                                                      | An element's own `border-radius` wins; underline-mode text bones have no radius                                                                                                                                                                                                                                                                                                                                                                                                                                                           |
+| `--skz-duration`                         | Animation duration, default `1.5s`                                                                                                                                                                                                                                                                                          | `[skz] { --skz-duration: 1.2s }`                                                                   | The svg scheme generates its image from it (1500 ms when it cannot be parsed); set it on the root, not `:root`                                                                                                                                                                                                                                                                                                                                                                                                                            |
+| `--skz-ul-thickness` / `--skz-ul-offset` | Underline thickness (default `1em`) / offset (default `-0.85em`)                                                                                                                                                                                                                                                            | `[skz] { --skz-ul-thickness: 1.1em }`                                                              | Only for the underline text mode                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          |
+| `--skz-fade-min`                         | Minimum opacity of fade, default `0.55`                                                                                                                                                                                                                                                                                     | `[skz] { --skz-fade-min: 0.4 }`                                                                    | Only affects fade (including pulse / shimmer falling back to fade)                                                                                                                                                                                                                                                                                                                                                                                                                                                                        |
+| `--skz-sweep-w`                          | Sweep band width relative to the root width, default `35%`                                                                                                                                                                                                                                                                  | `[skz] { --skz-sweep-w: 50% }`                                                                     | Set it on the skeleton root; needs `sweep.css`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            |
+| `--skz-sweep-skew`                       | Sweep band tilt, default `0deg` (vertical)                                                                                                                                                                                                                                                                                  | `[skz] { --skz-sweep-skew: -12deg }`                                                               | When the root is taller than about 16x its width (~19k px at 1200px wide) the band moves out of the viewport, so avoid it on long lists; needs `sweep.css`                                                                                                                                                                                                                                                                                                                                                                                |
+| `--skz-sweep-bg-rgb`                     | Container colour (`r, g, b`) of the dark-theme sweep, default `31, 41, 55`                                                                                                                                                                                                                                                  | `[skz] { --skz-sweep-bg-rgb: 17, 24, 39 }`                                                         | Use the lightest container background inside the root; it must be set on the skeleton root itself, setting it on an ancestor is overridden by the `[skz]` dark default; unused in light mode                                                                                                                                                                                                                                                                                                                                              |
+| Dark mode switch                         | Follows `prefers-color-scheme: dark` by default; force it on `<html>`; affects `--skz-color` / `--skz-highlight` and sweep's dark parameters                                                                                                                                                                                | `<html data-skz-theme="dark">`<br>`<html data-skz-theme="light">`                                  | The attribute must be on `<html>`; the svg scheme's image is only regenerated automatically on a system light/dark change, so call `enable()` again after switching `data-skz-theme` by hand (inferred from the code, not measured)                                                                                                                                                                                                                                                                                                       |
+| `--skz-svg-shimmer` / `--skz-svg-pulse`  | The svg scheme's animated background images (`url(…)`)                                                                                                                                                                                                                                                                      | Normally not written                                                                               | Via `enable()` JS writes them as inline styles on the root and overrides yours; with a hand-written `skz-engine="svg"` you can supply your own (not verified)                                                                                                                                                                                                                                                                                                                                                                             |
+| Other `--skz-*`                          | `--skz-fill` / `--skz-bg-img` / `--skz-bg-pos` / `--skz-bg-size` / `--skz-pulse-c` / `--skz-shimmer-p` / `--skz-sweep-a` / `-rgb` / `-blend` / `-bleed` / `-mask` etc. are internal style variables                                                                                                                         | Do not write by hand                                                                               | May change between versions, not part of the public contract                                                                                                                                                                                                                                                                                                                                                                                                                                                                              |
+| **API**                                  |                                                                                                                                                                                                                                                                                                                             |                                                                                                    |                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                           |
+| `enable(el, opts?)`                      | Turn the skeleton on: adds `skz` and `aria-busy="true"` to the root, locks interaction, returns the off function                                                                                                                                                                                                            | `const off = enable(el, { effect: "shimmer" })`                                                    | Prerequisite: the base styles and any variants you need are already imported; needs a DOM, so not callable on the server; empty elements have no size and get no bone; options are in the "`enable()` options" rows above                                                                                                                                                                                                                                                                                                                 |
+| `disable(el)`                            | Turn the skeleton off and restore the real content; does nothing if it was never enabled                                                                                                                                                                                                                                    | `disable(el)` (or the `off()` returned by `enable()`)                                              | Clears `skz`, `aria-busy`, `skz-effect`, `skz-text`, `skz-has-ignore` and the marks and inline styles left by fit / firewall / svg                                                                                                                                                                                                                                                                                                                                                                                                        |
+| `toggle(el, loading, opts?)`             | Turn on / off by boolean, shared by the adapters                                                                                                                                                                                                                                                                            | Write it yourself: `loading ? enable(el) : disable(el)`                                            | Not exported from the package entry (`skeletonizer` does not export it), used only inside the adapters                                                                                                                                                                                                                                                                                                                                                                                                                                    |
+| `<skz-box>`                              | Custom element: `loading` is the switch, plus `effect` / `text` / `fallback` / `engine` / `fit` attributes; the skeleton state lands on its first element child                                                                                                                                                             | `<skz-box loading effect="shimmer"><div class="card">…</div></skz-box>`<br>`el.loading = true`     | Call `defineSkzBox()` once first; light DOM, no shadow; `loading="false"` counts as off; no `MutationObserver`, so after a framework replaces the first child switch `loading` off and on yourself; moving the host to another parent keeps the loading state; in Vue it must be configured as a custom element                                                                                                                                                                                                                           |
+| `defineSkzBox(tag?)`                     | Register `<skz-box>`, with an optional custom tag name                                                                                                                                                                                                                                                                      | `defineSkzBox()`                                                                                   | Safe to call repeatedly; does nothing where there is no `customElements` (SSR)                                                                                                                                                                                                                                                                                                                                                                                                                                                            |
+| `registerCustomElements(root?, opts?)`   | Generate the skeleton stylesheet for Web Component hosts (Shadow DOM), returns `{ refresh, dispose }`                                                                                                                                                                                                                       | `const { refresh, dispose } = registerCustomElements(document, { watch: true })`                   | Hosts get `visibility: hidden` + a `::before` bone, and the host's own background is hidden too; call `refresh()` or enable `watch` for custom elements added later; `opts.tags` adds tag names; each call owns its own stylesheet and `dispose` only clears that one; skips `<skz-box>` itself<br>See [Web Component hosts](#web-component-hosts)                                                                                                                                                                                        |
+| `registerExtension(ext)` / `ROOT_ATTR`   | Register a scheme extension (called automatically when the `global` / `svg` entries load) / the root marker attribute name constant (`"skz"`)                                                                                                                                                                               | Normally not called by hand                                                                        | An internal extension point for variant entries; registering the same name again replaces the earlier one                                                                                                                                                                                                                                                                                                                                                                                                                                 |
+| Vue: `vSkeleton` / `SkzPlugin`           | Directive / plugin (registers `v-skeleton` and `<SkzBox>` globally)                                                                                                                                                                                                                                                         | `<div v-skeleton="{ loading, effect: 'shimmer' }">`<br>`app.use(SkzPlugin)`                        | `import … from "skeletonizer/vue"`; Vue ≥ 3 (optional peer dependency); the value is a boolean or an object with `loading`                                                                                                                                                                                                                                                                                                                                                                                                                |
+| Vue: `SkzBox` / `useSkeleton`            | Component / composable                                                                                                                                                                                                                                                                                                      | `<SkzBox :loading="loading" effect="shimmer">…</SkzBox>`<br>`useSkeleton(elRef, loadingRef, opts)` | Write `<SkzBox>` in templates; `<skz>` resolves to a native custom element instead; `SkzBox` takes an `as` prop (default `div`); `useSkeleton`'s `opts` is not reactive and is only synced when `loading` changes                                                                                                                                                                                                                                                                                                                         |
+| React: `SkzBox`                          | Component: renders a wrapper element and toggles the skeleton by `loading`                                                                                                                                                                                                                                                  | `<SkzBox loading={loading} effect="shimmer">…</SkzBox>`                                            | `import … from "skeletonizer/react"`; React ≥ 16.8 (optional peer dependency); only `className` is passed through, `as` defaults to `div`, every other prop is treated as a skeleton option                                                                                                                                                                                                                                                                                                                                               |
+| React: `useSkeleton`                     | Hook: enables when `loading` is true, disables when it turns false or on unmount                                                                                                                                                                                                                                            | `useSkeleton(ref, loading, { effect: "pulse" })`                                                   | Pass primitive values in `opts` (it re-syncs when a field changes); the ref's element must be mounted                                                                                                                                                                                                                                                                                                                                                                                                                                     |
+| Svelte: `skeleton`                       | Action                                                                                                                                                                                                                                                                                                                      | `<div use:skeleton={{ loading, effect: "shimmer" }}>…</div>`                                       | `import { skeleton } from "skeletonizer/svelte"`; an action only, no component, and the package declares no svelte dependency                                                                                                                                                                                                                                                                                                                                                                                                             |
+| `Bone.text(n, opts?)`                    | A block-word placeholder text of n characters, spaces between words, wraps naturally                                                                                                                                                                                                                                        | `Bone.text(8)`<br>`Bone.text(30, { seed: 1 })`                                                     | Deterministic (no `Math.random`, SSR / hydration safe); `seed` changes the word-length distribution; `n <= 0` returns an empty string                                                                                                                                                                                                                                                                                                                                                                                                     |
+| `Bone.lines(k, opts?)`                   | A placeholder paragraph of about k lines                                                                                                                                                                                                                                                                                    | `Bone.lines(3, { perLine: 30 })`                                                                   | `perLine` (default 40) is only the estimated characters per line, the real line count depends on the container width                                                                                                                                                                                                                                                                                                                                                                                                                      |
+| `Bone.cjk(n, opts?)`                     | CJK placeholder: pure blocks with a zero-width space every 3–6 characters for line breaks                                                                                                                                                                                                                                   | `Bone.cjk(20)`                                                                                     | `n` does not count the zero-width spaces                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                  |
+| `Bone.number(digits?)`                   | A fixed-width digit placeholder (full-width blocks)                                                                                                                                                                                                                                                                         | `Bone.number(4)`                                                                                   | Defaults to 3 digits                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      |
+| `Bone.image(w?, h?)`                     | Transparent placeholder image: no args = 1×1 GIF data URI; `w` = square transparent SVG; `w`, `h` = transparent SVG with an intrinsic aspect ratio                                                                                                                                                                          | `Bone.image(48)`<br>`Bone.image(160, 100)`                                                         | The no-arg GIF has no intrinsic size, so give `width` / `height` or CSS a size; invalid arguments (0, negative) fall back to the 1px GIF; if a strict CSP does not allow `img-src data:`, use a self-hosted transparent image                                                                                                                                                                                                                                                                                                             |
+| `Bone.GIF_1PX`                           | The 1×1 transparent GIF data URI constant                                                                                                                                                                                                                                                                                   | `img.src = Bone.GIF_1PX`                                                                           | As above; `Bone` has only static members and cannot be instantiated (`new` throws a `TypeError`)                                                                                                                                                                                                                                                                                                                                                                                                                                          |
 
 ## Which setup to use
 
-| Scenario                                                        | Use                                                                                                    | Why                                                                                  |
-| --------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------ |
-| Ordinary page, small skeleton (a few hundred elements)          | `base.css` (fade), optionally + `global` for shimmer                                                   | fade costs almost nothing; everything is 60 fps at this size                         |
-| Long lists / feeds / tables with `shimmer` / `pulse`            | `base.css` + `global`                                                                                  | the firewall keeps off-screen items out of per-frame work: 60 fps at 16,000 elements |
-| Same, bones can be marked by hand, lowest cost                  | `explicit.css` + `global`                                                                              | no inference selectors: per-frame style work drops another ~60%                      |
-| Large skeleton without list markup (big form, long detail page) | `global` + `fps: "auto"`, or `svg`                                                                     | the ticker lowers the update rate; `svg` has no per-frame style work                 |
-| Must animate on Chrome < 119 / Safari < 16.4 / Firefox < 128    | `global` (falls back to SVG automatically) or `svg`                                                    | SVG animation does not need `@property`                                              |
-| Product mandates the old-browser effect                         | `global` + `fallback` (`svg` / `fade`)                                                                 | only applies without `@property`                                                     |
-| Exact control over which elements become bones                  | `explicit.css`                                                                                         | everything unmarked renders as-is                                                    |
-| Bundle-size sensitive                                           | `base.css` alone (fade only) or `base.css` + one variant                                               | pay only for what you load                                                           |
-| Strict CSP                                                      | allow `img-src blob:` (the SVG scheme and the old-browser SVG fallback); `data:` only for `Bone.image` | runtime SVGs are blob URLs; no SVG data URIs ship in the CSS                         |
+| Scenario                                                                   | Use                                                                                                    | Why (numbers in [Comparison](#comparison))                                                                                                                                                                                                       |
+| -------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Ordinary page, small skeleton (a few hundred elements)                     | `base.css` (fade)                                                                                      | fade is 60 fps at 4,000 and 16,000 elements with under 0.3 ms of style work; every scheme is 60 fps at small sizes                                                                                                                               |
+| Long lists / feeds / tables with `shimmer` / `pulse`                       | `base.css` + `global` (the firewall comes with `enable()`)                                             | 60 fps at 16,000 elements with ~4.9 ms style work; the same skeleton as pure CSS (no JS) is ~21 fps / 41 ms                                                                                                                                      |
+| Same, bones can be marked by hand, lowest cost                             | `explicit.css` + `global`                                                                              | **no fps difference** (both 60), just cheaper: style work at 16,000 elements 4.89 → 2.60 ms, enabling 62 → 50 ms                                                                                                                                 |
+| Large skeleton without list markup (big form, long detail page)            | `engine: "svg"` (or import only `skeletonizer/svg`)                                                    | the firewall has nothing to hide: a two-column form with 16,003 elements is 17 fps / 49 ms on `global`, 60 fps / 0.04 ms on `svg`                                                                                                                |
+| Large skeleton, pure CSS, no JS                                            | `skz-cv` on the root                                                                                   | 60 fps / 6.8 ms at 16,000 elements (25 fps / 35 ms without it); stacked on `enable()` it is worse: ~3.5× slower to enable, and it clips overflow                                                                                                 |
+| Compositor-driven animation that keeps going during main-thread long tasks | `sweep.css`                                                                                            | the bar is a `transform`: 60 fps and 0.7 ms style work at 16,000 elements. Visual trade-off: light only brightens the bones, dark is a container-colour sweep (bones get darker as the band passes), see [Schemes in detail](#schemes-in-detail) |
+| Must animate on Chrome < 119 / Safari < 16.4 / Firefox < 128               | `global` (falls back to SVG automatically) or `svg`                                                    | SVG animation does not need `@property`                                                                                                                                                                                                          |
+| Product mandates the old-browser effect                                    | `global` + `fallback` (`svg` / `fade`)                                                                 | only applies without `@property`                                                                                                                                                                                                                 |
+| Placeholder list that must not create a scrollbar                          | `enable(el, { fit: true })`                                                                            | 60 fps and 3.3 ms style work at 16,000 elements; the cost is ~520 ms to enable (2,000 cards)                                                                                                                                                     |
+| Exact control over which elements become bones                             | `explicit.css`                                                                                         | everything unmarked renders as-is                                                                                                                                                                                                                |
+| Bundle-size sensitive                                                      | `base.css` alone (fade only, 1.28 KB) or `base.css` + one variant                                      | pay only for what you load                                                                                                                                                                                                                       |
+| Strict CSP                                                                 | allow `img-src blob:` (the SVG scheme and the old-browser SVG fallback); `data:` only for `Bone.image` | runtime SVGs are blob URLs; no SVG data URIs ship in the CSS                                                                                                                                                                                     |
+
+> The "compositor-driven animation that keeps going during main-thread long tasks" row follows from `transform` animations running on the compositor thread; behaviour during main-thread long tasks was not measured separately.
 
 ## Comparison
 
-Desktop Chrome on Windows, i5-13500 with integrated GPU, a card list (~8 elements per card), median of 3 runs. "Style" is per-frame `UpdateLayoutTree` time in ms; 16.6 ms is one frame. Raw data, scripts and screenshots live in [`bench/`](https://github.com/icodejoo/codejoo/blob/main/apps/skeletonizer/bench/README.md). Safari, Firefox and mobile were not measured.
+All numbers come from the [full benchmark matrix (controlled variables)](https://github.com/icodejoo/codejoo/blob/main/apps/skeletonizer/docs/reports/2026-10-09-benchmark-matrix.md) and its sweep re-test after the visibility fix. Each cell is "fps / per-frame style recalc in ms"; 16.6 ms is one frame. Card list, 8 elements per card (4,000 elements = 500 cards, 16,000 = 2,000 cards), underline text mode.
 
-| Scheme                                            | 4,000 elements: fps / style | 16,000 elements: fps / style  |
-| ------------------------------------------------- | --------------------------- | ----------------------------- |
-| fade (default) / solid                            | 60 / 0.1                    | 60 / 0.2                      |
-| sweep                                             | 60 / 0.3                    | 60 / 1.1 (+ ~6 ms PrePaint)   |
-| shimmer, `global`, pure CSS (no JS)               | 57 / 12.9                   | 17 / 49.3                     |
-| shimmer, `global` via `enable()` (firewall)       | 60 / 1.9                    | **60 / 6.8**                  |
-| shimmer, `global` + firewall + `explicit.css`     | 60 / 1.2                    | **60 / 2.8**                  |
-| shimmer, `global`, pure CSS + `explicit.css`      | 60 / 7.4                    | 24 / 31.9                     |
-| shimmer, `global`, no list markup + `fps: "auto"` | 60                          | ~47 (animation ~12 updates/s) |
-| shimmer, `svg`                                    | 60 / 0.1 (3.5 PrePaint)     | 54 / 0.1 (15.6 PrePaint)      |
+| Scheme (what you import)                                 | 4,000 elements: fps / style | 16,000 elements: fps / style | Enable time (4,000 / 16,000) |
+| -------------------------------------------------------- | --------------------------- | ---------------------------- | ---------------------------- |
+| fade (`base.css`, default)                               | 60.4 / 0.10                 | 60.4 / 0.24                  | 24 / 76 ms                   |
+| solid (`base.css`)                                       | 60.8 / 0.00                 | 60.8 / 0.00                  | 22 / 69 ms                   |
+| sweep, light (`sweep.css`, lighten blend)                | 60.0 / 0.24                 | 60.4 / 0.67                  | 16 / 63 ms                   |
+| sweep, dark (container colour)                           | 60.4 / 0.60                 | 60.4 / 0.61                  | 16 / 63 ms                   |
+| shimmer, `global`, **pure CSS (no JS)**                  | 60.0 / 9.90                 | 20.8 / 41.3                  | 15 / 80 ms                   |
+| shimmer, `global` + `enable()` (firewall)                | 60.4 / 1.75                 | **60.4 / 4.89**              | 15 / 63 ms                   |
+| shimmer, `explicit.css` + `global` + `enable()`          | 60.4 / 1.14                 | **60.4 / 2.60**              | 16 / 50 ms                   |
+| shimmer, `svg`                                           | 60.4 / 0.07                 | **60.4 / 0.05**              | 27 / 111 ms                  |
+| No list structure (two-column form): `global` + firewall | 52.4 / 14.7                 | 17.2 / 49.1                  | 21 / 84 ms                   |
+| No list structure (two-column form): `svg`               | 60.4 / 0.05                 | **60.4 / 0.04**              | 32 / 134 ms                  |
+| `fit: true` (shimmer, `global` + `enable()`)             | —                           | 60.4 / 3.31                  | — / 519 ms                   |
+| `skz-cv` (shimmer, `global`, pure CSS)                   | 60.4 / 2.12                 | 60.4 / 6.76                  | 13 / 207 ms                  |
 
-- `pulse` / `shimmer` cost is style recalc: the animated variable on the root is inherited, so every element recalculates each frame (~2.3 µs per element).
-- The **inheritance firewall** is the big win: off-screen list items pin the variables and their subtrees stop recalculating. It needs JS (`enable()` / an adapter + `global`) and list-like markup.
-- `explicit.css` makes each recalculation cheaper (−35–44% without the firewall, about −60% with it).
-- The JS ticker writes inline variables on the root, which bypasses the firewall (60 → 27–39 fps at 16,000 elements), so the library uses the firewall whenever it finds list items.
+**Test conditions**: Windows 10 desktop, Intel Core i5-13500 (14 cores / 20 threads) + Intel UHD 770 integrated GPU, 31.7 GB RAM; Chrome 154.0.8037.98 with its own profile, foreground window, viewport 1200×800, DPR 1; the production build from `pnpm build` (`dist/` loaded as-is, baseline f735d65), one shared card-list template; median of 3 traces per cell. The machine was a daily-use workstation, **not idle**: per-batch CPU average 17%–27% (including Chrome itself). One forward pass only, no reverse re-run, so do not trust conclusions about differences under 2×.
 
-| Scheme           | Colour                        | Browser requirement                                                                                                                       | Main trade-off                                                                     |
-| ---------------- | ----------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------- |
-| fade / solid     | exact                         | CSS variables                                                                                                                             | fade dims everything in the root                                                   |
-| sweep            | blend-mode approximation      | CSS variables, `mix-blend-mode`                                                                                                           | sets `position: relative` + `overflow-x: clip` on the root and takes its `::after` |
-| global           | exact                         | `@property` (detected via relative colour syntax: Chrome 119+, Safari 16.4+, Firefox 128+), else SVG attached by JS (fade before JS runs) | slow at scale without JS; iOS shimmer becomes a colour pulse                       |
-| svg              | exact via JS, fade without JS | SMIL                                                                                                                                      | underline text stays static; CSP needs `img-src blob:`                             |
-| explicit markers | —                             | as the base                                                                                                                               | every bone must be marked                                                          |
+- fade / solid come from group A; the first four shimmer rows from group B (same batch); the two form rows from group D; `fit` (E1) and `skz-cv` (E3) from group E, whose in-group references are `global` + `enable()` at 4.67 ms for 16,000 elements and pure CSS at 25.2 fps / 35.3 ms. Groups were not measured in the same batch, so compare across groups with a margin.
+- The sweep rows are the **post-fix** numbers: the old bar vanished once the root was taller than ~19–20k px, so the sweep rows in the original matrix measured an invisible animation (original numbers are kept and flagged in the report). After the merge there is also ~5–6 ms PrePaint and ~1.4–2.2 ms GPU per frame at 16,000 elements; enable time is reused from the original matrix (A3) and was not re-measured for the merged version.
+- Pure-CSS fps at 16,000 elements varies between batches (13–25 fps, lower under load); the table uses group B's 20.8.
+- Enable time is the real `enable()` (firewall, inert, blob included); pure-CSS rows time the `skz` attribute toggle. The svg enable time had a one-off 287 ms outlier in group A that was not re-measured.
 
-Tried and not adopted: an SVG filter that silhouettes content (60 fps but loses structure and light content, breaks `skz-ignore`), a canvas mask with a compositor-driven band (4–7 s to build the mask at 16,000 elements), the CSS Paint API (heavier off-main-thread, Chromium only), per-bone animations (the old approach, removed), `steps()` throttling (no effect). Details in [`bench/`](https://github.com/icodejoo/codejoo/blob/main/apps/skeletonizer/bench/README.md).
+**Not measured**: low-end devices / CPU throttling (the 4× throttle group was not run); Safari, Firefox, mobile; DPR > 1; the full matrix was not re-run after the `fps` timer was removed (only sweep was re-run; the removed code is not on the path of any row above, but the rows were not re-measured one by one).
+
+- Default fade is 60 fps at any size; enabling costs one style pass.
+- `pulse` / `shimmer` cost is style recalc: the animated variable on the root is inherited, so every element recalculates each frame. Pure CSS at 16,000 elements is only ~21 fps.
+- The **inheritance firewall** is the big win: off-screen list items stop recalculating, 16,000 elements are back to 60 fps and the enable time matches pure CSS. It needs JS (`enable()` / an adapter + `global`) and list-like markup; on pages whose root has only a few big blocks that are all in the viewport (such as a two-column form) it does nothing.
+- `explicit.css` makes each recalculation cheaper: −35% to −47% style work on the firewall path, pure-CSS fps 20.8 → 34.4; on the firewall path both are 60 fps.
+- `svg` has almost no per-frame style work and is 60 fps on every structure; the price is 4.7–8 ms PrePaint (16,000 elements) and a slower enable.
+- `sweep` is a compositor animation: very little style work, a fixed PrePaint / GPU cost, and style side effects on the root.
+
+| Scheme           | Colour                         | Browser requirement                                                                                                                       | Main trade-off                                                                     |
+| ---------------- | ------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------- |
+| fade / solid     | exact                          | CSS variables                                                                                                                             | fade dims everything in the root                                                   |
+| sweep            | blend / container-colour sweep | CSS variables, `mix-blend-mode`                                                                                                           | sets `position: relative` + `overflow-x: clip` on the root and takes its `::after` |
+| global           | exact                          | `@property` (detected via relative colour syntax: Chrome 119+, Safari 16.4+, Firefox 128+), else SVG attached by JS (fade before JS runs) | slow at scale without JS; iOS shimmer becomes a colour pulse                       |
+| svg              | exact via JS, fade without JS  | SMIL                                                                                                                                      | underline text stays static; CSP needs `img-src blob:`                             |
+| explicit markers | —                              | as the base                                                                                                                               | every bone must be marked                                                          |
+
+Tried and not adopted: an SVG filter that silhouettes content (60 fps but loses structure and light content, breaks `skz-ignore`), a canvas mask with a compositor-driven band (4–7 s to build the mask at 16,000 elements), the CSS Paint API (heavier off-main-thread, Chromium only), per-bone animations (the old approach, removed), a JS `fps` timer (removed: on real pages the firewall is always enabled first so the timer is almost never reached; forced onto it, 16,000 elements run at 45 fps / 10.8 ms, still behind `svg` at 60 fps / 0.04 ms), `steps()` frame dropping via `--skz-shimmer-timing` (removed: 25.2 fps / 35.6 ms vs 25.2 fps / 35.3 ms, no difference), and animating only the visible items ("scheme A": the prototype works and cuts style work for 2,000 cards to 0.7–1.2 ms, but the firewall is already 60 fps on the test machine and the gap only opens under 4×/6× CPU throttling; it adds new risks such as skipped items staying static, and Safari / Firefox were not checked; not adopted, see `bench/agents/a6-visible-anim`). Details in [`bench/`](https://github.com/icodejoo/codejoo/blob/main/apps/skeletonizer/bench/README.md).
 
 ## Schemes in detail
 
-- **fade / solid** (base): fade pulses the root's opacity on the compositor. With `skz-ignore` inside the root the implicit default skips fade (it would dim the ignored content); pass `effect: "fade"` to force it.
-- **global**: one CSS animation on the root drives registered properties (`@property`) that bones inherit; colours come straight from `--skz-color` / `--skz-highlight`. Shimmer uses a `background-attachment: fixed` gradient so all bones stay in sync. Through `enable()` the **firewall** finds the list items (skipping single-child wrappers) and marks off-screen ones with `skz-fw` via one shared `IntersectionObserver`; their bones stay static until 200px before they scroll in, and items inserted later join on the next `enable()` call. Without list markup, `fps` (number or `"auto"`, which adapts between every 1–4 frames) throttles updates. Without `@property` it falls back to the SVG animation (`fallback` changes that).
-- **svg**: bones share one SMIL-animated SVG background, so nothing in CSS changes per frame. Through `enable()` the SVG is generated at runtime from the root's `--skz-highlight` and `--skz-duration` (blob URL, exact colours, shared and ref-counted, regenerated on system theme change). Without JS (or if blob generation fails) the root has no `skz-engine` attribute and shows the base fade; the CSS ships no SVG data URIs. Override with `--skz-svg-shimmer` / `--skz-svg-pulse`.
-- **sweep**: one `::after` bar per root, moved by `transform`. Give it a dedicated, unstyled root element. `skz-sweep="bg"` uses the container colour instead of blend modes.
-- **explicit.css**: only `skz-bone` / `skz-leaf` are bones; descendants of a bone are hidden; media bones push their real content out of the box. Bones keep the element's own `border-radius` (round avatars stay round). Explicit mode is only available by loading `explicit.css` instead of `base.css`; there is no per-root switch.
-- **Lazy rendering**: roots scrolled out of the viewport get `skz-paused` and stop animating. `skz-cv` adds `content-visibility: auto` to the root's children (clips their overflow, slower to enable with many children).
+### fade / solid (built into the base)
 
-## Markers
+- **fade** (default, what you get without `skz-effect`): the whole root pulses its opacity on the compositor thread, nearly free however many elements there are. With `skz-ignore` inside the root the implicit default skips fade (it would dim the ignored content); pass `effect: "fade"` to force it.
+- **solid**: static, no animation.
 
-| Attribute                            | On      | Meaning                                                                                 |
-| ------------------------------------ | ------- | --------------------------------------------------------------------------------------- |
-| `skz`                                | root    | skeleton on (added by `enable()`; write it yourself in pure HTML)                       |
-| `skz-effect` / `skz-text`            | root    | effect and text mode                                                                    |
-| `skz-engine="svg"`                   | root    | written by the SVG scheme once its blob image is attached; no attribute means fade      |
-| `skz-has-ignore`                     | root    | set by `enable()` when the root contains `skz-ignore`; **add it yourself in pure HTML** |
-| `skz-cv` / `skz-sweep="bg"`          | root    | skip off-screen children / sweep container-colour mode                                  |
-| `skz-bone`                           | element | force this element to be one bone (e.g. a `div` used as an image or avatar)             |
-| `skz-leaf`                           | element | merge the whole subtree into one bone                                                   |
-| `skz-ignore`                         | element | keep as real content; stays clickable and focusable while loading                       |
-| `skz-paused` / `skz-fw` / `skz-tick` | runtime | internal state, do not write by hand                                                    |
+### global: root-driven pulse / shimmer
+
+```ts
+import "skeletonizer/global"; // or /global/js + global.css
+enable(el, { effect: "shimmer" }); // or "pulse"
+```
+
+- **How it works**: one CSS animation on the root drives variables registered with `@property` (shimmer position, pulse colour); bones only read the inherited values and carry no animation of their own. Colours come from `--skz-color` / `--skz-highlight`, so they follow the theme exactly.
+- **shimmer**: a `background-attachment: fixed` gradient slides through viewport coordinates, so all bones stay in sync; underline-mode text cannot take a gradient and uses a colour pulse instead.
+- **Inheritance firewall (automatic)**: when enabled through `enable()` / an adapter, the library looks for list items from the root down (skipping wrappers with a single child, so "root > list container > cards" hits the cards) and marks the ones outside the viewport with `skz-fw` via one shared `IntersectionObserver`. CSS pins the animated variables to static values on those items, so their descendants stop recalculating every frame. Bones in off-screen items are static and resume 200px before they scroll in; items inserted after enabling join on the next `enable()` call (until then they animate normally, they just do not save anything).
+- **Old-browser fallback**: without `@property`, JS attaches an SVG animation by default (generated as a blob, exact colours); `fallback: "fade"` keeps the base fade instead. Before JS runs (SSR first paint) and when blob generation fails, old browsers show fade.
+
+### svg: shared SVG animation background
+
+```ts
+import "skeletonizer/svg"; // with only svg imported, pulse / shimmer default to svg
+enable(el, { effect: "shimmer" }); // with global also imported, write engine: "svg"
+```
+
+- **How it works**: every bone's background carries one SMIL-animated SVG that all bones share, so CSS does not change per frame and there is no style recalculation; no `@property` needed.
+- **Colours**: through `enable()` the SVG is generated at runtime from the root's `--skz-highlight` and `--skz-duration` (blob URL), so colour and duration match the theme exactly; one copy is shared per parameter set, released when nobody uses it, and regenerated on a system light/dark change. Without JS, or if the theme variables cannot be read, the root gets no `skz-engine` attribute and shows the base fade (the CSS ships no built-in SVG fallback image). When enabled through `enable()` the two images are written on the root as inline variables `--skz-svg-shimmer` / `--skz-svg-pulse`; with a hand-written `skz-engine="svg"` you can supply those variables yourself (not verified).
+- **Costs**: underline-mode text cannot take the image and stays static (leaf mode has no such problem); a strict CSP must allow `img-src blob:` (the runtime image); iOS has no fixed backgrounds, so shimmer uses the pulse image.
+
+### sweep: highlight bar (pure CSS)
+
+```ts
+import "skeletonizer/sweep.css";
+enable(el, { effect: "sweep" });
+```
+
+One `::after` bar over the whole root, moved by `transform` on the compositor thread; the band is vertical by default (`--skz-sweep-skew` tilts it, careful on long roots). There is only one sweep, switched by theme: light uses a lighten blend that only brightens the bones; dark automatically sweeps with the container colour (band colour from `--skz-sweep-bg-rgb`, default `31, 41, 55`), so the container never leaks light. It changes the root element's own styles:
+
+- the root becomes `position: relative`, so absolutely positioned descendants now resolve against it;
+- the root gets `overflow-x: clip`, so dropdowns and badges poking out of its left / right edges are clipped;
+- the root's `::after` is taken, so any `::after` you wrote on the root is overridden.
+
+Give sweep a dedicated, unstyled wrapper div as its root. If your dark theme uses another container colour, override `--skz-sweep-bg-rgb` on the root (use the lightest container background inside it). It must be set on the skeleton root itself: set on an ancestor it is overridden by the `[skz]` dark default.
+
+### Explicit markers: `explicit.css`
+
+```ts
+import "skeletonizer/explicit.css"; // instead of base.css
+```
+
+```html
+<div skz>
+  <img skz-bone src="..." />
+  <h3 skz-bone>Title</h3>
+  <p>This paragraph is not a bone and renders as-is</p>
+</div>
+```
+
+Only `skz-bone` / `skz-leaf` are bones; descendants of a bone are hidden and media bones push their real content out of the box. There are no inference selectors, so both per-frame style recalc and enabling are cheaper (see [Comparison](#comparison)). Bones default to `var(--skz-radius)`, but an element that sets its own `border-radius` (a round avatar) keeps its shape.
+
+### Lazy rendering and `skz-cv`
+
+Lazy rendering only watches the root: when a huge root has just one corner in view, the whole root's animation keeps running. `skz-cv` covers that blind spot by making the root's direct children skip rendering while outside the viewport, but stacked on `enable()` (the inheritance firewall) it does worse, so prefer the firewall when there is list structure. For the triggers, costs and numbers see the "Lazy rendering" and `skz-cv` rows of the [Feature reference](#feature-reference).
+
+## Bone helpers
+
+`Bone` offers static methods that generate placeholder data. Every result is deterministic (no `Math.random`): the same input always gives the same output under SSR, so hydration is safe. They only create data, rendering stays with your real components.
+
+```js
+Bone.text(12); // "███ ████ ███" (word lengths illustrative): n characters, spaces between words, wraps naturally
+Bone.text(30, { seed: 1 }); // seed changes the word-length distribution; the same seed always gives the same output
+Bone.lines(3); // 120 characters (3 x 40) of placeholder text
+Bone.lines(3, { perLine: 30 }); // 90 characters
+Bone.cjk(20); // 20 blocks with a zero-width space every 3-6 characters for line breaks
+Bone.number(4); // "████"; Bone.number() gives 3 digits by default
+```
+
+`Bone.image(w?, h?)` has three shapes:
+
+```js
+Bone.image(); // no args: base64 data URI of a 1x1 transparent GIF, best compatibility
+Bone.image(48); // w only: h defaults to w, a 48x48 square transparent SVG
+Bone.image(160, 100); // w and h: a 160x100 transparent SVG with an intrinsic aspect ratio
+```
+
+- **No arguments**: a GIF has no intrinsic size, so give it `width` / `height` attributes or CSS, otherwise it collapses to 1px: `<img :src="Bone.image()" width="160" height="100" />`.
+- **With a size**: the SVG carries its aspect ratio and causes little layout shift; `Bone.image(48)` is the handiest for avatars and icons.
+- Invalid arguments (0, negative) fall back to the 1px GIF.
+- If a strict CSP does not allow `img-src data:`, use a self-hosted transparent image.
 
 ## Theming
 
-Variables are declared on the root itself, so override them **on the root element**, not `:root`:
+### Text bone modes
+
+- **`underline`** (default, needs `text-decoration-thickness`): draws one thick underline under the real text, following the real text lines with the last line naturally shorter; mixed text (`Price: <b>$5</b>`) is covered too. The cost is no gradient: under shimmer the text uses a colour pulse.
+- **`leaf`** (needs `:has()`): an element with no child elements but some text becomes one whole bone that can shimmer and has rounded corners. The cost is that multi-line block text becomes one rectangle, and bare text nodes in mixed content get no bone.
+
+```html
+<div skz skz-text="leaf">...</div>
+```
+
+### Custom colours, radius, duration
+
+Theme variables are declared on the root itself, so set them **on the root element** (inline `style` or a selector that hits the root); setting them on `:root` has no effect:
 
 ```css
 [skz] {
-  --skz-color: #e0e0e0;
-  --skz-highlight: #f0f0f0;
-  --skz-radius: 6px;
-  --skz-duration: 1.2s;
+  --skz-color: #e0e0e0; /* bone colour (default #d9dde3, dark #374151) */
+  --skz-highlight: #f0f0f0; /* highlight: shimmer band, pulse peak (default #eceff3, dark #4b5563) */
+  --skz-radius: 6px; /* bone radius (default 4px) */
+  --skz-duration: 1.2s; /* animation duration (default 1.5s) */
+  --skz-ul-thickness: 1em; /* underline thickness */
+  --skz-ul-offset: -0.85em; /* underline offset */
 }
 ```
 
-Dark mode follows `prefers-color-scheme`; force it with `data-skz-theme="dark"` or `"light"` on `<html>`. `prefers-reduced-motion: reduce` stops every animation. Mock data: `Bone.text(n)`, `Bone.lines(k)`, `Bone.cjk(n)`, `Bone.number(d)`, `Bone.image(w, h)`, all deterministic.
+Dark mode switching (`prefers-color-scheme` / `data-skz-theme`), the sweep and fit variables, reduced motion and the rest are in the "Theme variables" and "Automatic behaviour" rows of the [Feature reference](#feature-reference).
 
-## Browser support
+## Browser support and fallbacks
 
-Progressive tiers, no UA sniffing: no CSS variables → flat grey fallback; CSS variables → tag-based bones, fade / solid / sweep, svg scheme; `text-decoration-thickness` → underline text bones; `:has()` → leaf mode and icon heuristics; `@property` → global root-driven animation (else SVG fallback). Verified on desktop Chrome only; fallbacks were simulated in Chrome. Safari, Firefox, iOS and Android WebView are untested.
+Styles come in progressive tiers and each browser takes what it can; no UA sniffing:
+
+| Browser capability                                    | What you get                                                                                         |
+| ----------------------------------------------------- | ---------------------------------------------------------------------------------------------------- |
+| No CSS variables                                      | Fallback: each direct child of the root is one grey block, descendants hidden, static                |
+| CSS variables                                         | Tier 0: tag-whitelist bones, fade / solid / sweep, the svg scheme                                    |
+| `text-decoration-thickness`                           | Tier 1: underline text bones                                                                         |
+| `:has()`                                              | Tier 2: leaf mode, icon detection, underline fix for ignore regions                                  |
+| `@property` (detected through relative colour syntax) | global's root-driven pulse / shimmer; otherwise it falls back to an SVG animation by default         |
+| `:where()`                                            | Bone radius yields to the element's own `border-radius`; without it bones have no default radius     |
+| `IntersectionObserver`                                | Lazy rendering and the inheritance firewall; skipped without it (still animated, just not optimised) |
+| iOS Safari (no fixed backgrounds)                     | shimmer becomes a colour pulse (global) or the pulse image (svg)                                     |
+
+**Verification status**: everything was verified on desktop Chrome; Safari, Firefox, iOS, Android WebView and old browsers are **untested**, and the fallback paths were only simulated in Chrome by forcing the detection to fail.
+
+## Known limitations and constraints
+
+### Edge cases of the fallback layer
+
+These limits belong to the fallback layer (`base.scss` only); Tier 0 and above may partly or fully fix them:
+
+1. **`video` / `canvas` / `iframe` as direct children of the root**: the real content still covers the grey block. Fix: wrap it in a `div`.
+
+   ```html
+   <!-- ❌ no -->
+   <div skz>
+     <video width="160" height="100"></video>
+   </div>
+
+   <!-- ✅ do this -->
+   <div skz>
+     <div><video width="160" height="100"></video></div>
+   </div>
+   ```
+
+2. **`display: contents` wrappers**: with no box there is nothing to paint and the descendants are hidden by `visibility:hidden`, so that area ends up **blank**.
+
+   ```html
+   <!-- ❌ no -->
+   <div skz>
+     <div style="display:contents">
+       <p>Paragraph one</p>
+       <p>Paragraph two</p>
+     </div>
+   </div>
+
+   <!-- ✅ wrap with a normal div -->
+   <div skz>
+     <div>
+       <p>Paragraph one</p>
+       <p>Paragraph two</p>
+     </div>
+   </div>
+   ```
+
+3. **Bare text**: a bare text node directly under the root is not hidden and the real text shows.
+
+   ```html
+   <!-- ❌ no -->
+   <div skz>This bare text shows through</div>
+
+   <!-- ✅ wrap it in an element -->
+   <div skz>
+     <p>This paragraph is processed</p>
+   </div>
+   ```
+
+4. **Floating absolutely-positioned badges**: they get painted as a grey block. Mark them `skz-ignore` to keep them as-is.
+
+   ```html
+   <div skz style="position:relative;">
+     <span class="badge" skz-ignore style="position:absolute;right:0;top:0;">new</span>
+     <div>Card content</div>
+   </div>
+   ```
+
+5. **Icon-font stars** (Tier 0): the icon-font glyphs show through. Tier 2 has a heuristic that recognises icons and improves this.
+
+### Colours and backgrounds in `skz-ignore` regions
+
+Text is hidden with `-webkit-text-fill-color` and `color` is left alone, so the text colour of `skz-ignore` regions and their descendants stays as-is at every tier. Remaining points:
+
+- Backgrounds on descendants of an ignore region are still cleared in Tier 0 and 1; Tier 2's leaf background mode preserves them exactly.
+- Borders / outlines / box-shadows on containers inside the skeleton that rely on `currentColor` will show; give them explicit colours, or handle them separately in the skeleton state.
+- Only in the fallback layer (old browsers without CSS variables), an ignore region with no explicit colour still inherits transparent.
+
+### Web Component hosts
+
+Web Component hosts (Shadow DOM) need `registerCustomElements()` to generate the host stylesheet:
+
+```js
+import { registerCustomElements } from "skeletonizer";
+
+// generates the host stylesheet (adoptedStyleSheets, or a <style> fallback)
+const { refresh, dispose } = registerCustomElements(document, { watch: true });
+// if custom elements are added later, call refresh() to rescan
+refresh();
+```
+
+Hosts get `visibility:hidden` plus a `::before` bone, and the host's own background colour is hidden by `visibility` as well.
+
+### `inert` support
+
+`enable()` locks interaction with native `inert` by default. With `skz-ignore` inside the root it does not lock the whole root, only the branches that contain no ignore region, so ignore regions stay clickable and focusable (if the ignore regions change after enabling, call `enable()` again to re-lock). Browsers without `inert` fall back to CSS `pointer-events:none` plus a `focusin` interceptor (ignore regions are let through too), but that branch has not been verified on real devices.
+
+## Using with frameworks
+
+skeletonizer is plain ESM plus a standard custom element. Vue / React / Svelte also have ready-made adapters (see "Framework adapters" above, sub-paths such as `skeletonizer/vue`); the snippets below integrate without an adapter.
+
+Either way, import the base styles and the variants you need once at the app entry as described in [Entry points](#entry-points), e.g. `import "skeletonizer/base.css"; import "skeletonizer/global";`. Adapters and direct `enable()` calls share one core, and a variant import applies globally.
+
+### Vue 3
+
+Use `isCustomElement` so Vue leaves the `skz-box` tag alone (the adapter's `<SkzBox>` component does not need this step):
+
+```js
+// vite.config.js
+export default {
+  plugins: [
+    vue({
+      template: {
+        compilerOptions: {
+          isCustomElement: (tag) => tag === "skz-box",
+        },
+      },
+    }),
+  ],
+};
+```
+
+Use it directly in a template:
+
+```vue
+<template>
+  <skz-box :loading="isLoading" effect="pulse">
+    <div class="card">
+      <h3>{{ user.name }}</h3>
+      <p>{{ user.bio }}</p>
+    </div>
+  </skz-box>
+</template>
+
+<script setup>
+import { defineSkzBox } from "skeletonizer";
+
+defineSkzBox();
+
+const isLoading = ref(true);
+const user = ref({ name: "", bio: "" });
+
+onMounted(async () => {
+  const data = await fetchUser();
+  user.value = data;
+  isLoading.value = false;
+});
+</script>
+```
+
+### React 18+
+
+React 18 passes attributes to custom elements as strings natively, so use it directly:
+
+```jsx
+import { defineSkzBox } from "skeletonizer";
+
+defineSkzBox();
+
+export function CardSkeleton({ isLoading, user }) {
+  return (
+    <skz-box loading={isLoading} effect="pulse" text="underline">
+      <div className="card">
+        <h3>{user.name}</h3>
+        <p>{user.bio}</p>
+      </div>
+    </skz-box>
+  );
+}
+```
+
+On React 17, or when you need finer control, use `enable()` / `disable()`:
+
+```jsx
+import { useEffect, useRef } from "react";
+import { enable, disable } from "skeletonizer";
+
+export function CardSkeleton({ isLoading, user }) {
+  const ref = useRef(null);
+
+  useEffect(() => {
+    if (isLoading) {
+      const off = enable(ref.current, { effect: "pulse" });
+      return () => off();
+    } else {
+      disable(ref.current);
+    }
+  }, [isLoading]);
+
+  return (
+    <div ref={ref}>
+      <div className="card">
+        <h3>{user.name}</h3>
+        <p>{user.bio}</p>
+      </div>
+    </div>
+  );
+}
+```
+
+### Svelte
+
+Svelte supports custom elements directly:
+
+```svelte
+<script>
+  import { defineSkzBox } from 'skeletonizer';
+  import { onMount } from 'svelte';
+
+  defineSkzBox();
+
+  let isLoading = true;
+  let user = { name: '', bio: '' };
+
+  onMount(async () => {
+    user = await fetchUser();
+    isLoading = false;
+  });
+</script>
+
+<skz-box loading={isLoading} effect="pulse" text="underline">
+  <div class="card">
+    <h3>{user.name}</h3>
+    <p>{user.bio}</p>
+  </div>
+</skz-box>
+```
+
+Or use the adapter's action `use:skeleton`:
+
+```svelte
+<script>
+  import { skeleton } from 'skeletonizer/svelte';
+
+  let isLoading = true;
+</script>
+
+<div use:skeleton={{ loading: isLoading, effect: 'pulse' }}>
+  <div class="card"><!-- content --></div>
+</div>
+```
 
 ## AI coding agents
 
@@ -195,12 +643,34 @@ Loading states use skeletonizer. Before writing one, read `node_modules/skeleton
 ## Develop
 
 ```bash
-pnpm dev     # demo on :5188 (effect, scheme, ticker, tier, dark mode switches)
-pnpm build   # multi-entry JS (dist/*.mjs + .d.mts) and six CSS entries (src/styles/entries → dist/*.css)
-pnpm test    # vitest
-pnpm check   # fmt + lint + type-check
+pnpm dev     # demo (http://localhost:5188/demo/index.html): switch effect, scheme, tier, dark mode
+pnpm build   # vp pack: multi-entry JS (dist/*.mjs + .d.mts) and six CSS entries (src/styles/entries/*.scss → dist/*.css)
+pnpm test    # vitest: runtime, firewall, SVG generation, scheme selection, style entry composition
+pnpm check   # oxfmt + oxlint (including type checking)
 ```
 
-Architecture: [ARCHITECTURE.md](https://github.com/icodejoo/codejoo/blob/main/apps/skeletonizer/ARCHITECTURE.md). Performance report: [docs/reports](https://github.com/icodejoo/codejoo/blob/main/apps/skeletonizer/docs/reports/2026-10-08-performance.md).
+- Source layout: [ARCHITECTURE.md](https://github.com/icodejoo/codejoo/blob/main/apps/skeletonizer/ARCHITECTURE.md).
+- The performance experiments (toolkit, per-round scripts / scenarios / raw data, sub-agent experiments and conclusions) live in [`bench/`](https://github.com/icodejoo/codejoo/blob/main/apps/skeletonizer/bench/README.md); the conclusions are summarised in the [performance report](https://github.com/icodejoo/codejoo/blob/main/apps/skeletonizer/docs/reports/2026-10-08-performance.md).
 
-MIT
+## Roadmap
+
+- [x] Base + variants split, opt-in loading, the `/all` full entry
+- [x] Root-driven pulse / shimmer, inheritance firewall, exact runtime colours for the svg scheme, explicit-marker base
+- [ ] Playwright three-engine visual snapshot regression (Chrome / Firefox / Safari)
+- [ ] Real-device verification: iOS Safari (fixed backgrounds, `inert`), Firefox, Safari, Android WebView
+- [ ] First npm release
+
+## Docs and references
+
+- [Design overview](https://github.com/icodejoo/codejoo/blob/main/apps/skeletonizer/docs/design/overview.md)
+- [Performance report](https://github.com/icodejoo/codejoo/blob/main/apps/skeletonizer/docs/reports/2026-10-08-performance.md)
+- [Current status and TODO](https://github.com/icodejoo/codejoo/blob/main/apps/skeletonizer/docs/status.md)
+- [Docs index](https://github.com/icodejoo/codejoo/blob/main/apps/skeletonizer/docs/README.md)
+
+## License
+
+[MIT](./LICENSE)
+
+## Acknowledgements
+
+Inspired by Flutter's [skeletonizer](https://pub.dev/packages/skeletonizer), the placeholder idea of [vue-skeletor](https://www.npmjs.com/package/vue-skeletor), and the pain of "change the UI and you have to redraw the skeleton".

@@ -34,7 +34,7 @@ try {
   chrome.unref();
   await sleep(6000);
   await new Promise((resolve) => {
-    const p = spawn(process.execPath, [path.join(KIT, "trace.mjs"), scen, reps], { env: { ...process.env, PERF_PORT: port, PERF_HOST: host }, stdio: ["ignore", "inherit", "inherit"] });
+    const p = spawn(process.execPath, [process.env.PERF_SCRIPT || path.join(KIT, "trace.mjs"), scen, reps], { env: { ...process.env, PERF_PORT: port, PERF_HOST: host }, stdio: ["ignore", "inherit", "inherit"] });
     p.on("exit", resolve);
     p.on("error", (e) => { console.error("[trace] 启动失败", e.message); resolve(); });
   });

@@ -1,0 +1,5 @@
+{"name":"orig-blend-n20","elements":160,"fps":60.4,"mainBusy":0.89,"UpdateLayoutTree":0.07,"compositor":1.59,"gpu":1.86,"PrePaint":0.09,"Layerize":0,"Commit":0.06,"HitTest":0,"stalls":0}
+{"name":"new-blend-n20","elements":160,"fps":60.4,"mainBusy":1.32,"compositor":2.24,"UpdateLayoutTree":0.13,"gpu":2.27,"PrePaint":0.13,"Layerize":0,"Commit":0.08,"HitTest":0,"stalls":0}
+{"name":"orig-blend-n37","elements":296,"fps":60.4,"mainBusy":1.17,"UpdateLayoutTree":0.09,"compositor":1.67,"gpu":1.52,"PrePaint":0.15,"Layerize":0,"Commit":0.07,"HitTest":0,"stalls":0}
+{"name":"new-blend-n37","elements":296,"fps":49.2,"mainBusy":1.98,"UpdateLayoutTree":0.19,"compositor":2.82,"gpu":18.96,"PrePaint":0.26,"Layerize":0,"Commit":0.1,"HitTest":0,"stalls":0}
+{"name":"newskew-blend-n37","elements":296,"fps":53.6,"mainBusy":1.73,"UpdateLayoutTree":0.17,"compositor":1.94,"gpu":11.82,"PrePaint":0.22,"Layerize":0,"Commit":0.09,"HitTest":0,"stalls":0}

@@ -73,7 +73,7 @@ effects.css   无条件（默认支持 CSS 变量）fade（默认）/ solid / pu
 | `skz-leaf`   | 本元素整块，子树全藏                               | `Skeleton.leaf` / `unite`  |
 | `skz-ignore` | 保持原样                                           | `Skeleton.keep` / `ignore` |
 
-根元素上的属性：`skz-effect="fade|solid|sweep|pulse|shimmer"`（sweep 为原型）、`skz-text="underline|leaf"`。
+根元素上的属性：`skz-effect="fade|solid|sweep|pulse|shimmer"`（sweep：浅色混合提亮、深色自动用容器色扫光，无单独模式属性）、`skz-text="underline|leaf"`。
 
 已知限制：`skz-ignore` 区里后代自带的**背景**在第 0、1 档会丢，第 2 档的叶子背景模式才精确保留；文字色因为藏文字改用 `-webkit-text-fill-color`（不动 `color`），各档都保留。代价是容器上依赖 `currentColor` 的边框等会在骨架里露出来。
 

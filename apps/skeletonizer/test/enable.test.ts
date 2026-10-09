@@ -32,7 +32,7 @@ class FakeEl {
     if (force) this.attrs.set(n, "");
     else this.attrs.delete(n);
   }
-  /** 内联样式（计时器写变量用） */
+  /** 内联样式（占位桩） */
   style = { setProperty: (): void => {}, removeProperty: (): void => {} };
   /** 子元素 */
   children: FakeEl[] = [];
@@ -269,30 +269,6 @@ it("engine：enable 自己不写 skz-engine（由 svg 扩展挂上 blob 后写�
   expect(f.attrs.size).toBe(0);
 });
 
-it("fps：只有 pulse / shimmer + css 方案 + 环境支持时才交给计时器", () => {
-  vi.stubGlobal("requestAnimationFrame", () => 1);
-  vi.stubGlobal("cancelAnimationFrame", () => {});
-  vi.stubGlobal("CSS", { supports: () => true });
-  vi.stubGlobal("getComputedStyle", () => ({ getPropertyValue: () => "1.5s" }));
-  const f = new FakeEl();
-  const off = enable(asEl(f), { effect: "shimmer", fps: 30 });
-  expect(f.getAttribute("skz-tick")).toBe("");
-  enable(asEl(f), { effect: "shimmer", fps: 30, engine: "svg" });
-  expect(f.getAttribute("skz-tick")).toBeNull();
-  enable(asEl(f), { effect: "fade", fps: 30 });
-  expect(f.getAttribute("skz-tick")).toBeNull();
-  enable(asEl(f), { effect: "pulse" });
-  expect(f.getAttribute("skz-tick")).toBeNull();
-  vi.stubGlobal("CSS", { supports: () => false });
-  enable(asEl(f), { effect: "pulse", fps: 30 });
-  expect(f.getAttribute("skz-tick")).toBeNull();
-  vi.stubGlobal("CSS", { supports: () => true });
-  enable(asEl(f), { effect: "pulse", fps: 24 });
-  expect(f.getAttribute("skz-tick")).toBe("");
-  off();
-  expect(f.getAttribute("skz-tick")).toBeNull();
-});
-
 it("mode 选项已删除：即使传了也不会写 skz-mode", () => {
   const f = new FakeEl();
   const off = enable(asEl(f), { mode: "explicit" } as EnableOptions);
@@ -315,19 +291,6 @@ it("防火墙：只在 css 方案的 pulse / shimmer 下给列表项打标记，
   enable(asEl(root), { effect: "pulse" });
   off();
   expect(cards.some((c) => c.getAttribute("skz-fw") !== null)).toBe(false);
-});
-
-it("fps 与防火墙互斥：根下有列表项时用防火墙、不启用计时器", () => {
-  vi.stubGlobal("requestAnimationFrame", () => 1);
-  vi.stubGlobal("cancelAnimationFrame", () => {});
-  vi.stubGlobal("CSS", { supports: () => true });
-  vi.stubGlobal("getComputedStyle", () => ({ getPropertyValue: () => "1.5s" }));
-  const root = new FakeEl();
-  const cards = [root.add(new FakeEl()), root.add(new FakeEl())];
-  const off = enable(asEl(root), { effect: "shimmer", fps: 24 });
-  expect(cards.every((c) => c.getAttribute("skz-fw") === "")).toBe(true);
-  expect(root.getAttribute("skz-tick")).toBeNull();
-  off();
 });
 
 describe("按已加载的变体决定方案", () => {

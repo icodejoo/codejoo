@@ -1,0 +1,51 @@
+name: Deploy skeletonizer demo
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'apps/skeletonizer/src/**'
+      - 'apps/skeletonizer/demo/**'
+      - 'apps/skeletonizer/vite.demo.config.ts'
+      - 'apps/skeletonizer/scripts/**'
+      - 'apps/skeletonizer/package.json'
+      - 'pnpm-lock.yaml'
+      - '.github/workflows/deploy-skeletonizer.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: gh-pages
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    name: Build & deploy skeletonizer
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: 'pnpm'
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+      - name: Build demo
+        working-directory: apps/skeletonizer
+        run: pnpm run build:demo
+      - name: Deploy skeletonizer/ to gh-pages
+        uses: peaceiris/actions-gh-pages@v4
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_dir: apps/skeletonizer/demo-dist
+          destination_dir: skeletonizer
+          keep_files: true
+
+  update-index:
+    name: Update root index
+    needs: deploy
+    uses: ./.github/workflows/update-root-index.yml
+    secrets: inherit

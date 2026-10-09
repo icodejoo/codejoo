@@ -13,9 +13,8 @@ const FALSE_LITERAL = "false";
 /**
  * <skz-box loading> 自定义元素：light DOM、不用 shadow，子节点仍归你的框架管。
  * 属性：loading（布尔开关，属性存在且值不为 "false" 即为开启）、effect（fade|solid|sweep|pulse|shimmer，默认 fade）、
- * text（underline|leaf）、fallback（svg|fade，默认 svg）、engine（global|svg）、fps。
+ * text（underline|leaf）、fallback（svg|fade，默认 svg）、engine（global|svg）、fit（存在且不为 "false" 即开启）。
  * 宿主只负责读取 loading 开关和选项，实际的骨架状态（skz 属性等）作用在【第一个元素子节点】上。
- * 没升级成自定义元素的旧环境里，CSS 兜底层也能按 [loading] 命中宿主。
  * 使用前先调用一次 defineSkzBox()。
  * 注意：不带 MutationObserver，子根被框架替换后需要由用户自己处理（例如切一下 loading）。
  *
@@ -33,7 +32,7 @@ export class SkzBox extends BaseElement {
 
   /** 需要监听的属性 */
   static get observedAttributes(): string[] {
-    return [ATTR_LOADING, "effect", "text", "fallback", "engine", "fps", "fit"];
+    return [ATTR_LOADING, "effect", "text", "fallback", "engine", "fit"];
   }
 
   /**
@@ -88,7 +87,6 @@ export class SkzBox extends BaseElement {
         text: (this.getAttribute("text") ?? undefined) as SkzTextMode | undefined,
         fallback: (this.getAttribute("fallback") ?? undefined) as SkzFallback | undefined,
         engine: (this.getAttribute("engine") ?? undefined) as SkzEngine | undefined,
-        fps: this.getAttribute("fps") === "auto" ? "auto" : Number(this.getAttribute("fps")) || undefined,
         fit: this.hasAttribute("fit") && this.getAttribute("fit") !== FALSE_LITERAL,
       });
     } else {

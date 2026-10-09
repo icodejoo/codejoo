@@ -1,0 +1,4 @@
+[{"name":"smoke list shimmer enable","css":"base,global","n":500,"attrs":{"effect":"shimmer"},"toggle":true,"toggleN":3,"snap":true},
+ {"name":"smoke form default","css":"base,global,form","n":500,"attrs":{"effect":"shimmer"},"snap":true},
+ {"name":"smoke noio fps","css":"base,global,form,noio","n":500,"attrs":{"effect":"shimmer","fps":"auto"},"snap":true},
+ {"name":"smoke svg","css":"base,svg","n":500,"attrs":{"effect":"shimmer","engine":"svg"},"snap":true}]

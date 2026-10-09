@@ -68,8 +68,6 @@ export const SkzBox = defineComponent({
     fallback: String as PropType<SkzFallback>,
     /** pulse / shimmer 的实现：global / svg */
     engine: String as PropType<SkzEngine>,
-    /** pulse / shimmer 改用 JS 计时器时的帧率上限 */
-    fps: [Number, String] as PropType<number | "auto">,
     /** 是否防止撑出滚动条 */
     fit: Boolean,
     /** 包裹元素的标签名 */
@@ -82,7 +80,7 @@ export const SkzBox = defineComponent({
       if (root.value) toggle(root.value, props.loading, props);
     };
     onMounted(sync);
-    watch(() => [props.loading, props.effect, props.text, props.fallback, props.engine, props.fps, props.fit], sync);
+    watch(() => [props.loading, props.effect, props.text, props.fallback, props.engine, props.fit], sync);
     onBeforeUnmount(() => root.value && disable(root.value));
     return () => h(props.as, { ref: root }, slots.default?.());
   },

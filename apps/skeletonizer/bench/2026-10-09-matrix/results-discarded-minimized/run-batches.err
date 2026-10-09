@@ -1,0 +1,5 @@
+{"batch":"A","try":1,"started":"2026-10-09T06:20:51.516Z","idleBefore":"idle mean=11.3 waited=33s","cpuAtStart":"12.6,15.3,13.7","cpuMean":22.1,"cpuP90":33,"cpuMax":62.5,"samples":297,"rows":22}
+{"batch":"A","try":2,"started":"2026-10-09T06:26:51.434Z","idleBefore":"idle mean=10.9 waited=55s","cpuAtStart":"9.6,9.5,27.1","cpuMean":42.5,"cpuP90":78.5,"cpuMax":100,"samples":329,"rows":22}
+{"batch":"A","try":3,"started":"2026-10-09T06:37:32.860Z","idleBefore":"idle mean=12.1 waited=299s","cpuAtStart":"9,18.8,13.7","cpuMean":17.1,"cpuP90":28.8,"cpuMax":77.5,"samples":1424,"rows":22}
+[A] 采用 cpuMean=17.1 try=3
+{"batch":"B","try":1,"started":"2026-10-09T07:04:14.425Z","idleBefore":"idle mean=11.7 waited=28s","cpuAtStart":"16.6,10.2,14.8","cpuMean":24.6,"cpuP90":43.8,"cpuMax":93,"samples":240,"rows":16}

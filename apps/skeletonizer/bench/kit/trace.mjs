@@ -13,16 +13,26 @@ const send = (method, params = {}) => new Promise((r) => { const i = ++id; pend.
 const ev = async (e) => { const r = await send("Runtime.evaluate", { expression: e, awaitPromise: true, returnByValue: true }); if (r.result.exceptionDetails) throw new Error(JSON.stringify(r.result.exceptionDetails)); return r.result.result.value; };
 const waitEvent = async (name, ms = 20000) => { const end = Date.now() + ms; while (Date.now() < end) { const i = evs.findIndex((e) => e.method === name); if (i >= 0) return evs.splice(i, 1)[0]; await sleep(50); } return null; };
 await send("Page.enable"); await send("Page.bringToFront");
+// 可选：固定视口（PERF_VIEWPORT=1200x800，DPR 1）；默认不改，行为与旧版一致
+if (process.env.PERF_VIEWPORT) { const [w, h] = process.env.PERF_VIEWPORT.split("x").map(Number); await send("Emulation.setDeviceMetricsOverride", { width: w, height: h, deviceScaleFactor: 1, mobile: false }); }
+// 窗口被最小化（或被系统隐藏）时 rAF 停摆，帧数会全错：每次测量前把窗口还原，测完核对页面可见且实际耗时没拖长，否则这次作废重测
+const ensureVisible = async () => { try { const w = await send("Browser.getWindowForTarget"); if (w.result && w.result.bounds && w.result.bounds.windowState !== "normal") await send("Browser.setWindowBounds", { windowId: w.result.windowId, bounds: { windowState: "normal" } }); } catch {} await send("Page.bringToFront"); };
+const withTimeout = (p, ms) => Promise.race([p, new Promise((r) => setTimeout(() => r("__timeout__"), ms))]);
+let stalls = 0;
 let curCss = null;
 const go = async (css) => { if (css === curCss) return; await send("Page.navigate", { url: `${HOST}?css=${css}` }); for (let i = 0; i < 60 && !(await ev("window.ready === true").catch(() => false)); i++) await sleep(250); await sleep(400); curCss = css; };
 
 const MAIN = ["UpdateLayoutTree", "Layout", "PrePaint", "Paint", "Layerize", "Commit", "UpdateLayer", "HitTest"];
 async function traceOnce(ms) {
   await send("Tracing.start", { traceConfig: { includedCategories: ["devtools.timeline", "disabled-by-default-devtools.timeline", "cc", "gpu", "viz", "toplevel"], recordMode: "recordAsMuchAsPossible" }, transferMode: "ReturnAsStream" });
-  const frames = await ev(`frames(${ms})`);
+  const t0 = Date.now();
+  const frames = await withTimeout(ev(`frames(${ms})`), ms + 10000);
+  const wall = Date.now() - t0;
+  const vis = await withTimeout(ev("document.visibilityState"), 5000);
   await send("Tracing.end");
   const done = await waitEvent("Tracing.tracingComplete");
   if (!done) { console.error("trace timeout, skip"); return null; }
+  if (frames === "__timeout__" || vis !== "visible" || wall > ms + 1500) { stalls++; console.error(`[stall] 作废这次测量：frames=${frames} vis=${vis} wall=${wall}ms`); await ensureVisible(); return null; }
   let data = ""; for (;;) { const r = await send("IO.read", { handle: done.params.stream, size: 1 << 22 }); data += r.result.base64Encoded ? Buffer.from(r.result.data, "base64").toString() : r.result.data; if (r.result.eof) break; }
   await send("IO.close", { handle: done.params.stream });
   const t = JSON.parse(data); const events = t.traceEvents || t;
@@ -43,14 +53,19 @@ async function traceOnce(ms) {
 const med = (a) => [...a].sort((x, y) => x - y)[Math.floor(a.length / 2)];
 for (const s of scen) {
   await go(s.css || "prod");
+  // 可选：场景里写 "cpu": 4 即 CPU 降速 4 倍（Emulation.setCPUThrottlingRate）；不写为 1（不降速）
+  await send("Emulation.setCPUThrottlingRate", { rate: s.cpu || 1 });
   const elements = await ev(`setup(${s.n}, ${JSON.stringify(s.attrs || [])})`);
   if (s.js2) await ev(`jsDrive2(${JSON.stringify(s.js2[0])}, ${JSON.stringify(s.js2[1])}, ${s.js2[2]})`); 
   await ev(`typeof jsDrive === 'function' && jsDrive(${JSON.stringify(s.js ? s.js[0] : '')}, ${s.js ? s.js[1] : 0})`).catch(() => {});
   const runs = [];
-  if (!s.noTrace) for (let k = 0; k < REPS; k++) { await sleep(800); const r = await traceOnce(2500); if (r) runs.push(r); }
+  if (!s.noTrace) for (let k = 0; k < REPS; k++) { let r = null; for (let tries = 0; tries < 5 && !r; tries++) { await ensureVisible(); await sleep(800); r = await traceOnce(2500); } if (r) runs.push(r); }
   const keys = [...new Set(runs.flatMap(Object.keys))];
   const out = { name: s.name, elements }; for (const k of keys) out[k] = med(runs.map((r) => r[k] ?? 0));
-  if (s.toggle) { const xs = []; for (let k = 0; k < (s.toggleN || 5); k++) xs.push(await ev("toggleCost()")); out.toggleMs = +med(xs).toFixed(1); }
+  if (s.toggle) { const xs = []; for (let k = 0; k < (s.toggleN || 5); k++) { let v = "__timeout__"; for (let tries = 0; tries < 3 && v === "__timeout__"; tries++) { await ensureVisible(); v = await withTimeout(ev("toggleCost()"), 15000); } xs.push(v); } out.toggleMs = +med(xs).toFixed(1); }
+  if (s.snap) out.snap = await ev("snap()");
+  await send("Emulation.setCPUThrottlingRate", { rate: 1 });
+  out.stalls = stalls; stalls = 0;
   console.log(JSON.stringify(out));
 }
 await send("Browser.close").catch(() => {});

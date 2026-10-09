@@ -42,22 +42,14 @@
     --skz-ul-fill: var(--skz-pulse-c);
     animation: skz-pulse-root var(--skz-duration) ease-in-out infinite alternate;
   }
-  /* shimmer：fixed 渐变背景在视口坐标里平移，各骨头同步；下划线文字没法渐变，跟着脉冲颜色走。
-   * 时间函数可在根上用 --skz-shimmer-timing 覆盖，如 steps(36) 把刷新降到 24fps（1.5s × 24） */
+  /* shimmer：fixed 渐变背景在视口坐标里平移，各骨头同步；下划线文字没法渐变，跟着脉冲颜色走 */
   [skz][skz-effect="shimmer"] {
     --skz-bg-img: linear-gradient(100deg, transparent 0, var(--skz-highlight) 50%, transparent 100%);
     --skz-bg-pos: calc(var(--skz-shimmer-p) * 1vw) 0;
     --skz-ul-fill: var(--skz-pulse-c);
     animation:
-      skz-shimmer-root var(--skz-duration) var(--skz-shimmer-timing, linear) infinite,
+      skz-shimmer-root var(--skz-duration) linear infinite,
       skz-pulse-root var(--skz-duration) ease-in-out infinite alternate;
-  }
-  /* JS 计时器模式（enable 的 fps 选项，根上带 skz-tick）：根上不跑 CSS 动画，
-   * 由 JS 按限定帧率写 --skz-pulse-t（0~1）和 --skz-shimmer-p；颜色在这里用 color-mix 算，跟着主题走 */
-  [skz][skz-tick][skz-effect="pulse"],
-  [skz][skz-tick][skz-effect="shimmer"] {
-    animation: none;
-    --skz-pulse-c: color-mix(in srgb, var(--skz-color), var(--skz-highlight) calc(var(--skz-pulse-t, 0) * 100%));
   }
   /* 继承防火墙（enable 给视口外的列表项打 skz-fw）：在它身上把会逐帧变化的变量钉成静态值。
    * 根上变量变化时它自己重算一次，计算值不变，Chrome 就不再往它的后代传播重算；
@@ -66,8 +58,6 @@
   [skz] [skz-fw] {
     --skz-pulse-c: var(--skz-color);
     --skz-shimmer-p: -60;
-    /* JS 计时器写在根上的进度变量（未注册、会继承）也要钉住，否则会穿过防火墙 */
-    --skz-pulse-t: 0;
   }
   [skz][skz-effect="pulse"] [skz-fw] {
     --skz-fill: var(--skz-pulse-c);

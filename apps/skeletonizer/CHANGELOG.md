@@ -26,18 +26,16 @@
 - `registerCustomElements` 每次调用各持一张样式表，`dispose` 只清自己的；传 ShadowRoot 时样式表挂在该 ShadowRoot 上；标签没变不重写样式表。
 - 随包附带 `llms.md`：给 AI 编码助手的精简用法与坑点清单；README 提供贴进项目 `AGENTS.md` / `CLAUDE.md` 的接入片段；公共 API 的类型注释补上前提与坑点。
 - `pulse` / `shimmer` 改为根驱动：根上一个动画驱动 `@property` 注册的变量，骨头不再各挂动画；修复元素级写法下 `pulse` 与下划线模式 `shimmer` 被 `!important` 压住、看不出动画的问题。不支持 `@property` 的浏览器退回 `fade`，iOS 上 `shimmer` 改为颜色脉冲。
-- 继承防火墙：css 方案的 `pulse` / `shimmer` 自动给视口外的列表项打 `skz-fw`、钉住动画变量，16000 元素 shimmer 从约 17 帧到 60 帧；与 `fps` 计时器互斥（计时器会穿过防火墙）。
+- 继承防火墙：css 方案的 `pulse` / `shimmer` 自动给视口外的列表项打 `skz-fw`、钉住动画变量，16000 元素 shimmer 从约 17 帧到 60 帧。
 - SVG 方案改为运行时按主题生成 blob SVG：颜色与 `--skz-highlight` 一致、`--skz-duration` 生效、系统深浅色切换自动重新生成；无 JS 时退回 fade。
 - 新增 `fit` 选项（`enable(el, { fit: true })` / `<skz-box fit>`）：骨架自身不撑出滚动条。根高度限制在最近滚动祖先（没有则视口）的剩余空间内，完全落在外面的列表项 `display: none`；收口后边界仍可滚（滚动条由别的内容造成，或骨架在首屏以下）时放宽为一屏高；尺寸变化自动重算。
-- `fps` 支持 `"auto"` 自动档（按帧耗时每 1~4 帧写一次）。
 - 新增显式基底 `skeletonizer/explicit.css`：只认 `skz-bone` / `skz-leaf`。
+- sweep 光带默认竖直（`--skz-sweep-skew` 可选倾斜，默认 `0deg`；倾斜绕根中心，根高超过约 16 倍根宽时光带会被斜出视口，长根慎用）。sweep 只有一种，按主题自动切换：浅色用 lighten 混合只提亮骨头；深色自动改用容器色扫光（光带色取 `--skz-sweep-bg-rgb`，默认 `31, 41, 55`，换主题时覆盖它），容器不漏光。不再有 `skz-sweep` 属性。
 - 骨头圆角改用 `:where()` 零优先级，元素自己的 `border-radius`（如圆形头像）不再被盖掉。
-- 新增 `fps` 选项：`pulse` / `shimmer` 改由全库共享的 rAF 计时器按限定帧率写根变量，值没变的帧不写；4000 元素下每帧样式重算减半以上，16000 元素 pulse 从 27 帧到 45 帧（`fps: 24`）。
 - 新增 SVG 方案 `skz-engine="svg"` / `engine: "svg"`：骨头共用一张 SMIL 动画 SVG 背景，CSS 每帧不变，16000 元素下 shimmer 从 22 帧到 58 帧，且不依赖 `@property`。
 - 新增降级目标 `fallback` 选项（`svg` / `fade`），产品可指定老浏览器里 `pulse` / `shimmer` 退回什么效果。
 - 性能：根里含忽略区时 `enable()` 在根上加 `skz-has-ignore`，替代 `:has([skz-ignore])`；叶子规则改用 `:has(> *)`。16000 元素下动画每帧样式重算少约 22%~28%，隐式 fade 开启耗时从约 140ms 降到约 64ms。
 - 新增 `skz-cv`：根的直接子元素加 `content-visibility: auto`，视口外子元素跳过渲染。
 - 移除 `maxAnimated` 自动降级。
 - `skz-ignore` 区不再被强制 `animation: none`，业务自己的动画（如加载转圈）照常运行。
-- shimmer 时间函数可用 `--skz-shimmer-timing` 覆盖。
 - 命名统一加 `skz` 前缀：标签 `<skz-box>`（默认注册）、属性 `skz-ignore` / `skz-leaf` / `skz-bone` / `skz-effect` / `skz-text`、CSS 变量 `--skz-*`、动画 `skz-*`；JS 导出 `SkzBox` / `defineSkzBox` / `SkzEffect` 等；Vue/React 组件改名 `SkzBox`。

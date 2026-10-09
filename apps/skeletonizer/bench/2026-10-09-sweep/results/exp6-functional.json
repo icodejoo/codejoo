@@ -1,0 +1,46 @@
+{
+ "info": {
+  "a": {
+   "anim": "skz-sweep",
+   "playState": "running",
+   "blend": "lighten",
+   "transform": "matrix(1, 0, 0, 1, 925.857, 0)",
+   "anims": 1,
+   "ignorePtr": "auto"
+  },
+  "b": {
+   "anim": "none",
+   "playState": "running",
+   "blend": "lighten",
+   "transform": "matrix(1, 0, 0, 1, -961, 0)",
+   "anims": 0
+  },
+  "c": {
+   "anim": "skz-sweep",
+   "playState": "running",
+   "blend": "normal",
+   "transform": "matrix(1, 0, 0, 1, 925.857, 0)",
+   "anims": 1
+  }
+ },
+ "res": {
+  "a": {
+   "n": 5332,
+   "max": 122,
+   "x0": 20,
+   "x1": 196
+  },
+  "b": {
+   "n": 0,
+   "max": 0,
+   "x0": null,
+   "x1": null
+  },
+  "c": {
+   "n": 11712,
+   "max": 13,
+   "x0": 12,
+   "x1": 195
+  }
+ }
+}

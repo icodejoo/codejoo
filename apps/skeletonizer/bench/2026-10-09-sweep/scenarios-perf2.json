@@ -1,0 +1,45 @@
+[
+ {
+  "name": "orig-blend-n20",
+  "css": "base,sweep&v=orig",
+  "n": 20,
+  "attrs": {
+   "effect": "sweep"
+  }
+ },
+ {
+  "name": "new-blend-n20",
+  "css": "base,sweep&v=new",
+  "n": 20,
+  "attrs": {
+   "effect": "sweep"
+  }
+ },
+ {
+  "name": "orig-blend-n37",
+  "css": "base,sweep&v=orig",
+  "n": 37,
+  "attrs": {
+   "effect": "sweep"
+  }
+ },
+ {
+  "name": "new-blend-n37",
+  "css": "base,sweep&v=new",
+  "n": 37,
+  "attrs": {
+   "effect": "sweep"
+  }
+ },
+ {
+  "name": "newskew-blend-n37",
+  "css": "base,sweep&v=new",
+  "n": 37,
+  "attrs": {
+   "effect": "sweep",
+   "_vars": {
+    "--skz-sweep-skew": "-12deg"
+   }
+  }
+ }
+]

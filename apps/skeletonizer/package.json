@@ -109,6 +109,7 @@
     "lint": "vp lint -c oxlint.config.ts",
     "check": "vp fmt -c oxfmt.config.ts --check && vp lint -c oxlint.config.ts",
     "build": "vp pack",
+    "build:demo": "node scripts/build-demo.mjs",
     "dev": "vp dev",
     "dev:lib": "vp pack --watch",
     "test": "vp test",

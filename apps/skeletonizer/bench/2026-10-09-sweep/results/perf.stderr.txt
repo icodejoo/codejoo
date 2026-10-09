@@ -1,0 +1,2 @@
+[cpu] 16.3,10.7,9.5
+[stall] 作废这次测量：frames=__timeout__ vis=hidden wall=12501ms

@@ -1,0 +1,5 @@
+{"name":"new-blend-n37-r1","elements":296,"fps":37.6,"mainBusy":2.39,"UpdateLayoutTree":0.21,"compositor":3.28,"gpu":40.43,"PrePaint":0.31,"Layerize":0,"Commit":0.12,"HitTest":0,"stalls":0}
+{"name":"orig-blend-n37-r1","elements":296,"fps":60.4,"mainBusy":1.13,"compositor":1.41,"UpdateLayoutTree":0.1,"gpu":1.58,"PrePaint":0.12,"Layerize":0,"Commit":0.11,"HitTest":0,"raster":0,"stalls":0}
+{"name":"new-blend-n37-r2","elements":296,"fps":60.4,"mainBusy":1.51,"UpdateLayoutTree":0.15,"compositor":2.18,"gpu":2.06,"PrePaint":0.16,"Layerize":0,"Commit":0.15,"HitTest":0,"stalls":0}
+{"name":"orig-blend-n37-r2","elements":296,"fps":60.4,"compositor":1.43,"mainBusy":1.13,"gpu":1.58,"UpdateLayoutTree":0.11,"PrePaint":0.13,"Layerize":0,"Commit":0.12,"HitTest":0,"stalls":0}
+{"name":"new-blend-n37-r3","elements":296,"fps":60.4,"mainBusy":1.26,"UpdateLayoutTree":0.13,"compositor":1.87,"gpu":2.02,"PrePaint":0.13,"Layerize":0,"Commit":0.12,"HitTest":0,"stalls":0}

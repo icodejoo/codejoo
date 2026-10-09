@@ -1,0 +1,12 @@
+{"name":"new-blend-n37-r1","elements":296,"fps":60.4,"mainBusy":1.31,"UpdateLayoutTree":0.12,"compositor":2.12,"gpu":2.07,"PrePaint":0.16,"Layerize":0,"Commit":0.08,"HitTest":0,"stalls":0}
+{"name":"orig-blend-n37-r1","elements":296,"fps":60.4,"mainBusy":1.15,"UpdateLayoutTree":0.1,"compositor":1.41,"gpu":1.7,"PrePaint":0.12,"Layerize":0,"Commit":0.11,"HitTest":0,"raster":0,"UpdateLayer":0,"stalls":1}
+{"name":"new-blend-n100-r1","elements":800,"fps":60.4,"mainBusy":1.73,"UpdateLayoutTree":0.19,"compositor":1.94,"gpu":2.31,"PrePaint":0.25,"Layerize":0,"Commit":0.2,"HitTest":0,"raster":0,"stalls":0}
+{"name":"orig-blend-n100-r1","elements":800,"fps":60.4,"mainBusy":1.65,"UpdateLayoutTree":0.16,"compositor":1.1,"PrePaint":0.24,"Layerize":0,"Commit":0.19,"gpu":0.79,"HitTest":0,"stalls":0}
+{"name":"new-blend-n37-r2","elements":296,"fps":60.4,"mainBusy":1.2,"UpdateLayoutTree":0.12,"compositor":1.82,"gpu":1.99,"PrePaint":0.13,"Layerize":0,"Commit":0.11,"HitTest":0,"stalls":0}
+{"name":"orig-blend-n37-r2","elements":296,"fps":60.4,"mainBusy":1.35,"compositor":1.63,"gpu":1.78,"UpdateLayoutTree":0.13,"PrePaint":0.15,"Layerize":0,"Commit":0.12,"HitTest":0,"stalls":0}
+{"name":"new-blend-n100-r2","elements":800,"fps":60.4,"compositor":2.07,"mainBusy":1.93,"gpu":2.18,"UpdateLayoutTree":0.21,"PrePaint":0.25,"Layerize":0,"Commit":0.21,"HitTest":0,"stalls":0}
+{"name":"orig-blend-n100-r2","elements":800,"fps":60.4,"mainBusy":1.86,"UpdateLayoutTree":0.18,"compositor":1.17,"PrePaint":0.3,"Layerize":0,"Commit":0.2,"gpu":0.86,"HitTest":0,"stalls":0}
+{"name":"new-blend-n37-r3","elements":296,"fps":60.4,"mainBusy":1.48,"UpdateLayoutTree":0.15,"compositor":2.12,"gpu":2.02,"PrePaint":0.16,"Layerize":0,"Commit":0.14,"HitTest":0,"stalls":0}
+{"name":"orig-blend-n37-r3","elements":296,"fps":60.4,"mainBusy":1.25,"UpdateLayoutTree":0.12,"compositor":1.49,"gpu":1.52,"PrePaint":0.12,"Layerize":0,"Commit":0.11,"HitTest":0,"stalls":0}
+{"name":"new-blend-n100-r3","elements":800,"fps":60.4,"mainBusy":1.72,"UpdateLayoutTree":0.19,"compositor":1.97,"gpu":2.03,"PrePaint":0.24,"Layerize":0,"Commit":0.2,"HitTest":0,"stalls":0}
+{"name":"orig-blend-n100-r3","elements":800,"fps":60.4,"mainBusy":1.56,"UpdateLayoutTree":0.15,"compositor":1.09,"PrePaint":0.22,"Layerize":0,"Commit":0.19,"gpu":0.76,"HitTest":0,"stalls":0}

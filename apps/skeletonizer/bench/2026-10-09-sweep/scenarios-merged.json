@@ -1,0 +1,6 @@
+[
+ {"name":"merged-light-n500","css":"base,sweep&v=merged","n":500,"attrs":{"effect":"sweep"}},
+ {"name":"merged-light-n2000","css":"base,sweep&v=merged","n":2000,"attrs":{"effect":"sweep"}},
+ {"name":"merged-dark-n500","css":"base,sweep&v=merged&theme=dark","n":500,"attrs":{"effect":"sweep"}},
+ {"name":"merged-dark-n2000","css":"base,sweep&v=merged&theme=dark","n":2000,"attrs":{"effect":"sweep"}}
+]

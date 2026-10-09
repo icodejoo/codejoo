@@ -1,6 +1,5 @@
 import { PAUSED_ATTR } from "./dom.js";
 import { enableFit, disableFit } from "./fit.js";
-import type { TickRate } from "./ticker.js";
 
 /** 动画效果 */
 export type SkzEffect = "fade" | "solid" | "sweep" | "pulse" | "shimmer";
@@ -27,12 +26,6 @@ export interface EnableOptions {
    * 两者都加载（如 skeletonizer/all）时默认 global。
    */
   engine?: SkzEngine;
-  /**
-   * pulse / shimmer 改用 JS 计时器驱动：数字为每秒最多更新几次（建议 24~30）；"auto" 按帧耗时自动每 1~4 帧更新一次。
-   * 值没变的帧不更新。不传则用纯 CSS 动画。svg 方案、不支持 @property 的浏览器忽略此项；
-   * 根下能找到列表项时会自动启用继承防火墙（更快），此时也忽略此项。
-   */
-  fps?: TickRate;
   /** 保证骨架自身绝不撑出滚动条，超出部分自动隐藏。默认关闭 */
   fit?: boolean;
 }
@@ -216,7 +209,7 @@ function syncExtensions(el: HTMLElement, opts: EnableOptions, engine: SkzEngine)
  * 框架项目优先用子路径适配层（`/react`、`/vue`、`/svelte`），它们会自动开关。
  * 完整用法与坑点：包内 `llms.md`。
  * 根滚出视口时自动暂停动画（懒渲染），回到视口附近再恢复。
- * pulse / shimmer 的增强处理（继承防火墙、计时器、SVG 运行时图）由变体入口 skeletonizer/global、skeletonizer/svg 提供。
+ * pulse / shimmer 的增强处理（继承防火墙、SVG 运行时图）由变体入口 skeletonizer/global、skeletonizer/svg 提供。
  * 重复调用是幂等的，会按本次选项重新同步 effect / text 属性（没传的会被清掉）。
  * pulse / shimmer 由根驱动（根上一个动画），每帧仍要重绘骨头，成本随元素数增长；不支持 @property 的浏览器由 JS 改挂 SVG 动画（fallback 可改成 fade），JS 执行前显示 fade。
  *
@@ -224,7 +217,6 @@ function syncExtensions(el: HTMLElement, opts: EnableOptions, engine: SkzEngine)
  * @param opts
  *   effect：动画效果（写到 skz-effect 属性），不写则用默认的 fade（根级 opacity，几乎零成本）；
  *   text：文字骨头模式（写到 skz-text 属性）；
- *   fps：pulse / shimmer 改由 JS 计时器按此帧率更新（建议 24~30，或 "auto" 自动档），不传用 CSS 动画；
  *   engine：pulse / shimmer 的实现，global / svg（svg 方案挂上 blob 图后由扩展写 skz-engine 属性），默认按已加载的变体入口决定；
  *   fallback：global 方案在不支持 @property 的浏览器里的降级，svg（默认，JS 挂 blob SVG 动画）/ fade（不挂，保持基底 fade）
  * @returns 关闭函数，调用后恢复真实内容
