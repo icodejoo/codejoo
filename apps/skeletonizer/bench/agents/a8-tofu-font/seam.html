@@ -1,0 +1,9 @@
+<!doctype html><meta charset="utf-8"><link rel="stylesheet" href="./tofu.css">
+<style>body{margin:8px;background:#fff;color:#000}div{font-family:"Skz Tofu";color:#000;line-height:2;white-space:pre;letter-spacing:0;font-kerning:none;font-variant-ligatures:none;font-synthesis:none;margin-bottom:6px}</style>
+<div id="a"></div><div id="b"></div><div id="c"></div>
+<script>
+const fs = +new URLSearchParams(location.search).get("fs") || 14;
+for (const id of ["a","b","c"]) document.getElementById(id).style.fontSize = fs + "px";
+a.textContent = "x".repeat(40); b.textContent = "中".repeat(20); c.textContent = "Hello World 123, text-block seams test ".repeat(1) + "你好世界";
+window.ready = true;
+</script>

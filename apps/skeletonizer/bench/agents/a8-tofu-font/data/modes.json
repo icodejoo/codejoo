@@ -1,0 +1,302 @@
+{
+ "base,global,tofu": {
+  "leaf": {
+   "h3": {
+    "ff": "system-ui, \"",
+    "td": "none",
+    "fill": "rgba(0, 0, 0, 0)",
+    "bgclip": "border-box",
+    "color": "rgb(17, 17, 17)"
+   },
+   "bare": {
+    "ff": "system-ui, \"",
+    "td": "none",
+    "fill": "rgba(0, 0, 0, 0)",
+    "bgclip": "border-box",
+    "color": "rgb(17, 17, 17)"
+   },
+   "span": {
+    "ff": "system-ui, \"",
+    "td": "none",
+    "fill": "rgba(0, 0, 0, 0)",
+    "bgclip": "border-box",
+    "color": "rgb(17, 17, 17)"
+   },
+   "input": {
+    "ff": "Arial",
+    "td": "none",
+    "fill": "rgba(0, 0, 0, 0)",
+    "bgclip": "border-box",
+    "color": "rgb(17, 17, 17)"
+   },
+   "button": {
+    "ff": "Arial",
+    "td": "none",
+    "fill": "rgba(0, 0, 0, 0)",
+    "bgclip": "border-box",
+    "color": "rgb(17, 17, 17)"
+   }
+  },
+  "underline": {
+   "h3": {
+    "ff": "system-ui, \"",
+    "td": "underline",
+    "fill": "rgba(0, 0, 0, 0)",
+    "bgclip": "border-box",
+    "color": "rgb(17, 17, 17)"
+   },
+   "bare": {
+    "ff": "system-ui, \"",
+    "td": "underline",
+    "fill": "rgba(0, 0, 0, 0)",
+    "bgclip": "border-box",
+    "color": "rgb(17, 17, 17)"
+   },
+   "span": {
+    "ff": "system-ui, \"",
+    "td": "underline",
+    "fill": "rgba(0, 0, 0, 0)",
+    "bgclip": "border-box",
+    "color": "rgb(17, 17, 17)"
+   },
+   "input": {
+    "ff": "Arial",
+    "td": "underline",
+    "fill": "rgba(0, 0, 0, 0)",
+    "bgclip": "border-box",
+    "color": "rgb(17, 17, 17)"
+   },
+   "button": {
+    "ff": "Arial",
+    "td": "underline",
+    "fill": "rgba(0, 0, 0, 0)",
+    "bgclip": "border-box",
+    "color": "rgb(17, 17, 17)"
+   }
+  },
+  "clip": {
+   "h3": {
+    "ff": "system-ui, \"",
+    "td": "underline",
+    "fill": "rgba(0, 0, 0, 0)",
+    "bgclip": "text",
+    "color": "rgb(17, 17, 17)"
+   },
+   "bare": {
+    "ff": "system-ui, \"",
+    "td": "underline",
+    "fill": "rgba(0, 0, 0, 0)",
+    "bgclip": "border-box",
+    "color": "rgb(17, 17, 17)"
+   },
+   "span": {
+    "ff": "system-ui, \"",
+    "td": "underline",
+    "fill": "rgba(0, 0, 0, 0)",
+    "bgclip": "text",
+    "color": "rgb(17, 17, 17)"
+   },
+   "input": {
+    "ff": "Arial",
+    "td": "underline",
+    "fill": "rgba(0, 0, 0, 0)",
+    "bgclip": "border-box",
+    "color": "rgb(17, 17, 17)"
+   },
+   "button": {
+    "ff": "Arial",
+    "td": "underline",
+    "fill": "rgba(0, 0, 0, 0)",
+    "bgclip": "text",
+    "color": "rgb(17, 17, 17)"
+   }
+  },
+  "tofu": {
+   "h3": {
+    "ff": "\"Skz Tofu\"",
+    "td": "none",
+    "fill": "rgb(217, 221, 227)",
+    "bgclip": "text",
+    "color": "rgb(217, 221, 227)"
+   },
+   "bare": {
+    "ff": "system-ui, \"",
+    "td": "underline",
+    "fill": "rgba(0, 0, 0, 0)",
+    "bgclip": "border-box",
+    "color": "rgb(17, 17, 17)"
+   },
+   "span": {
+    "ff": "\"Skz Tofu\"",
+    "td": "none",
+    "fill": "rgb(217, 221, 227)",
+    "bgclip": "text",
+    "color": "rgb(217, 221, 227)"
+   },
+   "input": {
+    "ff": "Arial",
+    "td": "underline",
+    "fill": "rgba(0, 0, 0, 0)",
+    "bgclip": "border-box",
+    "color": "rgb(17, 17, 17)"
+   },
+   "button": {
+    "ff": "\"Skz Tofu\"",
+    "td": "none",
+    "fill": "rgb(217, 221, 227)",
+    "bgclip": "text",
+    "color": "rgb(217, 221, 227)"
+   }
+  }
+ },
+ "base,global,tofuall": {
+  "leaf": {
+   "h3": {
+    "ff": "system-ui, \"",
+    "td": "none",
+    "fill": "rgba(0, 0, 0, 0)",
+    "bgclip": "border-box",
+    "color": "rgb(17, 17, 17)"
+   },
+   "bare": {
+    "ff": "system-ui, \"",
+    "td": "none",
+    "fill": "rgba(0, 0, 0, 0)",
+    "bgclip": "border-box",
+    "color": "rgb(17, 17, 17)"
+   },
+   "span": {
+    "ff": "system-ui, \"",
+    "td": "none",
+    "fill": "rgba(0, 0, 0, 0)",
+    "bgclip": "border-box",
+    "color": "rgb(17, 17, 17)"
+   },
+   "input": {
+    "ff": "Arial",
+    "td": "none",
+    "fill": "rgba(0, 0, 0, 0)",
+    "bgclip": "border-box",
+    "color": "rgb(17, 17, 17)"
+   },
+   "button": {
+    "ff": "Arial",
+    "td": "none",
+    "fill": "rgba(0, 0, 0, 0)",
+    "bgclip": "border-box",
+    "color": "rgb(17, 17, 17)"
+   }
+  },
+  "underline": {
+   "h3": {
+    "ff": "system-ui, \"",
+    "td": "underline",
+    "fill": "rgba(0, 0, 0, 0)",
+    "bgclip": "border-box",
+    "color": "rgb(17, 17, 17)"
+   },
+   "bare": {
+    "ff": "system-ui, \"",
+    "td": "underline",
+    "fill": "rgba(0, 0, 0, 0)",
+    "bgclip": "border-box",
+    "color": "rgb(17, 17, 17)"
+   },
+   "span": {
+    "ff": "system-ui, \"",
+    "td": "underline",
+    "fill": "rgba(0, 0, 0, 0)",
+    "bgclip": "border-box",
+    "color": "rgb(17, 17, 17)"
+   },
+   "input": {
+    "ff": "Arial",
+    "td": "underline",
+    "fill": "rgba(0, 0, 0, 0)",
+    "bgclip": "border-box",
+    "color": "rgb(17, 17, 17)"
+   },
+   "button": {
+    "ff": "Arial",
+    "td": "underline",
+    "fill": "rgba(0, 0, 0, 0)",
+    "bgclip": "border-box",
+    "color": "rgb(17, 17, 17)"
+   }
+  },
+  "clip": {
+   "h3": {
+    "ff": "system-ui, \"",
+    "td": "underline",
+    "fill": "rgba(0, 0, 0, 0)",
+    "bgclip": "text",
+    "color": "rgb(17, 17, 17)"
+   },
+   "bare": {
+    "ff": "system-ui, \"",
+    "td": "underline",
+    "fill": "rgba(0, 0, 0, 0)",
+    "bgclip": "border-box",
+    "color": "rgb(17, 17, 17)"
+   },
+   "span": {
+    "ff": "system-ui, \"",
+    "td": "underline",
+    "fill": "rgba(0, 0, 0, 0)",
+    "bgclip": "text",
+    "color": "rgb(17, 17, 17)"
+   },
+   "input": {
+    "ff": "Arial",
+    "td": "underline",
+    "fill": "rgba(0, 0, 0, 0)",
+    "bgclip": "border-box",
+    "color": "rgb(17, 17, 17)"
+   },
+   "button": {
+    "ff": "Arial",
+    "td": "underline",
+    "fill": "rgba(0, 0, 0, 0)",
+    "bgclip": "text",
+    "color": "rgb(17, 17, 17)"
+   }
+  },
+  "tofu": {
+   "h3": {
+    "ff": "\"Skz Tofu\"",
+    "td": "none",
+    "fill": "rgb(217, 221, 227)",
+    "bgclip": "text",
+    "color": "rgb(217, 221, 227)"
+   },
+   "bare": {
+    "ff": "\"Skz Tofu\"",
+    "td": "none",
+    "fill": "rgb(217, 221, 227)",
+    "bgclip": "border-box",
+    "color": "rgb(217, 221, 227)"
+   },
+   "span": {
+    "ff": "\"Skz Tofu\"",
+    "td": "none",
+    "fill": "rgb(217, 221, 227)",
+    "bgclip": "text",
+    "color": "rgb(217, 221, 227)"
+   },
+   "input": {
+    "ff": "Arial",
+    "td": "underline",
+    "fill": "rgba(0, 0, 0, 0)",
+    "bgclip": "border-box",
+    "color": "rgb(17, 17, 17)"
+   },
+   "button": {
+    "ff": "\"Skz Tofu\"",
+    "td": "none",
+    "fill": "rgb(217, 221, 227)",
+    "bgclip": "text",
+    "color": "rgb(217, 221, 227)"
+   }
+  }
+ }
+}

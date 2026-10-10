@@ -13,7 +13,7 @@ const FALSE_LITERAL = "false";
 /**
  * <skz-box loading> 自定义元素：light DOM、不用 shadow，子节点仍归你的框架管。
  * 属性：loading（布尔开关，属性存在且值不为 "false" 即为开启）、effect（fade|solid|sweep|pulse|shimmer，默认 fade）、
- * text（underline|leaf）、fallback（svg|fade，默认 svg）、engine（global|svg）、fit（存在且不为 "false" 即开启）。
+ * text（见 SkzTextMode，缺省 clip）、fallback（svg|fade，默认 svg）、engine（global|svg）、fit（存在且不为 "false" 即开启）。
  * 宿主只负责读取 loading 开关和选项，实际的骨架状态（skz 属性等）作用在【第一个元素子节点】上。
  * 使用前先调用一次 defineSkzBox()。
  * 注意：不带 MutationObserver，子根被框架替换后需要由用户自己处理（例如切一下 loading）。

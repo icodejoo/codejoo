@@ -1,0 +1,5 @@
+/* 实验变体 lin-nop：shimmer linear，pulse 不跑 */
+[skz][skz-effect="shimmer"] {
+  animation:
+    skz-shimmer-root var(--skz-duration) linear infinite;
+}

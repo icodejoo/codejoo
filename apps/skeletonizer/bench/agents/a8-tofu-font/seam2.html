@@ -1,0 +1,8 @@
+<!doctype html><meta charset="utf-8"><style>body{margin:8px;background:#fff;color:#000}div{font-family:"T2";color:#000;line-height:2;white-space:pre}</style>
+<div id="a"></div>
+<script>
+const q = new URLSearchParams(location.search), fs = +q.get("fs");
+const st = document.createElement("style"); st.textContent = `@font-face{font-family:"T2";src:url(${q.get("font")}) format("woff2")}`; document.head.append(st);
+a.style.fontSize = fs + "px"; a.textContent = "x".repeat(40);
+document.fonts.load("12px T2").then(() => { window.ready = true; });
+</script>

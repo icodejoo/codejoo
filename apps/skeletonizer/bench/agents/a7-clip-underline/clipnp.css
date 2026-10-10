@@ -1,0 +1,2 @@
+/* 变体：clip 之上，shimmer 根只留 shimmer-p 动画，不再驱动 pulse-c（global 引擎） */
+[skz][skz-effect="shimmer"]:not([skz-engine="svg"]) { animation: skz-shimmer-root var(--skz-duration) linear infinite; }

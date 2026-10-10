@@ -1,0 +1,2 @@
+{"name":"clip shimmer global @2000","elements":16000,"fps":60.4,"mainBusy":21.59,"gpu":11.34,"compositor":4.38,"UpdateLayoutTree":7.31,"PrePaint":0.21,"Paint":2.86,"Layerize":0.1,"Commit":0.55,"UpdateLayer":0.07,"HitTest":0.01,"toggleMs":90.9,"stalls":0}
+{"name":"underline shimmer global @2000 cpu4","elements":16000,"fps":20.8,"PrePaint":0.73,"Paint":11.36,"compositor":4.65,"Layerize":0.33,"Commit":2.67,"UpdateLayer":0.16,"gpu":4.27,"mainBusy":98.29,"UpdateLayoutTree":34.79,"HitTest":0.19,"toggleMs":576.4,"stalls":0}

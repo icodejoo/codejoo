@@ -1,0 +1,13 @@
+<!doctype html><meta charset="utf-8"><style>
+body{font:16px/1.5 system-ui,"Microsoft YaHei",sans-serif;background:#1f2937;color:#e5e7eb;margin:0;padding:10px}
+.g{display:grid;grid-template-columns:repeat(3,1fr);gap:6px 14px}
+.c{font-size:11px;color:#9ca3af;margin:0}
+.t{ -webkit-text-fill-color:transparent; text-decoration:underline; text-decoration-skip-ink:none; text-decoration-color:transparent;
+  text-decoration-thickness:var(--th,1em); text-underline-offset:var(--of,-.85em);
+  background:#6b7280; -webkit-background-clip:text; background-clip:text; margin:0 0 4px; display:block; font-size:var(--fs,16px)}
+</style><div class="g" id="g"></div><script>
+const q=new URLSearchParams(location.search); if(q.get("ff"))document.body.style.fontFamily=q.get("ff"); const fs=q.get("fs")||"16px";
+const V=(q.get("v")||"1em,-.85em;1.1em,-.85em;1.2em,-.9em;1.25em,-.85em;1.3em,-.9em;1.15em,-.95em").split(";").map(s=>s.split(","));
+const TXT=["gypqj Typography gg","你好世界 中文字符 测试","ABC 123 hello","gjpqy 骨架屏 ggg"];
+g.innerHTML=V.map(([th,of])=>`<div><p class="c">th=${th} off=${of}</p>${TXT.map(t=>`<div class="t" style="--th:${th};--of:${of};--fs:${fs}">${t}</div>`).join("")}</div>`).join("");
+</script>

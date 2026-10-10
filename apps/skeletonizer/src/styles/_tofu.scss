@@ -1,0 +1,57 @@
+@use "lists" as *;
+@use "tofu-font" as *;
+
+/* ===== tofu 文字模式（skeletonizer/tofu.css；根上写 skz-text="tofu"，enable(el, { text: "tofu" })）=====
+ * 文字元素换成一个"全方块字体"（skz-tofu：所有字符都是实心方块，空白也是），颜色读 --skz-ul-fill，
+ * 排版（字号 / 行高 / 换行 / 最后一行变短）仍由浏览器用方块的宽度排。不用 background-clip，也不画下划线。
+ * 不引本文件时：skz-text="tofu" 的根在 base.css 里退回 underline 的外观（$clip 排除了它，通用下划线规则照常生效）。
+ * 字体以 data URI 内联：严格 CSP 需放行 font-src data:；字体加载失败 / 被 CSP 挡掉时，真实文字会以骨头色露出来，
+ * 没有 JS 回退（要回退请自己监听 document.fonts 再改成 clip）。
+ * 字体由 scripts/gen-tofu-font.py 生成（_tofu-font.scss 是生成物）。 */
+@font-face {
+  font-family: skz-tofu;
+  /* block：字体没到之前文字不可见，不闪真实文字；weight 给范围，粗体不触发合成加粗（方块会变宽） */
+  font-display: block;
+  font-style: normal;
+  font-weight: 100 900;
+  src: url("data:font/woff2;base64,#{$skz-tofu-woff2}") format("woff2");
+}
+
+$tofu-tags: sk-join($text-tags);
+$tofu-media: sk-join($media-tags);
+/// 不吃方块的元素：忽略区、显式骨头 / 叶子（共用 $text-skip）、媒体与控件（整块当骨头，文字由透明字色藏起来）及其内部
+$tofu-skip: ":not([skz-ignore])#{$text-skip}:not(:is(#{$tofu-media}) *)";
+
+/// 方块文字的声明：方块字体 + 纯色 + 撤掉下划线 + 关掉会改变字宽 / 字形的排版特性。
+/// 颜色读 --skz-ul-fill：global 的 pulse / shimmer 由根上的 pulse 动画驱动（见 _global.scss），svg 引擎下是静态 --skz-color
+@mixin tofu-text {
+  font-family: skz-tofu !important;
+  color: var(--skz-ul-fill, var(--skz-color)) !important;
+  -webkit-text-fill-color: currentColor !important;
+  text-decoration: none !important;
+  letter-spacing: 0 !important;
+  word-spacing: 0 !important;
+  font-kerning: none !important;
+  font-variant-ligatures: none !important;
+  font-synthesis: none !important;
+  font-feature-settings: normal !important;
+  text-rendering: optimizeSpeed !important;
+  -webkit-text-stroke: 0 !important;
+  text-shadow: none !important;
+}
+
+/* 文字标签（清单同 clip）和它们里面的后代（如 p 里的 code）吃方块字体。
+ * 根上没有忽略区（没有 skz-has-ignore）时直接匹配，不带 :has，保持便宜 */
+#{$tofu}:not([skz-has-ignore]) :is(#{$tofu-tags})#{$tofu-skip},
+#{$tofu}:not([skz-has-ignore]) :is(#{$tofu-tags}) *:not(:is(#{$tofu-media}))#{$tofu-skip} {
+  @include tofu-text;
+}
+/* 根上有忽略区（enable() 检测到后自动加 skz-has-ignore）：里面含 skz-ignore 的文字元素不套方块。
+ * 否则行内的忽略区会继承方块字体，被画成一条骨头；这些元素退回 underline 的外观，和 clip / underline 模式
+ * 对含忽略区祖先的处理一致（见 tier2）。需要 :has，不支持的浏览器上这类根整体退回 underline */
+@supports selector(:has(*)) {
+  #{$tofu}[skz-has-ignore] :is(#{$tofu-tags})#{$tofu-skip}:not(:has([skz-ignore])),
+  #{$tofu}[skz-has-ignore] :is(#{$tofu-tags}) *:not(:is(#{$tofu-media}))#{$tofu-skip}:not(:has([skz-ignore])) {
+    @include tofu-text;
+  }
+}

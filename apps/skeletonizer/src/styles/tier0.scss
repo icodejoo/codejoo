@@ -33,7 +33,20 @@
   visibility: hidden !important;
 }
 
+/* button 是控件，整块当一块骨头（见 $media-tags）：内部的 span / 图标一并藏起来，不在按钮块上再叠小骨头。
+ * 忽略区里的 button 自己不当骨头，后代恢复可见（同优先级，写在后面） */
+#{$auto} button:not([skz-ignore]) * {
+  visibility: hidden !important;
+}
+#{$auto} [skz-ignore] button * {
+  visibility: visible !important;
+}
+
 /* 骨头圆角：用 :where() 把优先级降到 0，元素自己写了 border-radius（如圆形头像）就保留它的形状 */
 :where(#{sk-is-sel($auto, $text-tags)}) {
   border-radius: var(--skz-tradius, var(--skz-radius));
+}
+/* button 整块骨头的圆角：同样降到 0 优先级，按钮自己写了 border-radius 就保留 */
+:where(#{$auto} button:not([skz-ignore])) {
+  border-radius: var(--skz-radius);
 }

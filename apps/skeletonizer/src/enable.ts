@@ -4,8 +4,14 @@ import { enableFit, disableFit } from "./fit.js";
 /** 动画效果 */
 export type SkzEffect = "fade" | "solid" | "sweep" | "pulse" | "shimmer";
 
-/** 文字骨头模式 */
-export type SkzTextMode = "underline" | "leaf";
+/**
+ * 文字骨头模式：不传 = "clip"（默认）。
+ * - "clip"：下划线当形状 + background-clip:text 当填充，文字条里也有 shimmer 光带，形状沿真实文字行；
+ * - "underline"：纯下划线，颜色脉冲，最便宜；
+ * - "leaf"：叶子元素整块当背景骨头（有圆角、能放光带）；
+ * - "tofu"：方块字体（需引入 skeletonizer/tofu.css，否则退回 underline 外观），颜色脉冲。
+ */
+export type SkzTextMode = "underline" | "leaf" | "clip" | "tofu";
 
 /** 降级目标：浏览器不支持 @property、global 方案的 pulse / shimmer 跑不起来时改用的效果：svg（默认，JS 挂 blob SVG 动画）/ fade（根级淡入淡出） */
 export type SkzFallback = "svg" | "fade";
@@ -17,7 +23,7 @@ export type SkzEngine = "global" | "svg";
 export interface EnableOptions {
   /** 动画效果，默认 fade */
   effect?: SkzEffect;
-  /** 文字骨头模式 */
+  /** 文字骨头模式，不传 = clip，各模式见 SkzTextMode */
   text?: SkzTextMode;
   /** global 方案在不支持 @property 的浏览器里退回的效果，默认 svg（由 JS 挂 blob SVG，需加载 skeletonizer/global）；JS 执行前一律是 fade */
   fallback?: SkzFallback;
@@ -216,7 +222,7 @@ function syncExtensions(el: HTMLElement, opts: EnableOptions, engine: SkzEngine)
  * @param el 骨架根元素
  * @param opts
  *   effect：动画效果（写到 skz-effect 属性），不写则用默认的 fade（根级 opacity，几乎零成本）；
- *   text：文字骨头模式（写到 skz-text 属性）；
+ *   text：文字骨头模式（写到 skz-text 属性），不传 = clip，各模式见 SkzTextMode；
  *   engine：pulse / shimmer 的实现，global / svg（svg 方案挂上 blob 图后由扩展写 skz-engine 属性），默认按已加载的变体入口决定；
  *   fallback：global 方案在不支持 @property 的浏览器里的降级，svg（默认，JS 挂 blob SVG 动画）/ fade（不挂，保持基底 fade）
  * @returns 关闭函数，调用后恢复真实内容
@@ -328,6 +334,8 @@ function mountHostSheet(root: Document | ShadowRoot): HostSheet {
 /**
  * 生成 Web Component 宿主的骨架样式：宿主 visibility:hidden 藏起 shadow 内容，
  * 再用宿主的 ::before 铺一块骨头（宿主自己的背景会被 visibility 一起藏掉，所以借伪元素）。
+ * 骨头的画法与 _mixins.scss 的 sk-bone 一致：读根上动画驱动继承下来的 --skz-fill / --skz-bg-img / --skz-bg-pos，
+ * 所以 pulse / shimmer（global 含降频、svg 引擎、防火墙）对宿主同样生效。
  * @param tags 带连字符的自定义元素标签名
  * @returns CSS 文本
  */
@@ -335,7 +343,7 @@ function buildHostCss(tags: string[]): string {
   if (!tags.length) return "";
   const sel = (suffix = ""): string => tags.map((t) => `[${ROOT_ATTR}] ${t}:not([skz-ignore])${suffix}`).join(",");
   return `${sel()}{visibility:hidden !important;position:relative}
-${sel("::before")}{content:"" !important;visibility:visible !important;position:absolute !important;top:0 !important;right:0 !important;bottom:0 !important;left:0 !important;background:var(--skz-color,#d9dde3) !important;border-radius:var(--skz-radius,4px) !important}`;
+${sel("::before")}{content:"" !important;visibility:visible !important;position:absolute !important;top:0 !important;right:0 !important;bottom:0 !important;left:0 !important;background-color:var(--skz-fill,var(--skz-color,#d9dde3)) !important;background-image:var(--skz-bg-img,none) !important;background-position:var(--skz-bg-pos,0 0);background-repeat:no-repeat !important;background-attachment:fixed !important;background-size:var(--skz-bg-size,60vw 100vh) !important;border-radius:var(--skz-radius,4px) !important}`;
 }
 
 /**

@@ -1,0 +1,22 @@
+/* a7 原型 clip：下划线当形状 + background-clip:text 当填充。叠在 dist/base.css(+global/svg) 之后。
+ * 1) 文字标签恢复第 0 档的 bg 声明（读 --skz-tbg/--skz-timg，和图标/图片骨头同一套变量），再 clip 到文字（含装饰线）。
+ * 2) 所有后代的装饰线颜色设 transparent：祖先块的下划线会"穿过"后代文字（装饰传播），不清掉会盖住渐变。
+ * 3) 下划线厚度 1.15em（偏移不变），盖住 gypq 等下探字形。
+ * 局限：不在文字标签列表里、又直接含文字的元素（如裸 div 文本）会变成不可见——clipall.css 变体补这个。 */
+@supports (text-decoration-thickness: 1em) {
+  [skz][skz-effect="shimmer"]:not([skz-text="leaf"]),
+  [skz][skz-effect="pulse"]:not([skz-text="leaf"]) {
+    --skz-tbg: var(--skz-fill, var(--skz-color));
+    --skz-timg: var(--skz-bg-img, none);
+    --skz-ul-thickness: 1.15em;
+  }
+  [skz][skz-effect="shimmer"]:not([skz-text="leaf"]) :not([skz-ignore]),
+  [skz][skz-effect="pulse"]:not([skz-text="leaf"]) :not([skz-ignore]) {
+    text-decoration-color: transparent !important;
+  }
+  [skz][skz-effect="shimmer"]:not([skz-text="leaf"]) :is(p,span,h1,h2,h3,h4,h5,h6,a,li,label,td,th,strong,b,em,small,button,dt,dd,blockquote,figcaption):not([skz-ignore]):not([skz-bone]):not([skz-leaf]):not([skz-leaf] *):not([skz-ignore] *),
+  [skz][skz-effect="pulse"]:not([skz-text="leaf"]) :is(p,span,h1,h2,h3,h4,h5,h6,a,li,label,td,th,strong,b,em,small,button,dt,dd,blockquote,figcaption):not([skz-ignore]):not([skz-bone]):not([skz-leaf]):not([skz-leaf] *):not([skz-ignore] *) {
+    -webkit-background-clip: text;
+    background-clip: text;
+  }
+}

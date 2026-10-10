@@ -1,0 +1,15 @@
+/* 变体 clipall：在 clip.css 之上，让"非文字标签但直接含文字"的元素（裸 div、code…）也画 bg + clip。
+ * 代价：每个容器元素多一层 fixed 背景（clip 后无文字则不出像素，但仍参与样式/绘制）。 */
+@supports (text-decoration-thickness: 1em) {
+  [skz][skz-effect="shimmer"]:not([skz-text="leaf"]) :not(img,video,canvas,picture,iframe,svg,input,textarea,select,[skz-ignore],[skz-bone],[skz-leaf],[skz-leaf] *,[skz-ignore] *,i:empty,[class*="icon"]:empty),
+  [skz][skz-effect="pulse"]:not([skz-text="leaf"]) :not(img,video,canvas,picture,iframe,svg,input,textarea,select,[skz-ignore],[skz-bone],[skz-leaf],[skz-leaf] *,[skz-ignore] *,i:empty,[class*="icon"]:empty) {
+    background-color: var(--skz-tbg) !important;
+    background-image: var(--skz-timg) !important;
+    background-position: var(--skz-bg-pos, 0 0);
+    background-repeat: no-repeat !important;
+    background-attachment: fixed !important;
+    background-size: var(--skz-bg-size, 60vw 100vh) !important;
+    -webkit-background-clip: text;
+    background-clip: text;
+  }
+}

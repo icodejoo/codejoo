@@ -1,0 +1,242 @@
+[
+ {
+  "name": "underline pulse global @500",
+  "css": "base,global",
+  "n": 500,
+  "attrs": {
+   "effect": "pulse",
+   "text": "underline"
+  },
+  "toggle": true,
+  "toggleN": 7,
+  "snap": false
+ },
+ {
+  "name": "clip pulse global @500",
+  "css": "base,global",
+  "n": 500,
+  "attrs": {
+   "effect": "pulse"
+  },
+  "toggle": true,
+  "toggleN": 7,
+  "snap": false
+ },
+ {
+  "name": "underline shimmer global @500",
+  "css": "base,global",
+  "n": 500,
+  "attrs": {
+   "effect": "shimmer",
+   "text": "underline"
+  },
+  "toggle": true,
+  "toggleN": 7,
+  "snap": false
+ },
+ {
+  "name": "clip shimmer global @500",
+  "css": "base,global",
+  "n": 500,
+  "attrs": {
+   "effect": "shimmer"
+  },
+  "toggle": true,
+  "toggleN": 7,
+  "snap": false
+ },
+ {
+  "name": "underline pulse global @2000",
+  "css": "base,global",
+  "n": 2000,
+  "attrs": {
+   "effect": "pulse",
+   "text": "underline"
+  },
+  "toggle": true,
+  "toggleN": 7,
+  "snap": false
+ },
+ {
+  "name": "clip pulse global @2000",
+  "css": "base,global",
+  "n": 2000,
+  "attrs": {
+   "effect": "pulse"
+  },
+  "toggle": true,
+  "toggleN": 7,
+  "snap": false
+ },
+ {
+  "name": "underline shimmer global @2000",
+  "css": "base,global",
+  "n": 2000,
+  "attrs": {
+   "effect": "shimmer",
+   "text": "underline"
+  },
+  "toggle": true,
+  "toggleN": 7,
+  "snap": false
+ },
+ {
+  "name": "clip shimmer global @2000",
+  "css": "base,global",
+  "n": 2000,
+  "attrs": {
+   "effect": "shimmer"
+  },
+  "toggle": true,
+  "toggleN": 7,
+  "snap": false
+ },
+ {
+  "name": "tofu pulse global @500",
+  "css": "base,global,tofu",
+  "n": 500,
+  "attrs": {
+   "effect": "pulse",
+   "text": "tofu"
+  },
+  "toggle": true,
+  "toggleN": 7,
+  "snap": false
+ },
+ {
+  "name": "tofu shimmer global @500",
+  "css": "base,global,tofu",
+  "n": 500,
+  "attrs": {
+   "effect": "shimmer",
+   "text": "tofu"
+  },
+  "toggle": true,
+  "toggleN": 7,
+  "snap": false
+ },
+ {
+  "name": "tofu pulse global @2000",
+  "css": "base,global,tofu",
+  "n": 2000,
+  "attrs": {
+   "effect": "pulse",
+   "text": "tofu"
+  },
+  "toggle": true,
+  "toggleN": 7,
+  "snap": false
+ },
+ {
+  "name": "tofu shimmer global @2000",
+  "css": "base,global,tofu",
+  "n": 2000,
+  "attrs": {
+   "effect": "shimmer",
+   "text": "tofu"
+  },
+  "toggle": true,
+  "toggleN": 7,
+  "snap": false
+ },
+ {
+  "name": "tofuall shimmer global @500",
+  "css": "base,global,tofuall",
+  "n": 500,
+  "attrs": {
+   "effect": "shimmer",
+   "text": "tofu"
+  },
+  "toggle": true,
+  "toggleN": 7,
+  "snap": false
+ },
+ {
+  "name": "tofuall shimmer global @2000",
+  "css": "base,global,tofuall",
+  "n": 2000,
+  "attrs": {
+   "effect": "shimmer",
+   "text": "tofu"
+  },
+  "toggle": true,
+  "toggleN": 7,
+  "snap": false
+ },
+ {
+  "name": "underline shimmer svg @500",
+  "css": "base,svg",
+  "n": 500,
+  "attrs": {
+   "effect": "shimmer",
+   "text": "underline",
+   "engine": "svg"
+  },
+  "toggle": true,
+  "toggleN": 7,
+  "snap": false
+ },
+ {
+  "name": "clip shimmer svg @500",
+  "css": "base,svg",
+  "n": 500,
+  "attrs": {
+   "effect": "shimmer",
+   "engine": "svg"
+  },
+  "toggle": true,
+  "toggleN": 7,
+  "snap": false
+ },
+ {
+  "name": "underline shimmer svg @2000",
+  "css": "base,svg",
+  "n": 2000,
+  "attrs": {
+   "effect": "shimmer",
+   "text": "underline",
+   "engine": "svg"
+  },
+  "toggle": true,
+  "toggleN": 7,
+  "snap": false
+ },
+ {
+  "name": "clip shimmer svg @2000",
+  "css": "base,svg",
+  "n": 2000,
+  "attrs": {
+   "effect": "shimmer",
+   "engine": "svg"
+  },
+  "toggle": true,
+  "toggleN": 7,
+  "snap": false
+ },
+ {
+  "name": "tofu shimmer svg @500",
+  "css": "base,svg,tofu",
+  "n": 500,
+  "attrs": {
+   "effect": "shimmer",
+   "text": "tofu",
+   "engine": "svg"
+  },
+  "toggle": true,
+  "toggleN": 7,
+  "snap": false
+ },
+ {
+  "name": "tofu shimmer svg @2000",
+  "css": "base,svg,tofu",
+  "n": 2000,
+  "attrs": {
+   "effect": "shimmer",
+   "text": "tofu",
+   "engine": "svg"
+  },
+  "toggle": true,
+  "toggleN": 7,
+  "snap": false
+ }
+]

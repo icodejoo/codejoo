@@ -1,0 +1,44 @@
+{
+ "tofu": {
+  "frames": 1,
+  "stats": [
+   {
+    "t": 418,
+    "red": 18015
+   }
+  ],
+  "log": "[[\"loading\",57],[\"loadingdone\",70],[\"first-paint\",416],[\"first-contentful-paint\",416]]"
+ },
+ "tofu-slow": {
+  "frames": 3,
+  "stats": [
+   {
+    "t": 44,
+    "red": 18015
+   },
+   {
+    "t": 74,
+    "red": 0
+   },
+   {
+    "t": 1591,
+    "red": 18015
+   }
+  ],
+  "log": "[[\"loading\",14],[\"first-paint\",64],[\"first-contentful-paint\",64],[\"loadingdone\",1540]]"
+ },
+ "tofu-broken": {
+  "frames": 2,
+  "stats": [
+   {
+    "t": 30,
+    "red": 18015
+   },
+   {
+    "t": 75,
+    "red": 3210
+   }
+  ],
+  "log": "[[\"loading\",17],[\"loadingdone\",19],[\"first-paint\",56],[\"first-contentful-paint\",56]]"
+ }
+}

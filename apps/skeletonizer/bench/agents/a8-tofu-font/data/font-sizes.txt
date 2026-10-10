@@ -1,0 +1,4 @@
+fmt13 ttf 1256 woff 880 woff2 552
+fmt4 ttf 5524 woff 2076 woff2 1248
+both ttf 6040 woff 2332 woff2 1448
+fmt4 segs 275 fmt13 groups 41

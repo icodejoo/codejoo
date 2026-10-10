@@ -1,0 +1,18 @@
+/* a8 原型：全方块字体（tofu）。叠在 dist/base.css(+global/svg) 之后，根上写 skz-text="tofu" 生效。 */
+@font-face{font-family:"Skz Tofu";font-display:block;font-style:normal;font-weight:100 900;src:url(data:font/woff2;base64,d09GMgABAAAAAAWoAAoAAAAAF6AAAAVgAAEAAAAAAAAAAAAAAAAAAAAAAAAAAAAABmAAqTgKgQxmATYCJAMWCw4ABCAFYwdFG7UWB2Rei7jDxgHQzWZB/v/PSjrG0KEyhLTU+vslBQUaBdOGmlwD2mHsjDQYeIIep9A9h0PUa4K6JeJhVj40I/oq4vVsgfcpcRZgxpgSOZ8lTOgwWqz0bNiemrrARMEozsbClqUjcFf4EW+H77ug5Xs9vxivYBWbmfCvLh7+2y+9b2bCpPYXQdWYuiSqRGiriFxlj0dZ4SoblbOqSBsAR3Na/ADQBQCLSnVKrnBA3+lxf0mSJElmZmZmZgPzzG2UTkTxypMNyH4BagogoHGw+BS1AIGBv4Htxt6R6Le/r//xP7qt5HwXeEQ1FEYEPDdMsbF3RGg4ADDATDdOzHSHz/fOzEySpL353N/MzMxMkiRJkiQJ8VZPhoQBDzyXqvkZdiJZz0MBDeKeFF+zrUaoyGtggUpYwaKdYclKoNW2dhuIqIhHIkoN6uWjoO+opL9vaFJ4YXh0YuWqymvk8cauNzXPTSBW/bPgnWSBQVk7/c9L/1NpbqLVXK3adehSUznnkcenSVd2c4dgcAQShcZgcXj8BSKJTKHS6Awmi83h8sAAByk00MIPBnyBUCSWSGVyhVKl1mhqa9+lH8ZpXtZtPx7P1/vzhREUwwmjSIpmWI4XRElWVE03TMt2XM8PwihO0iwvyqpu2q4fxmle1m0/zut+Xu/P9/cHQAhGUAwnSIpmWI4XRElWVE03TMt2XM8PwihO0iwvyqpu2q4fxmle1m0/zut+3u8HEGFCGZcWJEUzLMcLoiSr1IrSaLt+GKd5Wbf9OK/7eREmlHEhlfaMb3e3bs38OWq0RUXHBnz/BZ+kJ9nVzR2CwRFIFBqDxeEJiSQyhUqjM5gsNofLA6ADeMighQ7+YMAXCEViiVQmVyhVao3m7bs6g/thnOZl3fbj8Xy9P18YQTGcICmaYTleECVZUTXdMC3bcT0/CKM4SbO8KKu6abt+GKd5Wbf9OK/7eb0/398fACEYQTGcICmaYTleECVZUTXdMC3bcT0/CKM4SbO8KKu6abt+GKd5Wbf9OK/7eb9/NhBGcZJmeVFWddN2/TBO82q9bHV6g9FktlhtdofT5fZ4ESaUcSGV9oxvbe92xe36hz/lE5oQGQC62JnqqMmJ8bKIRiTCEUI3dEGnbuoyT+PHoN/rdtqtZqNeq1bKSxcL57N0chyFQd+1TV2VnGJI6/fcPbZlGrqmpOCMEowg8Pa4HDaLyaDTqBQyiUjA47AYNAqJgMOgEDAICODpsFlMBp1GpZBJRALAZTPpVDIRj/XOaCVCnmy05BRD4HuuY1umoWuqIkuiwBklGEHgnTVaCROCN/93z15z9FYZbipMCO/nOrZlGrqmKrIkCjzHMjRFEjiGIjAEAp7HtkxD11RFlkQBuE9Aup+U4TKYJOVXbimIEuYmC3OzhbnFwtwm+8ouiL/AAkArEtrQjkBHlHTqErrVpEQlzHBOdt4jKfFYbJ+QGqsqaZr3Y58P0Dujr92HSNHfq0HVq9SpgqrnZtWrmkfze0tpmWXC8t46dNcfK7ShpkIVLD2fXXrBsulyvNTE8uAtTfV+j/zxLynzv/tfXRHOU3yVITfRoLFBsdE72ZRpRX38DzcD8QF8rKkQQTTaqa+wXe7XXHd8iEma0anJoDGUPSH6cRQ/1zLQrKUr6YkNrLZcgUO0qAnmcIZP2nf9O+v3+Q3PuR6m31uQdtG4r1yhd0+w65pfT+OZREy7ae6DWAykVnL9ittmReCWxD8qVggQWln7VotWWZQ2oVfP6O6kW22iPVVNjtuOvvX+5zBht1Mqk/bb5qhxW2131B4bHZLwg2ZkA5EiR2n+ryez/cfLV/oqm9vt9Rk=) format("woff2")}
+
+/* 1) 根上撤掉 clip / underline 的文字填充（背景色退场；装饰线本身在文字元素上关掉） */
+[skz][skz-text="tofu"]:not([skz-ignore]){--skz-tbg:transparent;--skz-timg:none;--skz-tradius:0px}
+/* 2) 文字元素：方块字体 + 纯色（--skz-ul-fill：pulse/shimmer 由根驱动，svg 引擎下是静态 --skz-color） */
+[skz][skz-text="tofu"] :is(p,span,h1,h2,h3,h4,h5,h6,a,li,label,td,th,strong,b,em,small,dt,dd,blockquote,figcaption):not([skz-ignore]):not([skz-bone]):not([skz-leaf]):not([skz-leaf] *):not([skz-ignore] *){
+  font-family:"Skz Tofu"!important;
+  color:var(--skz-ul-fill,var(--skz-color))!important;
+  -webkit-text-fill-color:currentColor!important;
+  text-decoration:none!important;
+  background-image:none!important;
+  -webkit-background-clip:border-box!important;background-clip:border-box!important;
+  letter-spacing:0!important;word-spacing:0!important;
+  font-kerning:none!important;font-variant-ligatures:none!important;font-synthesis:none!important;
+  font-feature-settings:normal!important;text-rendering:optimizeSpeed!important;
+  -webkit-text-stroke:0!important;text-shadow:none!important;
+}

@@ -1,0 +1,47 @@
+{
+ "flash-tofu": {
+  "ff": "\"Skz Tofu\"",
+  "loadRes": "resolved:1",
+  "st": [
+   "Skz Tofu:loaded"
+  ],
+  "check": true,
+  "probeW": 52
+ },
+ "flash-tofu-broken": {
+  "ff": "\"Skz Tofu\"",
+  "loadRes": "rejected:NetworkError",
+  "st": [
+   "Skz Tofu:error"
+  ],
+  "check": false,
+  "probeW": 50
+ },
+ "flash-csp-data": {
+  "ff": "\"Skz Tofu\"",
+  "loadRes": "rejected:NetworkError",
+  "st": [
+   "Skz Tofu:error"
+  ],
+  "check": false,
+  "probeW": 50
+ },
+ "flash-csp-url": {
+  "ff": "\"Skz Tofu\"",
+  "loadRes": "resolved:1",
+  "st": [
+   "Skz Tofu:loaded"
+  ],
+  "check": true,
+  "probeW": 52
+ },
+ "flash-csp-fontdata": {
+  "ff": "\"Skz Tofu\"",
+  "loadRes": "resolved:1",
+  "st": [
+   "Skz Tofu:loaded"
+  ],
+  "check": true,
+  "probeW": 52
+ }
+}

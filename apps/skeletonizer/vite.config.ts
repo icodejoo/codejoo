@@ -1,7 +1,7 @@
 import { defineConfig } from "vite-plus";
 
-/** CSS 入口：基底二选一（base / explicit），变体按需叠加（global / svg / sweep），all 为基底 + 全部变体 */
-const CSS_ENTRIES = ["base", "explicit", "global", "svg", "sweep", "all"] as const;
+/** CSS 入口：基底二选一（base / explicit），变体按需叠加（global / svg / sweep / tofu），all 为基底 + 全部变体 */
+const CSS_ENTRIES = ["base", "explicit", "global", "svg", "sweep", "tofu", "all"] as const;
 
 /** 自带 CSS 的变体 JS 入口（入口名 → CSS 名）：产物开头加 import "./<名字>.css"，打包器会一并引入样式 */
 const STYLED_ENTRIES: Record<string, string> = { global: "global", svg: "svg", all: "all" };

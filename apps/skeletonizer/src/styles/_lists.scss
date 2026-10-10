@@ -1,12 +1,28 @@
 @use "sass:list";
 
 // 选择器清单：文字类、媒体控件类、图标启发式
-$text-tags: p, span, h1, h2, h3, h4, h5, h6, a, li, label, td, th, strong, b, em, small, button, dt, dd, blockquote, figcaption;
-$media-tags: img, video, canvas, picture, iframe, svg, input, textarea, select;
+$text-tags: p, span, h1, h2, h3, h4, h5, h6, a, li, label, td, th, strong, b, em, small, dt, dd, blockquote, figcaption;
+/// 控件标签：整块当骨头，自身不画下划线（见 tier1）
+$control-tags: input, textarea, select, button;
+$media-tags: list.join((img, video, canvas, picture, iframe, svg), $control-tags, comma);
 $icon-selectors: "i:empty", '[class*="icon"]:empty';
 
 /// 自动推导规则的根前缀：所有带 skz 的元素（不再有 skz-mode，显式模式只能靠 explicit.css）。
 $auto: "[skz]";
+
+/// clip（默认）文字模式的根选择器：不写 skz-text 或写 clip，即排除 underline / leaf / tofu。
+/// tofu 根在没引 tofu.css 时退回 underline 的外观（见 tier1），所以这里要排除。
+$clip: $auto + ':not([skz-text="underline"]):not([skz-text="leaf"]):not([skz-text="tofu"])';
+
+/// tofu 文字模式的根选择器（方块字体，见 _tofu.scss）。
+$tofu: $auto + '[skz-text="tofu"]';
+
+/// 文字颜色由根上变量驱动的文字模式（underline / tofu），作 :where() 后缀接在 $auto / [skz][skz-effect=…] 后面：
+/// 不抬优先级，压不过 svg 引擎根规则的 animation: none / 静态 --skz-ul-fill。
+$color-modes: ':where([skz-text="underline"], [skz-text="tofu"])';
+
+/// 文字类元素排除串：显式骨头 / 叶子、叶子内部、忽略区内部（clip 和 tofu 共用；tofu 另外追加媒体排除）。
+$text-skip: ":not([skz-bone]):not([skz-leaf]):not([skz-leaf] *):not([skz-ignore] *)";
 
 /// 给清单里每一项拼上前缀，并统一加 :not([skz-ignore])，返回逗号分隔的选择器列表。
 /// @param {String} $prefix 选择器前缀（含后代空格之前的部分），如 '[skz]'
@@ -20,8 +36,10 @@ $auto: "[skz]";
   @return $out;
 }
 
-/// 用 :is 收拢标签清单，返回单个选择器：#{$prefix} :is(#{$items}):not([skz-ignore])
-@function sk-is-sel($prefix, $items) {
+/// 把清单拼成逗号分隔的字符串，供 :is() / :not() 里使用。
+/// @param {List} $items 标签/选择器清单
+/// @return {String} 形如 "p, span, h1"
+@function sk-join($items) {
   $joined: "";
   @each $t in $items {
     @if $joined == "" {
@@ -30,5 +48,10 @@ $auto: "[skz]";
       $joined: "#{$joined}, #{$t}";
     }
   }
-  @return "#{$prefix} :is(#{$joined}):not([skz-ignore])";
+  @return $joined;
+}
+
+/// 用 :is 收拢标签清单，返回单个选择器：#{$prefix} :is(#{$items}):not([skz-ignore])
+@function sk-is-sel($prefix, $items) {
+  @return "#{$prefix} :is(#{sk-join($items)}):not([skz-ignore])";
 }

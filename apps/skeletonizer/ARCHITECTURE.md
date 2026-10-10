@@ -19,7 +19,8 @@ src/
 ├─ variants/     方案扩展：global.ts（防火墙）、svg.ts（运行时 SVG），导入即通过 registerExtension 注册到核心
 ├─ entries/      变体入口外壳：global / svg / all（构建时产物开头加 import "./xxx.css"）与 *-js（纯 JS）
 └─ styles/
-   ├─ entries/   CSS 入口：base / explicit（基底二选一）、global / svg / sweep（变体）、all
+   ├─ entries/   CSS 入口：base / explicit（基底二选一）、global / svg / sweep / tofu（变体）、all
+   ├─ _tofu / _tofu-font                   tofu 文字模式（方块字体）；_tofu-font.scss 是 scripts/gen-tofu-font.py 的生成物（woff2 base64）
    ├─ _theme / _marks / _effects-core      基底共用：主题与交互锁、显式标记与忽略区、fade / solid / 暂停 / 减少动态效果
    ├─ base / tier0 / tier1 / tier2         自动推导四档（显式基底不含）
    └─ _global / _svg / _sweep 与 *-mixin   变体样式；svg / sweep 的 mixin 也供 global 的老浏览器降级复用
@@ -27,17 +28,17 @@ src/
 
 ## 渲染分层（CSS 渐进增强）
 
-| 档位    | 能力要求                    | 效果                                                           |
-| ------- | --------------------------- | -------------------------------------------------------------- |
-| base    | 无                          | 根的直接子元素整块灰                                           |
-| tier0   | CSS 变量（默认支持）        | 标签白名单 + 背景色骨头 + 主题变量                             |
-| tier1   | `text-decoration-thickness` | 下划线法文字骨头                                               |
-| tier2   | `:has()`                    | 叶子背景法、`skz-ignore` 祖先修正                              |
-| effects | CSS 变量 / `@property`      | fade（默认）/ solid / sweep；pulse / shimmer 根驱动或 SVG 方案 |
+| 档位    | 能力要求                    | 效果                                                                                                                                                                         |
+| ------- | --------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| base    | 无                          | 根的直接子元素整块灰                                                                                                                                                         |
+| tier0   | CSS 变量（默认支持）        | 标签白名单 + 背景色骨头 + 主题变量                                                                                                                                           |
+| tier1   | `text-decoration-thickness` | 文字骨头：下划线法；默认 clip 在其上叠 `background-clip:text`（不支持时 `@supports not` 撤回）；`skz-text="tofu"` 的根被 `$clip` 排除，没引 `tofu.css` 时就是 underline 外观 |
+| tier2   | `:has()`                    | 叶子背景法、`skz-ignore` 祖先修正                                                                                                                                            |
+| effects | CSS 变量 / `@property`      | fade（默认）/ solid / sweep；pulse / shimmer 根驱动或 SVG 方案                                                                                                               |
 
 ## 构建与产物
 
-`vp pack` 一次产出：`dist/*.mjs`（ES2015、压缩，多入口 + 公共 chunk）、`dist/*.d.mts`、6 个 CSS（`base` / `explicit` / `global` / `svg` / `sweep` / `all`，SCSS 经 `@tsdown/css` 编译压缩，按最低支持线降级语法）。
+`vp pack` 一次产出：`dist/*.mjs`（ES2015、压缩，多入口 + 公共 chunk）、`dist/*.d.mts`、7 个 CSS（`base` / `explicit` / `global` / `svg` / `sweep` / `tofu` / `all`，SCSS 经 `@tsdown/css` 编译压缩，按最低支持线降级语法）。
 
 更详细的设计决策见 [docs/design/overview.md](./docs/design/overview.md)。
 

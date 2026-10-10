@@ -97,6 +97,7 @@
     "./global.css": "./dist/global.css",
     "./svg.css": "./dist/svg.css",
     "./sweep.css": "./dist/sweep.css",
+    "./tofu.css": "./dist/tofu.css",
     "./all.css": "./dist/all.css",
     "./style.css": "./dist/all.css",
     "./package.json": "./package.json"

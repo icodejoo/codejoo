@@ -1,0 +1,3 @@
+[{"name":"svg-nat","css":"base,svg","attrs":{"effect":"shimmer","engine":"svg"}},
+{"name":"svg-d36","css":"base,svg,sd36","attrs":{"effect":"shimmer","engine":"svg"}},
+{"name":"svg-d18","css":"base,svg,sd18","attrs":{"effect":"shimmer","engine":"svg"}}]

@@ -1,0 +1,131 @@
+@charset "UTF-8";
+/* ===== SVG 方案（skeletonizer/svg；根上 skz-engine="svg" 由 JS 在 blob 图真正挂上后写入） =====
+ * 同时被 global.css @use：老浏览器上 global 会把根切到这套方案，Sass 同一模块只输出一次，all.css 里只有一份。
+ * 没有 JS、JS 未执行或 blob 生成失败时根上没有 engine 属性，自动退回基底的 fade。
+ * 骨头背景叠一张带 SMIL 动画的 SVG，所有骨头共用这一张图，CSS 每帧不变，没有样式重算；不依赖 @property，老浏览器同样有动画。
+ * 骨头底色读 --skz-color；高光由 JS 按主题现生成（精确）。
+ * 文字：默认的 clip 模式文字条直接用这张背景图（pulse / shimmer 都有动画）；underline / tofu 靠颜色而不是背景图，svg 引擎下保持静止的 --skz-color
+ * （要让它们动请用 global 引擎）。降频变量 --skz-shimmer-timing 只对 global 引擎生效，svg 的光带速度由 SMIL 决定；
+ * iOS 不支持 fixed 背景，shimmer 改用 pulse 图。 */
+[skz][skz-engine=svg][skz-effect=pulse],
+[skz][skz-engine=svg][skz-effect=shimmer] {
+  animation: none;
+  --skz-fill: var(--skz-color);
+  --skz-ul-fill: var(--skz-color);
+  --skz-bg-pos: 0 0;
+  --skz-bg-size: 100vw 100vh;
+}
+
+[skz][skz-engine=svg][skz-effect=pulse] {
+  --skz-bg-img: var(--skz-svg-pulse);
+}
+
+[skz][skz-engine=svg][skz-effect=shimmer] {
+  --skz-bg-img: var(--skz-svg-shimmer);
+}
+
+@supports (color: rgb(from red r g b)) {
+  [skz][skz-engine=svg][skz-effect=shimmer] {
+    --skz-bg-img: var(--skz-svg-pulse);
+  }
+}
+/* ===== global 方案：pulse / shimmer 根驱动（skeletonizer/global） =====
+ * 根上的动画驱动注册过的 --skz-pulse-c（颜色）/ --skz-shimmer-p（流光位置），骨头只读继承下来的
+ * --skz-fill / --skz-ul-fill / --skz-bg-pos，自己不挂动画。颜色精确、跟主题走。
+ * 配合 JS（skeletonizer/global）的继承防火墙，长列表只有视口内的项参与逐帧重算。
+ * 不支持 @property 的浏览器由 JS（skeletonizer/global）把根切到 SVG 方案（skz-engine="svg"，规则在 _svg.scss，这里 @use 一份）；
+ * JS 执行前（SSR 首屏）和 blob 生成失败时，退回基底的 fade。 */
+@property --skz-shimmer-p {
+  syntax: "<number>";
+  inherits: true;
+  initial-value: -60;
+}
+@property --skz-pulse-c {
+  syntax: "<color>";
+  inherits: true;
+  initial-value: #d9dde3;
+}
+@keyframes skz-shimmer-root {
+  from {
+    --skz-shimmer-p: -60;
+  }
+  to {
+    --skz-shimmer-p: 110;
+  }
+}
+@keyframes skz-pulse-root {
+  from {
+    --skz-pulse-c: var(--skz-color);
+  }
+  to {
+    --skz-pulse-c: var(--skz-highlight);
+  }
+}
+/* @property 无法用 @supports 检测，借同版本落地的相对颜色语法判断（Safari 16.4 / Firefox 128 两者同时支持；
+ * Chrome 85~118 有 @property 但没有相对颜色，被保守地判为不支持，退回 fade） */
+@supports (color: rgb(from red r g b)) {
+  /* pulse（单独的效果）：骨头背景色和下划线颜色一起脉冲，时间函数固定 ease-in-out，不受 --skz-shimmer-timing 影响 */
+  [skz][skz-effect=pulse] {
+    --skz-fill: var(--skz-pulse-c);
+    --skz-ul-fill: var(--skz-pulse-c);
+    animation: skz-pulse-root var(--skz-duration) ease-in-out infinite alternate;
+  }
+  /* shimmer：fixed 渐变背景在视口坐标里平移，各骨头同步。
+   * 光带默认降频到 24 次/秒：时间函数读 --skz-shimmer-timing（缺省 steps(36)），值没变的帧 Chrome 不重绘。
+   *   - 档数和 --skz-duration 绑定：24 次/秒 = 时长（秒）× 24，默认 1.5s → steps(36)；改了时长要同步改档数
+   *     （例：--skz-duration: 3s 配 --skz-shimmer-timing: steps(72)）。calc() 没法把时间换算成整数，没法自动跟随；
+   *   - steps(18) 更省（12 次/秒）；linear 恢复逐帧平滑；变量写在根上或任一祖先上都行。
+   * 默认的 clip 文字模式下，文字条的光带由背景图承担，不需要 pulse 动画（它只改 --skz-ul-fill，clip 下装饰线是透明的，
+   * 挂着只会让样式重算每帧白干活），所以这里只挂光带动画。 */
+  [skz][skz-effect=shimmer] {
+    --skz-bg-img: linear-gradient(100deg, transparent 0, var(--skz-highlight) 50%, transparent 100%);
+    --skz-bg-pos: calc(var(--skz-shimmer-p) * 1vw) 0;
+    animation: skz-shimmer-root var(--skz-duration) var(--skz-shimmer-timing, steps(36)) infinite;
+  }
+  /* （用 :where() 保持 (0,2,0) 的优先级，压不过 svg 引擎根规则的 animation: none）
+   * 需要 --skz-ul-fill / --skz-pulse-c 逐帧变化的文字模式才额外挂 pulse：underline（下划线颜色跟着变）、
+   * tofu（方块文字颜色读 --skz-ul-fill）。pulse 也用同一个时间函数降频，否则颜色每帧都在变，降频就白搭。
+   * （这两种模式下，没有 pulse 就只剩静止的灰色文字，所以不能省） */
+  [skz][skz-effect=shimmer]:where([skz-text=underline], [skz-text=tofu]) {
+    --skz-ul-fill: var(--skz-pulse-c);
+    animation: skz-shimmer-root var(--skz-duration) var(--skz-shimmer-timing, steps(36)) infinite, skz-pulse-root var(--skz-duration) var(--skz-shimmer-timing, steps(36)) infinite alternate;
+  }
+  /* 继承防火墙（enable 给视口外的列表项打 skz-fw）：在它身上把会逐帧变化的变量钉成静态值。
+   * 根上变量变化时它自己重算一次，计算值不变，Chrome 就不再往它的后代传播重算；
+   * 派生变量（--skz-fill / --skz-ul-fill / --skz-bg-pos / clip 的 --skz-tbg）在根上已展开成具体值，必须一起重声明才挡得住。
+   * 实测 16000 元素 shimmer 从约 19 帧到 60 帧。打了防火墙的项里骨头静止，所以只用于视口外 */
+  [skz] [skz-fw] {
+    --skz-pulse-c: var(--skz-color);
+    --skz-shimmer-p: -60;
+  }
+  [skz][skz-effect=pulse] [skz-fw] {
+    --skz-fill: var(--skz-pulse-c);
+    --skz-ul-fill: var(--skz-pulse-c);
+  }
+  [skz][skz-effect=shimmer] [skz-fw] {
+    --skz-bg-pos: calc(var(--skz-shimmer-p) * 1vw) 0;
+  }
+  [skz][skz-effect=shimmer]:where([skz-text=underline], [skz-text=tofu]) [skz-fw] {
+    --skz-ul-fill: var(--skz-pulse-c);
+  }
+  /* clip 根在根上写了 --skz-tbg / --skz-timg（读 --skz-fill / --skz-bg-img）：pulse 下 --skz-fill 每帧变，
+   * 展开后的 --skz-tbg 会继承给所有后代，不在这里钉住防火墙就被绕过（2000 卡 pulse + clip 实测只有约 24~28 帧）。
+   * 重声明得和 clip 根上的定义一致，读上面已经钉住的 --skz-fill / --skz-bg-img；underline / tofu 根的 --skz-tbg 是
+   * 固定的 transparent，不在这里 */
+  [skz]:not([skz-text=underline]):not([skz-text=leaf]):not([skz-text=tofu]):is([skz-effect=pulse], [skz-effect=shimmer]) [skz-fw] {
+    --skz-tbg: var(--skz-fill, var(--skz-color));
+    --skz-timg: var(--skz-bg-img, none);
+  }
+  /* iOS Safari 不支持 background-attachment:fixed，流光会各自为政，改成骨头颜色脉冲：
+   * 光带图去掉，--skz-fill 读 pulse 颜色，所以这里必须挂 pulse 动画（和上面 clip 不挂的情况相反）；防火墙里同步钉住 --skz-fill */
+  @supports (color: rgb(from red r g b)) {
+    [skz][skz-effect=shimmer] {
+      --skz-bg-img: none;
+      --skz-fill: var(--skz-pulse-c);
+      animation: skz-shimmer-root var(--skz-duration) var(--skz-shimmer-timing, steps(36)) infinite, skz-pulse-root var(--skz-duration) var(--skz-shimmer-timing, steps(36)) infinite alternate;
+    }
+    [skz][skz-effect=shimmer] [skz-fw] {
+      --skz-fill: var(--skz-pulse-c);
+    }
+  }
+}

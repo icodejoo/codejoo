@@ -1,0 +1,6 @@
+/* 实验变体 s36：shimmer steps(36)，pulse 原样 ease-in-out alternate */
+[skz][skz-effect="shimmer"] {
+  animation:
+    skz-shimmer-root var(--skz-duration) steps(36) infinite,
+    skz-pulse-root var(--skz-duration) ease-in-out infinite alternate;
+}

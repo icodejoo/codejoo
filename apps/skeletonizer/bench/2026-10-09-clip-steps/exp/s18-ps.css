@@ -1,0 +1,6 @@
+/* 实验变体 s18-ps：shimmer steps(18)，pulse steps(18) */
+[skz][skz-effect="shimmer"] {
+  animation:
+    skz-shimmer-root var(--skz-duration) steps(18) infinite,
+    skz-pulse-root var(--skz-duration) steps(18) infinite alternate;
+}

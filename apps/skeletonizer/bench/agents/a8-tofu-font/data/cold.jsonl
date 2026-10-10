@@ -1,0 +1,12 @@
+{"target":"tofu","css":"base,global,tofu","run":0,"ms":203.8,"font":"loaded"}
+{"target":"tofu","css":"base,global,tofu","run":1,"ms":330.1,"font":"loaded"}
+{"target":"tofu","css":"base,global,tofu","run":2,"ms":159.1,"font":"loaded"}
+{"target":"underline","css":"base,global,tofu","run":0,"ms":87.6,"font":"unloaded"}
+{"target":"underline","css":"base,global,tofu","run":1,"ms":54.2,"font":"unloaded"}
+{"target":"underline","css":"base,global,tofu","run":2,"ms":53,"font":"unloaded"}
+{"target":"clip","css":"base,global","run":0,"ms":70.7,"font":""}
+{"target":"clip","css":"base,global","run":1,"ms":72.1,"font":""}
+{"target":"clip","css":"base,global","run":2,"ms":66.8,"font":""}
+{"target":"underline","css":"base,global","run":0,"ms":60.9,"font":""}
+{"target":"underline","css":"base,global","run":1,"ms":49.8,"font":""}
+{"target":"underline","css":"base,global","run":2,"ms":56.2,"font":""}

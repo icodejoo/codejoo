@@ -1,0 +1,18 @@
+/* a8 原型：全方块字体（tofu）。叠在 dist/base.css(+global/svg) 之后，根上写 skz-text="tofu" 生效。 */
+@font-face{font-family:"Skz Tofu";font-display:block;font-style:normal;font-weight:100 900;src:url(/nope/missing.woff2) format("woff2")}
+
+/* 1) 根上撤掉 clip / underline 的文字填充（背景色退场；装饰线本身在文字元素上关掉） */
+[skz][skz-text="tofu"]:not([skz-ignore]){--skz-tbg:transparent;--skz-timg:none;--skz-tradius:0px}
+/* 2) 文字元素：方块字体 + 纯色（--skz-ul-fill：pulse/shimmer 由根驱动，svg 引擎下是静态 --skz-color） */
+[skz][skz-text="tofu"] :is(p,span,h1,h2,h3,h4,h5,h6,a,li,label,td,th,strong,b,em,small,dt,dd,blockquote,figcaption):not([skz-ignore]):not([skz-bone]):not([skz-leaf]):not([skz-leaf] *):not([skz-ignore] *){
+  font-family:"Skz Tofu"!important;
+  color:var(--skz-ul-fill,var(--skz-color))!important;
+  -webkit-text-fill-color:currentColor!important;
+  text-decoration:none!important;
+  background-image:none!important;
+  -webkit-background-clip:border-box!important;background-clip:border-box!important;
+  letter-spacing:0!important;word-spacing:0!important;
+  font-kerning:none!important;font-variant-ligatures:none!important;font-synthesis:none!important;
+  font-feature-settings:normal!important;text-rendering:optimizeSpeed!important;
+  -webkit-text-stroke:0!important;text-shadow:none!important;
+}

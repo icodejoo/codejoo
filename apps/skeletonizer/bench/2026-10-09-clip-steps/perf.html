@@ -1,0 +1,150 @@
+<!doctype html>
+<html lang="zh"><head><meta charset="utf-8" /><title>perf-steps</title>
+<style>body{font:14px/1.5 system-ui,sans-serif;margin:0}.card{display:flex;gap:8px;padding:8px;border:1px solid #ddd;margin:4px}.card img{width:48px;height:48px;border-radius:50%}
+.cols{display:flex;gap:16px}.col{flex:1;min-width:0}.row{display:flex;gap:8px;padding:6px 8px;border-bottom:1px solid #eee}.row label{width:120px}.row input{width:48px;height:48px}</style>
+</head><body><div id="root"></div>
+<script type="module">
+// 矩阵基准页：CSS / JS 全部取自 ../../dist/（正式构建）。
+// URL 参数 css 是逗号分隔的令牌：
+//   base | explicit | sweep      只加载对应 CSS（base 与 explicit 二选一）
+//   global | svg                 加载 CSS + 对应变体的 JS（global-js.mjs / svg-js.mjs），即用户 import "skeletonizer/global" 的等价物
+//   globalcss | svgcss           只加载 CSS，不加载变体 JS（纯 CSS 无 JS 路径）
+//   form                         页面结构用"双栏表单"（根下只有 2 个大栏，防火墙找不到有意义的列表项）；缺省为卡片列表
+//   noio                         加载前把 IntersectionObserver 置空（强制走 fps 计时器路径，也会关掉视口暂停）
+// 本实验新增：
+//   x-<名字>                     在 dist 的 CSS 之后再叠 exp/<名字>.css（根上 skz-shimmer-root / skz-pulse-root 的时间函数改写）
+//   sd<N>                        svg 引擎实验：拦截 svg.ts 生成的 SVG 文本，把 shimmer 的 animateTransform 改成 N 档 calcMode="discrete"
+const q = new URLSearchParams(location.search);
+const tokens = (q.get("css") || "base").split(",").filter(Boolean);
+const has = (t) => tokens.includes(t);
+const DIST = "../../dist/";
+if (has("noio")) window.IntersectionObserver = undefined;
+const cssList = ["base", "explicit", "global", "svg", "sweep"].filter((n) => has(n)).concat(["globalcss", "svgcss"].filter(has).map((n) => n.replace("css", "")));
+// 基底在前、变体在后，和用户的引入顺序一致
+const order = ["base", "explicit", "global", "svg", "sweep"];
+cssList.sort((a, b) => order.indexOf(a) - order.indexOf(b));
+await Promise.all(cssList.map((n) => new Promise((res) => { const l = document.createElement("link"); l.rel = "stylesheet"; l.href = `${DIST}${n}.css`; l.onload = l.onerror = res; document.head.appendChild(l); })));
+// 实验 CSS 叠在 dist 之后（同步追加，文档顺序即覆盖顺序）
+for (const t of tokens.filter((t) => t.startsWith("x-"))) {
+  await new Promise((res) => { const l = document.createElement("link"); l.rel = "stylesheet"; l.href = `./exp/${t.slice(2)}.css`; l.onload = l.onerror = res; document.head.appendChild(l); });
+}
+// svg 离散化实验：svg.ts 用 new Blob([svg], {type:"image/svg+xml"}) 生成图，这里包一层 Blob 改写 SVG 文本
+window.__svgPatched = 0;
+const sd = tokens.find((t) => /^sd\d+$/.test(t));
+if (sd) {
+  const N = +sd.slice(2), NativeBlob = window.Blob;
+  const RE = /<animateTransform attributeName="transform" type="translate" from="-60 0" to="110 0" dur="(\d+)ms" repeatCount="indefinite"\/>/;
+  window.Blob = class extends NativeBlob {
+    constructor(parts, opts) {
+      if (opts && opts.type === "image/svg+xml") {
+        parts = parts.map((p) => typeof p === "string" ? p.replace(RE, (_, d) => {
+          window.__svgPatched++;
+          const vals = [], kts = [];
+          for (let i = 0; i < N; i++) { vals.push(`${+(-60 + (170 * i) / N).toFixed(3)} 0`); kts.push(+(i / N).toFixed(5)); }
+          return `<animateTransform attributeName="transform" type="translate" values="${vals.join(";")}" keyTimes="${kts.join(";")}" calcMode="discrete" dur="${d}ms" repeatCount="indefinite"/>`;
+        }) : p);
+      }
+      super(parts, opts);
+    }
+  };
+}
+const { Bone, enable } = await import(DIST + "index.mjs");
+if (has("global")) await import(DIST + "global-js.mjs");
+if (has("svg")) await import(DIST + "svg-js.mjs");
+const bone = has("explicit");
+const root = document.getElementById("root");
+const GIF = Bone.image();
+const nf = () => new Promise((r) => requestAnimationFrame(r));
+const B = bone ? " skz-bone" : "";
+let off = null, curSpec = null, scrollMode = false;
+
+/** 一张卡片 / 一行表单（都是 8 个元素）。 */
+const cardHtml = () => `<div class="card"><img${B} src="${GIF}" alt=""><div><h3${B}>${Bone.text(10)}</h3><p${B}>${Bone.lines(2)}</p><span${B}>${Bone.text(6)}</span> <i${B} class="icon-star"></i><button${B}>${Bone.text(4)}</button></div></div>`;
+const rowHtml = () => `<div class="row"><label${B}>${Bone.text(8)}</label><div><input${B} placeholder="x"><p${B}>${Bone.lines(2)}</p><span${B}>${Bone.text(6)}</span> <i${B} class="icon-star"></i><button${B}>${Bone.text(4)}</button></div></div>`;
+
+/** 把 spec 里的下划线开头键（_attrs / _vars / _scroll）拆出来，其余才是 enable 选项 */
+const split = (spec) => {
+  const o = { ...spec }; const ex = { attrs: o._attrs || [], vars: o._vars || {}, scroll: !!o._scroll };
+  delete o._attrs; delete o._vars; delete o._scroll; return [o, ex];
+};
+const applyExtras = (ex) => { ex.attrs.forEach(([k, v]) => root.setAttribute(k, v)); Object.entries(ex.vars).forEach(([k, v]) => root.style.setProperty(k, v)); };
+
+/**
+ * 搭场景：n 张卡片（或 n 行表单，每项约 8 个元素）。
+ * spec 是数组 -> 纯 CSS 路径：[[k,v]...]，k 以 -- 开头的写成根内联变量；
+ * spec 是对象 -> 走真实 enable(root, opts)，下划线键 _attrs/_vars/_scroll 是附加项。
+ */
+window.setup = async (n, spec) => {
+  off?.(); off = null;
+  root.getAttributeNames().forEach((a) => a !== "id" && root.removeAttribute(a));
+  root.removeAttribute("style");
+  window.scrollTo(0, 0);
+  if (has("form")) {
+    const half = Math.ceil(n / 2);
+    const col = (k) => `<div class="col">${Array.from({ length: k }, rowHtml).join("")}</div>`;
+    root.innerHTML = `<div class="cols">${col(half)}${col(n - half)}</div>`;
+  } else root.innerHTML = Array.from({ length: n }, cardHtml).join("");
+  scrollMode = false; curSpec = spec;
+  if (Array.isArray(spec)) {
+    for (const [k, v] of spec) { if (k.startsWith("--")) root.style.setProperty(k, v); else root.setAttribute(k, v); }
+    root.setAttribute("skz", "");
+    scrollMode = spec.some(([k]) => k === "_scroll");
+    root.removeAttribute("_scroll");
+  } else { const [opts, ex] = split(spec || {}); scrollMode = ex.scroll; applyExtras(ex); off = enable(root, opts); }
+  await nf(); await nf();
+  return root.querySelectorAll("*").length;
+};
+
+/** 数 ms 毫秒内的帧数；scroll 模式下边数边按时间滚动（1200px/s 往返） */
+window.frames = async (ms) => {
+  let f = 0; const t0 = performance.now(), end = t0 + ms;
+  const span = Math.max(1, Math.min(document.documentElement.scrollHeight - innerHeight, 20000));
+  while (performance.now() < end) {
+    await nf(); f++;
+    if (scrollMode) { const d = ((performance.now() - t0) / 1000) * 1200; const m = d % (2 * span); window.scrollTo(0, m < span ? m : 2 * span - m); }
+  }
+  window.scrollTo(0, 0); return f;
+};
+
+/** 开启耗时：enable 路径量真实的 enable() 调用（含防火墙、inert、强制样式 + 布局）；纯 CSS 路径量切 skz 属性 */
+window.toggleCost = async () => {
+  if (Array.isArray(curSpec)) {
+    root.removeAttribute("skz"); void root.offsetHeight; await nf(); await nf();
+    const t = performance.now(); root.setAttribute("skz", ""); void root.offsetHeight; return performance.now() - t;
+  }
+  const [opts, ex] = split(curSpec || {});
+  off?.(); off = null; void root.offsetHeight; await nf(); await nf();
+  const t = performance.now(); off = enable(root, opts); void root.offsetHeight; const d = performance.now() - t;
+  await nf(); await nf(); return d;
+};
+
+/** 状态快照：防火墙标记数、fit 隐藏数、根属性、计算样式，供正确性抽查 */
+window.snap = () => {
+  const items = [...(has("form") ? root.querySelectorAll(".col") : root.children)];
+  const vis = items.filter((c) => { const r = c.getBoundingClientRect(); return r.bottom > 0 && r.top < innerHeight; });
+  const probe = root.querySelector("h3, label");
+  const cs = probe ? getComputedStyle(probe) : null;
+  const rcs = getComputedStyle(root);
+  const after = getComputedStyle(root, "::after");
+  return {
+    items: items.length, fw: items.filter((c) => c.hasAttribute("skz-fw")).length, fitHide: root.querySelectorAll("[skz-fit-hide]").length,
+    visibleItems: vis.length, visibleNotHidden: vis.filter((c) => !c.hasAttribute("skz-fit-hide")).length,
+    rootAttrs: Object.fromEntries(root.getAttributeNames().map((a) => [a, root.getAttribute(a).slice(0, 40)])),
+    rootStyle: (root.getAttribute("style") || "").slice(0, 80), svgPatched: window.__svgPatched, rootAnim: rcs.animationName, rootOpacity: rcs.opacity,
+    afterAnim: after.animationName, afterTransform: after.transform,
+    probeBg: cs && cs.backgroundColor, probePos: cs && cs.backgroundPosition, probeImg: cs && cs.backgroundImage.slice(0, 40),
+    scrollH: document.documentElement.scrollHeight,
+  };
+};
+/** 采样根上 --skz-shimmer-p：ms 毫秒内每帧读一次，返回帧数、不同取值个数、相邻变化次数、各次变化的位移（vw）。会触发强制样式重算，只在非 trace 阶段用 */
+window.sampleP = async (ms) => {
+  const vals = []; const t0 = performance.now();
+  while (performance.now() - t0 < ms) { await nf(); vals.push(+getComputedStyle(root).getPropertyValue("--skz-shimmer-p")); }
+  let changes = 0; const steps = [];
+  for (let i = 1; i < vals.length; i++) if (vals[i] !== vals[i - 1]) { changes++; steps.push(+(vals[i] - vals[i - 1]).toFixed(2)); }
+  const secs = (performance.now() - t0) / 1000;
+  const med = [...steps].sort((a, b) => a - b)[Math.floor(steps.length / 2)];
+  return { frames: vals.length, changesPerSec: +(changes / secs).toFixed(1), medStepVw: med ?? null, anim: getComputedStyle(root).animation.slice(0, 160) };
+};
+window.ready = true;
+</script></body></html>

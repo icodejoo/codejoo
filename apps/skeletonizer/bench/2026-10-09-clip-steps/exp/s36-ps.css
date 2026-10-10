@@ -1,0 +1,6 @@
+/* 实验变体 s36-ps：shimmer steps(36)，pulse steps(36) */
+[skz][skz-effect="shimmer"] {
+  animation:
+    skz-shimmer-root var(--skz-duration) steps(36) infinite,
+    skz-pulse-root var(--skz-duration) steps(36) infinite alternate;
+}

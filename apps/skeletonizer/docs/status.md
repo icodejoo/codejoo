@@ -1,7 +1,7 @@
 ---
 title: 当前状态与待办
 status: active
-updated: 2026-10-09
+updated: 2026-10-10
 summary: 原型已跑通的范围、没做的事、下一步。
 ---
 
@@ -21,17 +21,21 @@ summary: 原型已跑通的范围、没做的事、下一步。
 - demo 页：八项场景、档位切换、深色、效果切换
 - 验证：[原型验证报告](reports/2026-10-08-prototype-verification.md)
 - 控制变量全量性能矩阵，README「方案怎么选 / 方案对比」据此重写，见 [矩阵报告](reports/2026-10-09-benchmark-matrix.md)
-- 按矩阵剔除：删除 `fps` JS 计时器（实际从未生效，无列表结构改推荐 `engine: "svg"`）与 `--skz-shimmer-timing` 降帧（无收益）
-- sweep：修复根高超过约 16 倍根宽时光带不可见（`skewX` 所致，默认改竖直）；合并为一种，浅色混合、深色容器色扫光
+- 按矩阵剔除：删除 `fps` JS 计时器（实际从未生效，无列表结构改推荐 `engine: "svg"`）；`--skz-shimmer-timing` 降帧当时也删了（只测了样式重算，无收益），**2026-10-10 已重新引入并默认开启**（见下）
+- sweep：修复根高超过约 16 倍根宽时光带不可见（`skewX` 所致，倾斜角改为变量 `--skz-sweep-skew`，默认仍 -12deg，长根设 0deg）；合并为一种，浅色混合、深色容器色扫光
 - 新增 `fit` 选项：骨架自身不撑出滚动条
+- 默认文字模式改为 `clip`（下划线 + background-clip:text，文字条有光带，svg 下也能动；`underline` 需显式写，最便宜）；补测见 [矩阵报告](reports/2026-10-09-benchmark-matrix.md)（`bench/2026-10-09-clip-default/`）：fade / solid 没变贵，shimmer GPU 约 3 倍，pulse + global 16000 元素掉到 24 帧（待查防火墙是否被绕过），4× 降速下 svg shimmer 12.8 帧；原型数据见 `bench/agents/a7-clip-underline/`，Firefox / Safari 未验证
+
+- 2026-10-10 落地：shimmer 光带默认降频 24 次/秒（`--skz-shimmer-timing: steps(36)`，只对 global，4× CPU 降速下默认档无收益）；clip 下 shimmer 根不再挂 pulse（underline / tofu / iOS 才挂，同样降频）；clip 根去掉 `--skz-tbg` / `--skz-timg` 转发（修 pulse + clip 绕过防火墙）（pulse + clip 2000 卡 22.8 帧 / 33.7 ms → 60.4 帧 / 6.95 ms）；新增可选 `text: "tofu"` 与 `tofu.css`（方块字体，`scripts/gen-tofu-font.py` 生成，没引 `tofu.css` 时退回 underline 外观，CSP 需 `font-src data:`）；`registerCustomElements` 宿主 `::before` 读动画变量（pulse / shimmer 对 Web Component 宿主生效）。复测见 [矩阵报告](reports/2026-10-09-benchmark-matrix.md)「落地复测」与 `bench/2026-10-10-landing/`
 
 ## 待办（按优先级）
 
-1. 真机 / 其他引擎验证：iOS Safari、Safari、Firefox（报告里的"未验证"项）
-2. PostCSS + autoprefixer（先确认依赖）
-3. Vitest + Playwright 三引擎视觉快照，强制单档 CSS 的降级快照
-4. 框架使用示例文档（Vue 指令 / React / Svelte / Solid）
-5. 评估运行时测量模式作为精确文字骨头的逃生口
+1. 真机 / 其他引擎验证：iOS Safari（降频、iOS 分支的 pulse 与防火墙目前只在 Chrome 里模拟）、Safari、Firefox（报告里的"未验证"项；含 clip 的装饰线裁剪、tofu 的 cmap format 13）
+2. 4× 降速下 underline / tofu 样式重算 55~60 ms 的原因；svg 引擎 clip 的 PrePaint 降不动的根因；24 次/秒的光带台阶感需要真人观感评审
+3. PostCSS + autoprefixer（先确认依赖）
+4. Vitest + Playwright 三引擎视觉快照，强制单档 CSS 的降级快照
+5. 框架使用示例文档（Vue 指令 / React / Svelte / Solid）
+6. 评估运行时测量模式作为精确文字骨头的逃生口
 
 ## 怎么跑
 

@@ -1,0 +1,12 @@
+{"overlap":0,"dpr":1,"worstLum":96,"bad":"10:59 11:96 12:77 13:77 14:77 15:58 16:85 18:85 20:19 24:77"}
+{"overlap":0,"dpr":1.25,"worstLum":96,"bad":"10:85 11:96 12:58 13:59 14:77 15:85 16:19 18:85 20:58 24:59"}
+{"overlap":0,"dpr":2,"worstLum":132,"bad":"10:19 11:77 12:77 13:85 14:85 15:59 16:77 18:85 20:19 24:132"}
+{"overlap":40,"dpr":1,"worstLum":255,"bad":"10:109 11:116 12:116 13:20 20:255 24:255"}
+{"overlap":40,"dpr":1.25,"worstLum":20,"bad":"10:20 11:20"}
+{"overlap":40,"dpr":2,"worstLum":2,"bad":""}
+{"overlap":60,"dpr":1,"worstLum":20,"bad":"11:20"}
+{"overlap":60,"dpr":1.25,"worstLum":9,"bad":""}
+{"overlap":60,"dpr":2,"worstLum":0,"bad":""}
+{"overlap":80,"dpr":1,"worstLum":2,"bad":""}
+{"overlap":80,"dpr":1.25,"worstLum":0,"bad":""}
+{"overlap":80,"dpr":2,"worstLum":0,"bad":""}

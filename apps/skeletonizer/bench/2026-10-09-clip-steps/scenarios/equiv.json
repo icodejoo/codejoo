@@ -1,0 +1,4 @@
+[{"name":"lin-clip","css":"base,global,x-lin","attrs":{"effect":"shimmer"}},
+{"name":"lin-nop-clip","css":"base,global,x-lin-nop","attrs":{"effect":"shimmer"}},
+{"name":"lin-ul","css":"base,global,x-lin","attrs":{"effect":"shimmer","text":"underline"}},
+{"name":"lin-nop-ul","css":"base,global,x-lin-nop","attrs":{"effect":"shimmer","text":"underline"}}]

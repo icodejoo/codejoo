@@ -1,0 +1,14 @@
+<!doctype html><meta charset="utf-8"><body><span id="s" style="font-size:100px;white-space:pre"></span>
+<script>
+window.test = async (url, fmt) => {
+  const r = { url };
+  try {
+    const f = new FontFace("T" + Math.random().toString(36).slice(2), `url(${url}) format("${fmt}")`);
+    await f.load(); document.fonts.add(f); r.status = f.status;
+    const s = document.getElementById("s"); s.style.fontFamily = `"${f.family}", monospace`;
+    const w = (t) => { s.textContent = t; return +s.getBoundingClientRect().width.toFixed(1); };
+    r.A = w("A"); r.sp = w(" "); r.cjk = w("中"); r.nbsp = w("\u00a0"); r.cyr = w("Я"); r.hang = w("한"); r.ideo = w("\u3000"); r.emoji = w("😀"); r.ext = w("\u{20000}"); r.zwj = w("\u200d"); r.pua = w("\ue000"); r.comb = w("e\u0301");
+  } catch (e) { r.status = "ERR " + e.message; }
+  return r;
+};
+</script>

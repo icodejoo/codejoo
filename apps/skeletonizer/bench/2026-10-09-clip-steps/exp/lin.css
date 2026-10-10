@@ -1,0 +1,6 @@
+/* 实验变体 lin：shimmer linear，pulse 原样 ease-in-out alternate */
+[skz][skz-effect="shimmer"] {
+  animation:
+    skz-shimmer-root var(--skz-duration) linear infinite,
+    skz-pulse-root var(--skz-duration) ease-in-out infinite alternate;
+}

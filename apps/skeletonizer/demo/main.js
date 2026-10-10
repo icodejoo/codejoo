@@ -80,7 +80,7 @@ document.querySelectorAll("[data-demo-fit]").forEach((el) => (el.innerHTML = lis
 // ---------- 开关与控制 ----------
 const roots = [...document.querySelectorAll("[data-demo-root]")];
 const fitRoots = [...document.querySelectorAll("[data-demo-fit]")];
-const state = { loading: true, dark: true, effect: "shimmer", engine: "global", tier: 3, text: "underline", fit: true };
+const state = { loading: true, dark: true, effect: "shimmer", engine: "global", tier: 3, text: "clip", fit: true };
 let hosts;
 
 function apply() {
@@ -103,14 +103,14 @@ function apply() {
 }
 
 // 按层叠顺序排列的样式分片（与 src/styles/entries/all.scss 的组成一致）
-const CSS_FILES = ["_theme", "base", "tier0", "_marks", "tier1", "tier2", "_effects-core", "_fit", "_global", "_svg", "_sweep"];
+const CSS_FILES = ["_theme", "base", "tier0", "_marks", "tier1", "_tofu", "tier2", "_effects-core", "_fit", "_global", "_svg", "_sweep"];
 // 返回 Promise：样式表全部加载完才 resolve（fit 要按已生效的样式测量，所以 apply 要等它）
 function loadTier(n) {
   document.querySelectorAll("link[data-skz-css]").forEach((l) => l.remove());
   // n=0 仅兜底层（含主题、标记）；n=1 + 第 0 档和全部效果；n=2 + 第 1 档；n=3 + 第 2 档
   const want = ["_theme", "base", "_marks", "_fit"];
   if (n >= 1) want.push("tier0", "_effects-core", "_global", "_svg", "_sweep");
-  if (n >= 2) want.push("tier1");
+  if (n >= 2) want.push("tier1", "_tofu");
   if (n >= 3) want.push("tier2");
   const loads = CSS_FILES.filter((f) => want.includes(f)).map(
     (f) =>

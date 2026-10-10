@@ -1,0 +1,184 @@
+[
+ {
+  "name": "CANa base global+enable @2000",
+  "css": "base,global",
+  "n": 2000,
+  "attrs": {
+   "effect": "shimmer"
+  },
+  "toggle": true,
+  "toggleN": 7,
+  "snap": false
+ },
+ {
+  "name": "G0 现状 global+enable @500",
+  "css": "base,global",
+  "n": 500,
+  "attrs": {
+   "effect": "shimmer"
+  },
+  "toggle": true,
+  "toggleN": 7,
+  "snap": false
+ },
+ {
+  "name": "G1 clip global+enable @500",
+  "css": "base,global,clip",
+  "n": 500,
+  "attrs": {
+   "effect": "shimmer"
+  },
+  "toggle": true,
+  "toggleN": 7,
+  "snap": false
+ },
+ {
+  "name": "G2 clipall global+enable @500",
+  "css": "base,global,clip,clipall",
+  "n": 500,
+  "attrs": {
+   "effect": "shimmer"
+  },
+  "toggle": true,
+  "toggleN": 7,
+  "snap": false
+ },
+ {
+  "name": "G3 clip+无pulse动画 global+enable @500",
+  "css": "base,global,clip,clipnp",
+  "n": 500,
+  "attrs": {
+   "effect": "shimmer"
+  },
+  "toggle": true,
+  "toggleN": 7,
+  "snap": false
+ },
+ {
+  "name": "S0 现状 svg @500",
+  "css": "base,svg",
+  "n": 500,
+  "attrs": {
+   "effect": "shimmer",
+   "engine": "svg"
+  },
+  "toggle": true,
+  "toggleN": 7,
+  "snap": false
+ },
+ {
+  "name": "S1 clip svg @500",
+  "css": "base,svg,clip",
+  "n": 500,
+  "attrs": {
+   "effect": "shimmer",
+   "engine": "svg"
+  },
+  "toggle": true,
+  "toggleN": 7,
+  "snap": false
+ },
+ {
+  "name": "S2 clipall svg @500",
+  "css": "base,svg,clip,clipall",
+  "n": 500,
+  "attrs": {
+   "effect": "shimmer",
+   "engine": "svg"
+  },
+  "toggle": true,
+  "toggleN": 7,
+  "snap": false
+ },
+ {
+  "name": "G0 现状 global+enable @2000",
+  "css": "base,global",
+  "n": 2000,
+  "attrs": {
+   "effect": "shimmer"
+  },
+  "toggle": true,
+  "toggleN": 7,
+  "snap": false
+ },
+ {
+  "name": "G1 clip global+enable @2000",
+  "css": "base,global,clip",
+  "n": 2000,
+  "attrs": {
+   "effect": "shimmer"
+  },
+  "toggle": true,
+  "toggleN": 7,
+  "snap": false
+ },
+ {
+  "name": "G2 clipall global+enable @2000",
+  "css": "base,global,clip,clipall",
+  "n": 2000,
+  "attrs": {
+   "effect": "shimmer"
+  },
+  "toggle": true,
+  "toggleN": 7,
+  "snap": false
+ },
+ {
+  "name": "G3 clip+无pulse动画 global+enable @2000",
+  "css": "base,global,clip,clipnp",
+  "n": 2000,
+  "attrs": {
+   "effect": "shimmer"
+  },
+  "toggle": true,
+  "toggleN": 7,
+  "snap": false
+ },
+ {
+  "name": "S0 现状 svg @2000",
+  "css": "base,svg",
+  "n": 2000,
+  "attrs": {
+   "effect": "shimmer",
+   "engine": "svg"
+  },
+  "toggle": true,
+  "toggleN": 7,
+  "snap": false
+ },
+ {
+  "name": "S1 clip svg @2000",
+  "css": "base,svg,clip",
+  "n": 2000,
+  "attrs": {
+   "effect": "shimmer",
+   "engine": "svg"
+  },
+  "toggle": true,
+  "toggleN": 7,
+  "snap": false
+ },
+ {
+  "name": "S2 clipall svg @2000",
+  "css": "base,svg,clip,clipall",
+  "n": 2000,
+  "attrs": {
+   "effect": "shimmer",
+   "engine": "svg"
+  },
+  "toggle": true,
+  "toggleN": 7,
+  "snap": false
+ },
+ {
+  "name": "CANb base global+enable @2000",
+  "css": "base,global",
+  "n": 2000,
+  "attrs": {
+   "effect": "shimmer"
+  },
+  "toggle": true,
+  "toggleN": 7,
+  "snap": false
+ }
+]

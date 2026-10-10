@@ -15,6 +15,8 @@ const waitEvent = async (name, ms = 20000) => { const end = Date.now() + ms; whi
 await send("Page.enable"); await send("Page.bringToFront");
 // 可选：固定视口（PERF_VIEWPORT=1200x800，DPR 1）；默认不改，行为与旧版一致
 if (process.env.PERF_VIEWPORT) { const [w, h] = process.env.PERF_VIEWPORT.split("x").map(Number); await send("Emulation.setDeviceMetricsOverride", { width: w, height: h, deviceScaleFactor: 1, mobile: false }); }
+// 可选：PERF_SCHEME=dark 模拟深色模式
+if (process.env.PERF_SCHEME) await send("Emulation.setEmulatedMedia", { features: [{ name: "prefers-color-scheme", value: process.env.PERF_SCHEME }] });
 // 窗口被最小化（或被系统隐藏）时 rAF 停摆，帧数会全错：每次测量前把窗口还原，测完核对页面可见且实际耗时没拖长，否则这次作废重测
 const ensureVisible = async () => { try { const w = await send("Browser.getWindowForTarget"); if (w.result && w.result.bounds && w.result.bounds.windowState !== "normal") await send("Browser.setWindowBounds", { windowId: w.result.windowId, bounds: { windowState: "normal" } }); } catch {} await send("Page.bringToFront"); };
 const withTimeout = (p, ms) => Promise.race([p, new Promise((r) => setTimeout(() => r("__timeout__"), ms))]);

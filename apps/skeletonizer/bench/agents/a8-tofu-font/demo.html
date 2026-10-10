@@ -1,0 +1,39 @@
+<!doctype html>
+<html lang="zh"><head><meta charset="utf-8"><title>a8 tofu demo</title>
+<meta name="color-scheme" content="light dark">
+<style>
+:root{--bg:#fff;--fg:#111;--card:#f9fafb;--accent:#3b82f6}
+@media (prefers-color-scheme:dark){:root:not([data-skz-theme=light]){--bg:#111827;--fg:#e5e7eb;--card:#1f2937}}
+:root[data-skz-theme=dark]{--bg:#111827;--fg:#e5e7eb;--card:#1f2937}
+body{margin:0;padding:16px;background:var(--bg);color:var(--fg);font:14px/1.5 system-ui,"Microsoft YaHei",sans-serif}
+.grid3{display:grid;grid-template-columns:repeat(3,1fr);gap:12px}.box{border:1px solid #8884;border-radius:8px;padding:14px;background:var(--card)}
+.card{display:flex;gap:12px;align-items:flex-start}.card img.avatar{width:48px;height:48px;border-radius:50%;flex:none}.card .body{flex:1;min-width:0}
+.card h3{margin:0;font-size:16px}.card small{opacity:.7}.btn{margin-top:8px;padding:6px 14px;border:0;border-radius:6px;background:var(--accent);color:#fff;font:inherit}
+.icon-star::before{content:"★"}h2{font-size:12px;opacity:.6;margin:16px 0 6px}
+.pair{display:grid;grid-template-columns:1fr 1fr;gap:12px}.pair>div{border:1px dashed #8886;padding:6px}
+.w{width:260px}
+</style></head><body>
+<h2>cards（骨架）</h2><div class="grid3" id="cards"></div>
+<h2>对照：左真实文字 右方块（同宽 260px）</h2><div id="cmp"></div>
+<script type="module">
+const q = new URLSearchParams(location.search);
+const css = (q.get("css") || "base,global,tofu").split(",");
+const DIST = "../../../dist/";
+await Promise.all(css.map((n) => new Promise((res) => { const l = document.createElement("link"); l.rel = "stylesheet"; l.href = /^(tofu|clip)/.test(n) ? `./${n}.css` : `${DIST}${n}.css`; l.onload = l.onerror = res; document.head.appendChild(l); })));
+const { Bone, enable } = await import(DIST + "index.mjs");
+if (css.includes("global")) await import(DIST + "global-js.mjs");
+if (css.includes("svg")) await import(DIST + "svg-js.mjs");
+const card = (i) => `<div class="box"><div class="card"><img class="avatar" src="${Bone.image(48)}" alt=""><div class="body"><h3>用户名 Alice ${i}</h3><small>2026-10-09 · 价格：<b>¥5</b></small><p>${["这是一段用来测试骨架屏文字贴合的中英混排 text with some English words and 数字 12345。第二句话让它换行。", "Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore.", "短文本"][i % 3]}</p><i class="icon-star"></i> <button class="btn">立即购买 Buy</button> <input placeholder="输入框 placeholder" value="abc"><select><option>选项 A</option></select></div></div></div>`;
+cards.innerHTML = [0, 1, 2].map(card).join("") + `<div class="box" id="ign"><p>普通 <span skz-ignore id="ig">忽略区 ignore 文字</span> 段落</p><p skz-ignore>整段 ignore</p></div><div class="box" id="leaf" skz-text-note></div><div class="box"><textarea>textarea 内容</textarea></div>`;
+const PARAS = [
+  ["英文", "The quick brown fox jumps over the lazy dog. Pack my box with five dozen liquor jugs, and then sphinx of black quartz, judge my vow. How vexingly quick daft zebras jump!"],
+  ["中文", "骨架屏会按文字的排版生成占位，换行位置应该和真实内容接近；最后一行自然变短。这是一段用来测量中文段落换行位置的测试文字，包含，标点。以及“引号”和（括号）。"],
+  ["混排", "价格：¥5.00 起，共 12345 件商品 in stock，ship to 北京 / Shanghai within 3-5 days。Visit https://example.com/path?x=1 for 更多信息 and details."],
+  ["数字", "0123456789 3.1415926535 1,234,567.89 2026-10-09 12:34:56 +86 138-0000-1111 #A1B2C3 100% $19.99"],
+];
+cmp.innerHTML = PARAS.map(([t, s]) => `<h2>${t}</h2><div class="pair"><div><div class="w real" style="font-size:14px"><p style="margin:0">${s}</p></div></div><div><div class="w sk" id="sk-${t}" style="font-size:14px"><p style="margin:0">${s}</p></div></div></div>`).join("");
+let offs = [];
+window.apply = (opts, sel = "#cards,.sk") => { offs.forEach((f) => f()); offs = []; document.querySelectorAll(sel).forEach((el) => offs.push(enable(el, opts))); };
+window.skel = (el, o) => enable(el, o);
+window.ready = true;
+</script></body></html>

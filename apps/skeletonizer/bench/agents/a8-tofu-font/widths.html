@@ -1,0 +1,14 @@
+<!doctype html><meta charset="utf-8"><link rel="stylesheet" href="./tofu.css">
+<style>body{margin:0}.m{position:absolute;white-space:nowrap;font-size:100px;visibility:hidden}.t{font-family:"Skz Tofu"!important}</style>
+<script>
+const EN = "The quick brown fox jumps over the lazy dog. Pack my box with five dozen liquor jugs. How vexingly quick daft zebras jump! Skeleton screens replace content while loading so the page never feels empty, and the layout stays calm.";
+const EN2 = "Welcome back, Alice! You have 3 new notifications and 12 unread messages. Your order #10492 shipped on Monday and should arrive within five business days. Questions? Contact support anytime.";
+const NUM = "0123456789 3.1415926535 1,234,567.89 2026-10-09 12:34:56 +86 138-0000-1111 $19.99 100%";
+const ZH = "骨架屏会按文字的排版生成占位，换行位置应该和真实内容接近；最后一行自然变短。这是一段用来测量中文段落宽度的测试文字，包含标点。";
+const MIX = "价格：¥5.00 起，共 12345 件商品 in stock，ship to 北京 / Shanghai within 3-5 days。更多信息 and details 请查看商品详情页面。";
+window.TEXTS = { EN, EN2, NUM, ZH, MIX };
+window.FONTS = ["Segoe UI", "Arial", "Times New Roman", "Verdana", "Tahoma", "Georgia", "Calibri", "Consolas", "Microsoft YaHei", "SimSun", "system-ui"];
+const w = (txt, fam, cls) => { const s = document.createElement("span"); s.className = "m " + (cls || ""); s.style.fontFamily = fam; s.textContent = txt; document.body.append(s); const r = s.getBoundingClientRect().width / 100; s.remove(); return r; };
+window.measure = () => { const out = []; for (const [k, t] of Object.entries(TEXTS)) { const tofu = w(t, '"Skz Tofu"', "t"); const row = { text: k, chars: [...t].length, tofuEm: +tofu.toFixed(2) }; for (const f of FONTS) row[f] = +(tofu / w(t, `"${f}"`)).toFixed(3); out.push(row); } return out; };
+document.fonts.load("12px 'Skz Tofu'", "a中").then(() => { window.ready = true; });
+</script>

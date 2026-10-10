@@ -124,6 +124,18 @@ it("enable：加根标记属性、aria-busy、inert，off 全部撤销并清掉�
   expect(f.inert).toBe(false);
 });
 
+it("text：四种模式都原样写到 skz-text；不传 = 不写属性（默认 clip）", () => {
+  const f = new FakeEl();
+  const off = enable(asEl(f), { effect: "shimmer" });
+  expect(f.getAttribute("skz-text")).toBeNull();
+  for (const mode of ["clip", "underline", "leaf", "tofu"] as const) {
+    enable(asEl(f), { effect: "shimmer", text: mode });
+    expect(f.getAttribute("skz-text")).toBe(mode);
+  }
+  off();
+  expect(f.attrs.size).toBe(0);
+});
+
 it("fallback：不再写 skz-fallback 属性（降级由 JS 完成）", () => {
   const f = new FakeEl();
   const off = enable(asEl(f), { effect: "shimmer", fallback: "fade" });
@@ -203,6 +215,20 @@ it("registerCustomElements：每次调用各持一张表，标签没变不重写
   expect(root.adoptedStyleSheets).toHaveLength(1);
   b.dispose();
   expect(root.adoptedStyleSheets).toHaveLength(0);
+});
+
+it("registerCustomElements：宿主 ::before 的画法与 sk-bone 一致，读动画驱动的变量（pulse / shimmer 才会动）", () => {
+  vi.stubGlobal("CSSStyleSheet", FakeSheet);
+  const root = fakeRoot(["sl-button"]);
+  const h = registerCustomElements(root as unknown as Document);
+  const [sheet] = root.adoptedStyleSheets;
+  expect(sheet.css).toContain("background-color:var(--skz-fill,var(--skz-color,#d9dde3)) !important");
+  expect(sheet.css).toContain("background-image:var(--skz-bg-img,none) !important");
+  expect(sheet.css).toContain("background-attachment:fixed !important");
+  // 保持原有的伪元素铺满、圆角
+  expect(sheet.css).toContain('content:"" !important');
+  expect(sheet.css).toContain("border-radius:var(--skz-radius,4px) !important");
+  h.dispose();
 });
 
 it("忽略区：只锁不含忽略区的分支，忽略区自己保持可交互", () => {

@@ -1,0 +1,26 @@
+[
+ {
+  "name": "clip shimmer global @2000",
+  "css": "base,global",
+  "n": 2000,
+  "attrs": {
+   "effect": "shimmer"
+  },
+  "toggle": true,
+  "toggleN": 7,
+  "snap": false
+ },
+ {
+  "name": "underline shimmer global @2000 cpu4",
+  "css": "base,global",
+  "n": 2000,
+  "attrs": {
+   "effect": "shimmer",
+   "text": "underline"
+  },
+  "toggle": true,
+  "toggleN": 7,
+  "snap": false,
+  "cpu": 4
+ }
+]

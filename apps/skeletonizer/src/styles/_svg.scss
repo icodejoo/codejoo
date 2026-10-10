@@ -3,7 +3,9 @@
  * 没有 JS、JS 未执行或 blob 生成失败时根上没有 engine 属性，自动退回基底的 fade。
  * 骨头背景叠一张带 SMIL 动画的 SVG，所有骨头共用这一张图，CSS 每帧不变，没有样式重算；不依赖 @property，老浏览器同样有动画。
  * 骨头底色读 --skz-color；高光由 JS 按主题现生成（精确）。
- * 下划线文字无法贴图，保持静止；iOS 不支持 fixed 背景，shimmer 改用 pulse 图。 */
+ * 文字：默认的 clip 模式文字条直接用这张背景图（pulse / shimmer 都有动画）；underline / tofu 靠颜色而不是背景图，svg 引擎下保持静止的 --skz-color
+ * （要让它们动请用 global 引擎）。降频变量 --skz-shimmer-timing 只对 global 引擎生效，svg 的光带速度由 SMIL 决定；
+ * iOS 不支持 fixed 背景，shimmer 改用 pulse 图。 */
 [skz][skz-engine="svg"][skz-effect="pulse"],
 [skz][skz-engine="svg"][skz-effect="shimmer"] {
   animation: none;

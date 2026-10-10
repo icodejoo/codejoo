@@ -1,0 +1,642 @@
+{
+ "global-pulse": {
+  "distinctColors": 4,
+  "colors": [
+   "rgb(220, 224, 229)",
+   "rgb(226, 229, 234)",
+   "rgb(232, 235, 240)",
+   "rgb(236, 239, 243)"
+  ],
+  "first": {
+   "color": "rgb(220, 224, 229)",
+   "fill": "rgb(220, 224, 229)",
+   "ff": "\"Skz Tofu\"",
+   "td": "none",
+   "bg": "rgba(0, 0, 0, 0)",
+   "bgi": "none"
+  },
+  "info": {
+   "input": {
+    "ff": "Arial",
+    "color": "rgb(0, 0, 0)",
+    "fill": "rgba(0, 0, 0, 0)",
+    "td": "underline",
+    "bg": "rgb(236, 239, 243)",
+    "bgi": "none"
+   },
+   "select": {
+    "ff": "Arial",
+    "color": "rgb(0, 0, 0)",
+    "fill": "rgba(0, 0, 0, 0)",
+    "td": "underline",
+    "bg": "rgb(236, 239, 243)",
+    "bgi": "none"
+   },
+   "textarea": {
+    "ff": "monospace",
+    "color": "rgb(0, 0, 0)",
+    "fill": "rgba(0, 0, 0, 0)",
+    "td": "underline",
+    "bg": "rgb(236, 239, 243)",
+    "bgi": "none"
+   },
+   "button": {
+    "ff": "\"Skz Tofu\"",
+    "color": "rgb(236, 239, 243)",
+    "fill": "rgb(236, 239, 243)",
+    "td": "none",
+    "bg": "rgba(0, 0, 0, 0)",
+    "bgi": "none"
+   },
+   "small": {
+    "ff": "\"Skz Tofu\"",
+    "color": "rgb(236, 239, 243)",
+    "fill": "rgb(236, 239, 243)",
+    "td": "none",
+    "bg": "rgba(0, 0, 0, 0)",
+    "bgi": "none"
+   },
+   "b": {
+    "ff": "\"Skz Tofu\"",
+    "color": "rgb(236, 239, 243)",
+    "fill": "rgb(236, 239, 243)",
+    "td": "none",
+    "bg": "rgba(0, 0, 0, 0)",
+    "bgi": "none"
+   },
+   "ignoreSpan": {
+    "ff": "\"Skz Tofu\"",
+    "color": "rgb(236, 239, 243)",
+    "fill": "rgb(236, 239, 243)",
+    "td": "none",
+    "bg": "rgba(0, 0, 0, 0)",
+    "bgi": "none"
+   },
+   "ignoreP": {
+    "ff": "system-ui, \"Microsof",
+    "color": "rgb(17, 17, 17)",
+    "fill": "rgb(17, 17, 17)",
+    "td": "none",
+    "bg": "rgba(0, 0, 0, 0)",
+    "bgi": "none"
+   },
+   "img": {
+    "ff": "system-ui, \"Microsof",
+    "color": "rgb(17, 17, 17)",
+    "fill": "rgba(0, 0, 0, 0)",
+    "td": "underline",
+    "bg": "rgb(236, 239, 243)",
+    "bgi": "none"
+   },
+   "icon": {
+    "ff": "system-ui, \"Microsof",
+    "color": "rgb(17, 17, 17)",
+    "fill": "rgba(0, 0, 0, 0)",
+    "td": "underline",
+    "bg": "rgb(236, 239, 243)",
+    "bgi": "none"
+   },
+   "rootAttrs": {
+    "class": "grid3",
+    "id": "cards",
+    "skz-effect": "pulse",
+    "skz-text": "tofu",
+    "skz-has-ignore": "",
+    "skz": "",
+    "aria-busy": "true"
+   }
+  }
+ },
+ "global-shimmer": {
+  "distinctColors": 4,
+  "colors": [
+   "rgb(220, 224, 229)",
+   "rgb(226, 229, 234)",
+   "rgb(232, 235, 240)",
+   "rgb(236, 239, 243)"
+  ],
+  "first": {
+   "color": "rgb(220, 224, 229)",
+   "fill": "rgb(220, 224, 229)",
+   "ff": "\"Skz Tofu\"",
+   "td": "none",
+   "bg": "rgba(0, 0, 0, 0)",
+   "bgi": "none"
+  },
+  "info": {
+   "input": {
+    "ff": "Arial",
+    "color": "rgb(0, 0, 0)",
+    "fill": "rgba(0, 0, 0, 0)",
+    "td": "underline",
+    "bg": "rgb(217, 221, 227)",
+    "bgi": "linear-gradient(100deg, rgba(0"
+   },
+   "select": {
+    "ff": "Arial",
+    "color": "rgb(0, 0, 0)",
+    "fill": "rgba(0, 0, 0, 0)",
+    "td": "underline",
+    "bg": "rgb(217, 221, 227)",
+    "bgi": "linear-gradient(100deg, rgba(0"
+   },
+   "textarea": {
+    "ff": "monospace",
+    "color": "rgb(0, 0, 0)",
+    "fill": "rgba(0, 0, 0, 0)",
+    "td": "underline",
+    "bg": "rgb(217, 221, 227)",
+    "bgi": "linear-gradient(100deg, rgba(0"
+   },
+   "button": {
+    "ff": "\"Skz Tofu\"",
+    "color": "rgb(236, 239, 243)",
+    "fill": "rgb(236, 239, 243)",
+    "td": "none",
+    "bg": "rgba(0, 0, 0, 0)",
+    "bgi": "none"
+   },
+   "small": {
+    "ff": "\"Skz Tofu\"",
+    "color": "rgb(236, 239, 243)",
+    "fill": "rgb(236, 239, 243)",
+    "td": "none",
+    "bg": "rgba(0, 0, 0, 0)",
+    "bgi": "none"
+   },
+   "b": {
+    "ff": "\"Skz Tofu\"",
+    "color": "rgb(236, 239, 243)",
+    "fill": "rgb(236, 239, 243)",
+    "td": "none",
+    "bg": "rgba(0, 0, 0, 0)",
+    "bgi": "none"
+   },
+   "ignoreSpan": {
+    "ff": "\"Skz Tofu\"",
+    "color": "rgb(236, 239, 243)",
+    "fill": "rgb(236, 239, 243)",
+    "td": "none",
+    "bg": "rgba(0, 0, 0, 0)",
+    "bgi": "none"
+   },
+   "ignoreP": {
+    "ff": "system-ui, \"Microsof",
+    "color": "rgb(17, 17, 17)",
+    "fill": "rgb(17, 17, 17)",
+    "td": "none",
+    "bg": "rgba(0, 0, 0, 0)",
+    "bgi": "none"
+   },
+   "img": {
+    "ff": "system-ui, \"Microsof",
+    "color": "rgb(17, 17, 17)",
+    "fill": "rgba(0, 0, 0, 0)",
+    "td": "underline",
+    "bg": "rgb(217, 221, 227)",
+    "bgi": "linear-gradient(100deg, rgba(0"
+   },
+   "icon": {
+    "ff": "system-ui, \"Microsof",
+    "color": "rgb(17, 17, 17)",
+    "fill": "rgba(0, 0, 0, 0)",
+    "td": "underline",
+    "bg": "rgb(217, 221, 227)",
+    "bgi": "linear-gradient(100deg, rgba(0"
+   },
+   "rootAttrs": {
+    "class": "grid3",
+    "id": "cards",
+    "skz-effect": "shimmer",
+    "skz-text": "tofu",
+    "skz-has-ignore": "",
+    "skz": "",
+    "aria-busy": "true"
+   }
+  }
+ },
+ "svg-pulse": {
+  "distinctColors": 1,
+  "colors": [
+   "rgb(217, 221, 227)"
+  ],
+  "first": {
+   "color": "rgb(217, 221, 227)",
+   "fill": "rgb(217, 221, 227)",
+   "ff": "\"Skz Tofu\"",
+   "td": "none",
+   "bg": "rgba(0, 0, 0, 0)",
+   "bgi": "none"
+  },
+  "info": {
+   "input": {
+    "ff": "Arial",
+    "color": "rgb(0, 0, 0)",
+    "fill": "rgba(0, 0, 0, 0)",
+    "td": "underline",
+    "bg": "rgb(217, 221, 227)",
+    "bgi": "url(\"blob:http://localhost:519"
+   },
+   "select": {
+    "ff": "Arial",
+    "color": "rgb(0, 0, 0)",
+    "fill": "rgba(0, 0, 0, 0)",
+    "td": "underline",
+    "bg": "rgb(217, 221, 227)",
+    "bgi": "url(\"blob:http://localhost:519"
+   },
+   "textarea": {
+    "ff": "monospace",
+    "color": "rgb(0, 0, 0)",
+    "fill": "rgba(0, 0, 0, 0)",
+    "td": "underline",
+    "bg": "rgb(217, 221, 227)",
+    "bgi": "url(\"blob:http://localhost:519"
+   },
+   "button": {
+    "ff": "\"Skz Tofu\"",
+    "color": "rgb(217, 221, 227)",
+    "fill": "rgb(217, 221, 227)",
+    "td": "none",
+    "bg": "rgba(0, 0, 0, 0)",
+    "bgi": "none"
+   },
+   "small": {
+    "ff": "\"Skz Tofu\"",
+    "color": "rgb(217, 221, 227)",
+    "fill": "rgb(217, 221, 227)",
+    "td": "none",
+    "bg": "rgba(0, 0, 0, 0)",
+    "bgi": "none"
+   },
+   "b": {
+    "ff": "\"Skz Tofu\"",
+    "color": "rgb(217, 221, 227)",
+    "fill": "rgb(217, 221, 227)",
+    "td": "none",
+    "bg": "rgba(0, 0, 0, 0)",
+    "bgi": "none"
+   },
+   "ignoreSpan": {
+    "ff": "\"Skz Tofu\"",
+    "color": "rgb(217, 221, 227)",
+    "fill": "rgb(217, 221, 227)",
+    "td": "none",
+    "bg": "rgba(0, 0, 0, 0)",
+    "bgi": "none"
+   },
+   "ignoreP": {
+    "ff": "system-ui, \"Microsof",
+    "color": "rgb(17, 17, 17)",
+    "fill": "rgb(17, 17, 17)",
+    "td": "none",
+    "bg": "rgba(0, 0, 0, 0)",
+    "bgi": "none"
+   },
+   "img": {
+    "ff": "system-ui, \"Microsof",
+    "color": "rgb(17, 17, 17)",
+    "fill": "rgba(0, 0, 0, 0)",
+    "td": "underline",
+    "bg": "rgb(217, 221, 227)",
+    "bgi": "url(\"blob:http://localhost:519"
+   },
+   "icon": {
+    "ff": "system-ui, \"Microsof",
+    "color": "rgb(17, 17, 17)",
+    "fill": "rgba(0, 0, 0, 0)",
+    "td": "underline",
+    "bg": "rgb(217, 221, 227)",
+    "bgi": "url(\"blob:http://localhost:519"
+   },
+   "rootAttrs": {
+    "class": "grid3",
+    "id": "cards",
+    "skz-effect": "pulse",
+    "skz-text": "tofu",
+    "skz-has-ignore": "",
+    "skz": "",
+    "aria-busy": "true",
+    "skz-engine": "svg",
+    "style": "--skz-svg-shimmer: u"
+   }
+  }
+ },
+ "svg-shimmer": {
+  "distinctColors": 1,
+  "colors": [
+   "rgb(217, 221, 227)"
+  ],
+  "first": {
+   "color": "rgb(217, 221, 227)",
+   "fill": "rgb(217, 221, 227)",
+   "ff": "\"Skz Tofu\"",
+   "td": "none",
+   "bg": "rgba(0, 0, 0, 0)",
+   "bgi": "none"
+  },
+  "info": {
+   "input": {
+    "ff": "Arial",
+    "color": "rgb(0, 0, 0)",
+    "fill": "rgba(0, 0, 0, 0)",
+    "td": "underline",
+    "bg": "rgb(217, 221, 227)",
+    "bgi": "url(\"blob:http://localhost:519"
+   },
+   "select": {
+    "ff": "Arial",
+    "color": "rgb(0, 0, 0)",
+    "fill": "rgba(0, 0, 0, 0)",
+    "td": "underline",
+    "bg": "rgb(217, 221, 227)",
+    "bgi": "url(\"blob:http://localhost:519"
+   },
+   "textarea": {
+    "ff": "monospace",
+    "color": "rgb(0, 0, 0)",
+    "fill": "rgba(0, 0, 0, 0)",
+    "td": "underline",
+    "bg": "rgb(217, 221, 227)",
+    "bgi": "url(\"blob:http://localhost:519"
+   },
+   "button": {
+    "ff": "\"Skz Tofu\"",
+    "color": "rgb(217, 221, 227)",
+    "fill": "rgb(217, 221, 227)",
+    "td": "none",
+    "bg": "rgba(0, 0, 0, 0)",
+    "bgi": "none"
+   },
+   "small": {
+    "ff": "\"Skz Tofu\"",
+    "color": "rgb(217, 221, 227)",
+    "fill": "rgb(217, 221, 227)",
+    "td": "none",
+    "bg": "rgba(0, 0, 0, 0)",
+    "bgi": "none"
+   },
+   "b": {
+    "ff": "\"Skz Tofu\"",
+    "color": "rgb(217, 221, 227)",
+    "fill": "rgb(217, 221, 227)",
+    "td": "none",
+    "bg": "rgba(0, 0, 0, 0)",
+    "bgi": "none"
+   },
+   "ignoreSpan": {
+    "ff": "\"Skz Tofu\"",
+    "color": "rgb(217, 221, 227)",
+    "fill": "rgb(217, 221, 227)",
+    "td": "none",
+    "bg": "rgba(0, 0, 0, 0)",
+    "bgi": "none"
+   },
+   "ignoreP": {
+    "ff": "system-ui, \"Microsof",
+    "color": "rgb(17, 17, 17)",
+    "fill": "rgb(17, 17, 17)",
+    "td": "none",
+    "bg": "rgba(0, 0, 0, 0)",
+    "bgi": "none"
+   },
+   "img": {
+    "ff": "system-ui, \"Microsof",
+    "color": "rgb(17, 17, 17)",
+    "fill": "rgba(0, 0, 0, 0)",
+    "td": "underline",
+    "bg": "rgb(217, 221, 227)",
+    "bgi": "url(\"blob:http://localhost:519"
+   },
+   "icon": {
+    "ff": "system-ui, \"Microsof",
+    "color": "rgb(17, 17, 17)",
+    "fill": "rgba(0, 0, 0, 0)",
+    "td": "underline",
+    "bg": "rgb(217, 221, 227)",
+    "bgi": "url(\"blob:http://localhost:519"
+   },
+   "rootAttrs": {
+    "class": "grid3",
+    "id": "cards",
+    "skz-effect": "shimmer",
+    "skz-text": "tofu",
+    "skz-has-ignore": "",
+    "skz": "",
+    "aria-busy": "true",
+    "skz-engine": "svg",
+    "style": "--skz-svg-shimmer: u"
+   }
+  }
+ },
+ "fade": {
+  "distinctColors": 1,
+  "colors": [
+   "rgb(217, 221, 227)"
+  ],
+  "first": {
+   "color": "rgb(217, 221, 227)",
+   "fill": "rgb(217, 221, 227)",
+   "ff": "\"Skz Tofu\"",
+   "td": "none",
+   "bg": "rgba(0, 0, 0, 0)",
+   "bgi": "none"
+  },
+  "info": {
+   "input": {
+    "ff": "Arial",
+    "color": "rgb(0, 0, 0)",
+    "fill": "rgba(0, 0, 0, 0)",
+    "td": "underline",
+    "bg": "rgb(217, 221, 227)",
+    "bgi": "none"
+   },
+   "select": {
+    "ff": "Arial",
+    "color": "rgb(0, 0, 0)",
+    "fill": "rgba(0, 0, 0, 0)",
+    "td": "underline",
+    "bg": "rgb(217, 221, 227)",
+    "bgi": "none"
+   },
+   "textarea": {
+    "ff": "monospace",
+    "color": "rgb(0, 0, 0)",
+    "fill": "rgba(0, 0, 0, 0)",
+    "td": "underline",
+    "bg": "rgb(217, 221, 227)",
+    "bgi": "none"
+   },
+   "button": {
+    "ff": "\"Skz Tofu\"",
+    "color": "rgb(217, 221, 227)",
+    "fill": "rgb(217, 221, 227)",
+    "td": "none",
+    "bg": "rgba(0, 0, 0, 0)",
+    "bgi": "none"
+   },
+   "small": {
+    "ff": "\"Skz Tofu\"",
+    "color": "rgb(217, 221, 227)",
+    "fill": "rgb(217, 221, 227)",
+    "td": "none",
+    "bg": "rgba(0, 0, 0, 0)",
+    "bgi": "none"
+   },
+   "b": {
+    "ff": "\"Skz Tofu\"",
+    "color": "rgb(217, 221, 227)",
+    "fill": "rgb(217, 221, 227)",
+    "td": "none",
+    "bg": "rgba(0, 0, 0, 0)",
+    "bgi": "none"
+   },
+   "ignoreSpan": {
+    "ff": "\"Skz Tofu\"",
+    "color": "rgb(217, 221, 227)",
+    "fill": "rgb(217, 221, 227)",
+    "td": "none",
+    "bg": "rgba(0, 0, 0, 0)",
+    "bgi": "none"
+   },
+   "ignoreP": {
+    "ff": "system-ui, \"Microsof",
+    "color": "rgb(17, 17, 17)",
+    "fill": "rgb(17, 17, 17)",
+    "td": "none",
+    "bg": "rgba(0, 0, 0, 0)",
+    "bgi": "none"
+   },
+   "img": {
+    "ff": "system-ui, \"Microsof",
+    "color": "rgb(17, 17, 17)",
+    "fill": "rgba(0, 0, 0, 0)",
+    "td": "underline",
+    "bg": "rgb(217, 221, 227)",
+    "bgi": "none"
+   },
+   "icon": {
+    "ff": "system-ui, \"Microsof",
+    "color": "rgb(17, 17, 17)",
+    "fill": "rgba(0, 0, 0, 0)",
+    "td": "underline",
+    "bg": "rgb(217, 221, 227)",
+    "bgi": "none"
+   },
+   "rootAttrs": {
+    "class": "grid3",
+    "id": "cards",
+    "skz-effect": "fade",
+    "skz-text": "tofu",
+    "skz-has-ignore": "",
+    "skz": "",
+    "aria-busy": "true"
+   }
+  }
+ },
+ "solid": {
+  "distinctColors": 1,
+  "colors": [
+   "rgb(217, 221, 227)"
+  ],
+  "first": {
+   "color": "rgb(217, 221, 227)",
+   "fill": "rgb(217, 221, 227)",
+   "ff": "\"Skz Tofu\"",
+   "td": "none",
+   "bg": "rgba(0, 0, 0, 0)",
+   "bgi": "none"
+  },
+  "info": {
+   "input": {
+    "ff": "Arial",
+    "color": "rgb(0, 0, 0)",
+    "fill": "rgba(0, 0, 0, 0)",
+    "td": "underline",
+    "bg": "rgb(217, 221, 227)",
+    "bgi": "none"
+   },
+   "select": {
+    "ff": "Arial",
+    "color": "rgb(0, 0, 0)",
+    "fill": "rgba(0, 0, 0, 0)",
+    "td": "underline",
+    "bg": "rgb(217, 221, 227)",
+    "bgi": "none"
+   },
+   "textarea": {
+    "ff": "monospace",
+    "color": "rgb(0, 0, 0)",
+    "fill": "rgba(0, 0, 0, 0)",
+    "td": "underline",
+    "bg": "rgb(217, 221, 227)",
+    "bgi": "none"
+   },
+   "button": {
+    "ff": "\"Skz Tofu\"",
+    "color": "rgb(217, 221, 227)",
+    "fill": "rgb(217, 221, 227)",
+    "td": "none",
+    "bg": "rgba(0, 0, 0, 0)",
+    "bgi": "none"
+   },
+   "small": {
+    "ff": "\"Skz Tofu\"",
+    "color": "rgb(217, 221, 227)",
+    "fill": "rgb(217, 221, 227)",
+    "td": "none",
+    "bg": "rgba(0, 0, 0, 0)",
+    "bgi": "none"
+   },
+   "b": {
+    "ff": "\"Skz Tofu\"",
+    "color": "rgb(217, 221, 227)",
+    "fill": "rgb(217, 221, 227)",
+    "td": "none",
+    "bg": "rgba(0, 0, 0, 0)",
+    "bgi": "none"
+   },
+   "ignoreSpan": {
+    "ff": "\"Skz Tofu\"",
+    "color": "rgb(217, 221, 227)",
+    "fill": "rgb(217, 221, 227)",
+    "td": "none",
+    "bg": "rgba(0, 0, 0, 0)",
+    "bgi": "none"
+   },
+   "ignoreP": {
+    "ff": "system-ui, \"Microsof",
+    "color": "rgb(17, 17, 17)",
+    "fill": "rgb(17, 17, 17)",
+    "td": "none",
+    "bg": "rgba(0, 0, 0, 0)",
+    "bgi": "none"
+   },
+   "img": {
+    "ff": "system-ui, \"Microsof",
+    "color": "rgb(17, 17, 17)",
+    "fill": "rgba(0, 0, 0, 0)",
+    "td": "underline",
+    "bg": "rgb(217, 221, 227)",
+    "bgi": "none"
+   },
+   "icon": {
+    "ff": "system-ui, \"Microsof",
+    "color": "rgb(17, 17, 17)",
+    "fill": "rgba(0, 0, 0, 0)",
+    "td": "underline",
+    "bg": "rgb(217, 221, 227)",
+    "bgi": "none"
+   },
+   "rootAttrs": {
+    "class": "grid3",
+    "id": "cards",
+    "skz-effect": "solid",
+    "skz-text": "tofu",
+    "skz-has-ignore": "",
+    "skz": "",
+    "aria-busy": "true"
+   }
+  }
+ }
+}

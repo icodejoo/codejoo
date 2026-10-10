@@ -1,7 +1,6 @@
 @use "sweep-mixin" as *;
 
 /* ===== sweep：整个根一个 ::after 扫光条，transform 平移，跑在合成器线程（skeletonizer/sweep.css） =====
- * 光带默认竖直（倾斜见 --skz-sweep-skew 的注释）。
  * 浅色用 lighten 混合，深色用容器色 alpha 叠加，让它主要提亮/扫过骨头。
  * 代价：根会变成 position:relative + 左右裁剪（overflow-x: clip）；根自己的 ::after 会被占用；根里的 skz-ignore 内容也会被扫到。 */
 @include sk-sweep-assets;

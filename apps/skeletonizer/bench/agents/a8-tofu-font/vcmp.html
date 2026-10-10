@@ -1,0 +1,12 @@
+<!doctype html><meta charset="utf-8"><style>
+@font-face{font-family:V80;src:url(fonts/v80-both.woff2)}@font-face{font-family:V90;src:url(fonts/v90-both.woff2)}@font-face{font-family:V100;src:url(fonts/v100-both.woff2)}
+body{margin:12px;background:#fff;color:#9aa0aa;font:14px/1.5 system-ui,"Microsoft YaHei",sans-serif}.c{display:inline-block;width:210px;vertical-align:top;margin-right:10px}.c p{margin:0 0 8px}.r{color:#111}
+.n p{line-height:normal}
+</style>
+<div class="c r"><b>real</b><p>The quick brown fox jumps over the lazy dog. 骨架屏文字 gypq</p><p>Second paragraph here with more words to wrap.</p></div>
+<div class="c" style="font-family:V80"><b>v80 (0.8em)</b><p>The quick brown fox jumps over the lazy dog. 骨架屏文字 gypq</p><p>Second paragraph here with more words to wrap.</p></div>
+<div class="c" style="font-family:V90"><b>v90 (0.9em)</b><p>The quick brown fox jumps over the lazy dog. 骨架屏文字 gypq</p><p>Second paragraph here with more words to wrap.</p></div>
+<div class="c" style="font-family:V100"><b>v100 (1.0em)</b><p>The quick brown fox jumps over the lazy dog. 骨架屏文字 gypq</p><p>Second paragraph here with more words to wrap.</p></div>
+<hr><div class="n"><div class="c r"><b>real normal</b><p id="rn">line one line one line one line one line one line one line one line one</p></div>
+<div class="c" style="font-family:V90"><b>v90 normal</b><p id="tn">line one line one line one line one line one line one line one line one</p></div></div>
+<script>document.fonts.ready.then(()=>{window.ready=true})</script>

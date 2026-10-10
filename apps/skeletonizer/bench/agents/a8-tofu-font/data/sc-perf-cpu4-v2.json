@@ -1,0 +1,56 @@
+[
+ {
+  "name": "underline shimmer global @2000 cpu4",
+  "css": "base,global",
+  "n": 2000,
+  "attrs": {
+   "effect": "shimmer",
+   "text": "underline"
+  },
+  "toggle": true,
+  "toggleN": 7,
+  "snap": false,
+  "cpu": 4
+ },
+ {
+  "name": "tofu shimmer global @2000 cpu4",
+  "css": "base,global,tofu",
+  "n": 2000,
+  "attrs": {
+   "effect": "shimmer",
+   "text": "tofu"
+  },
+  "toggle": true,
+  "toggleN": 7,
+  "snap": false,
+  "cpu": 4
+ },
+ {
+  "name": "underline shimmer svg @2000 cpu4",
+  "css": "base,svg",
+  "n": 2000,
+  "attrs": {
+   "effect": "shimmer",
+   "text": "underline",
+   "engine": "svg"
+  },
+  "toggle": true,
+  "toggleN": 7,
+  "snap": false,
+  "cpu": 4
+ },
+ {
+  "name": "tofu shimmer svg @2000 cpu4",
+  "css": "base,svg,tofu",
+  "n": 2000,
+  "attrs": {
+   "effect": "shimmer",
+   "text": "tofu",
+   "engine": "svg"
+  },
+  "toggle": true,
+  "toggleN": 7,
+  "snap": false,
+  "cpu": 4
+ }
+]

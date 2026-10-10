@@ -1,0 +1,15 @@
+<!doctype html><meta charset="utf-8"><style>
+@font-face{font-family:N500;src:url(fonts-n/n500-both.woff2)}@font-face{font-family:N520;src:url(fonts-n/n520-both.woff2)}@font-face{font-family:N550;src:url(fonts-n/n550-both.woff2)}
+body{margin:0;font:14px/1.5 system-ui,"Microsoft YaHei",sans-serif}p{margin:0}
+</style><div id="h"></div>
+<script>
+const TEXTS = {
+EN:"The quick brown fox jumps over the lazy dog. Pack my box with five dozen liquor jugs. How vexingly quick daft zebras jump! Skeleton screens replace content while loading so the page never feels empty, and the layout stays calm.",
+EN2:"Welcome back, Alice! You have 3 new notifications and 12 unread messages. Your order #10492 shipped on Monday and should arrive within five business days. Questions? Contact support anytime.",
+ZH:"骨架屏会按文字的排版生成占位，换行位置应该和真实内容接近；最后一行自然变短。这是一段用来测量中文段落宽度的测试文字，包含标点，以及“引号”和（括号）。",
+MIX:"价格：¥5.00 起，共 12345 件商品 in stock，ship to 北京 / Shanghai within 3-5 days。更多信息 and details 请查看商品详情页面。"};
+function lines(p){ const r=document.createRange(); r.selectNodeContents(p); const m=new Map(); for(const q of r.getClientRects()){ if(q.width<0.5) continue; const k=Math.round(q.top); m.set(k,(m.get(k)||0)+q.width); } return [...m.values()].map(x=>+x.toFixed(1)); }
+window.run = (realFam) => { const out=[]; for (const W of [180,260,360,520]) for (const [k,t] of Object.entries(TEXTS)) { const row={W,text:k}; const mk=(fam)=>{const p=document.createElement("p");p.style.width=W+"px";p.style.fontFamily=fam;p.textContent=t;h.append(p);const l=lines(p);p.remove();return l}; const real=mk(realFam); row.real=real.length; row.realLast=real.at(-1); row.realLastFrac=+(real.at(-1)/W).toFixed(2);
+  for (const n of ["N500","N520","N550"]) { const l=mk(n); row[n]=l.length; row[n+"last"]=+(l.at(-1)/W).toFixed(2);} out.push(row);} return out; };
+document.fonts.load("12px N500","a中").then(()=>document.fonts.load("12px N520","a中")).then(()=>document.fonts.load("12px N550","a中")).then(()=>{window.ready=true});
+</script>

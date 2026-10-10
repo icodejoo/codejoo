@@ -1,0 +1,11 @@
+<!doctype html><meta charset="utf-8"><meta http-equiv="Content-Security-Policy" content="default-src 'self'; style-src 'self' 'unsafe-inline'; font-src data:"><title>flash</title>
+<link rel="stylesheet" href="../../../dist/base.css"><link rel="stylesheet" href="../../../dist/global.css"><link rel="stylesheet" href="./tofu.css">
+<style>body{margin:20px;font:20px/1.6 system-ui,sans-serif;background:#fff}</style>
+<div id="r" skz skz-text="tofu" skz-effect="solid" style="--skz-color:#f00;width:600px"><p>This is some real text that must never flash before the tofu font is ready. 这是真实文字。</p><h3>Heading Text Here</h3></div>
+<script>
+const t0 = performance.now(); window.log = [];
+document.fonts.onloadingdone = () => log.push(["loadingdone", Math.round(performance.now())]);
+document.fonts.onloading = () => log.push(["loading", Math.round(performance.now())]);
+new PerformanceObserver((l) => l.getEntries().forEach((e) => log.push([e.name, Math.round(e.startTime)]))).observe({ type: "paint", buffered: true });
+window.ready = true;
+</script>

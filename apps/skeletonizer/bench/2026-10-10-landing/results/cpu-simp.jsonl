@@ -1,0 +1,6 @@
+{"batch":"S","label":"before","try":1,"started":"2026-10-10T01:56:12.444Z","idleBefore":"timeout mean=16.2 waited=601s","cpuAtStart":"22.1,18.4,22","cpuMean":31.9,"cpuP90":52.5,"cpuMax":99.1,"samples":129,"rows":8}
+{"batch":"S","label":"before","try":1,"started":"2026-10-10T02:09:23.032Z","idleBefore":"timeout mean=30.4 waited=120s","cpuAtStart":"31.9,29.7,33.8","cpuMean":33.8,"cpuP90":47,"cpuMax":100,"samples":132,"rows":8}
+{"batch":"S","label":"after","try":1,"started":"2026-10-10T02:13:40.219Z","idleBefore":"timeout mean=27.8 waited=120s","cpuAtStart":"17.7,14.3,16.3","cpuMean":28.9,"cpuP90":39.4,"cpuMax":78.1,"samples":129,"rows":8}
+{"batch":"S","label":"after2","try":1,"started":"2026-10-10T02:17:54.517Z","idleBefore":"timeout mean=24.6 waited=120s","cpuAtStart":"27.6,18.1,33","cpuMean":38.7,"cpuP90":50.5,"cpuMax":88.9,"samples":135,"rows":8}
+{"batch":"S","label":"before2","try":1,"started":"2026-10-10T02:22:16.108Z","idleBefore":"timeout mean=87.4 waited=121s","cpuAtStart":"96.2,100,100","cpuMean":71.3,"cpuP90":100,"cpuMax":100,"samples":140,"rows":8}
+{"batch":"S","label":"before2","try":2,"started":"2026-10-10T02:27:20.171Z","idleBefore":"timeout mean=39.7 waited=121s","cpuAtStart":"32.6,19.9,25.9","cpuMean":39.8,"cpuP90":57.6,"cpuMax":87.8,"samples":133,"rows":8}

@@ -1,0 +1,44 @@
+[
+ {
+  "name": "G0 现状 global+enable @2000 cpu4x",
+  "css": "base,global",
+  "n": 2000,
+  "attrs": {
+   "effect": "shimmer"
+  },
+  "cpu": 4,
+  "toggle": false
+ },
+ {
+  "name": "G1 clip global+enable @2000 cpu4x",
+  "css": "base,global,clip",
+  "n": 2000,
+  "attrs": {
+   "effect": "shimmer"
+  },
+  "cpu": 4,
+  "toggle": false
+ },
+ {
+  "name": "S0 现状 svg @2000 cpu4x",
+  "css": "base,svg",
+  "n": 2000,
+  "attrs": {
+   "effect": "shimmer",
+   "engine": "svg"
+  },
+  "cpu": 4,
+  "toggle": false
+ },
+ {
+  "name": "S1 clip svg @2000 cpu4x",
+  "css": "base,svg,clip",
+  "n": 2000,
+  "attrs": {
+   "effect": "shimmer",
+   "engine": "svg"
+  },
+  "cpu": 4,
+  "toggle": false
+ }
+]
