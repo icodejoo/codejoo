@@ -171,6 +171,8 @@ describe("打包器（vite）构建浏览器产物", () => {
     try {
       fs.mkdirSync(path.join(dir, "node_modules"));
       fs.symlinkSync(ROOT, path.join(dir, "node_modules/skeletonizer"), "junction");
+      // vp 要求 cwd 是带 package.json 的包，否则报 Package not found in workspace
+      fs.writeFileSync(path.join(dir, "package.json"), `{"name":"skz-fixture","private":true,"type":"module"}`);
       fs.writeFileSync(path.join(dir, "index.html"), `<!doctype html><html><body><div id="a"></div><script type="module" src="./main.js"></script></body></html>`);
       fs.writeFileSync(path.join(dir, "main.js"), source);
       await execAsync(`"${VP}" build`, { cwd: dir, env: { ...process.env, NODE_ENV: "production" } });
