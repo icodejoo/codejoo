@@ -39,7 +39,8 @@
 }
 
 /* 忽略区子树：撤销骨头效果。文字用 text-fill-color 撤销、不动 color，后代自己的文字色得以保留；
- * 背景/背景图仍会被清掉（自动推导模式下第 2 档才完整保留） */
+ * 背景/背景图仍会被清掉（自动推导模式下第 2 档才完整保留）。
+ * :not([skz-x]) 是抬高优先级用的占位（说明见 _text.scss 的 sk-text-no-underline-marks） */
 [skz] [skz-ignore] *:not([skz-ignore]):not([skz-x]) {
   background-color: transparent !important;
   background-image: none !important;

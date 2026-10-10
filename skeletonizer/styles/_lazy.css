@@ -1,0 +1,21 @@
+@charset "UTF-8";
+/* ===== 懒渲染与视口外跳过渲染（base.css 与 explicit.css 带，core.css 不带）=====
+ * skz-paused 由完整版的懒渲染扩展写上，skz-cv 由使用者写在根上，core.css 里没有。 */
+/* 懒渲染：根在视口外（enable() 打上 skz-paused）时移除根上和 sweep 光带的动画，SVG 方案去掉背景图 */
+[skz][skz-paused],
+[skz][skz-paused]::after {
+  animation: none !important;
+}
+
+[skz][skz-paused] {
+  --skz-bg-img: none !important;
+}
+
+/* ===== 视口外内容跳过渲染（根上写 skz-cv 开启） =====
+ * 根的直接子元素在视口外时，浏览器跳过它们的样式、布局、绘制，动画也不用算；
+ * 补上懒渲染"大根露一角就整体动"的盲区。代价：子元素溢出部分会被裁掉；
+ * 从没渲染过的子元素按 --skz-cv-size 估高，估不准滚动时会跳。 */
+[skz][skz-cv] > * {
+  content-visibility: auto;
+  contain-intrinsic-size: auto var(--skz-cv-size, 200px);
+}

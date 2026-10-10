@@ -1,0 +1,63 @@
+@charset "UTF-8";
+/* ===== SVG 方案（skeletonizer/svg；根上 skz-engine="svg" 由 JS 在 blob 图真正挂上后写入） =====
+ * 同时被 global.css @use：老浏览器上 global 会把根切到这套方案，Sass 同一模块只输出一次，all.css 里只有一份。
+ * 没有 JS、JS 未执行或 blob 生成失败时根上没有 engine 属性，自动退回基底的 fade。
+ * 骨头背景叠一张带 SMIL 动画的 SVG，所有骨头共用这一张图，CSS 每帧不变，没有样式重算；不依赖 @property，老浏览器同样有动画。
+ * 骨头底色读 --skz-color；高光由 JS 按主题现生成（精确）。
+ * 文字：默认的 clip 模式文字条直接用这张背景图（pulse / shimmer 都有动画）；underline / tofu 靠颜色而不是背景图，svg 引擎下保持静止的 --skz-color
+ * （要让它们动请用 global 引擎）。降频变量 --skz-shimmer-timing 只对 global 引擎生效，svg 的光带速度由 SMIL 决定；
+ * iOS 不支持 fixed 背景，shimmer 改用 pulse 图。 */
+[skz][skz-engine=svg][skz-effect=pulse],
+[skz][skz-engine=svg][skz-effect=shimmer] {
+  animation: none;
+  --skz-fill: var(--skz-color);
+  --skz-ul-fill: var(--skz-color);
+  --skz-bg-pos: 0 0;
+  --skz-bg-size: 100vw 100vh;
+}
+
+[skz][skz-engine=svg][skz-effect=pulse] {
+  --skz-bg-img: var(--skz-svg-pulse);
+}
+
+[skz][skz-engine=svg][skz-effect=shimmer] {
+  --skz-bg-img: var(--skz-svg-shimmer);
+}
+
+@supports (-webkit-touch-callout: none) {
+  [skz][skz-engine=svg][skz-effect=shimmer] {
+    --skz-bg-img: var(--skz-svg-pulse);
+  }
+}
+/* ===== global 方案：继承防火墙 + 老浏览器的 SVG 降级（skeletonizer/global，global.css）=====
+ * pulse / shimmer 的根驱动在所有基底里（core.css / explicit.css / base.css，见 _driver.scss），这里不重复。
+ * 防火墙配合 JS（skeletonizer/global）：长列表只有视口内的项参与逐帧重算。
+ * 不支持 @property 的浏览器由 JS（skeletonizer/global）把根切到 SVG 方案（skz-engine="svg"，规则在 _svg.scss，这里 @use 一份，
+ * Sass 同一模块只输出一次，all.css 里只有一份）；JS 执行前（SSR 首屏）和 blob 生成失败时，退回基底的 fade。 */
+@supports (color: rgb(from red r g b)) {
+  /* 继承防火墙（enable 给视口外的列表项打 skz-fw）：在它身上把会逐帧变化的变量钉成静态值。
+   * 根上变量变化时它自己重算一次，计算值不变，Chrome 就不再往它的后代传播重算；
+   * 派生变量（--skz-fill / --skz-ul-fill / --skz-bg-pos）在根上已展开成具体值，必须一起重声明才挡得住，
+   * 重声明的三条派生变量与根规则共用 _drivers.scss 的 mixin。
+   * clip 根上没有派生别名（文字条背景在文字元素自己身上读 --skz-fill / --skz-bg-img），钉住这两个就够了。
+   * 实测 16000 元素 shimmer 从约 19 帧到 60 帧。打了防火墙的项里骨头静止，所以只用于视口外 */
+  [skz] [skz-fw] {
+    --skz-pulse-c: var(--skz-color);
+    --skz-shimmer-p: -60;
+  }
+  [skz][skz-effect=pulse] [skz-fw] {
+    --skz-fill: var(--skz-pulse-c);
+  }
+  [skz][skz-effect=shimmer] [skz-fw] {
+    --skz-bg-pos: calc(var(--skz-shimmer-p) * 1vw) 0;
+  }
+  [skz]:is([skz-effect=pulse], [skz-effect=shimmer]):where([skz-text]:not([skz-text=clip]):not([skz-text=leaf])) [skz-fw] {
+    --skz-ul-fill: var(--skz-pulse-c);
+  }
+  /* iOS 分支（见 _driver.scss）里 --skz-fill 读 pulse 颜色，防火墙里同步钉住 */
+  @supports (-webkit-touch-callout: none) {
+    [skz][skz-effect=shimmer] [skz-fw] {
+      --skz-fill: var(--skz-pulse-c);
+    }
+  }
+}

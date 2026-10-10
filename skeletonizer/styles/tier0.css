@@ -1,16 +1,7 @@
 @charset "UTF-8";
 /* ===== 第 0 档：默认浏览器支持 CSS 变量（Safari 9.1+/Chrome 49+/Firefox 31+），不再做 @supports 判断=====
- * 标签白名单 + 背景色。粗糙：嵌套命中会连成更大一块（颜色不透明且一致，不会变深）。属于自动推导，explicit.css 里没有。 */
-/* 退出兜底层：直接子元素不再整块涂灰，后代恢复可见 */
-[skz] > *:not([skz-ignore]) {
-  background-image: none !important;
-  color: inherit !important;
-}
-
-[skz] > * * {
-  visibility: visible !important;
-}
-
+ * 标签白名单 + 背景色。粗糙：嵌套命中会连成更大一块（颜色不透明且一致，不会变深）。属于自动推导，explicit.css 里没有。
+ * 带兜底层的 base.css 在这之前还有一份"退出兜底层"（_tier0-exit.scss）。 */
 /* 文字类标签 -> 背景色骨头
  * 注：藏文字统一使用 -webkit-text-fill-color 而不是 color。因为 color 会继承给子孙，导致忽略区也看不见；
  * -webkit-text-fill-color 支持度极高（Chrome 1+、Safari 3+、Firefox 49+），且可以被忽略区低优先级覆盖。 */

@@ -1,0 +1,12 @@
+@charset "UTF-8";
+/* ===== 退出兜底层（完整版）：直接子元素不再整块涂灰，后代恢复可见 =====
+ * 只有带兜底层（base.css）时才需要；core.css 没有兜底层，不含这两条。
+ * 必须排在兜底层之后、第 0 档规则之前（同优先级，后写的赢）。 */
+[skz] > *:not([skz-ignore]) {
+  background-image: none !important;
+  color: inherit !important;
+}
+
+[skz] > * * {
+  visibility: visible !important;
+}

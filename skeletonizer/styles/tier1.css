@@ -1,16 +1,20 @@
 @charset "UTF-8";
 /* ===== 第 1 档：下划线法文字骨头（Safari 12.1+/Chrome 89+/Firefox 70+）=====
  * 给所有文字画一根超粗下划线：沿真实文字行延伸，最后一行自然变短，混合文字也覆盖。
- * 本身不能渐变、没有圆角：颜色读 --skz-ul-fill，pulse / shimmer 时由根驱动只能变色（见 effects）；
+ * 本身不能渐变、没有圆角：颜色读 --skz-ul-fill，pulse / shimmer 时由根驱动只能变色（见 driver-color）；
  * 默认的 clip 模式在它之上叠一层 background-clip:text 填充（见下）。
- * skz-text="tofu" 的根：$clip 排除了它，没引 tofu.css 时外观就是这里的 underline；引了 tofu.css 则换成方块字体。 */
+ * 完整版保留这一档的全部渐进行为，给"有 text-decoration-thickness、没有 :has()"的浏览器用；
+ * 支持两者的浏览器在 core.css 里走合并后的现代档（_modern.scss），规则由同一批积木（_text.scss）生成。
+ * skz-text="tofu" 的根：$clip 不含它，没引 tofu.css 时外观就是这里的 underline；引了 tofu.css 则换成方块字体；
+ * 其他未知取值同样落到 underline 外观。 */
 @supports (text-decoration-thickness: 1em) {
   /* 文字标签上第 0 档的背景色退场，改用下划线：圆角归零对 clip / underline / tofu 都生效；
-   * 背景色 / 背景图开关只挂在 underline / tofu 根上，clip 根不声明（tier0 读 --skz-tbg 缺省时自然回落到 --skz-fill / --skz-bg-img） */
+   * 背景色 / 背景图开关只挂在 underline / tofu / 未知取值的根上（$color-modes），clip 根不声明
+   * （tier0 读 --skz-tbg 缺省时自然回落到 --skz-fill / --skz-bg-img） */
   [skz]:not([skz-text=leaf]) {
     --skz-tradius: 0px;
   }
-  [skz]:where([skz-text=underline], [skz-text=tofu]) {
+  [skz]:where([skz-text]:not([skz-text=clip]):not([skz-text=leaf])) {
     --skz-tbg: transparent;
     --skz-timg: none;
   }
@@ -32,31 +36,31 @@
    * 想要纯下划线（颜色脉冲，最便宜）在根上写 skz-text="underline"。
    * 局限：不在文字标签清单里、又直接含文字的元素（如裸 div 文本）会不可见；比 underline 贵（GPU 约 2.5 倍）；
    * @supports 只能判断属性存在，判断不了装饰线是否参与裁剪（规范要求参与，仅 Chrome 实测过）。 */
-  [skz]:not([skz-text=underline]):not([skz-text=leaf]):not([skz-text=tofu]) {
-    /* tbg / timg 置为 initial（无效值），文字骨头回落读 --skz-fill / --skz-bg-img；
-     * 显式写出是为了嵌套在 underline / tofu 根里时不继承外层的 transparent。值是静态的，不增加逐帧重算 */
+  /* tbg / timg 置为 initial（无效值），文字骨头回落读 --skz-fill / --skz-bg-img；
+   * 显式写出是为了嵌套在 underline / tofu 根里时不继承外层的 transparent。值是静态的，不增加逐帧重算 */
+  [skz]:not([skz-text]), [skz][skz-text=clip] {
     --skz-tbg: initial;
     --skz-timg: initial;
     --skz-dc: transparent;
     --skz-ul-thickness: 1.15em;
   }
-  [skz]:not([skz-text=underline]):not([skz-text=leaf]):not([skz-text=tofu]) :is(p, span, h1, h2, h3, h4, h5, h6, a, li, label, td, th, strong, b, em, small, dt, dd, blockquote, figcaption):not([skz-ignore]):not([skz-bone]):not([skz-leaf]):not([skz-leaf] *):not([skz-ignore] *) {
+  :is([skz]:not([skz-text]), [skz][skz-text=clip]) :is(p, span, h1, h2, h3, h4, h5, h6, a, li, label, td, th, strong, b, em, small, dt, dd, blockquote, figcaption):not([skz-ignore]):not([skz-bone]):not([skz-leaf]):not([skz-leaf] *):not([skz-ignore] *) {
     -webkit-background-clip: text;
     background-clip: text;
   }
   /* 浏览器不认 background-clip:text：撤回 clip，退回上面的 underline（规则与 clip 同优先级，写在后面）。
    * 装饰线颜色：--skz-dc 清掉后读 --skz-ul-fill，clip 根上没有 pulse 驱动的 --skz-ul-fill，所以回落到静态 --skz-color
-   * （这类浏览器没有 clip 的光带，文字条是静态灰，可接受；svg 引擎本来就是静态 --skz-color） */
+   * （这类浏览器没有 clip 的光带，文字条是静态灰，可接受；svg 引擎本来就是静态 --skz-color）。
+   * core 的门槛（Chrome 119+ / Safari 16.4+ / Firefox 128+）都认 background-clip:text，core 里没有这一支 */
   @supports not ((-webkit-background-clip: text) or (background-clip: text)) {
-    [skz]:not([skz-text=underline]):not([skz-text=leaf]):not([skz-text=tofu]) {
+    [skz]:not([skz-text]), [skz][skz-text=clip] {
       --skz-tbg: transparent;
       --skz-timg: none;
       --skz-dc: initial;
       --skz-ul-thickness: 1em;
     }
   }
-  /* 控件（见 $control-tags）整块当骨头：自身不画下划线，免得在骨头块上叠一根条；多写一层 :not([skz-text="leaf"]) 把优先级抬到压过上面的通配规则。
-   * 后代不用管：button 的后代在 tier0 已 visibility:hidden，input / textarea 没有元素后代；只有 select 的 option 单独压一下 */
+  /* 控件（见 $control-tags）整块当骨头：自身不画下划线，见 sk-text-controls */
   [skz]:not([skz-text=leaf]) :is(input, textarea, select, button):not([skz-ignore]),
   [skz]:not([skz-text=leaf]) select:not([skz-ignore]) * {
     text-decoration: none !important;
