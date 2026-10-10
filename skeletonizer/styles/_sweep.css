@@ -1,6 +1,5 @@
 @charset "UTF-8";
 /* ===== sweep：整个根一个 ::after 扫光条，transform 平移，跑在合成器线程（skeletonizer/sweep.css） =====
- * 光带默认竖直（倾斜见 --skz-sweep-skew 的注释）。
  * 浅色用 lighten 混合，深色用容器色 alpha 叠加，让它主要提亮/扫过骨头。
  * 代价：根会变成 position:relative + 左右裁剪（overflow-x: clip）；根自己的 ::after 会被占用；根里的 skz-ignore 内容也会被扫到。 */
 [skz] {
@@ -11,9 +10,9 @@
   --skz-sweep-bleed: 16px;
   /* sweep 光带宽度，相对根宽，可在根上覆盖 */
   --skz-sweep-w: 35%;
-  /* 光带倾斜角，默认 0（竖直）。skewX 绕元素中心倾斜，根越高两端被斜出去越远（偏移 = 高度 / 2 * tan(角度)），
-   * 根高超过约 16 倍根宽（1200px 宽约 19k px）视口里就看不到光带了。想要斜光带可在根上设 -12deg，别用在长列表上 */
-  --skz-sweep-skew: 0deg;
+  /* 光带倾斜角，默认 -12deg。skewX 绕元素中心倾斜，根越高两端被斜出去越远（偏移 = 高度 / 2 * tan(角度)），
+   * 根高超过约 16 倍根宽（1200px 宽约 19k px）视口里就看不到光带了。长根（尤其手机窄屏）请在根上设 0deg（竖直），或配合 fit 限制根高 */
+  --skz-sweep-skew: -12deg;
   /* 上下淡出遮罩：光带上下各多出 --skz-sweep-bleed，淡出只发生在多出来的这一截，根的盒子内全程满强度 */
   --skz-sweep-mask: linear-gradient(to bottom, transparent 0, #000 var(--skz-sweep-bleed), #000 calc(100% - var(--skz-sweep-bleed)), transparent 100%);
 }

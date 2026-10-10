@@ -1,0 +1,56 @@
+@charset "UTF-8";
+/* ===== tofu 文字模式（skeletonizer/tofu.css；根上写 skz-text="tofu"，enable(el, { text: "tofu" })）=====
+ * 文字元素换成一个"全方块字体"（skz-tofu：所有字符都是实心方块，空白也是），颜色读 --skz-ul-fill，
+ * 排版（字号 / 行高 / 换行 / 最后一行变短）仍由浏览器用方块的宽度排。不用 background-clip，也不画下划线。
+ * 不引本文件时：skz-text="tofu" 的根在 base.css 里退回 underline 的外观（$clip 排除了它，通用下划线规则照常生效）。
+ * 字体以 data URI 内联：严格 CSP 需放行 font-src data:；字体加载失败 / 被 CSP 挡掉时，真实文字会以骨头色露出来，
+ * 没有 JS 回退（要回退请自己监听 document.fonts 再改成 clip）。
+ * 字体由 scripts/gen-tofu-font.py 生成（_tofu-font.scss 是生成物）。 */
+@font-face {
+  font-family: skz-tofu;
+  /* block：字体没到之前文字不可见，不闪真实文字；weight 给范围，粗体不触发合成加粗（方块会变宽） */
+  font-display: block;
+  font-style: normal;
+  font-weight: 100 900;
+  src: url("data:font/woff2;base64,d09GMgABAAAAAAXAAAoAAAAAF6AAAAV1AAEAAAAAAAAAAAAAAAAAAAAAAAAAAAAABmAAqTgKgQxmATYCJAMWCw4ABCAFYwdFG7UWB2Rei7jDxgHQzWZB/v/PSzpkDNDDgHsvapXF1cBA8IikoOzbYEn7DpZJOmiSz4MGgVl3oQcbIlTUXkwDZLwDLUWdq3g7l2D3kOy1gi2Yh2R2vEuA0DejoqtYbeQ6eYIguImua9siPZOfDX7EK9j3KebLo51fjkdAwwCEf3MRRHvfze5telP/kg5doQTBNuFAqATlisOIahwWWUp51s7rM4wy/zizWaR4A6XUp0yD1bbi4dv5oKBLUp9IkU9wMMCJTLho90V2BcDRnBY/AHQBwKJSnZJrHFA+rAPzPEJOo3CgCtcMgA8gf6fH/SVJkiSZmZmZmSXBQ+TAPHMbpbPfvv7+I4pXnmxA9gtQE/+j20rOd+MVtVAYEfDcMMXG3hGhBQgM/DUcABhgphsnZrrD53tnZiZJ0t587m9mZmYmSZIkSZKEeKsnQ8KAB55L1fwMO5Gs56GABnFPiq/ZViNU5DWwQCWsYNHOsGQl0Gpbuw1EVMQjEaUG9fJR0HdU+RdfVrwwPHp8RO7ZiXZ1N7/muYFY/2fBOzWBVc00y4/S8kN5kDDpwKRpM+aMdCdet9Z0Xd3cIRgcgUShMVgcHn+BSCJTqDQ6g8lic7g8MMBBCg208IOALxCKxBKpTK5QqtQazdq179IP4zQv67Yfj+fr/fnCCIrhhFEkRTMsxwuiJCuqphumZTuu5wdhFCdplhdlVTdt1w/jNC/rth/ndT+v9+f7+wMgBCMohhMkRTMsxwuiJCuqphumZTuu5wdhFCdplhdlVTdt1w/jNC/rth/ndX++vz+ACBPKuLQgKZphOV4QJVnRqOpuu34Yp3lZt/04r/t5ESaUcSGV9oxvd7euz/lz1ChR0bEB338F/vLXrm7uEAyOQKLQGCwOT0gkkSlUGp3BZLE5XB4AFXjIoIUO/mDAFwhFYolUJlcoVWqN5u27OoP7YZzmZd324/F8vT9fGEExnCApmmE5XhAlWVE13TAt23E9PwijOEmzvCirumm7fhineVm3/Tiv+3m9P9/fHwAhGEExnCApmmE5XhAlWVE13TAt23E9PwijOEmzvCirumm7fhineVm3/Tiv+/P9/WcDIAQjKIYTJEUzLMcLoiQrGlVbpzcYTWaL1WZ3OF1ujxdhQhkXUmnP+Na27Yy1/vCnfEITIgNAFztTHTU5MV4W0YhEOELohi7o1E1d5mn8GPR73U671WzUa9VKeeli4XyWTo6jMOi7tqmrklMMaf2eu8e2TEPXlBScUYIRBN4el8NmMRl0GpVCJhEJeBwWg0YhEXAYFAIGAQE8HTaLyaDTqBQyiUgAuGwmnUom4rHeGa1EyJONlpxiCHzPdWzLNHRNVWRJFDijBCMIvLNGK2FC8Ob/7tlrjt4qw02FCeH9XMe2TEPXVEWWRIHnWIamSALHUASGQMDz2JZp6JqqyJIoAPcJSPeTcmVTql+5VYgS5qaFuc3C3LIwd8y+cg7ib+AMYBKJKUwjMBOlWXPCvJFMdGHbiebUPZm4L7YPksOqSpq229i3O7A4Y6m9hEhZ7o2g97o6PegLN/uifkhHvYt0ySXhcu8GujePFbpVU6EHF0+zF++6NL2Ml8a4HPCcXvR+j/zxL6nxv/tfXRHOU75qkJsMDF0Zpmb5lBj/uBmID+BjTYUIYmhnX2G77tfcfHyIScYxa8yqLdSeEP04ys9NrIxjYi5ZiK2syolD9NElzOEMn3P9jev5DX+3l+GNB+3ScNEYvXuCXdf8yPAgYtpjcx/EeSAnaS+vuB1XArck/6hcESBMsvatCZOaqClh0cLo7jRvdNwevlH0rfc/B4LuYNdMQnlVo4ZsIfxgHM1KULSo8f96MpvbfKWvsrndThkAAAA=") format("woff2");
+}
+/* 文字标签（清单同 clip）和它们里面的后代（如 p 里的 code）吃方块字体。
+ * 根上没有忽略区（没有 skz-has-ignore）时直接匹配，不带 :has，保持便宜 */
+[skz][skz-text=tofu]:not([skz-has-ignore]) :is(p, span, h1, h2, h3, h4, h5, h6, a, li, label, td, th, strong, b, em, small, dt, dd, blockquote, figcaption):not([skz-ignore]):not([skz-bone]):not([skz-leaf]):not([skz-leaf] *):not([skz-ignore] *):not(:is(img, video, canvas, picture, iframe, svg, input, textarea, select, button) *),
+[skz][skz-text=tofu]:not([skz-has-ignore]) :is(p, span, h1, h2, h3, h4, h5, h6, a, li, label, td, th, strong, b, em, small, dt, dd, blockquote, figcaption) *:not(:is(img, video, canvas, picture, iframe, svg, input, textarea, select, button)):not([skz-ignore]):not([skz-bone]):not([skz-leaf]):not([skz-leaf] *):not([skz-ignore] *):not(:is(img, video, canvas, picture, iframe, svg, input, textarea, select, button) *) {
+  font-family: skz-tofu !important;
+  color: var(--skz-ul-fill, var(--skz-color)) !important;
+  -webkit-text-fill-color: currentColor !important;
+  text-decoration: none !important;
+  letter-spacing: 0 !important;
+  word-spacing: 0 !important;
+  font-kerning: none !important;
+  font-variant-ligatures: none !important;
+  font-synthesis: none !important;
+  font-feature-settings: normal !important;
+  text-rendering: optimizeSpeed !important;
+  -webkit-text-stroke: 0 !important;
+  text-shadow: none !important;
+}
+
+/* 根上有忽略区（enable() 检测到后自动加 skz-has-ignore）：里面含 skz-ignore 的文字元素不套方块。
+ * 否则行内的忽略区会继承方块字体，被画成一条骨头；这些元素退回 underline 的外观，和 clip / underline 模式
+ * 对含忽略区祖先的处理一致（见 tier2）。需要 :has，不支持的浏览器上这类根整体退回 underline */
+@supports selector(:has(*)) {
+  [skz][skz-text=tofu][skz-has-ignore] :is(p, span, h1, h2, h3, h4, h5, h6, a, li, label, td, th, strong, b, em, small, dt, dd, blockquote, figcaption):not([skz-ignore]):not([skz-bone]):not([skz-leaf]):not([skz-leaf] *):not([skz-ignore] *):not(:is(img, video, canvas, picture, iframe, svg, input, textarea, select, button) *):not(:has([skz-ignore])),
+  [skz][skz-text=tofu][skz-has-ignore] :is(p, span, h1, h2, h3, h4, h5, h6, a, li, label, td, th, strong, b, em, small, dt, dd, blockquote, figcaption) *:not(:is(img, video, canvas, picture, iframe, svg, input, textarea, select, button)):not([skz-ignore]):not([skz-bone]):not([skz-leaf]):not([skz-leaf] *):not([skz-ignore] *):not(:is(img, video, canvas, picture, iframe, svg, input, textarea, select, button) *):not(:has([skz-ignore])) {
+    font-family: skz-tofu !important;
+    color: var(--skz-ul-fill, var(--skz-color)) !important;
+    -webkit-text-fill-color: currentColor !important;
+    text-decoration: none !important;
+    letter-spacing: 0 !important;
+    word-spacing: 0 !important;
+    font-kerning: none !important;
+    font-variant-ligatures: none !important;
+    font-synthesis: none !important;
+    font-feature-settings: normal !important;
+    text-rendering: optimizeSpeed !important;
+    -webkit-text-stroke: 0 !important;
+    text-shadow: none !important;
+  }
+}

@@ -14,7 +14,7 @@
 /* 文字类标签 -> 背景色骨头
  * 注：藏文字统一使用 -webkit-text-fill-color 而不是 color。因为 color 会继承给子孙，导致忽略区也看不见；
  * -webkit-text-fill-color 支持度极高（Chrome 1+、Safari 3+、Firefox 49+），且可以被忽略区低优先级覆盖。 */
-[skz] p:not([skz-ignore]), [skz] span:not([skz-ignore]), [skz] h1:not([skz-ignore]), [skz] h2:not([skz-ignore]), [skz] h3:not([skz-ignore]), [skz] h4:not([skz-ignore]), [skz] h5:not([skz-ignore]), [skz] h6:not([skz-ignore]), [skz] a:not([skz-ignore]), [skz] li:not([skz-ignore]), [skz] label:not([skz-ignore]), [skz] td:not([skz-ignore]), [skz] th:not([skz-ignore]), [skz] strong:not([skz-ignore]), [skz] b:not([skz-ignore]), [skz] em:not([skz-ignore]), [skz] small:not([skz-ignore]), [skz] button:not([skz-ignore]), [skz] dt:not([skz-ignore]), [skz] dd:not([skz-ignore]), [skz] blockquote:not([skz-ignore]), [skz] figcaption:not([skz-ignore]) {
+[skz] p:not([skz-ignore]), [skz] span:not([skz-ignore]), [skz] h1:not([skz-ignore]), [skz] h2:not([skz-ignore]), [skz] h3:not([skz-ignore]), [skz] h4:not([skz-ignore]), [skz] h5:not([skz-ignore]), [skz] h6:not([skz-ignore]), [skz] a:not([skz-ignore]), [skz] li:not([skz-ignore]), [skz] label:not([skz-ignore]), [skz] td:not([skz-ignore]), [skz] th:not([skz-ignore]), [skz] strong:not([skz-ignore]), [skz] b:not([skz-ignore]), [skz] em:not([skz-ignore]), [skz] small:not([skz-ignore]), [skz] dt:not([skz-ignore]), [skz] dd:not([skz-ignore]), [skz] blockquote:not([skz-ignore]), [skz] figcaption:not([skz-ignore]) {
   background-color: var(--skz-tbg, var(--skz-fill, var(--skz-color))) !important;
   background-position: var(--skz-bg-pos, 0 0);
   background-image: var(--skz-timg, var(--skz-bg-img, none)) !important;
@@ -25,7 +25,7 @@
 }
 
 /* 媒体与控件 -> 背景色骨头（图片靠透明 mock 图让背景透出来） */
-[skz] img:not([skz-ignore]), [skz] video:not([skz-ignore]), [skz] canvas:not([skz-ignore]), [skz] picture:not([skz-ignore]), [skz] iframe:not([skz-ignore]), [skz] svg:not([skz-ignore]), [skz] input:not([skz-ignore]), [skz] textarea:not([skz-ignore]), [skz] select:not([skz-ignore]) {
+[skz] img:not([skz-ignore]), [skz] video:not([skz-ignore]), [skz] canvas:not([skz-ignore]), [skz] picture:not([skz-ignore]), [skz] iframe:not([skz-ignore]), [skz] svg:not([skz-ignore]), [skz] input:not([skz-ignore]), [skz] textarea:not([skz-ignore]), [skz] select:not([skz-ignore]), [skz] button:not([skz-ignore]) {
   background-color: var(--skz-fill, var(--skz-color)) !important;
   background-position: var(--skz-bg-pos, 0 0);
   background-image: var(--skz-bg-img, none) !important;
@@ -43,7 +43,22 @@
   visibility: hidden !important;
 }
 
+/* button 是控件，整块当一块骨头（见 $media-tags）：内部的 span / 图标一并藏起来，不在按钮块上再叠小骨头。
+ * 忽略区里的 button 自己不当骨头，后代恢复可见（同优先级，写在后面） */
+[skz] button:not([skz-ignore]) * {
+  visibility: hidden !important;
+}
+
+[skz] [skz-ignore] button * {
+  visibility: visible !important;
+}
+
 /* 骨头圆角：用 :where() 把优先级降到 0，元素自己写了 border-radius（如圆形头像）就保留它的形状 */
-:where([skz] :is(p, span, h1, h2, h3, h4, h5, h6, a, li, label, td, th, strong, b, em, small, button, dt, dd, blockquote, figcaption):not([skz-ignore])) {
+:where([skz] :is(p, span, h1, h2, h3, h4, h5, h6, a, li, label, td, th, strong, b, em, small, dt, dd, blockquote, figcaption):not([skz-ignore])) {
   border-radius: var(--skz-tradius, var(--skz-radius));
+}
+
+/* button 整块骨头的圆角：同样降到 0 优先级，按钮自己写了 border-radius 就保留 */
+:where([skz] button:not([skz-ignore])) {
+  border-radius: var(--skz-radius);
 }
