@@ -35,17 +35,31 @@
   "type": "module",
   "sideEffects": [
     "**/*.css",
-    "./src/variants/*.ts",
+    "./src/core/index.ts",
+    "./src/full/index.ts",
+    "./src/full/variants/*.ts",
     "./dist/*.mjs"
   ],
-  "main": "./dist/index.mjs",
-  "module": "./dist/index.mjs",
-  "types": "./dist/index.d.mts",
+  "main": "./dist/core-js.mjs",
+  "module": "./dist/core-js.mjs",
+  "types": "./dist/core.d.mts",
   "exports": {
     ".": {
-      "types": "./dist/index.d.mts",
-      "import": "./dist/index.mjs",
-      "default": "./dist/index.mjs"
+      "types": "./dist/core.d.mts",
+      "node": "./dist/core-js.mjs",
+      "default": "./dist/core.mjs"
+    },
+    "./core.css": "./dist/core.css",
+    "./explicit": {
+      "types": "./dist/explicit.d.mts",
+      "node": "./dist/explicit-js.mjs",
+      "default": "./dist/explicit.mjs"
+    },
+    "./explicit.css": "./dist/explicit.css",
+    "./full": {
+      "types": "./dist/full.d.mts",
+      "import": "./dist/full.mjs",
+      "default": "./dist/full.mjs"
     },
     "./vue": {
       "types": "./dist/vue.d.mts",
@@ -93,7 +107,6 @@
       "default": "./dist/all-js.mjs"
     },
     "./base.css": "./dist/base.css",
-    "./explicit.css": "./dist/explicit.css",
     "./global.css": "./dist/global.css",
     "./svg.css": "./dist/svg.css",
     "./sweep.css": "./dist/sweep.css",

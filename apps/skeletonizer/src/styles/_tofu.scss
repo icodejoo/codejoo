@@ -23,7 +23,7 @@ $tofu-media: sk-join($media-tags);
 $tofu-skip: ":not([skz-ignore])#{$text-skip}:not(:is(#{$tofu-media}) *)";
 
 /// 方块文字的声明：方块字体 + 纯色 + 撤掉下划线 + 关掉会改变字宽 / 字形的排版特性。
-/// 颜色读 --skz-ul-fill：global 的 pulse / shimmer 由根上的 pulse 动画驱动（见 _global.scss），svg 引擎下是静态 --skz-color
+/// 颜色读 --skz-ul-fill：pulse / shimmer 由根上的 pulse 动画驱动（见 _driver.scss、_driver-color.scss），svg 引擎下是静态 --skz-color
 @mixin tofu-text {
   font-family: skz-tofu !important;
   color: var(--skz-ul-fill, var(--skz-color)) !important;

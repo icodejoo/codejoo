@@ -1,0 +1,2 @@
+{"batch":"M","label":"after2","try":1,"started":"2026-10-10T09:31:46.333Z","idleBefore":"timeout mean=31.1 waited=181s","cpuAtStart":"25.2,22.1,26.9","cpuMean":30.8,"cpuP90":38.7,"cpuMax":97.2,"samples":388,"rows":26}
+[M/after2] 采用 cpuMean=30.8 try=1

@@ -1,0 +1,13 @@
+// skeletonizer/core.css：core 默认样式。
+// 目标浏览器 Chrome 119+ / Safari 16.4+ / Firefox 128+（同时具备 @property、相对颜色、:has()、text-decoration-thickness、background-clip:text）；
+// 低于门槛只剩第 0 档（支持 CSS 变量的浏览器：按标签铺静态色块）加 fade。
+// 组成：主题与交互锁 + 第 0 档 + 显式标记（skz-bone / skz-leaf / skz-ignore）+ 现代档（clip 文字骨头 / 控件整块 / 图标）
+//   + fade / solid / 减少动态效果 + fit + 根驱动（pulse / shimmer 纯 CSS 动画，光带降频）。
+// 不含：兜底层、underline / leaf / tofu 文字模式、继承防火墙、svg 降级、sweep、懒渲染（skz-paused）、skz-cv。
+@use "../theme";
+@use "../tier0";
+@use "../marks";
+@use "../modern";
+@use "../effects-core";
+@use "../fit";
+@use "../driver";

@@ -1,8 +1,9 @@
 // demo 页入口脚本：由 index.html 以 <script type="module" src> 引入（Vite 构建时才会打包它）
-import { Bone, enable, disable, registerCustomElements, defineSkzBox } from "../src/index.ts";
+// 走完整版源码入口（等同 import "skeletonizer/full"）：demo 要用到 engine / text / sweep / registerCustomElements 全部能力
+import { Bone, enable, disable, registerCustomElements, defineSkzBox } from "../src/full/index.ts";
 // 注册 global / svg 两个方案（等同 import "skeletonizer/all/js"；样式由下方 loadTier 按档位加载）
-import "../src/variants/global.ts";
-import "../src/variants/svg.ts";
+import "../src/full/variants/global.ts";
+import "../src/full/variants/svg.ts";
 
 // ---------- 自带 shadow DOM 的演示组件 ----------
 class DemoCard extends HTMLElement {
@@ -102,14 +103,14 @@ function apply() {
   $("#btn-fit").textContent = `fit：${state.fit ? "开" : "关"}`;
 }
 
-// 按层叠顺序排列的样式分片（与 src/styles/entries/all.scss 的组成一致）
-const CSS_FILES = ["_theme", "base", "tier0", "_marks", "tier1", "_tofu", "tier2", "_effects-core", "_fit", "_global", "_svg", "_sweep"];
+// 按层叠顺序排列的样式分片（与 src/styles/entries/all.scss 的组成一致；core 的合并现代档 _modern 不在这里，demo 走完整版）
+const CSS_FILES = ["base", "_theme", "_tier0-exit", "tier0", "_marks", "tier1", "_tofu", "tier2", "_effects-core", "_fit", "_driver", "_driver-color", "_lazy", "_firewall", "_svg", "_sweep"];
 // 返回 Promise：样式表全部加载完才 resolve（fit 要按已生效的样式测量，所以 apply 要等它）
 function loadTier(n) {
   document.querySelectorAll("link[data-skz-css]").forEach((l) => l.remove());
   // n=0 仅兜底层（含主题、标记）；n=1 + 第 0 档和全部效果；n=2 + 第 1 档；n=3 + 第 2 档
-  const want = ["_theme", "base", "_marks", "_fit"];
-  if (n >= 1) want.push("tier0", "_effects-core", "_global", "_svg", "_sweep");
+  const want = ["base", "_theme", "_marks", "_fit"];
+  if (n >= 1) want.push("_tier0-exit", "tier0", "_effects-core", "_driver", "_driver-color", "_lazy", "_firewall", "_svg", "_sweep");
   if (n >= 2) want.push("tier1", "_tofu");
   if (n >= 3) want.push("tier2");
   const loads = CSS_FILES.filter((f) => want.includes(f)).map(

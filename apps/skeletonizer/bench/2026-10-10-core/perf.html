@@ -1,0 +1,78 @@
+<!doctype html>
+<html lang="zh"><head><meta charset="utf-8" /><title>perf-core</title>
+<style>body{font:14px/1.5 system-ui,sans-serif;margin:0}.card{display:flex;gap:8px;padding:8px;border:1px solid #ddd;margin:4px}.card img{width:48px;height:48px;border-radius:50%}</style>
+<!-- core 实测基准页：JS / CSS 取自冻结的 dist 快照（serve.mjs 的 /d/），用 import map 把包名指到产物，写法和真实项目一致。
+     URL 参数 css 是逗号分隔的令牌（其余令牌，如换页用的 f<序号>，会被忽略）：
+       core   core-js + core.css（等价 import "skeletonizer" 的浏览器端效果，JS 不带 CSS 的那版 + 手动引 core.css）
+       full   完整版：base.css + global.css + full.mjs + global-js.mjs（等价 import "skeletonizer/global"，带继承防火墙） -->
+<script>
+  const q = new URLSearchParams(location.search), tokens = (q.get("css") || "core").split(","), D = "/d/";
+  const full = tokens.includes("full");
+  const im = document.createElement("script"); im.type = "importmap";
+  im.textContent = JSON.stringify({ imports: full ? { skeletonizer: D + "full.mjs", "skeletonizer/global/js": D + "global-js.mjs" } : { skeletonizer: D + "core-js.mjs" } });
+  document.head.appendChild(im);
+  window.cssReady = Promise.all((full ? ["base", "global"] : ["core"]).map((n) => new Promise((res) => { const l = document.createElement("link"); l.rel = "stylesheet"; l.href = `${D}${n}.css`; l.onload = l.onerror = res; document.head.appendChild(l); })));
+  window.mode = full ? "full" : "core";
+</script>
+</head><body><div id="root"></div>
+<script type="module">
+await window.cssReady;
+import { Bone, enable } from "skeletonizer";
+if (window.mode === "full") await import("skeletonizer/global/js");
+const root = document.getElementById("root");
+const GIF = Bone.image();
+const nf = () => new Promise((r) => requestAnimationFrame(r));
+let off = null, curSpec = null;
+
+/** 一张卡片（8 个元素）：卡片容器、头像图、内容容器、标题、段落、标签 span、图标、按钮 */
+const cardHtml = () => `<div class="card"><img src="${GIF}" alt=""><div><h3>${Bone.text(10)}</h3><p>${Bone.lines(2)}</p><span>${Bone.text(6)}</span> <i class="icon-star"></i><button>${Bone.text(4)}</button></div></div>`;
+
+/** 搭场景：n 张卡片（约 8 个元素 / 张），spec 走真实 enable(root, spec)；返回根下元素总数 */
+window.setup = async (n, spec) => {
+  off?.(); off = null;
+  root.getAttributeNames().forEach((a) => a !== "id" && root.removeAttribute(a));
+  root.removeAttribute("style");
+  window.scrollTo(0, 0);
+  root.innerHTML = Array.from({ length: n }, cardHtml).join("");
+  curSpec = spec;
+  off = enable(root, spec || {});
+  await nf(); await nf();
+  return root.querySelectorAll("*").length;
+};
+
+/** 数 ms 毫秒内的帧数 */
+window.frames = async (ms) => {
+  let f = 0; const end = performance.now() + ms;
+  while (performance.now() < end) { await nf(); f++; }
+  return f;
+};
+
+/** 开启耗时：量真实的 enable() 调用（core 没有防火墙 / inert；完整版含），加一次强制样式 + 布局 */
+window.toggleCost = async () => {
+  off?.(); off = null; void root.offsetHeight; await nf(); await nf();
+  const t = performance.now(); off = enable(root, curSpec || {}); void root.offsetHeight; const d = performance.now() - t;
+  await nf(); await nf(); return d;
+};
+
+/** 状态快照：防火墙标记数、根属性、计算样式，供正确性抽查 */
+window.snap = () => {
+  const items = [...root.children];
+  const probe = root.querySelector("h3");
+  const cs = probe ? getComputedStyle(probe) : null;
+  const rcs = getComputedStyle(root);
+  return {
+    mode: window.mode, items: items.length, fw: items.filter((c) => c.hasAttribute("skz-fw")).length,
+    rootAttrs: Object.fromEntries(root.getAttributeNames().map((a) => [a, root.getAttribute(a).slice(0, 40)])),
+    rootAnim: rcs.animationName, probeBg: cs && cs.backgroundColor, probeImg: cs && cs.backgroundImage.slice(0, 40), probeClip: cs && cs.backgroundClip,
+  };
+};
+/** 采样根上 --skz-shimmer-p：ms 毫秒内每帧读一次，返回帧数与每秒变化次数（降频是否生效）。会触发强制样式重算，只在非 trace 阶段用 */
+window.sampleP = async (ms) => {
+  const vals = []; const t0 = performance.now();
+  while (performance.now() - t0 < ms) { await nf(); vals.push(+getComputedStyle(root).getPropertyValue("--skz-shimmer-p")); }
+  let changes = 0;
+  for (let i = 1; i < vals.length; i++) if (vals[i] !== vals[i - 1]) changes++;
+  return { frames: vals.length, changesPerSec: +(changes / ((performance.now() - t0) / 1000)).toFixed(1), anim: getComputedStyle(root).animation.slice(0, 160) };
+};
+window.ready = true;
+</script></body></html>

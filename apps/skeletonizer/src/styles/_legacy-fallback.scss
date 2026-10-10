@@ -1,8 +1,8 @@
 /* ===== 老浏览器降级（solid / sweep）：当前未打包，仅保留作参考 =====
  * 没有任何入口 @use 本文件，dist 里不会出现这些规则。
  * 重新启用需要两步：JS（enable）恢复写根上的 skz-fallback 属性，并把 SkzFallback 类型加回 "solid" | "sweep"；
- * 再把本文件挂到某个入口（如 _global.scss 里 @supports not (color: rgb(from red r g b)) 内 @include）。
- * 默认 svg 降级已改由 JS 完成（见 _svg.scss、variants/global.ts），不在这里。
+ * 再把本文件挂到某个入口（如 _driver.scss 里 @supports not (color: rgb(from red r g b)) 内 @include）。
+ * 默认 svg 降级已改由 JS 完成（见 _svg.scss、full/variants/global.ts），不在这里。
  * sweep 本身（_sweep.scss / _sweep-mixin.scss / sweep.css 入口）不受影响。 */
 @use "sweep-mixin" as *;
 

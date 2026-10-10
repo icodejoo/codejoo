@@ -1,6 +1,31 @@
 # Changelog
 
-## 0.1.0
+## 0.1.0 - 2026-10-10
+
+首次发布。下面前半部分是发布前最后一轮的 core / 完整版拆分（其中的"迁移说明"针对发布前的预览写法），后半部分是更早的开发记录。
+
+- **包拆成 core + 完整版扩展**（破坏性）：
+  - `skeletonizer`（根入口）现在是 **core**：`enable` / `disable` / `<skz-box>` / `Bone` / `registerExtension`，只认 `effect`（fade / solid / pulse / shimmer）和 `fit`，默认带 `core.css`（见下面的 CSS 分层）。Node / SSR 走 `node` 条件拿到不带 CSS 的纯 JS 版。默认导出 `skz` 对象（与全局 `skz` 是同一个对象，`import skz from "skeletonizer"`；`/explicit`、`/full` 同理）。
+  - `skeletonizer/explicit`：core + `explicit.css`，其余同上。
+  - **`skeletonizer/full`**：core + 完整版扩展，不带 CSS。文字模式（`text`）、pulse / shimmer 的方案调度（`engine` / `fallback`）、视口外暂停动画（懒渲染）、`registerCustomElements`、`sweep` 效果都在完整版。`skeletonizer/global`、`/svg`、`/all`（含 `/js`）内部自动带上完整版扩展，路径与用法不变。
+  - 迁移：原来 `import { enable, registerCustomElements } from "skeletonizer"` 用到 `text` / `engine` / `fallback` / `sweep` / `registerCustomElements` 的，改成 `from "skeletonizer/full"`；只用 `effect` / `fit` 的不用改。`registerCustomElements` 只在完整版导出。适配层 `skeletonizer/vue` / `/react` / `/svelte` 路径不变，直接引用 core 模块，不带 CSS、不挂全局。
+- **CSS 分层**（core 与完整版各取所需）：
+  - `core.css`：目标 Chrome 119+ / Safari 16.4+ / Firefox 128+（同时具备 `@property`、相对颜色、`:has()`、`text-decoration-thickness`、`background-clip:text`）。组成 = 主题与交互锁 + 第 0 档（按标签铺静态色块）+ 显式标记 + **现代档**（clip 文字骨头、控件整块、图标启发式、忽略区下划线修正，用一个 `@supports` 同时要求 `text-decoration-thickness` 和 `:has()`）+ fade / solid / 减少动态效果 + fit + 根驱动（pulse / shimmer 纯 CSS 动画，光带降频）。低于门槛只剩第 0 档加 fade。不含兜底层、underline / leaf / tofu、防火墙、svg 降级、sweep、懒渲染（`skz-paused`）、`skz-cv`；clip 的 `@supports not (background-clip: text)` 撤回分支在 core 里删掉（门槛已保证支持）。core 的规则只认没写 `skz-text` 的根。
+  - `explicit.css`（core 与完整版共用）= 主题 + 交互锁 + 显式标记 + fade / solid / 减少动态效果 + fit + 根驱动 + 懒渲染 `skz-paused` + `skz-cv`。**恢复了懒渲染规则**：`explicit.css` + 完整版 JS 的组合里视口外的根照常暂停动画；`core.css` 仍不含这两段（core 没有懒渲染扩展）。
+  - `base.css`（完整版）= 兜底层（最前）+ 完整的四档推导（保留原 tier1 / tier2 的渐进行为，给"有 `text-decoration-thickness` 没有 `:has()`"之类的中间浏览器；含 underline / leaf 文字模式）+ 根驱动（gradient 驱动，加 underline / tofu 的纯色驱动）+ 懒渲染 `skz-paused` + `skz-cv`。
+  - `global.css`（完整版变体）**只剩**继承防火墙 + 老浏览器 SVG 降级规则；pulse / shimmer 的根驱动（`@property`、关键帧、降频、iOS 分支）挪到各基底里，防火墙的重声明清单和 pulse 挂载选择器由 `_lists.scss` 里的"文字模式 → 驱动"表生成。`svg.css` / `sweep.css` / `tofu.css` 不变，`all.css` = `base` + `global` + `svg` + `sweep` + `tofu`。
+  - **行为变化**：只引 `base.css`（或 `explicit.css`）不引 `global` 时，`pulse` / `shimmer` 在 Chrome 119+ 等支持相对颜色的浏览器里直接有纯 CSS 动画（以前退回 fade）。`global` 现在只负责防火墙（长列表优化）和老浏览器的 SVG 降级。
+  - **clip 改成正向选择**：clip 根 = `[skz]:not([skz-text])` 或 `[skz][skz-text="clip"]`（以前是排除 underline / leaf / tofu）。**任何未知的 `skz-text` 取值现在落到 underline 外观**（以前落到 clip）；`tofu` 没引 `tofu.css` 时仍是 underline 外观，`leaf` 不受影响。underline / tofu / 未知取值的背景开关和纯色驱动用同一个"有 `skz-text` 且不是 clip / leaf"的挂载选择器。
+  - 宿主样式 `registerCustomElements` 的背景声明与 `sk-bone` 加了漂移测试：`sk-bone` 改了而宿主没跟会让测试失败。
+  - **迁移 / 不要重复引**：用 `skeletonizer/full`（或 `/all`、`/global`、`/svg`）的完整版用户**不要再引 `skeletonizer` 默认入口**（它自带 `core.css`）。两份样式同时存在时 core 的规则只认没写 `skz-text` 的根，对 clip 默认根重复且一致；但 core.css 排在完整版样式**之后**时，它的 shimmer 根规则（同优先级、后写的赢）会盖掉完整版里 underline / tofu / 未知取值根的 pulse 动画，这类根的 shimmer 颜色变成静态。只用 `skeletonizer` 默认入口的用户不受影响。
+- 新增通用扩展点 `registerExtension({ name, sync, release })`（core 导出）：`enable` 每次调用按注册顺序逐个 `sync`，关闭时逐个 `release`，同名后注册的覆盖先注册的。**签名变了**：原来的 `{ engine, sync, release }`（方案扩展）改名为 `registerEngine`，现在从 `skeletonizer/full` 导出，由变体入口注册。文字模式、方案调度、懒渲染都是挂在这个扩展点上的完整版扩展。
+- 全局变量 `skz`：导入 core / explicit / full 任一入口即挂上 `globalThis.skz = { enable, disable, bone, defineSkzBox }`（完整版再补 `registerCustomElements`），免 import 就能 `skz.bone.text(8)`；SSR 里同样挂。已被别人占用的 `skz` 不覆盖（开发模式警告一次）。适配层不挂。
+- 类型按入口变宽：core 只有 `effect` / `fit`；导入 `skeletonizer/full`（或 `/global`、`/svg`、`/all`）后，`EnableOptions` 自动多出 `text` / `engine` / `fallback`，`SkzEffect` 多出 `sweep`，适配层 props 同步变化（`declare module "skeletonizer"` 增强，`test/types` 基于构建产物验证）。
+- `<skz-box>` 始终监听 `loading` / `effect` / `text` / `fallback` / `engine` / `fit` 六个属性并原样传给 `enable`；没加载对应扩展时 `text` / `engine` / `fallback` 被忽略。
+- 开发警告：显式传 `engine` 而该方案没注册（只引了 `global` 却写 `engine: "svg"`，或反过来）时，开发模式 `console.warn` 一次；生产构建里随 `process.env.NODE_ENV` 一并摘掉。
+- 构建产物里保留 `process.env.NODE_ENV` 原样（不再被 rolldown 固化成 `production`），由使用方的打包器决定开发警告去留。
+- 文档按 core / 完整版并列重写（README 中英、`llms.md`、ARCHITECTURE、设计总结、状态页）：开头一张对比表帮使用者选，快速开始分 core 与完整版两条线，新增迁移说明、全局 `skz`、开发模式警告、类型随版本变宽的说明；功能总表每项标明属于 core 还是完整版；体积表按新入口重量（core 4.63 KB、`explicit` 4.16 KB、`full` + `base.css` 6.39 KB，gzip）。
+- core 实测与规模上限（`bench/2026-10-10-core/`，Chrome 154，clip 默认，每格新鲜加载，机器非安静状态）：桌面正常速度下 core 单个根 1000 / 2000 元素的 fade / solid / pulse / shimmer 都是 60.4 帧，4000 元素 pulse 59.2 / shimmer 60.4；6000 元素 pulse 46.4 / shimmer 58 帧，16000 元素 pulse 18.4 / shimmer 16.8 帧（完整版同规模 60.4 帧）；4× CPU 降速下 core 2000 元素只有 pulse 21.2 / shimmer 17.2 帧，504 元素 40.8 / 52 帧。建议：桌面级 CPU 上 core 单根约 4000 元素以内（保守约 2000），再大换完整版；要照顾慢设备门槛低得多。README 新增「core 的规模上限」一节。
 
 - 去掉 CSS 里全部 SVG data URI（约 5 KB，`all.css` 里还重复了一份）：SVG 动画一律由 JS 生成 blob 图；老浏览器（不支持 `@property`）的 SVG 降级也改由 JS 完成（`global` 变体按 `CSS.supports` 检测后调用 `applySvg`）。JS 执行前（SSR 首屏）和 blob 生成失败时，老浏览器显示 fade。严格 CSP 的 SVG 降级需要 `img-src blob:`，`data:` 只剩 `Bone.image` 需要。`all.css` 从 25.2 KB 降到 11.7 KB（gzip 约 2.8 KB 降到 2.1 KB）。
 - `skz-engine="svg"` 改为 blob 图真正挂上后才由 JS 写入（`applySvg` 返回是否挂上），不再由 `enable()` 直接写；没有 JS、JS 未执行或 blob 失败时根上没有该属性，自动落到基底 fade。

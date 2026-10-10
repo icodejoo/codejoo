@@ -1,9 +1,17 @@
-// skeletonizer/base.css：自动推导基底（主题、交互锁、四档推导、显式标记、fade / solid）
-@use "../theme";
+// skeletonizer/base.css：完整版自动推导基底。
+// 组成：兜底层（最前）+ 主题与交互锁 + 四档推导（第 0 档、第 1 档下划线法 / clip、第 2 档 :has()）+ 显式标记
+//   + fade / solid / 减少动态效果 + fit + 根驱动（gradient + underline / tofu 的纯色驱动）+ 懒渲染 skz-paused + skz-cv。
+// 第 1、2 档保留完整的渐进行为（含 underline / leaf 文字模式），给介于第 0 档与现代档之间的浏览器用；
+// core.css 里的现代档是同一批规则的合并版（见 _modern.scss），不重复叠进来。
 @use "../base";
+@use "../theme";
+@use "../tier0-exit";
 @use "../tier0";
-@use "../marks" as marks;
+@use "../marks";
 @use "../tier1";
 @use "../tier2";
 @use "../effects-core";
 @use "../fit";
+@use "../driver";
+@use "../driver-color";
+@use "../lazy";

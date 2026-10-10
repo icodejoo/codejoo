@@ -1,2 +1,3 @@
-// skeletonizer/global.css：global 方案（pulse / shimmer 根驱动 + 防火墙 + 老浏览器 SVG 降级）
-@use "../global";
+// skeletonizer/global.css：global 方案（继承防火墙 + 老浏览器 SVG 降级规则）。
+// pulse / shimmer 的根驱动在各基底（core.css / explicit.css / base.css）里，这里不再有。
+@use "../firewall";

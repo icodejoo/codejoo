@@ -1,8 +1,6 @@
-@use "mixins" as *;
-
-/* ===== 基底效果：fade（默认）/ solid，以及所有方案共用的暂停、减少动态效果、视口外跳过渲染 =====
- * pulse / shimmer / sweep 在变体里：skeletonizer/global、skeletonizer/svg、skeletonizer/sweep.css。
- * 没加载变体时，pulse / shimmer 退回根级 fade。 */
+/* ===== 基底效果：fade（默认）/ solid，以及减少动态效果（core.css / explicit.css / base.css 共用）=====
+ * pulse / shimmer 的根驱动在 _driver.scss（同样在所有基底里），sweep 在 sweep.css，视口外暂停和 skz-cv 在 _lazy.scss（只在 base.css）。
+ * 不支持 @property / 相对颜色的浏览器里，pulse / shimmer 退回根级 fade。 */
 [skz] {
   --skz-bg-img: none;
   --skz-fade-min: 0.55;
@@ -15,9 +13,9 @@
   animation: skz-fade var(--skz-duration) ease-in-out infinite alternate;
 }
 
-/* pulse / shimmer 没有加载变体（skeletonizer/global、skeletonizer/svg）时，退回 fade。
- * 用 :where() 把优先级降到 0：不管样式表先后顺序，变体的规则都能盖掉它
- * （:not() 会把括号里的选择器算进优先级，直接写会压过变体，曾导致 pulse / shimmer 一直是 fade）。
+/* pulse / shimmer 的根驱动不可用（浏览器不认 @property / 相对颜色，见 _driver.scss）时，退回 fade。
+ * 用 :where() 把优先级降到 0：不管样式表先后顺序，根驱动的规则都能盖掉它
+ * （:not() 会把括号里的选择器算进优先级，直接写会压过根驱动，曾导致 pulse / shimmer 一直是 fade）。
  * 单独成一条：不支持 :where() 的老浏览器只丢这条，不连累上面的默认 fade */
 :where([skz][skz-effect="pulse"]:not([skz-has-ignore]), [skz][skz-effect="shimmer"]:not([skz-has-ignore])) {
   animation: skz-fade var(--skz-duration) ease-in-out infinite alternate;
@@ -31,15 +29,6 @@
   }
 }
 
-/* 懒渲染：根在视口外（enable() 打上 skz-paused）时移除根上和 sweep 光带的动画，SVG 方案去掉背景图 */
-[skz][skz-paused],
-[skz][skz-paused]::after {
-  animation: none !important;
-}
-[skz][skz-paused] {
-  --skz-bg-img: none !important;
-}
-
 /* 减少动态效果：全部静止 */
 @media (prefers-reduced-motion: reduce) {
   [skz] {
@@ -49,13 +38,4 @@
   [skz]::after {
     animation: none !important;
   }
-}
-
-/* ===== 视口外内容跳过渲染（根上写 skz-cv 开启） =====
- * 根的直接子元素在视口外时，浏览器跳过它们的样式、布局、绘制，动画也不用算；
- * 补上懒渲染"大根露一角就整体动"的盲区。代价：子元素溢出部分会被裁掉；
- * 从没渲染过的子元素按 --skz-cv-size 估高，估不准滚动时会跳。 */
-[skz][skz-cv] > * {
-  content-visibility: auto;
-  contain-intrinsic-size: auto var(--skz-cv-size, 200px);
 }

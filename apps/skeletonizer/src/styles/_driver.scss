@@ -1,0 +1,72 @@
+@use "mixins" as *;
+@use "drivers" as *;
+
+/* ===== 根驱动：pulse / shimmer 的纯 CSS 动画（core.css / explicit.css / base.css 共用）=====
+ * 根上的动画驱动注册过的 --skz-pulse-c（颜色）/ --skz-shimmer-p（流光位置），骨头只读继承下来的
+ * --skz-fill / --skz-ul-fill / --skz-bg-pos，自己不挂动画。颜色精确、跟主题走，光带默认降频。
+ * 这里只有 gradient 驱动（clip、leaf、显式骨头、core 的全部骨头）；underline / tofu 的纯色驱动在 _driver-color.scss（只在 base.css）。
+ * 继承防火墙和老浏览器的 SVG 降级在 skeletonizer/global（global.css）。
+ * 不支持 @property（或相对颜色）的浏览器：pulse / shimmer 退回基底的根级 fade；装了 skeletonizer/global 则由它把根切到 SVG 方案。 */
+
+@property --skz-shimmer-p {
+  syntax: "<number>";
+  inherits: true;
+  initial-value: -60;
+}
+@property --skz-pulse-c {
+  syntax: "<color>";
+  inherits: true;
+  initial-value: #d9dde3;
+}
+@keyframes skz-shimmer-root {
+  from {
+    --skz-shimmer-p: -60;
+  }
+  to {
+    --skz-shimmer-p: 110;
+  }
+}
+@keyframes skz-pulse-root {
+  from {
+    --skz-pulse-c: var(--skz-color);
+  }
+  to {
+    --skz-pulse-c: var(--skz-highlight);
+  }
+}
+
+/* @property 无法用 @supports 检测，借同版本落地的相对颜色语法判断（Safari 16.4 / Firefox 128 两者同时支持；
+ * Chrome 85~118 有 @property 但没有相对颜色，被保守地判为不支持，退回 fade） */
+@supports (color: rgb(from red r g b)) {
+  /* pulse（单独的效果）：骨头背景色脉冲，时间函数固定 ease-in-out，不受 --skz-shimmer-timing 影响 */
+  [skz][skz-effect="pulse"] {
+    @include sk-pulse-fill;
+    animation: skz-pulse-root var(--skz-duration) ease-in-out infinite alternate;
+  }
+  /* shimmer：fixed 渐变背景在视口坐标里平移，各骨头同步。
+   * 光带默认降频到 24 次/秒：时间函数读 --skz-shimmer-timing（缺省 steps(36)），值没变的帧 Chrome 不重绘。
+   *   - 档数和 --skz-duration 绑定：24 次/秒 = 时长（秒）× 24，默认 1.5s → steps(36)；改了时长要同步改档数
+   *     （例：--skz-duration: 3s 配 --skz-shimmer-timing: steps(72)）。calc() 没法把时间换算成整数，没法自动跟随；
+   *   - steps(18) 更省（12 次/秒）；linear 恢复逐帧平滑；变量写在根上或任一祖先上都行。
+   * 要不要额外挂 pulse 动画，看文字条的颜色是谁驱动的：
+   *   - clip（默认）：文字条的光带由背景图承担，--skz-fill 在 shimmer 下不变；pulse 只改 --skz-ul-fill，clip 下装饰线是透明的，
+   *     挂着只会让样式重算每帧白干活，所以只挂光带动画；
+   *   - underline / tofu：颜色读 --skz-ul-fill，没有 pulse 就只剩静止的灰色，必须挂（pulse 也降频，否则颜色每帧都在变），见 _driver-color.scss；
+   *   - iOS：不支持 fixed 背景，光带图去掉改成骨头色脉冲（--skz-fill 读 pulse），所有模式都要挂（见下）。
+   * 带 :where() 的规则优先级保持 (0,2,0)，压不过 svg 引擎根规则的 animation: none / 静态 --skz-ul-fill。 */
+  [skz][skz-effect="shimmer"] {
+    --skz-bg-img: linear-gradient(100deg, transparent 0, var(--skz-highlight) 50%, transparent 100%);
+    @include sk-shimmer-pos;
+    animation: skz-shimmer-root var(--skz-duration) $shimmer-timing infinite;
+  }
+
+  /* iOS Safari 不支持 background-attachment:fixed，流光会各自为政，改成骨头颜色脉冲：
+   * 光带图去掉，--skz-fill 读 pulse 颜色（要挂 pulse 的原因见 shimmer 规则上方）；防火墙里同步钉住 --skz-fill（见 global.css） */
+  @include sk-ios {
+    [skz][skz-effect="shimmer"] {
+      --skz-bg-img: none;
+      @include sk-pulse-fill;
+      @include sk-shimmer-with-pulse;
+    }
+  }
+}

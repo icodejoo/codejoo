@@ -17,6 +17,8 @@
 | `2026-10-09-integration/` | 组合方案落地后的复测：场景 `sc-int-*.json`、原始输出 `int-*.log`、测试页（`perf.html` / 带 `x-ske-bone` 的 `perf-bone.html`）、验证脚本 `verify*.mjs`、截图 `shots/`（性能报告第 10 节） |
 | `2026-10-09-autoscope/` | 自动作用域属性 `skz-auto` 实验：scoped / split / class 三种前缀写法的 CSS 变体，A 现状 / B 标记区 / C 全自动 / D explicit / E 混合五组对比（16000 元素），含页面 `perf-auto.html`、场景 `sc-*.json`、带看门狗的 `run-all.sh`、原始结果 `results/`、截图 `shots/`、`NOTES.md`（结论：标记区没有被加速，全自动区反而慢 7~9ms） |
 | `2026-10-10-landing/` | 降频 / clip 不挂 pulse / 防火墙补钉 `--skz-tbg` / tofu 落地后的复测（2000 卡 × shimmer·pulse·svg × clip·underline·tofu，另含 4× 降速）与正确性验证（`verify.mjs`、`wcsvg.mjs`、`shots/`），见 `NOTES.md` |
+| `2026-10-10-layering/` | CSS 分层（`core.css` / `explicit.css` / `base.css` / `global.css` 重新划分）的验证与基准：逐规则对比 `cssdiff.mjs`、计算样式 + 整页截图对比 `verify.mjs`、老浏览器模拟（`serve.mjs` 的 `?sim=`）、重复加载（`dup`）、demo 快照对比、完整版 2000 卡基准（每格新鲜加载）、派生变量 A/B（未采用）、"会话状态陷阱"排查；最小 core 页面 `core.html`；见 `NOTES.md` |
+| `2026-10-10-core/` | core 实测（core 与完整版并列拆包之后）：125 / 250 / 500 卡 × fade·solid·pulse·shimmer，同规模完整版（`skeletonizer/global` + 防火墙）对照，250 卡 4× CPU 降速，另有规模上限批（750~2000 卡、4× 降速下 63~500 卡）；基准页 `perf.html`（import map 引 `core-js` + `core.css` / 完整版）、`serve.mjs`（冻结 dist 快照）、`gen-scenarios.mjs`、`run-batch.mjs`（端口 9711，等 CPU 安静 + 加锁串行）、`summarize.mjs`、`results/`（jsonl、CPU 日志、汇总）；结论与口径见 `NOTES.md` |
 | `agents/` | 子代理实验目录，各自带 `NOTES.md`（方案、文件用途、场景↔实验、原始结果、截图、结论与失败原因），见下表 |
 
 ## 场景 / 结果 ↔ 性能报告

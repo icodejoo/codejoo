@@ -1,6 +1,6 @@
 @use "mixins" as *;
 
-/* ===== 主题与交互锁：所有基底（base.css / explicit.css）共用 ===== */
+/* ===== 主题与交互锁：所有基底（core.css / base.css / explicit.css）共用 ===== */
 
 /* 自定义元素没升级时是 inline，先变块级 */
 skz-box {

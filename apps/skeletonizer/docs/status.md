@@ -7,7 +7,7 @@ summary: 原型已跑通的范围、没做的事、下一步。
 
 ## TL;DR
 
-设计已拍板，桌面 Chrome 验证通过，单测 89 条全绿，准备首次发布 npm（0.1.0）。其他浏览器真机验证、视觉快照测试还没开始。
+设计已拍板，桌面 Chrome 验证通过，单测 170 条全绿（含类型测试与产物测试），准备首次发布 npm（0.1.0）。2026-10-10 包拆成 core + 完整版并列两种用法、CSS 重新分层；core 的规模上限有实测（见 `bench/2026-10-10-core/NOTES.md`）。其他浏览器（Firefox / Safari）、真机验证、视觉快照测试还没开始。
 
 ## 已完成
 
@@ -27,12 +27,13 @@ summary: 原型已跑通的范围、没做的事、下一步。
 - 默认文字模式改为 `clip`（下划线 + background-clip:text，文字条有光带，svg 下也能动；`underline` 需显式写，最便宜）；补测见 [矩阵报告](reports/2026-10-09-benchmark-matrix.md)（`bench/2026-10-09-clip-default/`）：fade / solid 没变贵，shimmer GPU 约 3 倍，pulse + global 16000 元素掉到 24 帧（待查防火墙是否被绕过），4× 降速下 svg shimmer 12.8 帧；原型数据见 `bench/agents/a7-clip-underline/`，Firefox / Safari 未验证
 
 - 2026-10-10 落地：shimmer 光带默认降频 24 次/秒（`--skz-shimmer-timing: steps(36)`，只对 global，4× CPU 降速下默认档无收益）；clip 下 shimmer 根不再挂 pulse（underline / tofu / iOS 才挂，同样降频）；clip 根去掉 `--skz-tbg` / `--skz-timg` 转发（修 pulse + clip 绕过防火墙）（pulse + clip 2000 卡 22.8 帧 / 33.7 ms → 60.4 帧 / 6.95 ms）；新增可选 `text: "tofu"` 与 `tofu.css`（方块字体，`scripts/gen-tofu-font.py` 生成，没引 `tofu.css` 时退回 underline 外观，CSP 需 `font-src data:`）；`registerCustomElements` 宿主 `::before` 读动画变量（pulse / shimmer 对 Web Component 宿主生效）。复测见 [矩阵报告](reports/2026-10-09-benchmark-matrix.md)「落地复测」与 `bench/2026-10-10-landing/`
+- 2026-10-10 拆包与分层：包拆成 core（`skeletonizer`，默认，现代浏览器、单个根约 2000 元素以内）与完整版（`skeletonizer/full`，上限高得多）并列，`registerExtension` 变成通用扩展点（方案注册改名 `registerEngine`），全局 `skz`、类型随版本变宽、开发模式警告；CSS 分成 `core.css` / `explicit.css` / `base.css` / `global.css`，根驱动挪进各基底，`explicit.css` 恢复懒渲染规则。验证见 `bench/2026-10-10-layering/`（逐规则对比、计算样式 + 截图、老浏览器模拟）与 `bench/2026-10-10-core/`（core 实测：125 / 250 / 500 卡 × fade·solid·pulse·shimmer，对照完整版，4× 降速，规模上限）。README（中英）、`llms.md`、ARCHITECTURE 按新结构重写：开头并列对比表、两条快速开始、迁移说明、每项标明属于 core 还是完整版
 - 2026-10-10 文档补齐：README（中英）加「类型」章节与无打包器（import map）示例，补按钮 / clip / tofu / 降频的限制，功能总表性能数字统一到默认 clip 口径（未重测的标「underline 时测得」），修正防火墙机制、`engine` 指定未引入方案的实测表现、体积表；`llms.md` 补 `enable` 选项、`<skz-box>` 属性、适配层导出与全部主题变量速查
 
 ## 待办（按优先级）
 
-1. 真机 / 其他引擎验证：iOS Safari（降频、iOS 分支的 pulse 与防火墙目前只在 Chrome 里模拟）、Safari、Firefox（报告里的"未验证"项；含 clip 的装饰线裁剪、tofu 的 cmap format 13）
-2. 4× 降速下 underline / tofu 样式重算 55~60 ms 的原因；svg 引擎 clip 的 PrePaint 降不动的根因；24 次/秒的光带台阶感需要真人观感评审
+1. 真机 / 其他引擎验证：iOS Safari（降频、iOS 分支的 pulse 与防火墙目前只在 Chrome 里模拟）、Safari、Firefox（报告里的"未验证"项；含 clip 的装饰线裁剪、tofu 的 cmap format 13；core 与完整版目前都只在 Chrome 实测）
+2. 4× 降速下 underline / tofu 样式重算 55~60 ms 的原因；core 在 4× 降速下的规模上限偏低（数据见 `bench/2026-10-10-core/NOTES.md`）；svg 引擎 clip 的 PrePaint 降不动的根因；24 次/秒的光带台阶感需要真人观感评审
 3. PostCSS + autoprefixer（先确认依赖）
 4. Vitest + Playwright 三引擎视觉快照，强制单档 CSS 的降级快照
 5. 框架使用示例文档（Vue 指令 / React / Svelte / Solid）

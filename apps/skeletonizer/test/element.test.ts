@@ -1,12 +1,9 @@
 // @vitest-environment jsdom
-import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
-import { defineSkzBox } from "../src/element.js";
-import type { SkzBox } from "../src/element.js";
-import { ROOT_ATTR } from "../src/enable.js";
-
-/** 视口观察器桩（jsdom 没有 IntersectionObserver） */
-const observe = vi.fn();
-const unobserve = vi.fn();
+import { afterEach, beforeAll, beforeEach, describe, expect, it } from "vitest";
+import { defineSkzBox } from "../src/core/element.js";
+import type { SkzBox } from "../src/core/element.js";
+import { registerExtension } from "../src/core/extension.js";
+import { ROOT_ATTR } from "../src/core/enable.js";
 
 /** 焦点拦截监听的事件名 */
 const LOCK_EVENT = "focusin";
@@ -67,22 +64,12 @@ function countLock(el: HTMLElement): LockCount {
 }
 
 beforeAll(() => {
-  vi.stubGlobal(
-    "IntersectionObserver",
-    class {
-      observe = observe;
-      unobserve = unobserve;
-      disconnect = vi.fn();
-    },
-  );
   defineSkzBox();
 });
 
 describe("SkzBox", () => {
   beforeEach(() => {
     document.body.innerHTML = "";
-    observe.mockClear();
-    unobserve.mockClear();
   });
 
   afterEach(() => {
@@ -144,11 +131,31 @@ describe("SkzBox", () => {
 
     expect(lock.add).toBe(3);
     expect(lock.remove).toBe(3);
-    expect(observe).toHaveBeenCalledTimes(3);
-    expect(unobserve).toHaveBeenCalledTimes(3);
     expect(child.hasAttribute(ARIA_BUSY)).toBe(false);
     expect(child.hasAttribute(ROOT_ATTR)).toBe(false);
     expect(el.hasAttribute(ROOT_ATTR)).toBe(false);
+  });
+
+  it("6 个属性原样透传给 enable：core 自己只认 effect / fit，text / fallback / engine 交给扩展，没注册扩展时被忽略", () => {
+    const seen: Array<Record<string, unknown>> = [];
+    registerExtension({ name: "spy", sync: (_el, opts) => void seen.push({ ...opts }), release: () => {} });
+    const el = mount(document.body, { loading: "", effect: "pulse", text: "leaf", fallback: "fade", engine: "svg", fit: "" });
+    const child = document.createElement(TAG_DIV);
+    el.appendChild(child);
+    el.loading = false;
+    el.loading = true;
+
+    expect(seen.at(-1)).toEqual({ effect: "pulse", text: "leaf", fallback: "fade", engine: "svg", fit: true });
+    // core 不认识 text：根上只有 effect，没有 skz-text
+    expect(child.getAttribute("skz-effect")).toBe("pulse");
+    expect(child.hasAttribute("skz-text")).toBe(false);
+    // fit="false" 视为关闭
+    el.setAttribute("fit", "false");
+    expect(seen.at(-1)?.fit).toBe(false);
+    // 未设置的属性透传为 undefined
+    el.removeAttribute("text");
+    expect(seen.at(-1)?.text).toBeUndefined();
+    el.loading = false;
   });
 
   it("移动节点：加载中的宿主 append 到别的父节点后，子根仍保持状态", () => {

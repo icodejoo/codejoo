@@ -1,0 +1,40 @@
+// 量体积：每个入口的静态依赖闭包（.mjs 逐个 gzip -9 -n 再求和）；CSS 单独量。用法：node sizes.mjs <dist 目录>
+import fs from "node:fs";
+import path from "node:path";
+import { execFileSync } from "node:child_process";
+const D = path.resolve(process.argv[2] || "dist");
+const gz = (f) => execFileSync("gzip", ["-9", "-n", "-c", path.join(D, f)], { maxBuffer: 1 << 24 }).length;
+const raw = (f) => fs.statSync(path.join(D, f)).size;
+const closure = (entry, seen = new Set()) => {
+  if (seen.has(entry)) return seen; seen.add(entry);
+  const t = fs.readFileSync(path.join(D, entry), "utf8");
+  for (const m of t.matchAll(/(?:from|import)\s*"\.\/([^"]+\.mjs)"/g)) closure(m[1], seen);
+  return seen;
+};
+const sum = (files, fn) => [...files].reduce((a, f) => a + fn(f), 0);
+const row = (name, files) => console.log(`${name.padEnd(28)} files=${[...files].join("+")}  raw=${sum(files, raw)} gzip=${sum(files, gz)}`);
+const E = {};
+for (const e of ["core-js", "core", "explicit-js", "explicit", "full", "global-js", "global", "svg-js", "svg", "all-js", "all", "vue", "react", "svelte"]) E[e] = closure(`${e}.mjs`);
+for (const [k, v] of Object.entries(E)) row(k + ".mjs", v);
+const diff = (a, b) => new Set([...E[a]].filter((f) => !E[b].has(f)));
+console.log("--- 增量");
+row("full - core-js", diff("full", "core-js"));
+row("global-js - full", diff("global-js", "full"));
+row("svg-js - full", diff("svg-js", "full"));
+row("all-js - full", diff("all-js", "full"));
+row("global-js - core-js", diff("global-js", "core-js"));
+row("svg-js - core-js", diff("svg-js", "core-js"));
+row("all-js - core-js", diff("all-js", "core-js"));
+for (const a of ["vue", "react", "svelte"]) row(`${a} - core-js`, diff(a, "core-js"));
+for (const a of ["core-js","explicit-js"]) row(a, E[a]);
+console.log("--- CSS");
+for (const c of ["core", "explicit", "base", "global", "svg", "sweep", "tofu", "all"]) console.log(`${c}.css raw=${raw(c + ".css")} gzip=${gz(c + ".css")}`);
+const t = (js, css) => `${js}+${css}: gzip=${sum(E[js], gz) + gz(css + ".css")}`;
+console.log("--- 合计（JS 闭包 + CSS）");
+console.log(t("core-js", "core"), "|", t("explicit-js", "explicit"));
+console.log("full + base:", sum(E.full, gz) + gz("base.css"));
+console.log("global-js + base + global:", sum(E["global-js"], gz) + gz("base.css") + gz("global.css"));
+console.log("svg-js + base + svg:", sum(E["svg-js"], gz) + gz("base.css") + gz("svg.css"));
+console.log("all-js + all.css:", sum(E["all-js"], gz) + gz("all.css"));
+// 适配层单文件
+for (const a of ["vue", "react", "svelte"]) console.log(a + ".mjs 单文件 gzip", gz(a + ".mjs"));

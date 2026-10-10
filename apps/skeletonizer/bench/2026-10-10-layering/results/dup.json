@@ -1,0 +1,877 @@
+{
+ "cells": 96,
+ "differing": [
+  {
+   "label": "all vs all,core/shimmer/underline",
+   "styleDiffs": 21,
+   "px": 18228
+  },
+  {
+   "label": "all vs all,core/shimmer/tofu",
+   "styleDiffs": 41,
+   "px": 18486
+  },
+  {
+   "label": "all vs all,core/shimmer/raw:foo",
+   "styleDiffs": 21,
+   "px": 18228
+  },
+  {
+   "label": "base,global vs base,global,core/shimmer/underline",
+   "styleDiffs": 21,
+   "px": 18228
+  },
+  {
+   "label": "base,global vs base,global,core/shimmer/tofu",
+   "styleDiffs": 21,
+   "px": 18228
+  },
+  {
+   "label": "base,global vs base,global,core/shimmer/raw:foo",
+   "styleDiffs": 21,
+   "px": 18228
+  }
+ ],
+ "diffs": [
+  {
+   "label": "all vs all,core/shimmer/underline",
+   "el": "div0>img0",
+   "prop": "textDecorationColor",
+   "before": "rgb(225, 229, 234)",
+   "after": "rgb(217, 221, 227)"
+  },
+  {
+   "label": "all vs all,core/shimmer/underline",
+   "el": "div0>div1>h30",
+   "prop": "textDecorationColor",
+   "before": "rgb(225, 229, 234)",
+   "after": "rgb(217, 221, 227)"
+  },
+  {
+   "label": "all vs all,core/shimmer/underline",
+   "el": "div0>div1>p1",
+   "prop": "textDecorationColor",
+   "before": "rgb(225, 229, 234)",
+   "after": "rgb(217, 221, 227)"
+  },
+  {
+   "label": "all vs all,core/shimmer/underline",
+   "el": "div0>div1>span2",
+   "prop": "textDecorationColor",
+   "before": "rgb(225, 229, 234)",
+   "after": "rgb(217, 221, 227)"
+  },
+  {
+   "label": "all vs all,core/shimmer/underline",
+   "el": "div0>div1>small3",
+   "prop": "textDecorationColor",
+   "before": "rgb(225, 229, 234)",
+   "after": "rgb(217, 221, 227)"
+  },
+  {
+   "label": "all vs all,core/shimmer/underline",
+   "el": "div0>div1>i4",
+   "prop": "textDecorationColor",
+   "before": "rgb(225, 229, 234)",
+   "after": "rgb(217, 221, 227)"
+  },
+  {
+   "label": "all vs all,core/shimmer/underline",
+   "el": "div0>div1>p6",
+   "prop": "textDecorationColor",
+   "before": "rgb(225, 229, 234)",
+   "after": "rgb(217, 221, 227)"
+  },
+  {
+   "label": "all vs all,core/shimmer/underline",
+   "el": "div0>div1>p6>b0",
+   "prop": "textDecorationColor",
+   "before": "rgb(225, 229, 234)",
+   "after": "rgb(217, 221, 227)"
+  },
+  {
+   "label": "all vs all,core/shimmer/underline",
+   "el": "div0>div1>p6>code1",
+   "prop": "textDecorationColor",
+   "before": "rgb(225, 229, 234)",
+   "after": "rgb(217, 221, 227)"
+  },
+  {
+   "label": "all vs all,core/shimmer/underline",
+   "el": "div0>div1>p6>a2",
+   "prop": "textDecorationColor",
+   "before": "rgb(225, 229, 234)",
+   "after": "rgb(217, 221, 227)"
+  },
+  {
+   "label": "all vs all,core/shimmer/underline",
+   "el": "div0>div1>ul9",
+   "prop": "textDecorationColor",
+   "before": "rgb(225, 229, 234)",
+   "after": "rgb(217, 221, 227)"
+  },
+  {
+   "label": "all vs all,core/shimmer/underline",
+   "el": "div0>div1>ul9>li0",
+   "prop": "textDecorationColor",
+   "before": "rgb(225, 229, 234)",
+   "after": "rgb(217, 221, 227)"
+  },
+  {
+   "label": "all vs all,core/shimmer/underline",
+   "el": "div0>div1>ul9>li1",
+   "prop": "textDecorationColor",
+   "before": "rgb(225, 229, 234)",
+   "after": "rgb(217, 221, 227)"
+  },
+  {
+   "label": "all vs all,core/shimmer/underline",
+   "el": "div0>div1>button12>span0",
+   "prop": "textDecorationColor",
+   "before": "rgb(225, 229, 234)",
+   "after": "rgb(217, 221, 227)"
+  },
+  {
+   "label": "all vs all,core/shimmer/underline",
+   "el": "div0>div1>div13>p0>span0",
+   "prop": "textDecorationColor",
+   "before": "rgb(225, 229, 234)",
+   "after": "rgb(217, 221, 227)"
+  },
+  {
+   "label": "all vs all,core/shimmer/underline",
+   "el": "div0>div1>p14",
+   "prop": "textDecorationColor",
+   "before": "rgb(225, 229, 234)",
+   "after": "rgb(217, 221, 227)"
+  },
+  {
+   "label": "all vs all,core/shimmer/underline",
+   "el": "div0>div1>p14>b0",
+   "prop": "textDecorationColor",
+   "before": "rgb(225, 229, 234)",
+   "after": "rgb(217, 221, 227)"
+  },
+  {
+   "label": "all vs all,core/shimmer/underline",
+   "el": "div0>div1>p15",
+   "prop": "textDecorationColor",
+   "before": "rgb(225, 229, 234)",
+   "after": "rgb(217, 221, 227)"
+  },
+  {
+   "label": "all vs all,core/shimmer/underline",
+   "el": "div0>div1>wc-card16",
+   "prop": "textDecorationColor",
+   "before": "rgb(225, 229, 234)",
+   "after": "rgb(217, 221, 227)"
+  },
+  {
+   "label": "all vs all,core/shimmer/underline",
+   "el": "#root",
+   "prop": "anim",
+   "before": "skz-shimmer-root, skz-pulse-root|steps(36), steps(36)",
+   "after": "skz-shimmer-root|steps(36)"
+  },
+  {
+   "label": "all vs all,core/shimmer/underline",
+   "el": "#root",
+   "prop": "ulfill",
+   "before": "rgb(225, 229, 234)",
+   "after": "rgb(217, 221, 227)"
+  },
+  {
+   "label": "all vs all,core/shimmer/tofu",
+   "el": "div0>img0",
+   "prop": "textDecorationColor",
+   "before": "rgb(225, 229, 234)",
+   "after": "rgb(217, 221, 227)"
+  },
+  {
+   "label": "all vs all,core/shimmer/tofu",
+   "el": "div0>div1>h30",
+   "prop": "color",
+   "before": "rgb(225, 229, 234)",
+   "after": "rgb(217, 221, 227)"
+  },
+  {
+   "label": "all vs all,core/shimmer/tofu",
+   "el": "div0>div1>h30",
+   "prop": "webkitTextFillColor",
+   "before": "rgb(225, 229, 234)",
+   "after": "rgb(217, 221, 227)"
+  },
+  {
+   "label": "all vs all,core/shimmer/tofu",
+   "el": "div0>div1>h30",
+   "prop": "textDecorationColor",
+   "before": "rgb(225, 229, 234)",
+   "after": "rgb(217, 221, 227)"
+  },
+  {
+   "label": "all vs all,core/shimmer/tofu",
+   "el": "div0>div1>p1",
+   "prop": "color",
+   "before": "rgb(225, 229, 234)",
+   "after": "rgb(217, 221, 227)"
+  },
+  {
+   "label": "all vs all,core/shimmer/tofu",
+   "el": "div0>div1>p1",
+   "prop": "webkitTextFillColor",
+   "before": "rgb(225, 229, 234)",
+   "after": "rgb(217, 221, 227)"
+  },
+  {
+   "label": "all vs all,core/shimmer/tofu",
+   "el": "div0>div1>p1",
+   "prop": "textDecorationColor",
+   "before": "rgb(225, 229, 234)",
+   "after": "rgb(217, 221, 227)"
+  },
+  {
+   "label": "all vs all,core/shimmer/tofu",
+   "el": "div0>div1>span2",
+   "prop": "color",
+   "before": "rgb(225, 229, 234)",
+   "after": "rgb(217, 221, 227)"
+  },
+  {
+   "label": "all vs all,core/shimmer/tofu",
+   "el": "div0>div1>span2",
+   "prop": "webkitTextFillColor",
+   "before": "rgb(225, 229, 234)",
+   "after": "rgb(217, 221, 227)"
+  },
+  {
+   "label": "all vs all,core/shimmer/tofu",
+   "el": "div0>div1>span2",
+   "prop": "textDecorationColor",
+   "before": "rgb(225, 229, 234)",
+   "after": "rgb(217, 221, 227)"
+  },
+  {
+   "label": "all vs all,core/shimmer/tofu",
+   "el": "div0>div1>small3",
+   "prop": "color",
+   "before": "rgb(225, 229, 234)",
+   "after": "rgb(217, 221, 227)"
+  },
+  {
+   "label": "all vs all,core/shimmer/tofu",
+   "el": "div0>div1>small3",
+   "prop": "webkitTextFillColor",
+   "before": "rgb(225, 229, 234)",
+   "after": "rgb(217, 221, 227)"
+  },
+  {
+   "label": "all vs all,core/shimmer/tofu",
+   "el": "div0>div1>small3",
+   "prop": "textDecorationColor",
+   "before": "rgb(225, 229, 234)",
+   "after": "rgb(217, 221, 227)"
+  },
+  {
+   "label": "all vs all,core/shimmer/tofu",
+   "el": "div0>div1>i4",
+   "prop": "textDecorationColor",
+   "before": "rgb(225, 229, 234)",
+   "after": "rgb(217, 221, 227)"
+  },
+  {
+   "label": "all vs all,core/shimmer/tofu",
+   "el": "div0>div1>p6",
+   "prop": "color",
+   "before": "rgb(225, 229, 234)",
+   "after": "rgb(217, 221, 227)"
+  },
+  {
+   "label": "all vs all,core/shimmer/tofu",
+   "el": "div0>div1>p6",
+   "prop": "webkitTextFillColor",
+   "before": "rgb(225, 229, 234)",
+   "after": "rgb(217, 221, 227)"
+  },
+  {
+   "label": "all vs all,core/shimmer/tofu",
+   "el": "div0>div1>p6",
+   "prop": "textDecorationColor",
+   "before": "rgb(225, 229, 234)",
+   "after": "rgb(217, 221, 227)"
+  },
+  {
+   "label": "all vs all,core/shimmer/tofu",
+   "el": "div0>div1>p6>b0",
+   "prop": "color",
+   "before": "rgb(225, 229, 234)",
+   "after": "rgb(217, 221, 227)"
+  },
+  {
+   "label": "all vs all,core/shimmer/tofu",
+   "el": "div0>div1>p6>b0",
+   "prop": "webkitTextFillColor",
+   "before": "rgb(225, 229, 234)",
+   "after": "rgb(217, 221, 227)"
+  },
+  {
+   "label": "all vs all,core/shimmer/tofu",
+   "el": "div0>div1>p6>b0",
+   "prop": "textDecorationColor",
+   "before": "rgb(225, 229, 234)",
+   "after": "rgb(217, 221, 227)"
+  },
+  {
+   "label": "all vs all,core/shimmer/tofu",
+   "el": "div0>div1>p6>code1",
+   "prop": "color",
+   "before": "rgb(225, 229, 234)",
+   "after": "rgb(217, 221, 227)"
+  },
+  {
+   "label": "all vs all,core/shimmer/tofu",
+   "el": "div0>div1>p6>code1",
+   "prop": "webkitTextFillColor",
+   "before": "rgb(225, 229, 234)",
+   "after": "rgb(217, 221, 227)"
+  },
+  {
+   "label": "all vs all,core/shimmer/tofu",
+   "el": "div0>div1>p6>code1",
+   "prop": "textDecorationColor",
+   "before": "rgb(225, 229, 234)",
+   "after": "rgb(217, 221, 227)"
+  },
+  {
+   "label": "all vs all,core/shimmer/tofu",
+   "el": "div0>div1>p6>a2",
+   "prop": "color",
+   "before": "rgb(225, 229, 234)",
+   "after": "rgb(217, 221, 227)"
+  },
+  {
+   "label": "all vs all,core/shimmer/tofu",
+   "el": "div0>div1>p6>a2",
+   "prop": "webkitTextFillColor",
+   "before": "rgb(225, 229, 234)",
+   "after": "rgb(217, 221, 227)"
+  },
+  {
+   "label": "all vs all,core/shimmer/tofu",
+   "el": "div0>div1>p6>a2",
+   "prop": "textDecorationColor",
+   "before": "rgb(225, 229, 234)",
+   "after": "rgb(217, 221, 227)"
+  },
+  {
+   "label": "all vs all,core/shimmer/tofu",
+   "el": "div0>div1>ul9",
+   "prop": "textDecorationColor",
+   "before": "rgb(225, 229, 234)",
+   "after": "rgb(217, 221, 227)"
+  },
+  {
+   "label": "all vs all,core/shimmer/tofu",
+   "el": "div0>div1>ul9>li0",
+   "prop": "color",
+   "before": "rgb(225, 229, 234)",
+   "after": "rgb(217, 221, 227)"
+  },
+  {
+   "label": "all vs all,core/shimmer/tofu",
+   "el": "div0>div1>ul9>li0",
+   "prop": "webkitTextFillColor",
+   "before": "rgb(225, 229, 234)",
+   "after": "rgb(217, 221, 227)"
+  },
+  {
+   "label": "all vs all,core/shimmer/tofu",
+   "el": "div0>div1>ul9>li0",
+   "prop": "textDecorationColor",
+   "before": "rgb(225, 229, 234)",
+   "after": "rgb(217, 221, 227)"
+  },
+  {
+   "label": "all vs all,core/shimmer/tofu",
+   "el": "div0>div1>ul9>li1",
+   "prop": "color",
+   "before": "rgb(225, 229, 234)",
+   "after": "rgb(217, 221, 227)"
+  },
+  {
+   "label": "all vs all,core/shimmer/tofu",
+   "el": "div0>div1>ul9>li1",
+   "prop": "webkitTextFillColor",
+   "before": "rgb(225, 229, 234)",
+   "after": "rgb(217, 221, 227)"
+  },
+  {
+   "label": "all vs all,core/shimmer/tofu",
+   "el": "div0>div1>ul9>li1",
+   "prop": "textDecorationColor",
+   "before": "rgb(225, 229, 234)",
+   "after": "rgb(217, 221, 227)"
+  },
+  {
+   "label": "all vs all,core/shimmer/tofu",
+   "el": "div0>div1>button12>span0",
+   "prop": "textDecorationColor",
+   "before": "rgb(225, 229, 234)",
+   "after": "rgb(217, 221, 227)"
+  },
+  {
+   "label": "all vs all,core/shimmer/tofu",
+   "el": "div0>div1>div13>p0>span0",
+   "prop": "textDecorationColor",
+   "before": "rgb(225, 229, 234)",
+   "after": "rgb(217, 221, 227)"
+  },
+  {
+   "label": "all vs all,core/shimmer/tofu",
+   "el": "div0>div1>p14",
+   "prop": "textDecorationColor",
+   "before": "rgb(225, 229, 234)",
+   "after": "rgb(217, 221, 227)"
+  },
+  {
+   "label": "all vs all,core/shimmer/tofu",
+   "el": "div0>div1>p14>b0",
+   "prop": "textDecorationColor",
+   "before": "rgb(225, 229, 234)",
+   "after": "rgb(217, 221, 227)"
+  },
+  {
+   "label": "all vs all,core/shimmer/tofu",
+   "el": "div0>div1>p15",
+   "prop": "textDecorationColor",
+   "before": "rgb(225, 229, 234)",
+   "after": "rgb(217, 221, 227)"
+  },
+  {
+   "label": "all vs all,core/shimmer/tofu",
+   "el": "div0>div1>wc-card16",
+   "prop": "textDecorationColor",
+   "before": "rgb(225, 229, 234)",
+   "after": "rgb(217, 221, 227)"
+  },
+  {
+   "label": "all vs all,core/shimmer/tofu",
+   "el": "#root",
+   "prop": "anim",
+   "before": "skz-shimmer-root, skz-pulse-root|steps(36), steps(36)",
+   "after": "skz-shimmer-root|steps(36)"
+  },
+  {
+   "label": "all vs all,core/shimmer/tofu",
+   "el": "#root",
+   "prop": "ulfill",
+   "before": "rgb(225, 229, 234)",
+   "after": "rgb(217, 221, 227)"
+  },
+  {
+   "label": "all vs all,core/shimmer/raw:foo",
+   "el": "div0>img0",
+   "prop": "textDecorationColor",
+   "before": "rgb(225, 229, 234)",
+   "after": "rgb(217, 221, 227)"
+  },
+  {
+   "label": "all vs all,core/shimmer/raw:foo",
+   "el": "div0>div1>h30",
+   "prop": "textDecorationColor",
+   "before": "rgb(225, 229, 234)",
+   "after": "rgb(217, 221, 227)"
+  },
+  {
+   "label": "all vs all,core/shimmer/raw:foo",
+   "el": "div0>div1>p1",
+   "prop": "textDecorationColor",
+   "before": "rgb(225, 229, 234)",
+   "after": "rgb(217, 221, 227)"
+  },
+  {
+   "label": "all vs all,core/shimmer/raw:foo",
+   "el": "div0>div1>span2",
+   "prop": "textDecorationColor",
+   "before": "rgb(225, 229, 234)",
+   "after": "rgb(217, 221, 227)"
+  },
+  {
+   "label": "all vs all,core/shimmer/raw:foo",
+   "el": "div0>div1>small3",
+   "prop": "textDecorationColor",
+   "before": "rgb(225, 229, 234)",
+   "after": "rgb(217, 221, 227)"
+  },
+  {
+   "label": "all vs all,core/shimmer/raw:foo",
+   "el": "div0>div1>i4",
+   "prop": "textDecorationColor",
+   "before": "rgb(225, 229, 234)",
+   "after": "rgb(217, 221, 227)"
+  },
+  {
+   "label": "all vs all,core/shimmer/raw:foo",
+   "el": "div0>div1>p6",
+   "prop": "textDecorationColor",
+   "before": "rgb(225, 229, 234)",
+   "after": "rgb(217, 221, 227)"
+  },
+  {
+   "label": "all vs all,core/shimmer/raw:foo",
+   "el": "div0>div1>p6>b0",
+   "prop": "textDecorationColor",
+   "before": "rgb(225, 229, 234)",
+   "after": "rgb(217, 221, 227)"
+  },
+  {
+   "label": "all vs all,core/shimmer/raw:foo",
+   "el": "div0>div1>p6>code1",
+   "prop": "textDecorationColor",
+   "before": "rgb(225, 229, 234)",
+   "after": "rgb(217, 221, 227)"
+  },
+  {
+   "label": "all vs all,core/shimmer/raw:foo",
+   "el": "div0>div1>p6>a2",
+   "prop": "textDecorationColor",
+   "before": "rgb(225, 229, 234)",
+   "after": "rgb(217, 221, 227)"
+  },
+  {
+   "label": "all vs all,core/shimmer/raw:foo",
+   "el": "div0>div1>ul9",
+   "prop": "textDecorationColor",
+   "before": "rgb(225, 229, 234)",
+   "after": "rgb(217, 221, 227)"
+  },
+  {
+   "label": "all vs all,core/shimmer/raw:foo",
+   "el": "div0>div1>ul9>li0",
+   "prop": "textDecorationColor",
+   "before": "rgb(225, 229, 234)",
+   "after": "rgb(217, 221, 227)"
+  },
+  {
+   "label": "all vs all,core/shimmer/raw:foo",
+   "el": "div0>div1>ul9>li1",
+   "prop": "textDecorationColor",
+   "before": "rgb(225, 229, 234)",
+   "after": "rgb(217, 221, 227)"
+  },
+  {
+   "label": "all vs all,core/shimmer/raw:foo",
+   "el": "div0>div1>button12>span0",
+   "prop": "textDecorationColor",
+   "before": "rgb(225, 229, 234)",
+   "after": "rgb(217, 221, 227)"
+  },
+  {
+   "label": "all vs all,core/shimmer/raw:foo",
+   "el": "div0>div1>div13>p0>span0",
+   "prop": "textDecorationColor",
+   "before": "rgb(225, 229, 234)",
+   "after": "rgb(217, 221, 227)"
+  },
+  {
+   "label": "all vs all,core/shimmer/raw:foo",
+   "el": "div0>div1>p14",
+   "prop": "textDecorationColor",
+   "before": "rgb(225, 229, 234)",
+   "after": "rgb(217, 221, 227)"
+  },
+  {
+   "label": "all vs all,core/shimmer/raw:foo",
+   "el": "div0>div1>p14>b0",
+   "prop": "textDecorationColor",
+   "before": "rgb(225, 229, 234)",
+   "after": "rgb(217, 221, 227)"
+  },
+  {
+   "label": "all vs all,core/shimmer/raw:foo",
+   "el": "div0>div1>p15",
+   "prop": "textDecorationColor",
+   "before": "rgb(225, 229, 234)",
+   "after": "rgb(217, 221, 227)"
+  },
+  {
+   "label": "all vs all,core/shimmer/raw:foo",
+   "el": "div0>div1>wc-card16",
+   "prop": "textDecorationColor",
+   "before": "rgb(225, 229, 234)",
+   "after": "rgb(217, 221, 227)"
+  },
+  {
+   "label": "all vs all,core/shimmer/raw:foo",
+   "el": "#root",
+   "prop": "anim",
+   "before": "skz-shimmer-root, skz-pulse-root|steps(36), steps(36)",
+   "after": "skz-shimmer-root|steps(36)"
+  },
+  {
+   "label": "all vs all,core/shimmer/raw:foo",
+   "el": "#root",
+   "prop": "ulfill",
+   "before": "rgb(225, 229, 234)",
+   "after": "rgb(217, 221, 227)"
+  },
+  {
+   "label": "base,global vs base,global,core/shimmer/underline",
+   "el": "div0>img0",
+   "prop": "textDecorationColor",
+   "before": "rgb(225, 229, 234)",
+   "after": "rgb(217, 221, 227)"
+  },
+  {
+   "label": "base,global vs base,global,core/shimmer/underline",
+   "el": "div0>div1>h30",
+   "prop": "textDecorationColor",
+   "before": "rgb(225, 229, 234)",
+   "after": "rgb(217, 221, 227)"
+  },
+  {
+   "label": "base,global vs base,global,core/shimmer/underline",
+   "el": "div0>div1>p1",
+   "prop": "textDecorationColor",
+   "before": "rgb(225, 229, 234)",
+   "after": "rgb(217, 221, 227)"
+  },
+  {
+   "label": "base,global vs base,global,core/shimmer/underline",
+   "el": "div0>div1>span2",
+   "prop": "textDecorationColor",
+   "before": "rgb(225, 229, 234)",
+   "after": "rgb(217, 221, 227)"
+  },
+  {
+   "label": "base,global vs base,global,core/shimmer/underline",
+   "el": "div0>div1>small3",
+   "prop": "textDecorationColor",
+   "before": "rgb(225, 229, 234)",
+   "after": "rgb(217, 221, 227)"
+  },
+  {
+   "label": "base,global vs base,global,core/shimmer/underline",
+   "el": "div0>div1>i4",
+   "prop": "textDecorationColor",
+   "before": "rgb(225, 229, 234)",
+   "after": "rgb(217, 221, 227)"
+  },
+  {
+   "label": "base,global vs base,global,core/shimmer/underline",
+   "el": "div0>div1>p6",
+   "prop": "textDecorationColor",
+   "before": "rgb(225, 229, 234)",
+   "after": "rgb(217, 221, 227)"
+  },
+  {
+   "label": "base,global vs base,global,core/shimmer/underline",
+   "el": "div0>div1>p6>b0",
+   "prop": "textDecorationColor",
+   "before": "rgb(225, 229, 234)",
+   "after": "rgb(217, 221, 227)"
+  },
+  {
+   "label": "base,global vs base,global,core/shimmer/underline",
+   "el": "div0>div1>p6>code1",
+   "prop": "textDecorationColor",
+   "before": "rgb(225, 229, 234)",
+   "after": "rgb(217, 221, 227)"
+  },
+  {
+   "label": "base,global vs base,global,core/shimmer/underline",
+   "el": "div0>div1>p6>a2",
+   "prop": "textDecorationColor",
+   "before": "rgb(225, 229, 234)",
+   "after": "rgb(217, 221, 227)"
+  },
+  {
+   "label": "base,global vs base,global,core/shimmer/underline",
+   "el": "div0>div1>ul9",
+   "prop": "textDecorationColor",
+   "before": "rgb(225, 229, 234)",
+   "after": "rgb(217, 221, 227)"
+  },
+  {
+   "label": "base,global vs base,global,core/shimmer/underline",
+   "el": "div0>div1>ul9>li0",
+   "prop": "textDecorationColor",
+   "before": "rgb(225, 229, 234)",
+   "after": "rgb(217, 221, 227)"
+  },
+  {
+   "label": "base,global vs base,global,core/shimmer/underline",
+   "el": "div0>div1>ul9>li1",
+   "prop": "textDecorationColor",
+   "before": "rgb(225, 229, 234)",
+   "after": "rgb(217, 221, 227)"
+  },
+  {
+   "label": "base,global vs base,global,core/shimmer/underline",
+   "el": "div0>div1>button12>span0",
+   "prop": "textDecorationColor",
+   "before": "rgb(225, 229, 234)",
+   "after": "rgb(217, 221, 227)"
+  },
+  {
+   "label": "base,global vs base,global,core/shimmer/underline",
+   "el": "div0>div1>div13>p0>span0",
+   "prop": "textDecorationColor",
+   "before": "rgb(225, 229, 234)",
+   "after": "rgb(217, 221, 227)"
+  },
+  {
+   "label": "base,global vs base,global,core/shimmer/underline",
+   "el": "div0>div1>p14",
+   "prop": "textDecorationColor",
+   "before": "rgb(225, 229, 234)",
+   "after": "rgb(217, 221, 227)"
+  },
+  {
+   "label": "base,global vs base,global,core/shimmer/underline",
+   "el": "div0>div1>p14>b0",
+   "prop": "textDecorationColor",
+   "before": "rgb(225, 229, 234)",
+   "after": "rgb(217, 221, 227)"
+  },
+  {
+   "label": "base,global vs base,global,core/shimmer/underline",
+   "el": "div0>div1>p15",
+   "prop": "textDecorationColor",
+   "before": "rgb(225, 229, 234)",
+   "after": "rgb(217, 221, 227)"
+  },
+  {
+   "label": "base,global vs base,global,core/shimmer/underline",
+   "el": "div0>div1>wc-card16",
+   "prop": "textDecorationColor",
+   "before": "rgb(225, 229, 234)",
+   "after": "rgb(217, 221, 227)"
+  },
+  {
+   "label": "base,global vs base,global,core/shimmer/underline",
+   "el": "#root",
+   "prop": "anim",
+   "before": "skz-shimmer-root, skz-pulse-root|steps(36), steps(36)",
+   "after": "skz-shimmer-root|steps(36)"
+  },
+  {
+   "label": "base,global vs base,global,core/shimmer/underline",
+   "el": "#root",
+   "prop": "ulfill",
+   "before": "rgb(225, 229, 234)",
+   "after": "rgb(217, 221, 227)"
+  },
+  {
+   "label": "base,global vs base,global,core/shimmer/tofu",
+   "el": "div0>img0",
+   "prop": "textDecorationColor",
+   "before": "rgb(225, 229, 234)",
+   "after": "rgb(217, 221, 227)"
+  },
+  {
+   "label": "base,global vs base,global,core/shimmer/tofu",
+   "el": "div0>div1>h30",
+   "prop": "textDecorationColor",
+   "before": "rgb(225, 229, 234)",
+   "after": "rgb(217, 221, 227)"
+  },
+  {
+   "label": "base,global vs base,global,core/shimmer/tofu",
+   "el": "div0>div1>p1",
+   "prop": "textDecorationColor",
+   "before": "rgb(225, 229, 234)",
+   "after": "rgb(217, 221, 227)"
+  },
+  {
+   "label": "base,global vs base,global,core/shimmer/tofu",
+   "el": "div0>div1>span2",
+   "prop": "textDecorationColor",
+   "before": "rgb(225, 229, 234)",
+   "after": "rgb(217, 221, 227)"
+  },
+  {
+   "label": "base,global vs base,global,core/shimmer/tofu",
+   "el": "div0>div1>small3",
+   "prop": "textDecorationColor",
+   "before": "rgb(225, 229, 234)",
+   "after": "rgb(217, 221, 227)"
+  },
+  {
+   "label": "base,global vs base,global,core/shimmer/tofu",
+   "el": "div0>div1>i4",
+   "prop": "textDecorationColor",
+   "before": "rgb(225, 229, 234)",
+   "after": "rgb(217, 221, 227)"
+  },
+  {
+   "label": "base,global vs base,global,core/shimmer/tofu",
+   "el": "div0>div1>p6",
+   "prop": "textDecorationColor",
+   "before": "rgb(225, 229, 234)",
+   "after": "rgb(217, 221, 227)"
+  },
+  {
+   "label": "base,global vs base,global,core/shimmer/tofu",
+   "el": "div0>div1>p6>b0",
+   "prop": "textDecorationColor",
+   "before": "rgb(225, 229, 234)",
+   "after": "rgb(217, 221, 227)"
+  },
+  {
+   "label": "base,global vs base,global,core/shimmer/tofu",
+   "el": "div0>div1>p6>code1",
+   "prop": "textDecorationColor",
+   "before": "rgb(225, 229, 234)",
+   "after": "rgb(217, 221, 227)"
+  },
+  {
+   "label": "base,global vs base,global,core/shimmer/tofu",
+   "el": "div0>div1>p6>a2",
+   "prop": "textDecorationColor",
+   "before": "rgb(225, 229, 234)",
+   "after": "rgb(217, 221, 227)"
+  },
+  {
+   "label": "base,global vs base,global,core/shimmer/tofu",
+   "el": "div0>div1>ul9",
+   "prop": "textDecorationColor",
+   "before": "rgb(225, 229, 234)",
+   "after": "rgb(217, 221, 227)"
+  },
+  {
+   "label": "base,global vs base,global,core/shimmer/tofu",
+   "el": "div0>div1>ul9>li0",
+   "prop": "textDecorationColor",
+   "before": "rgb(225, 229, 234)",
+   "after": "rgb(217, 221, 227)"
+  },
+  {
+   "label": "base,global vs base,global,core/shimmer/tofu",
+   "el": "div0>div1>ul9>li1",
+   "prop": "textDecorationColor",
+   "before": "rgb(225, 229, 234)",
+   "after": "rgb(217, 221, 227)"
+  },
+  {
+   "label": "base,global vs base,global,core/shimmer/tofu",
+   "el": "div0>div1>button12>span0",
+   "prop": "textDecorationColor",
+   "before": "rgb(225, 229, 234)",
+   "after": "rgb(217, 221, 227)"
+  },
+  {
+   "label": "base,global vs base,global,core/shimmer/tofu",
+   "el": "div0>div1>div13>p0>span0",
+   "prop": "textDecorationColor",
+   "before": "rgb(225, 229, 234)",
+   "after": "rgb(217, 221, 227)"
+  },
+  {
+   "label": "base,global vs base,global,core/shimmer/tofu",
+   "el": "div0>div1>p14",
+   "prop": "textDecorationColor",
+   "before": "rgb(225, 229, 234)",
+   "after": "rgb(217, 221, 227)"
+  }
+ ]
+}

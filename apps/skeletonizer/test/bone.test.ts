@@ -1,6 +1,6 @@
 import { expect, it } from "vitest";
 
-import { Bone } from "../src/bone.ts";
+import { Bone } from "../src/core/bone.ts";
 
 it("Bone 不能被实例化", () => {
   expect(() => new Bone()).toThrow(TypeError);

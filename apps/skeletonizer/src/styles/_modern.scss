@@ -1,0 +1,30 @@
+@use "lists" as *;
+@use "text" as *;
+
+/* ===== 现代档（core.css）：clip 文字骨头 + 控件整块骨头 + 图标启发式 + 忽略区下划线修正 =====
+ * 门槛：同时具备 text-decoration-thickness 和 :has()（Chrome 105+ / Safari 15.4+ / Firefox 121+，
+ * core 的目标线 Chrome 119+ / Safari 16.4+ / Firefox 128+ 都满足）。低于门槛只有第 0 档的静态色块。
+ * 这里是完整版 tier1（下划线法 / clip）和 tier2（图标 / 忽略区）里 core 需要的部分合并成一个 @supports；
+ * 不含 underline / leaf / tofu 文字模式，也没有 background-clip:text 的撤回分支（门槛已保证支持）。
+ * 根选择器只认没写 skz-text 的根（见 $core-mod）：同时引了完整版样式时，本块碰不到 leaf / underline / tofu 根。 */
+@supports (text-decoration-thickness: 1em) and selector(:has(*)) {
+  /* 文字标签上第 0 档的背景色退场，改用下划线当形状：圆角归零 */
+  @include sk-text-radius($core-mod);
+  @include sk-text-underline($core-mod);
+
+  /* clip：下划线当形状、background-clip:text 当填充；装饰线透明、只参与裁剪，下划线加厚到 1.15em。
+   * 局限：不在文字标签清单里、又直接含文字的元素（如裸 div 文本）不可见，要包进 p / span；
+   * 装饰线是否参与裁剪（规范要求参与）仅 Chrome 实测过 */
+  @include sk-clip-root($core-clip, false);
+  @include sk-clip-fill($core-clip);
+
+  /* 控件整块当骨头，自身不画下划线；叶子元素 / 忽略区内部不画下划线 */
+  @include sk-text-controls($core-mod);
+  @include sk-text-no-underline-marks;
+
+  /* 图标启发式：空的 <i> 和类名带 icon 的空元素 -> 骨头 */
+  @include sk-icons;
+
+  /* 含 skz-ignore 的祖先不再画下划线（要求根上有 skz-has-ignore，enable() 检测到忽略区时自动加） */
+  @include sk-ignore-underline($core-mod);
+}

@@ -1,0 +1,45 @@
+{
+ "cells": [
+  {
+   "label": "core vs all.css light/solid",
+   "styleDiffs": 0,
+   "px": 0
+  },
+  {
+   "label": "core vs all.css light/fade",
+   "styleDiffs": 0,
+   "px": 0
+  },
+  {
+   "label": "core vs all.css light/pulse",
+   "styleDiffs": 0,
+   "px": 0
+  },
+  {
+   "label": "core vs all.css light/shimmer",
+   "styleDiffs": 0,
+   "px": 0
+  },
+  {
+   "label": "core vs all.css dark/solid",
+   "styleDiffs": 0,
+   "px": 0
+  },
+  {
+   "label": "core vs all.css dark/fade",
+   "styleDiffs": 0,
+   "px": 0
+  },
+  {
+   "label": "core vs all.css dark/pulse",
+   "styleDiffs": 0,
+   "px": 0
+  },
+  {
+   "label": "core vs all.css dark/shimmer",
+   "styleDiffs": 0,
+   "px": 0
+  }
+ ],
+ "diffs": []
+}

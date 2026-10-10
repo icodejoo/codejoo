@@ -1,100 +1,13 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { disable, enable, registerCustomElements, toggle } from "../src/enable.ts";
-import type { EnableOptions } from "../src/enable.ts";
-// 注册两个方案扩展（等同于用户导入 skeletonizer/all）
-import { resetRootDrivenCache } from "../src/variants/global.ts";
-import "../src/variants/svg.ts";
-
-/** 最小假元素：只实现 enable / registerCustomElements 用到的那部分 DOM 接口 */
-class FakeEl {
-  /** 属性表 */
-  attrs = new Map<string, string>();
-  /** 原生 inert 状态 */
-  inert = false;
-  /** 标签名 */
-  localName = "div";
-  /** @param n 属性名 @param v 属性值 */
-  setAttribute(n: string, v: string): void {
-    this.attrs.set(n, v);
-  }
-  /** @param n 属性名 */
-  getAttribute(n: string): string | null {
-    return this.attrs.get(n) ?? null;
-  }
-  /** @param n 属性名 */
-  removeAttribute(n: string): void {
-    this.attrs.delete(n);
-  }
-  /** 切换布尔属性
-   * @param n 属性名 @param force 是否存在 */
-  toggleAttribute(n: string, force: boolean): void {
-    if (force) this.attrs.set(n, "");
-    else this.attrs.delete(n);
-  }
-  /** 内联样式（占位桩） */
-  style = { setProperty: (): void => {}, removeProperty: (): void => {} };
-  /** 子元素 */
-  children: FakeEl[] = [];
-  /** 事件监听表 */
-  listeners = new Map<string, (e: { timeStamp: number }) => void>();
-  /** @param t 事件名 @param fn 回调 */
-  addEventListener(t: string, fn: (e: { timeStamp: number }) => void): void {
-    this.listeners.set(t, fn);
-  }
-  /** @param t 事件名 */
-  removeEventListener(t: string): void {
-    this.listeners.delete(t);
-  }
-  /** 只支持 [skz-ignore]：本元素是否被标记 */
-  matches(): boolean {
-    return this.attrs.has("skz-ignore");
-  }
-  /** 只支持 [skz-ignore]：子孙里有没有被标记的 */
-  querySelector(): FakeEl | null {
-    for (const c of this.children) {
-      if (c.matches()) return c;
-      const hit = c.querySelector();
-      if (hit) return hit;
-    }
-    return null;
-  }
-  /**
-   * 追加子元素
-   * @param c 子元素
-   * @returns 子元素本身
-   */
-  add(c: FakeEl): FakeEl {
-    this.children.push(c);
-    return c;
-  }
-}
-
-/** 把假元素当 HTMLElement 用 */
-const asEl = (f: FakeEl): HTMLElement => f as unknown as HTMLElement;
-
-/** 假的视口观察器：记录观察目标，测试里手动触发回调 */
-class FakeIO {
-  /** 最近创建的实例 */
-  static last: FakeIO | null = null;
-  /** 正在观察的元素 */
-  targets = new Set<FakeEl>();
-  /** 交叉回调 */
-  cb: (entries: { target: FakeEl; isIntersecting: boolean }[]) => void;
-  /** @param cb 交叉回调 */
-  constructor(cb: (entries: { target: FakeEl; isIntersecting: boolean }[]) => void) {
-    this.cb = cb;
-    FakeIO.last = this;
-  }
-  /** @param t 目标 */
-  observe(t: FakeEl): void {
-    this.targets.add(t);
-  }
-  /** @param t 目标 */
-  unobserve(t: FakeEl): void {
-    this.targets.delete(t);
-  }
-}
+import { disable, enable, toggle } from "../src/core/enable.ts";
+import type { EnableOptions } from "../src/core/types.ts";
+// 完整版入口：注册 text / engine / lazy 扩展，再注册两个方案（等同于用户导入 skeletonizer/all）
+import "../src/full/index.ts";
+import { registerCustomElements } from "../src/full/hosts.ts";
+import { resetRootDrivenCache } from "../src/full/variants/global.ts";
+import "../src/full/variants/svg.ts";
+import { asEl, FakeEl, FakeIO, fresh, loadFull } from "./helpers.ts";
 
 beforeEach(() => {
   // 默认当作支持根驱动的现代浏览器；老浏览器的降级路径在 global.test.ts 里测
@@ -321,17 +234,6 @@ it("防火墙：只在 css 方案的 pulse / shimmer 下给列表项打标记，
 
 describe("按已加载的变体决定方案", () => {
   /**
-   * 重新加载一份干净的核心，并按需注册变体
-   * @param variants 要注册的变体
-   * @returns 新模块里的 enable
-   */
-  async function fresh(variants: Array<"global" | "svg">): Promise<typeof enable> {
-    vi.resetModules();
-    const mod = await import("../src/enable.ts");
-    for (const v of variants) await import(`../src/variants/${v}.ts`);
-    return mod.enable;
-  }
-  /**
    * 造一个带 3 个列表项的根
    * @returns 根与列表项
    */
@@ -374,23 +276,22 @@ describe("按已加载的变体决定方案", () => {
   });
 });
 
-describe("syncExtensions 分两遍", () => {
+describe("engine 扩展分两遍", () => {
   /**
    * 注册两个会记录调用顺序的假扩展（先 global 后 svg），返回新模块的 enable 和调用日志
    * @returns enable 与日志
    */
   async function withLoggedExtensions(): Promise<{ en: typeof enable; log: string[] }> {
-    vi.resetModules();
-    const mod = await import("../src/enable.ts");
+    const { enable: en, registerEngine } = await loadFull();
     const log: string[] = [];
     for (const engine of ["global", "svg"] as const) {
-      mod.registerExtension({
+      registerEngine({
         engine,
         sync: () => void log.push("sync:" + engine),
         release: () => void log.push("release:" + engine),
       });
     }
-    return { en: mod.enable, log };
+    return { en, log };
   }
 
   it("先撤掉所有未选中的扩展，再同步选中的（选中的在注册表里排在前面也一样）", async () => {

@@ -10,16 +10,32 @@ $icon-selectors: "i:empty", '[class*="icon"]:empty';
 /// 自动推导规则的根前缀：所有带 skz 的元素（不再有 skz-mode，显式模式只能靠 explicit.css）。
 $auto: "[skz]";
 
-/// clip（默认）文字模式的根选择器：不写 skz-text 或写 clip，即排除 underline / leaf / tofu。
-/// tofu 根在没引 tofu.css 时退回 underline 的外观（见 tier1），所以这里要排除。
-$clip: $auto + ':not([skz-text="underline"]):not([skz-text="leaf"]):not([skz-text="tofu"])';
+/// color 驱动的文字模式挂载选择器（:where() 后缀），作后缀接在 $auto / [skz][skz-effect=…] 后面。
+/// 文字模式按驱动分两类：
+/// - gradient 驱动：clip / leaf，读 --skz-fill / --skz-bg-img / --skz-bg-pos（clip 把渐变裁进文字，leaf 把渐变铺满叶子元素）；
+/// - color 驱动：underline / tofu，只有一个颜色，读 --skz-ul-fill（pulse / shimmer 时只能变色）。
+/// 挂载条件是「有 skz-text 且不是 gradient 驱动的任何取值」：用排除法而不是逐个枚举，拼错的 / 将来新增的取值才会落到 underline 的外观。
+/// 新增 gradient 驱动的文字模式时，在这里补一个 :not()（并核对 _firewall.scss 与 test/styles.test.ts）。
+/// :where() 不抬优先级：压不过 svg 引擎根规则的 animation: none / 静态 --skz-ul-fill。
+$color-modes: ':where([skz-text]:not([skz-text="clip"]):not([skz-text="leaf"]))';
+
+/// 非 leaf 根的限定（完整版）：除叶子背景法以外的所有根，含 clip / underline / tofu / 未知取值。接在 $auto 后面。
+$nonleaf-mod: ':not([skz-text="leaf"])';
+
+/// core 的根限定：core 没有文字模式，所有根都是 clip；只认没写 skz-text 的根，
+/// 这样同时引了 core.css 和完整版样式时，core 的规则碰不到 leaf / underline / tofu 根，重复加载不改变层叠结果。接在 $auto 后面。
+$core-mod: ":not([skz-text])";
+
+/// core 的 clip 根（= 所有没写 skz-text 的根）。
+$core-clip: $auto + $core-mod;
+
+/// clip（默认）文字模式的根（完整版）：没写 skz-text（即 $core-clip），或明写 clip；其余取值一律不是 clip，
+/// underline / tofu / 未知取值落到 underline 的外观（tofu 没引 tofu.css 时也是），leaf 走叶子背景法。
+/// 逗号分隔的两项，直接 #{} 插值作规则的选择器；作前缀拼后代选择器时用 sk-root-is() 包成 :is()。
+$clip: ($core-clip, $auto + '[skz-text="clip"]');
 
 /// tofu 文字模式的根选择器（方块字体，见 _tofu.scss）。
 $tofu: $auto + '[skz-text="tofu"]';
-
-/// 文字颜色由根上变量驱动的文字模式（underline / tofu），作 :where() 后缀接在 $auto / [skz][skz-effect=…] 后面：
-/// 不抬优先级，压不过 svg 引擎根规则的 animation: none / 静态 --skz-ul-fill。
-$color-modes: ':where([skz-text="underline"], [skz-text="tofu"])';
 
 /// 文字类元素排除串：显式骨头 / 叶子、叶子内部、忽略区内部（clip 和 tofu 共用；tofu 另外追加媒体排除）。
 $text-skip: ":not([skz-bone]):not([skz-leaf]):not([skz-leaf] *):not([skz-ignore] *)";
@@ -49,6 +65,16 @@ $text-skip: ":not([skz-bone]):not([skz-leaf]):not([skz-leaf] *):not([skz-ignore]
     }
   }
   @return $joined;
+}
+
+/// 把根选择器清单包成可作前缀的单个选择器：只有一项原样返回，多项用 :is() 收拢。
+/// @param {List|String} $roots 根选择器（逗号分隔清单或单个选择器）
+/// @return {String} 单个选择器
+@function sk-root-is($roots) {
+  @if list.length($roots) == 1 {
+    @return list.nth($roots, 1);
+  }
+  @return ":is(#{$roots})";
 }
 
 /// 用 :is 收拢标签清单，返回单个选择器：#{$prefix} :is(#{$items}):not([skz-ignore])

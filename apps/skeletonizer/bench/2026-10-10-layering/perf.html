@@ -1,0 +1,89 @@
+<!doctype html>
+<html lang="zh"><head><meta charset="utf-8" /><title>perf-layering</title>
+<style>body{font:14px/1.5 system-ui,sans-serif;margin:0}.card{display:flex;gap:8px;padding:8px;border:1px solid #ddd;margin:4px}.card img{width:48px;height:48px;border-radius:50%}</style>
+</head><body><div id="root"></div>
+<script type="module">
+// 分层基准页：CSS / JS 取自冻结 dist（静态服务 serve.mjs），由端口决定用哪一份：
+//   5195 = 改前（/d/before/）  5196 = 改后（/d/after/）  5198 = 派生变量实验（/d/derive/，第 4 项 A/B）
+// URL 参数 css 是逗号分隔的令牌：
+//   base | explicit | sweep | tofu | core | all    加载对应 CSS（base / explicit / core 互斥）
+//   global | svg                                   加载 CSS + 对应变体的 JS（global-js.mjs / svg-js.mjs），即 import "skeletonizer/global" 的等价物
+//   core                                           JS 也换成 core-js.mjs（只有 effect / fit），不带完整版扩展
+const q = new URLSearchParams(location.search);
+const tokens = (q.get("css") || "base").split(",").filter(Boolean);
+const has = (t) => tokens.includes(t);
+const VER = { 5195: "before", 5196: "after", 5198: "derive" }[location.port] || "after";
+const DIST = `/d/${VER}/`;
+const order = ["core", "base", "explicit", "global", "svg", "sweep", "tofu", "all"];
+const cssList = order.filter(has);
+await Promise.all(cssList.map((n) => new Promise((res) => { const l = document.createElement("link"); l.rel = "stylesheet"; l.href = `${DIST}${n}.css`; l.onload = l.onerror = res; document.head.appendChild(l); })));
+const { Bone, enable } = await import(DIST + (has("core") ? "core-js.mjs" : "full.mjs"));
+if (has("global") || has("all")) await import(DIST + "global-js.mjs");
+if (has("svg") || has("all")) await import(DIST + "svg-js.mjs");
+const bone = has("explicit");
+const root = document.getElementById("root");
+const GIF = Bone.image();
+const nf = () => new Promise((r) => requestAnimationFrame(r));
+const B = bone ? " skz-bone" : "";
+let off = null, curSpec = null;
+
+/** 一张卡片（8 个元素）。 */
+const cardHtml = () => `<div class="card"><img${B} src="${GIF}" alt=""><div><h3${B}>${Bone.text(10)}</h3><p${B}>${Bone.lines(2)}</p><span${B}>${Bone.text(6)}</span> <i${B} class="icon-star"></i><button${B}>${Bone.text(4)}</button></div></div>`;
+
+/** 搭场景：n 张卡片（约 8 个元素 / 张）；spec 是数组 -> 纯 CSS 路径 [[k,v]...]；是对象 -> 走真实 enable(root, opts) */
+window.setup = async (n, spec) => {
+  off?.(); off = null;
+  root.getAttributeNames().forEach((a) => a !== "id" && root.removeAttribute(a));
+  root.removeAttribute("style");
+  window.scrollTo(0, 0);
+  root.innerHTML = Array.from({ length: n }, cardHtml).join("");
+  curSpec = spec;
+  if (Array.isArray(spec)) {
+    for (const [k, v] of spec) { if (k.startsWith("--")) root.style.setProperty(k, v); else root.setAttribute(k, v); }
+    root.setAttribute("skz", "");
+  } else off = enable(root, spec || {});
+  await nf(); await nf();
+  return root.querySelectorAll("*").length;
+};
+
+/** 数 ms 毫秒内的帧数 */
+window.frames = async (ms) => {
+  let f = 0; const end = performance.now() + ms;
+  while (performance.now() < end) { await nf(); f++; }
+  return f;
+};
+
+/** 开启耗时：enable 路径量真实的 enable() 调用（含防火墙、inert、强制样式 + 布局）；纯 CSS 路径量切 skz 属性 */
+window.toggleCost = async () => {
+  if (Array.isArray(curSpec)) {
+    root.removeAttribute("skz"); void root.offsetHeight; await nf(); await nf();
+    const t = performance.now(); root.setAttribute("skz", ""); void root.offsetHeight; return performance.now() - t;
+  }
+  off?.(); off = null; void root.offsetHeight; await nf(); await nf();
+  const t = performance.now(); off = enable(root, curSpec || {}); void root.offsetHeight; const d = performance.now() - t;
+  await nf(); await nf(); return d;
+};
+
+/** 状态快照：防火墙标记数、根属性、计算样式，供正确性抽查 */
+window.snap = () => {
+  const items = [...root.children];
+  const probe = root.querySelector("h3");
+  const cs = probe ? getComputedStyle(probe) : null;
+  const rcs = getComputedStyle(root);
+  return {
+    items: items.length, fw: items.filter((c) => c.hasAttribute("skz-fw")).length,
+    rootAttrs: Object.fromEntries(root.getAttributeNames().map((a) => [a, root.getAttribute(a).slice(0, 40)])),
+    rootAnim: rcs.animationName, rootOpacity: rcs.opacity,
+    probeBg: cs && cs.backgroundColor, probePos: cs && cs.backgroundPosition, probeImg: cs && cs.backgroundImage.slice(0, 40), probeClip: cs && cs.backgroundClip,
+  };
+};
+/** 采样根上 --skz-shimmer-p：ms 毫秒内每帧读一次，返回帧数与每秒变化次数。会触发强制样式重算，只在非 trace 阶段用 */
+window.sampleP = async (ms) => {
+  const vals = []; const t0 = performance.now();
+  while (performance.now() - t0 < ms) { await nf(); vals.push(+getComputedStyle(root).getPropertyValue("--skz-shimmer-p")); }
+  let changes = 0;
+  for (let i = 1; i < vals.length; i++) if (vals[i] !== vals[i - 1]) changes++;
+  return { frames: vals.length, changesPerSec: +(changes / ((performance.now() - t0) / 1000)).toFixed(1), anim: getComputedStyle(root).animation.slice(0, 160) };
+};
+window.ready = true;
+</script></body></html>

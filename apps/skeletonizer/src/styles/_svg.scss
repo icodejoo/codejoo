@@ -6,6 +6,8 @@
  * 文字：默认的 clip 模式文字条直接用这张背景图（pulse / shimmer 都有动画）；underline / tofu 靠颜色而不是背景图，svg 引擎下保持静止的 --skz-color
  * （要让它们动请用 global 引擎）。降频变量 --skz-shimmer-timing 只对 global 引擎生效，svg 的光带速度由 SMIL 决定；
  * iOS 不支持 fixed 背景，shimmer 改用 pulse 图。 */
+@use "mixins" as *;
+
 [skz][skz-engine="svg"][skz-effect="pulse"],
 [skz][skz-engine="svg"][skz-effect="shimmer"] {
   animation: none;
@@ -20,7 +22,7 @@
 [skz][skz-engine="svg"][skz-effect="shimmer"] {
   --skz-bg-img: var(--skz-svg-shimmer);
 }
-@supports (-webkit-touch-callout: none) {
+@include sk-ios {
   [skz][skz-engine="svg"][skz-effect="shimmer"] {
     --skz-bg-img: var(--skz-svg-pulse);
   }

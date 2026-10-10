@@ -1,0 +1,31 @@
+<!doctype html>
+<html lang="zh"><head><meta charset="utf-8" /><title>core-minimal</title>
+<style>
+:root{color-scheme:light dark}body{font:14px/1.5 system-ui,sans-serif;margin:0;background:#fff;color:#111}
+@media (prefers-color-scheme:dark){body{background:#111827;color:#e5e7eb}}
+.card{display:flex;gap:12px;padding:12px;border:1px solid #8884;margin:8px;width:520px;box-sizing:border-box}
+.card img{width:56px;height:56px;border-radius:50%;flex:none}.card .body{flex:1;min-width:0}
+.card h3{margin:0 0 4px}.card p{margin:4px 0}
+</style>
+<!-- 最小 core 页面：只有 core-js + core.css，用 import map 把 "skeletonizer" 指到冻结的 dist（?ver=before|after，缺省 after）。 -->
+<script>
+  const q = new URLSearchParams(location.search), D = `/d/${q.get("ver") || "after"}/`, sim = q.get("sim") || "";
+  const im = document.createElement("script"); im.type = "importmap"; im.textContent = JSON.stringify({ imports: { skeletonizer: D + "core-js.mjs" } }); document.head.appendChild(im);
+  const l = document.createElement("link"); l.rel = "stylesheet"; l.href = `${D}${q.get("cssfile") || "core"}.css${sim ? `?sim=${sim}` : ""}`; document.head.appendChild(l);
+</script>
+</head><body><div id="root"></div>
+<script type="module">
+import { Bone, enable } from "skeletonizer";
+const root = document.getElementById("root");
+const GIF = Bone.image();
+const card = (i) => `<div class="card"><img src="${GIF}" alt=""><div class="body"><h3>标题 Card Title ${i}</h3><p>这是第一段描述文字，用来检查多行换行与最后一行变短的效果，English words mixed in 123.</p><span>tag-a</span> <small>small text</small> <i class="icon-star"></i> <button>按钮 Button</button><p>混排 <b>粗体</b> 和 <code>code</code> 以及 <a href="#">链接文字</a> 收尾</p><p>忽略区 <span skz-ignore>保留的真实内容</span> 后面</p><input placeholder="输入框"><ul><li>列表项一</li><li>列表项二</li></ul><select><option>选项甲</option></select> <textarea>文本域</textarea> <button><span>按钮内层 span</span></button><div skz-ignore><p>忽略区里的 p <span skz-x>标记 x</span></p></div><p skz-leaf>叶子 <b>内部</b></p><p skz-bone>骨头标记</p></div></div>`;
+const nf = () => new Promise((r) => requestAnimationFrame(r));
+let off = null;
+window.setup = async ({ n = 1, ...opts } = {}) => {
+  off?.(); root.getAttributeNames().forEach((a) => a !== "id" && root.removeAttribute(a));
+  root.innerHTML = Array.from({ length: n }, (_, i) => card(i + 1)).join("");
+  off = enable(root, opts); await nf(); await nf(); return root.querySelectorAll("*").length;
+};
+window.root = root;
+window.ready = true;
+</script></body></html>

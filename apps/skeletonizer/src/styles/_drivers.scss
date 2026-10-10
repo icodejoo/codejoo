@@ -1,0 +1,19 @@
+// ===== 根驱动的三条派生变量（不输出任何 CSS，只在规则体里 @include）=====
+// 根上的动画只驱动两个原始变量（--skz-pulse-c 颜色、--skz-shimmer-p 光带位置），
+// 骨头读的 --skz-fill / --skz-ul-fill / --skz-bg-pos 是从它们派生出来的，在根上展开后继承给所有后代。
+// 根规则（_driver.scss / _driver-color.scss）和继承防火墙（_firewall.scss，要在列表项上把这些派生值重声明）共用这三条，改一处两边同步。
+
+/// gradient 驱动的 pulse：骨头背景色读 pulse 颜色。
+@mixin sk-pulse-fill {
+  --skz-fill: var(--skz-pulse-c);
+}
+
+/// gradient 驱动的 shimmer：光带位置读 shimmer 位置。
+@mixin sk-shimmer-pos {
+  --skz-bg-pos: calc(var(--skz-shimmer-p) * 1vw) 0;
+}
+
+/// color 驱动（underline / tofu）：下划线 / 方块字的颜色读 pulse 颜色（pulse 与 shimmer 都用它）。
+@mixin sk-pulse-ul {
+  --skz-ul-fill: var(--skz-pulse-c);
+}

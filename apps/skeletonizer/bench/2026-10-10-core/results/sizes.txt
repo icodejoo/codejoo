@@ -1,0 +1,45 @@
+core-js.mjs                  files=core-js.mjs+core-BiUUYPaf.mjs+enable-BgDP1H2f.mjs  raw=7582 gzip=3578
+core.mjs                     files=core.mjs+core-BiUUYPaf.mjs+enable-BgDP1H2f.mjs  raw=7601 gzip=3585
+explicit-js.mjs              files=explicit-js.mjs+core-BiUUYPaf.mjs+enable-BgDP1H2f.mjs  raw=7582 gzip=3578
+explicit.mjs                 files=explicit.mjs+core-BiUUYPaf.mjs+enable-BgDP1H2f.mjs  raw=7605 gzip=3589
+full.mjs                     files=full.mjs+core-BiUUYPaf.mjs+enable-BgDP1H2f.mjs+full-CuQWpKFO.mjs  raw=10663 gzip=5127
+global-js.mjs                files=global-js.mjs+full-CuQWpKFO.mjs+core-BiUUYPaf.mjs+enable-BgDP1H2f.mjs+global-BHQQkd8b.mjs+svg-Czd1GONm.mjs  raw=13448 gzip=6545
+global.mjs                   files=global.mjs+full-CuQWpKFO.mjs+core-BiUUYPaf.mjs+enable-BgDP1H2f.mjs+global-BHQQkd8b.mjs+svg-Czd1GONm.mjs  raw=13469 gzip=6552
+svg-js.mjs                   files=svg-js.mjs+full-CuQWpKFO.mjs+core-BiUUYPaf.mjs+enable-BgDP1H2f.mjs+svg-Cfxbohw9.mjs+svg-Czd1GONm.mjs  raw=12700 gzip=6161
+svg.mjs                      files=svg.mjs+full-CuQWpKFO.mjs+core-BiUUYPaf.mjs+enable-BgDP1H2f.mjs+svg-Cfxbohw9.mjs+svg-Czd1GONm.mjs  raw=12718 gzip=6168
+all-js.mjs                   files=all-js.mjs+full-CuQWpKFO.mjs+core-BiUUYPaf.mjs+enable-BgDP1H2f.mjs+global-BHQQkd8b.mjs+svg-Czd1GONm.mjs+svg-Cfxbohw9.mjs  raw=13596 gzip=6677
+all.mjs                      files=all.mjs+full-CuQWpKFO.mjs+core-BiUUYPaf.mjs+enable-BgDP1H2f.mjs+global-BHQQkd8b.mjs+svg-Czd1GONm.mjs+svg-Cfxbohw9.mjs  raw=13614 gzip=6685
+vue.mjs                      files=vue.mjs+enable-BgDP1H2f.mjs  raw=4380 gzip=1935
+react.mjs                    files=react.mjs+enable-BgDP1H2f.mjs  raw=4296 gzip=1928
+svelte.mjs                   files=svelte.mjs+enable-BgDP1H2f.mjs  raw=3580 gzip=1554
+--- 增量
+full - core-js               files=full.mjs+full-CuQWpKFO.mjs  raw=3309 gzip=1718
+global-js - full             files=global-js.mjs+global-BHQQkd8b.mjs+svg-Czd1GONm.mjs  raw=3108 gzip=1630
+svg-js - full                files=svg-js.mjs+svg-Cfxbohw9.mjs+svg-Czd1GONm.mjs  raw=2360 gzip=1246
+all-js - full                files=all-js.mjs+global-BHQQkd8b.mjs+svg-Czd1GONm.mjs+svg-Cfxbohw9.mjs  raw=3256 gzip=1762
+global-js - core-js          files=global-js.mjs+full-CuQWpKFO.mjs+global-BHQQkd8b.mjs+svg-Czd1GONm.mjs  raw=6094 gzip=3136
+svg-js - core-js             files=svg-js.mjs+full-CuQWpKFO.mjs+svg-Cfxbohw9.mjs+svg-Czd1GONm.mjs  raw=5346 gzip=2752
+all-js - core-js             files=all-js.mjs+full-CuQWpKFO.mjs+global-BHQQkd8b.mjs+svg-Czd1GONm.mjs+svg-Cfxbohw9.mjs  raw=6242 gzip=3268
+vue - core-js                files=vue.mjs  raw=957 gzip=530
+react - core-js              files=react.mjs  raw=873 gzip=523
+svelte - core-js             files=svelte.mjs  raw=157 gzip=149
+core-js                      files=core-js.mjs+core-BiUUYPaf.mjs+enable-BgDP1H2f.mjs  raw=7582 gzip=3578
+explicit-js                  files=explicit-js.mjs+core-BiUUYPaf.mjs+enable-BgDP1H2f.mjs  raw=7582 gzip=3578
+--- CSS
+core.css raw=7175 gzip=1540
+explicit.css raw=3518 gzip=1062
+base.css raw=8910 gzip=1757
+global.css raw=976 gzip=320
+svg.css raw=468 gzip=193
+sweep.css raw=1724 gzip=566
+tofu.css raw=4415 gzip=2006
+all.css raw=16022 gzip=4126
+--- 合计（JS 闭包 + CSS）
+core-js+core: gzip=5118 | explicit-js+explicit: gzip=4640
+full + base: 6884
+global-js + base + global: 8622
+svg-js + base + svg: 8111
+all-js + all.css: 10803
+vue.mjs 单文件 gzip 530
+react.mjs 单文件 gzip 523
+svelte.mjs 单文件 gzip 149

@@ -1,8 +1,12 @@
-// skeletonizer/explicit.css：显式基底，不含任何推导规则，只有 skz-bone / skz-leaf 是骨头。
-// 和 base.css 二选一（显式模式只能靠引入本文件开启）。
+// skeletonizer/explicit.css：显式基底（core 与完整版共用），不含任何推导规则，只有 skz-bone / skz-leaf 是骨头。
+// 和 base.css / core.css 二选一（显式模式只能靠引入本文件开启）。
+// 组成：主题与交互锁 + 显式标记 + fade / solid / 减少动态效果 + fit + 根驱动（pulse / shimmer 纯 CSS 动画，光带降频）+ 懒渲染 skz-paused + skz-cv。
+// 不含：兜底层、推导规则、underline / leaf / tofu 文字模式、继承防火墙、svg 降级、sweep。
 @use "../theme";
 @use "../marks" as marks;
 @use "../effects-core";
 @use "../fit";
+@use "../driver";
+@use "../lazy";
 
 @include marks.sk-explicit("[skz]");

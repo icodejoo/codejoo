@@ -1,15 +1,15 @@
 ---
 title: skeletonizer Web 版设计总结
 status: active
-updated: 2026-10-08
-summary: 运行时 + mock + 覆盖标记的 Web 骨架屏方案：已定决策、四档层叠、标记、API 与路线。
+updated: 2026-10-10
+summary: 运行时 + mock + 覆盖标记的 Web 骨架屏方案：已定决策、四档层叠、core 与完整版、标记、API 与路线。
 ---
 
 ## TL;DR
 
 - 照 Flutter skeletonizer 的路子：**真实 DOM 渲染 + mock 数据 + 例外标记**，不手画占位形状。
 - 核心是**纯 CSS**，靠 `@supports` 分四档渐进覆盖（兜底整块 → 标签白名单 → 下划线文字（默认再叠 `background-clip:text` 填充）→ `:has` 叶子），不用 UA 嗅探，也不用 JS 闸门。
-- 产物只有 `core`（CSS + `enable()` + `Bone`）和一个 light DOM 的 `<skz-box>`；各框架只给文档示例，不发适配包。
+- 包有两种并列的用法（2026-10-10 拆包）：**core**（默认，`import "skeletonizer"`，面向现代浏览器里的中小骨架，单个根约 2000 元素以内）与**完整版**（`skeletonizer/full` + 按需样式与变体，规模上限高得多（有继承防火墙））；产物还包括一个 light DOM 的 `<skz-box>` 和 Vue / React / Svelte 适配层（子路径导出）。
 - 原型已跑通，实测结论见 [原型验证报告](../reports/2026-10-08-prototype-verification.md)。
 
 ## 1. 为什么做，和三个参考物的关系
@@ -47,8 +47,15 @@ summary: 运行时 + mock + 覆盖标记的 Web 骨架屏方案：已定决策�
 | Q27      | iOS 流光         | 识别 iOS 后显式选了的 shimmer 降级 pulse（**iOS 上是否真的需要，未验证**）                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                             |
 | Q28      | 兜底粒度         | 根的**直接子元素各一块**，后代 `visibility:hidden`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     |
 | Q29      | 兜底层约束       | 见 §7                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                  |
+| Q30      | core 与完整版    | 包拆成两种**并列**用法：core（`skeletonizer`，体积 > 简单 > 维护，目标 Chrome 119+ / Safari 16.4+ / Firefox 128+，单个根约 2000 元素以内，文字只有 clip，低于门槛只有第 0 档 + fade）与完整版（`skeletonizer/full`，四档渐进、防火墙、svg、sweep、tofu、懒渲染、`registerCustomElements`、老浏览器降级，规模上限高得多（有继承防火墙））。README 用一张对比表让使用者选，两者不要同时引（见 §5.1）。**Firefox / Safari 未实测，按规范默认兼容，文档写"仅 Chrome 实测"**                                                                                                                                                |
+| Q31      | CSS 分层         | `core.css` = 主题 + 第 0 档 + 标记 + 现代档（单个 `@supports` 要求 `text-decoration-thickness` 与 `:has()`）+ effects-core + fit + 根驱动；`explicit.css` = 主题 + 标记 + effects-core + fit + 根驱动 + 懒渲染规则；`base.css` = 兜底 + 完整四档 + 根驱动 + 纯色驱动 + 懒渲染；`global.css` 只剩防火墙 + svg 降级。pulse / shimmer 的根驱动挪进各基底，只引 `base.css` 也有纯 CSS 动画。逐规则对比与性能验证见 `bench/2026-10-10-layering/NOTES.md`                                                                                                                                                                    |
+| Q32      | 扩展点与全局变量 | core 只认 `effect` / `fit`，其余能力经通用扩展点 `registerExtension({ name, sync, release })` 挂入；方案实现的注册改名 `registerEngine`（`skeletonizer/full` 导出）。导入 core / explicit / full 任一入口挂全局 `skz = { enable, disable, bone, defineSkzBox }`（SSR 也挂，完整版补 `registerCustomElements`；已被别人占用不覆盖并在开发模式警告一次；适配层不挂）                                                                                                                                                                                                                                                     |
+| Q33      | 类型随版本变宽   | `EnableOptions` / `SkzGlobal` 用接口、`SkzEffect` 取自 `SkzEffectMap` 的键；完整版入口的类型里 `declare module "skeletonizer"` 补 `text` / `engine` / `fallback`、`sweep`、`registerCustomElements`，导入后全项目自动变宽；只导入 core 时传这些是类型错误                                                                                                                                                                                                                                                                                                                                                              |
+| Q34      | 开发模式警告     | `process.env.NODE_ENV` 不是 production 时 `console.warn` 一次：全局 `skz` 被占用、完整版里显式传了没注册的 `engine`；产物里保留该表达式原样，由使用方打包器替换，浏览器直引按生产处理                                                                                                                                                                                                                                                                                                                                                                                                                                  |
 
 ## 3. 四档层叠
+
+> 这是完整版（`base.css`）的完整渐进。core 只取其中的第 0 档加一个"现代档"（`text-decoration-thickness` 与 `:has()` 同时具备时才开，clip 文字 / 控件整块 / 图标 / 忽略区修正合并在一起），低于门槛没有中间档；见 §5.1。
 
 ```
 base.css      无条件        兜底：根的直接子元素整块灰，后代藏起来
@@ -80,9 +87,10 @@ effects.css   无条件（默认支持 CSS 变量）fade（默认）/ solid / pu
 ## 5. 根状态与 API
 
 ```js
-import { enable, disable, registerCustomElements, defineSkzBox, Bone } from "skeletonizer";
+import { enable, disable, defineSkzBox, Bone } from "skeletonizer"; // core；完整版从 "skeletonizer/full" 导入，并多出 registerCustomElements / registerEngine
+import { registerCustomElements } from "skeletonizer/full";
 
-const off = enable(el, { effect: "pulse", text: "underline" }); // 返回关闭函数
+const off = enable(el, { effect: "pulse" }); // 返回关闭函数；text / engine / fallback 仅完整版
 off(); // 或 disable(el)
 
 defineSkzBox(); // <skz-box loading effect="pulse"><div>…</div></skz-box>，skz 落在第一个元素子节点上
@@ -93,7 +101,20 @@ registerCustomElements(document, { watch: true }); // 扫描自定义元素，�
 - `fit: true`（默认关）：骨架自身不撑出滚动条。根带 `skz-fit`，CSS 兜底 `max-height: 100vh/100dvh` + `overflow: clip`（首帧零 JS 生效）；JS（`src/fit.ts`）找第一个 overflow 非 visible 的祖先（没有则视口），把根的内联 `max-height` 收成「边界可视底边 − 根顶」，并给完全落在其外的列表项（同防火墙的找法）打 `skz-fit-hide`（`display:none`）；收口后边界若仍可滚动（骨架在首屏以下，或下方有别的内容，滚动条不是骨架造成的），放宽为一屏高后重新打标记，只放宽一次；`ResizeObserver` 观察边界（视口监听 `resize`），rAF 合并重算；关闭或 `disable()` 时清干净。只管骨架自身，不扣掉它下方的内容（页脚等）。`<skz-box fit>` 与 React / Vue / Svelte 的 `fit` 透传同一选项。
 - `<skz-box>` 宿主只管自己的 `loading` 属性，`enable/disable/toggle` 作用在【第一个元素子节点】上，宿主自己不带 `skz`，因此没有重入保护；宿主断开时对子根 `disable`、重新连接时按 `loading` 恢复。不带 MutationObserver：子根被框架替换后由用户自己处理（如切一下 `loading`）。
 - 没有原生 `inert` 时退到 CSS `pointer-events:none` + 根上 `focusin` 捕获后 `blur()`（**该分支未在真机验证**）。
-- `registerCustomElements` 优先 `adoptedStyleSheets`，不支持时往 `<head>` 插 `<style data-skz-hosts>`（**降级分支未验证**）。
+- `registerCustomElements`（仅完整版）优先 `adoptedStyleSheets`，不支持时往 `<head>` 插 `<style data-skz-hosts>`（**降级分支未验证**）。
+
+### 5.1 包的两种用法：core 与完整版
+
+|              | core（`skeletonizer`）                                            | 完整版（`skeletonizer/full`）                                                                    |
+| ------------ | ----------------------------------------------------------------- | ------------------------------------------------------------------------------------------------ |
+| 样式         | 自带 `core.css`                                                   | 自己挑：`base.css` / `explicit.css` + 变体，或 `all.css`                                         |
+| 能力         | fade / solid / pulse / shimmer，文字只有 clip                     | 另有 sweep、underline / leaf / tofu、防火墙、svg、懒渲染、`registerCustomElements`、老浏览器降级 |
+| 门槛与规模   | Chrome 119+ / Safari 16.4+ / Firefox 128+；单个根约 2000 元素以内 | 兜底层 + 四档渐进；上限高得多                                                                    |
+| 体积（gzip） | 4.63 KB                                                           | 6.39 KB（`full` + `base.css`）起                                                                 |
+
+- core 没有继承防火墙，pulse / shimmer 每帧重算根下所有元素的样式，规模上限的数据见 [README 的"core 的规模上限"](../../README.zh-CN.md#core-的规模上限)和 `bench/2026-10-10-core/NOTES.md`。
+- 完整版用户不要再引 `skeletonizer` 默认入口（它带 `core.css`，重复加载并改变层叠）；旧的 `import … from "skeletonizer"` 迁到 `skeletonizer/full`。
+- 适配层直接引 core 模块，不带样式、不挂全局，类型随导入的版本变宽。
 
 ### Bone（只造数据）
 

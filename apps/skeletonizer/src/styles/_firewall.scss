@@ -1,0 +1,38 @@
+@use "svg";
+@use "lists" as *;
+@use "mixins" as *;
+@use "drivers" as *;
+
+/* ===== global 方案：继承防火墙 + 老浏览器的 SVG 降级（skeletonizer/global，global.css）=====
+ * pulse / shimmer 的根驱动在所有基底里（core.css / explicit.css / base.css，见 _driver.scss），这里不重复。
+ * 防火墙配合 JS（skeletonizer/global）：长列表只有视口内的项参与逐帧重算。
+ * 不支持 @property 的浏览器由 JS（skeletonizer/global）把根切到 SVG 方案（skz-engine="svg"，规则在 _svg.scss，这里 @use 一份，
+ * Sass 同一模块只输出一次，all.css 里只有一份）；JS 执行前（SSR 首屏）和 blob 生成失败时，退回基底的 fade。 */
+@supports (color: rgb(from red r g b)) {
+  /* 继承防火墙（enable 给视口外的列表项打 skz-fw）：在它身上把会逐帧变化的变量钉成静态值。
+   * 根上变量变化时它自己重算一次，计算值不变，Chrome 就不再往它的后代传播重算；
+   * 派生变量（--skz-fill / --skz-ul-fill / --skz-bg-pos）在根上已展开成具体值，必须一起重声明才挡得住，
+   * 重声明的三条派生变量与根规则共用 _drivers.scss 的 mixin。
+   * clip 根上没有派生别名（文字条背景在文字元素自己身上读 --skz-fill / --skz-bg-img），钉住这两个就够了。
+   * 实测 16000 元素 shimmer 从约 19 帧到 60 帧。打了防火墙的项里骨头静止，所以只用于视口外 */
+  [skz] [skz-fw] {
+    --skz-pulse-c: var(--skz-color);
+    --skz-shimmer-p: -60;
+  }
+  [skz][skz-effect="pulse"] [skz-fw] {
+    @include sk-pulse-fill;
+  }
+  [skz][skz-effect="shimmer"] [skz-fw] {
+    @include sk-shimmer-pos;
+  }
+  #{$auto}:is([skz-effect="pulse"], [skz-effect="shimmer"])#{$color-modes} [skz-fw] {
+    @include sk-pulse-ul;
+  }
+
+  /* iOS 分支（见 _driver.scss）里 --skz-fill 读 pulse 颜色，防火墙里同步钉住 */
+  @include sk-ios {
+    [skz][skz-effect="shimmer"] [skz-fw] {
+      @include sk-pulse-fill;
+    }
+  }
+}

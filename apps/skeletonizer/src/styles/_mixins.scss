@@ -26,3 +26,22 @@
     }
   }
 }
+
+/// 光带 / pulse 的降频时间函数：读 --skz-shimmer-timing，缺省 steps(36)。
+/// 默认值只能写在这里的 var() 兜底里：写成根上的 --skz-shimmer-timing 声明会盖掉用户写在祖先上的覆盖。
+$shimmer-timing: var(--skz-shimmer-timing, steps(36));
+
+/// 光带动画 + pulse 动画一起挂（同一个降频时间函数）：underline / tofu 根和 iOS 的 shimmer 都要颜色逐步变化。
+@mixin sk-shimmer-with-pulse {
+  animation:
+    skz-shimmer-root var(--skz-duration) $shimmer-timing infinite,
+    skz-pulse-root var(--skz-duration) $shimmer-timing infinite alternate;
+}
+
+/// iOS Safari 专属分支：@content 包进 @supports (-webkit-touch-callout: none)。iOS 不支持 background-attachment:fixed，
+/// 光带图要换成骨头色脉冲（_driver.scss、_firewall.scss、_svg.scss 共用这一处条件）。
+@mixin sk-ios {
+  @supports (-webkit-touch-callout: none) {
+    @content;
+  }
+}

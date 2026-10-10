@@ -2,7 +2,11 @@
   "extends": "../../tsconfig.base.json",
   "compilerOptions": {
     "lib": ["DOM", "DOM.Iterable", "ESNext"],
-    "types": ["node"]
+    "types": ["node"],
+    // 源码里 declare module "skeletonizer"（完整版类型增强）要能解析到 core；产物侧靠 package.json exports
+    "paths": { "skeletonizer": ["./src/core/index.ts"] }
   },
-  "include": ["./src/**/*.ts", "./test/**/*.ts"]
+  "include": ["./src/**/*.ts", "./test/**/*.ts"],
+  // test/types 是依赖构建产物的类型测试工程（含故意的报错用例），由 test/types.test.ts 单独编译
+  "exclude": ["./test/types/**"]
 }

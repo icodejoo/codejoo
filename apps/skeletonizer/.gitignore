@@ -23,3 +23,7 @@ dist-ssr
 
 *.tsbuildinfo
 demo-dist
+
+# 本地临时原型与会话交接文件（不提交）
+demo/.tmp-*/
+memory.md

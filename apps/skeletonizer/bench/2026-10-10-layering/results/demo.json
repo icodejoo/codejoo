@@ -1,0 +1,73 @@
+{
+ "cells": 49,
+ "identical": 38,
+ "differing": [
+  {
+   "label": "demo/dark/global/sweep/clip",
+   "styleDiffs": 0,
+   "px": 3,
+   "elements": 424
+  },
+  {
+   "label": "demo/dark/global/sweep/underline",
+   "styleDiffs": 0,
+   "px": 2,
+   "elements": 424
+  },
+  {
+   "label": "demo/dark/global/sweep/leaf",
+   "styleDiffs": 0,
+   "px": 6,
+   "elements": 424
+  },
+  {
+   "label": "demo/light/svg/pulse/clip",
+   "styleDiffs": 0,
+   "px": 123980,
+   "elements": 424
+  },
+  {
+   "label": "demo/light/svg/shimmer/clip",
+   "styleDiffs": 0,
+   "px": 93685,
+   "elements": 424
+  },
+  {
+   "label": "demo/light/svg/pulse/underline",
+   "styleDiffs": 0,
+   "px": 530,
+   "elements": 424
+  },
+  {
+   "label": "demo/light/svg/shimmer/underline",
+   "styleDiffs": 0,
+   "px": 86996,
+   "elements": 424
+  },
+  {
+   "label": "demo/light/svg/pulse/leaf",
+   "styleDiffs": 0,
+   "px": 149251,
+   "elements": 424
+  },
+  {
+   "label": "demo/light/svg/shimmer/leaf",
+   "styleDiffs": 0,
+   "px": 116394,
+   "elements": 424
+  },
+  {
+   "label": "demo/light/svg/pulse/tofu",
+   "styleDiffs": 0,
+   "px": 100398,
+   "elements": 424
+  },
+  {
+   "label": "demo/light/svg/shimmer/tofu",
+   "styleDiffs": 0,
+   "px": 92762,
+   "elements": 424
+  }
+ ],
+ "diffs": []
+}

@@ -1,0 +1,15 @@
+@use "lists" as *;
+@use "mixins" as *;
+@use "drivers" as *;
+
+/* ===== 纯色驱动（只在完整版 base.css）：underline / tofu / 未知取值的根 =====
+ * 下划线和方块字只有一个颜色，读 --skz-ul-fill；pulse / shimmer 时由根上的 pulse 动画驱动它（shimmer 也要挂 pulse，否则只剩静止的灰色）。
+ * pulse / shimmer 的降频时间函数和 _driver.scss 一致。放在 _driver.scss 之后：同优先级，后写的赢。 */
+@supports (color: rgb(from red r g b)) {
+  #{$auto}:is([skz-effect="pulse"], [skz-effect="shimmer"])#{$color-modes} {
+    @include sk-pulse-ul;
+  }
+  [skz][skz-effect="shimmer"]#{$color-modes} {
+    @include sk-shimmer-with-pulse;
+  }
+}
