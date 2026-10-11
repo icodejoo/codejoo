@@ -1,0 +1,135 @@
+[
+ {
+  "name": "WARM",
+  "css": "global,inl,f147",
+  "n": 2000,
+  "attrs": {
+   "effect": "shimmer"
+  },
+  "toggle": false,
+  "toggleN": 7,
+  "probe": false,
+  "snap": false,
+  "cpu": 4,
+  "noTrace": true
+ },
+ {
+  "name": "D4 global round inl @2000",
+  "css": "global,round,inl,f148",
+  "n": 2000,
+  "attrs": {
+   "effect": "shimmer"
+  },
+  "toggle": true,
+  "toggleN": 3,
+  "probe": false,
+  "snap": true,
+  "cpu": 4
+ },
+ {
+  "name": "D4 global roundr inl @2000",
+  "css": "global,roundr,inl,f149",
+  "n": 2000,
+  "attrs": {
+   "effect": "shimmer"
+  },
+  "toggle": true,
+  "toggleN": 3,
+  "probe": false,
+  "snap": true,
+  "cpu": 4
+ },
+ {
+  "name": "D4 global ul inl @2000",
+  "css": "global,inl,f150",
+  "n": 2000,
+  "attrs": {
+   "effect": "shimmer",
+   "text": "underline"
+  },
+  "toggle": true,
+  "toggleN": 3,
+  "probe": false,
+  "snap": true,
+  "cpu": 4
+ },
+ {
+  "name": "D4 global clip inl @2000",
+  "css": "global,inl,f151",
+  "n": 2000,
+  "attrs": {
+   "effect": "shimmer"
+  },
+  "toggle": true,
+  "toggleN": 3,
+  "probe": false,
+  "snap": true,
+  "cpu": 4
+ },
+ {
+  "name": "D4 svg round inl @2000",
+  "css": "svg,round,inl,f152",
+  "n": 2000,
+  "attrs": {
+   "effect": "shimmer"
+  },
+  "toggle": true,
+  "toggleN": 3,
+  "probe": false,
+  "snap": true,
+  "cpu": 4
+ },
+ {
+  "name": "D4 svg roundr inl @2000",
+  "css": "svg,roundr,inl,f153",
+  "n": 2000,
+  "attrs": {
+   "effect": "shimmer"
+  },
+  "toggle": true,
+  "toggleN": 3,
+  "probe": false,
+  "snap": true,
+  "cpu": 4
+ },
+ {
+  "name": "D4 svg ul inl @2000",
+  "css": "svg,inl,f154",
+  "n": 2000,
+  "attrs": {
+   "effect": "shimmer",
+   "text": "underline"
+  },
+  "toggle": true,
+  "toggleN": 3,
+  "probe": false,
+  "snap": true,
+  "cpu": 4
+ },
+ {
+  "name": "D4 svg clip inl @2000",
+  "css": "svg,inl,f155",
+  "n": 2000,
+  "attrs": {
+   "effect": "shimmer"
+  },
+  "toggle": true,
+  "toggleN": 3,
+  "probe": false,
+  "snap": true,
+  "cpu": 4
+ },
+ {
+  "name": "CAN-b 4x clip global inl @2000 D2",
+  "css": "global,inl,f156",
+  "n": 2000,
+  "attrs": {
+   "effect": "shimmer"
+  },
+  "toggle": true,
+  "toggleN": 3,
+  "probe": false,
+  "snap": true,
+  "cpu": 4
+ }
+]

@@ -1,0 +1,1 @@
+import{i as e,n as t}from"./enable--vAgo0nO.mjs";function n(n,r){return e(n,r.loading,r),{update:t=>e(n,t.loading,t),destroy:()=>t(n)}}export{n as skeleton};

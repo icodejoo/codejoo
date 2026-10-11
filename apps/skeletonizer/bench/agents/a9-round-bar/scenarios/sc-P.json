@@ -1,0 +1,246 @@
+[
+ {
+  "name": "CAN-a clip global inl @2000 r0",
+  "css": "global,inl,f7",
+  "n": 2000,
+  "attrs": {
+   "effect": "shimmer"
+  },
+  "toggle": true,
+  "toggleN": 7,
+  "probe": true,
+  "snap": true
+ },
+ {
+  "name": "P global ul inl @500",
+  "css": "global,inl,f8",
+  "n": 500,
+  "attrs": {
+   "effect": "shimmer",
+   "text": "underline"
+  },
+  "toggle": true,
+  "toggleN": 7,
+  "probe": true,
+  "snap": true
+ },
+ {
+  "name": "P global clip inl @500",
+  "css": "global,inl,f9",
+  "n": 500,
+  "attrs": {
+   "effect": "shimmer"
+  },
+  "toggle": true,
+  "toggleN": 7,
+  "probe": true,
+  "snap": true
+ },
+ {
+  "name": "P global round inl @500",
+  "css": "global,round,inl,f10",
+  "n": 500,
+  "attrs": {
+   "effect": "shimmer"
+  },
+  "toggle": true,
+  "toggleN": 7,
+  "probe": true,
+  "snap": true
+ },
+ {
+  "name": "P svg ul inl @500",
+  "css": "svg,inl,f11",
+  "n": 500,
+  "attrs": {
+   "effect": "shimmer",
+   "text": "underline"
+  },
+  "toggle": true,
+  "toggleN": 7,
+  "probe": false,
+  "snap": true
+ },
+ {
+  "name": "P svg clip inl @500",
+  "css": "svg,inl,f12",
+  "n": 500,
+  "attrs": {
+   "effect": "shimmer"
+  },
+  "toggle": true,
+  "toggleN": 7,
+  "probe": false,
+  "snap": true
+ },
+ {
+  "name": "P svg round inl @500",
+  "css": "svg,round,inl,f13",
+  "n": 500,
+  "attrs": {
+   "effect": "shimmer"
+  },
+  "toggle": true,
+  "toggleN": 7,
+  "probe": false,
+  "snap": true
+ },
+ {
+  "name": "P global ul inl @2000",
+  "css": "global,inl,f14",
+  "n": 2000,
+  "attrs": {
+   "effect": "shimmer",
+   "text": "underline"
+  },
+  "toggle": true,
+  "toggleN": 7,
+  "probe": true,
+  "snap": true
+ },
+ {
+  "name": "P global clip inl @2000",
+  "css": "global,inl,f15",
+  "n": 2000,
+  "attrs": {
+   "effect": "shimmer"
+  },
+  "toggle": true,
+  "toggleN": 7,
+  "probe": true,
+  "snap": true
+ },
+ {
+  "name": "P global round inl @2000",
+  "css": "global,round,inl,f16",
+  "n": 2000,
+  "attrs": {
+   "effect": "shimmer"
+  },
+  "toggle": true,
+  "toggleN": 7,
+  "probe": true,
+  "snap": true
+ },
+ {
+  "name": "P svg ul inl @2000",
+  "css": "svg,inl,f17",
+  "n": 2000,
+  "attrs": {
+   "effect": "shimmer",
+   "text": "underline"
+  },
+  "toggle": true,
+  "toggleN": 7,
+  "probe": false,
+  "snap": true
+ },
+ {
+  "name": "P svg clip inl @2000",
+  "css": "svg,inl,f18",
+  "n": 2000,
+  "attrs": {
+   "effect": "shimmer"
+  },
+  "toggle": true,
+  "toggleN": 7,
+  "probe": false,
+  "snap": true
+ },
+ {
+  "name": "P svg round inl @2000",
+  "css": "svg,round,inl,f19",
+  "n": 2000,
+  "attrs": {
+   "effect": "shimmer"
+  },
+  "toggle": true,
+  "toggleN": 7,
+  "probe": false,
+  "snap": true
+ },
+ {
+  "name": "P global clip blk @2000",
+  "css": "global,f20",
+  "n": 2000,
+  "attrs": {
+   "effect": "shimmer"
+  },
+  "toggle": true,
+  "toggleN": 7,
+  "probe": true,
+  "snap": true
+ },
+ {
+  "name": "P global round blk @2000",
+  "css": "global,round,f21",
+  "n": 2000,
+  "attrs": {
+   "effect": "shimmer"
+  },
+  "toggle": true,
+  "toggleN": 7,
+  "probe": true,
+  "snap": true
+ },
+ {
+  "name": "P global roundi blk @2000",
+  "css": "global,roundi,f22",
+  "n": 2000,
+  "attrs": {
+   "effect": "shimmer"
+  },
+  "toggle": true,
+  "toggleN": 7,
+  "probe": true,
+  "snap": true
+ },
+ {
+  "name": "P svg clip blk @2000",
+  "css": "svg,f23",
+  "n": 2000,
+  "attrs": {
+   "effect": "shimmer"
+  },
+  "toggle": true,
+  "toggleN": 7,
+  "probe": false,
+  "snap": true
+ },
+ {
+  "name": "P svg round blk @2000",
+  "css": "svg,round,f24",
+  "n": 2000,
+  "attrs": {
+   "effect": "shimmer"
+  },
+  "toggle": true,
+  "toggleN": 7,
+  "probe": false,
+  "snap": true
+ },
+ {
+  "name": "P svg roundi blk @2000",
+  "css": "svg,roundi,f25",
+  "n": 2000,
+  "attrs": {
+   "effect": "shimmer"
+  },
+  "toggle": true,
+  "toggleN": 7,
+  "probe": false,
+  "snap": true
+ },
+ {
+  "name": "CAN-b clip global inl @2000 r0",
+  "css": "global,inl,f26",
+  "n": 2000,
+  "attrs": {
+   "effect": "shimmer"
+  },
+  "toggle": true,
+  "toggleN": 7,
+  "probe": true,
+  "snap": true
+ }
+]

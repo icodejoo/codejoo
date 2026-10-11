@@ -1,0 +1,4 @@
+t=300ms clip内部行0 vs 行1 {"maxDiff":1,"samples":277} clip亮度范围[64,84] clip行数=5 A行数=5 A全部 vs clip {"maxDiff":4,"samples":3999} A混合 vs clip {"maxDiff":4,"samples":3999}
+t=700ms clip内部行0 vs 行1 {"maxDiff":2,"samples":277} clip亮度范围[64,84] clip行数=5 A行数=5 A全部 vs clip {"maxDiff":4,"samples":3999} A混合 vs clip {"maxDiff":4,"samples":3999}
+t=1000ms clip内部行0 vs 行1 {"maxDiff":1,"samples":277} clip亮度范围[64,84] clip行数=5 A行数=5 A全部 vs clip {"maxDiff":3,"samples":3999} A混合 vs clip {"maxDiff":4,"samples":3999}
+t=1300ms clip内部行0 vs 行1 {"maxDiff":0,"samples":277} clip亮度范围[64,66] clip行数=5 A行数=5 A全部 vs clip {"maxDiff":2,"samples":3999} A混合 vs clip {"maxDiff":4,"samples":3999}

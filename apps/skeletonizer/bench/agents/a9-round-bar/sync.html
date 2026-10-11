@@ -1,0 +1,13 @@
+<!doctype html>
+<html lang="zh"><head><meta charset="utf-8" /><title>a9 sync</title>
+<link rel="stylesheet" href="./dist-snap/core.css"><link rel="stylesheet" href="./round.css">
+<style>body{margin:0;padding:10px;background:#111827;font:20px/1.8 system-ui,"Microsoft YaHei"}.r{width:1200px;margin-bottom:14px}.l{font:11px monospace;color:#9ca3af}</style></head>
+<body><div id="o"></div>
+<script>
+document.documentElement.setAttribute("data-skz-theme", "dark");
+const T = "这是一段用于检查光带同步的较长文字，Skeleton screen shimmer should stay in sync across fragments and elements, 数字 1234567890 也一起放进来。";
+const rs = [["clip", ""], ["A 全部", "skz-round"], ["A 混合", 'skz-round="inline"']];
+document.getElementById("o").innerHTML = rs.map(([n, a]) => `<div class="l">${n}</div><div class="r" skz ${a} skz-effect="shimmer"><span skz-text>${T}${T}${T}</span> <span skz-text>第二个元素 another element 的条</span></div>`).join("");
+window.freeze = (ms) => { document.getAnimations().forEach((a) => { a.pause(); a.currentTime = ms; }); };
+window.ready = true;
+</script></body></html>

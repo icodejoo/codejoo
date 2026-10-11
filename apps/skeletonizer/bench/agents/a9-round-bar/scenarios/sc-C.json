@@ -1,0 +1,160 @@
+[
+ {
+  "name": "CAN-a 4x clip global inl @2000 r0",
+  "css": "global,inl,f27",
+  "n": 2000,
+  "attrs": {
+   "effect": "shimmer"
+  },
+  "toggle": true,
+  "toggleN": 3,
+  "probe": false,
+  "snap": true,
+  "cpu": 4
+ },
+ {
+  "name": "C4 global ul inl @2000",
+  "css": "global,inl,f28",
+  "n": 2000,
+  "attrs": {
+   "effect": "shimmer",
+   "text": "underline"
+  },
+  "toggle": true,
+  "toggleN": 3,
+  "probe": false,
+  "snap": true,
+  "cpu": 4
+ },
+ {
+  "name": "C4 global clip inl @2000",
+  "css": "global,inl,f29",
+  "n": 2000,
+  "attrs": {
+   "effect": "shimmer"
+  },
+  "toggle": true,
+  "toggleN": 3,
+  "probe": false,
+  "snap": true,
+  "cpu": 4
+ },
+ {
+  "name": "C4 global round inl @2000",
+  "css": "global,round,inl,f30",
+  "n": 2000,
+  "attrs": {
+   "effect": "shimmer"
+  },
+  "toggle": true,
+  "toggleN": 3,
+  "probe": false,
+  "snap": true,
+  "cpu": 4
+ },
+ {
+  "name": "C4 svg ul inl @2000",
+  "css": "svg,inl,f31",
+  "n": 2000,
+  "attrs": {
+   "effect": "shimmer",
+   "text": "underline"
+  },
+  "toggle": true,
+  "toggleN": 3,
+  "probe": false,
+  "snap": true,
+  "cpu": 4
+ },
+ {
+  "name": "C4 svg clip inl @2000",
+  "css": "svg,inl,f32",
+  "n": 2000,
+  "attrs": {
+   "effect": "shimmer"
+  },
+  "toggle": true,
+  "toggleN": 3,
+  "probe": false,
+  "snap": true,
+  "cpu": 4
+ },
+ {
+  "name": "C4 svg round inl @2000",
+  "css": "svg,round,inl,f33",
+  "n": 2000,
+  "attrs": {
+   "effect": "shimmer"
+  },
+  "toggle": true,
+  "toggleN": 3,
+  "probe": false,
+  "snap": true,
+  "cpu": 4
+ },
+ {
+  "name": "C4 global clip blk @2000",
+  "css": "global,f34",
+  "n": 2000,
+  "attrs": {
+   "effect": "shimmer"
+  },
+  "toggle": true,
+  "toggleN": 3,
+  "probe": false,
+  "snap": true,
+  "cpu": 4
+ },
+ {
+  "name": "C4 global round blk @2000",
+  "css": "global,round,f35",
+  "n": 2000,
+  "attrs": {
+   "effect": "shimmer"
+  },
+  "toggle": true,
+  "toggleN": 3,
+  "probe": false,
+  "snap": true,
+  "cpu": 4
+ },
+ {
+  "name": "C4 svg clip blk @2000",
+  "css": "svg,f36",
+  "n": 2000,
+  "attrs": {
+   "effect": "shimmer"
+  },
+  "toggle": true,
+  "toggleN": 3,
+  "probe": false,
+  "snap": true,
+  "cpu": 4
+ },
+ {
+  "name": "C4 svg round blk @2000",
+  "css": "svg,round,f37",
+  "n": 2000,
+  "attrs": {
+   "effect": "shimmer"
+  },
+  "toggle": true,
+  "toggleN": 3,
+  "probe": false,
+  "snap": true,
+  "cpu": 4
+ },
+ {
+  "name": "CAN-b 4x clip global inl @2000 r0",
+  "css": "global,inl,f38",
+  "n": 2000,
+  "attrs": {
+   "effect": "shimmer"
+  },
+  "toggle": true,
+  "toggleN": 3,
+  "probe": false,
+  "snap": true,
+  "cpu": 4
+ }
+]

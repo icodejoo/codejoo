@@ -1,0 +1,66 @@
+<!doctype html>
+<html lang="zh"><head><meta charset="utf-8" /><title>a9 round bar</title>
+<style>
+/* 验证页：四列并排 = 原文 | 现状 clip | A 全部 | A 混合(inline)。URL 参数：theme=dark|light  effect=solid|shimmer|pulse  base=core|base  cases=逗号分隔的 id 过滤 */
+:root{color-scheme:light dark}
+body{font:16px/1.5 system-ui,"Microsoft YaHei",sans-serif;margin:0;padding:12px;background:#fff;color:#222}
+:root[data-skz-theme=dark] body{background:#111827;color:#e5e7eb}
+h4{margin:14px 0 4px;font:600 12px/1.2 system-ui;color:#888}
+.pair{display:grid;justify-content:start;grid-template-columns:repeat(4,auto);gap:16px}
+.side>.lbl{font:11px/1 monospace;color:#999;margin-bottom:3px}
+.side>div.box{border:1px dashed rgba(128,128,128,.3);padding:6px}
+.w220 .box{width:220px}.w300 .box{width:300px}
+.card{display:flex;gap:8px;padding:8px;border:1px solid rgba(128,128,128,.3)}.card img{width:48px;height:48px;border-radius:50%}
+.flex{display:flex;gap:8px;align-items:flex-start}
+/* 块元素的实验性 hack（只在对应 case 里用） */
+.hk-inline p[skz-text],.hk-inline h3[skz-text]{display:inline}
+.hk-fit p[skz-text]{width:fit-content}
+</style>
+<script>
+const q = new URLSearchParams(location.search);
+const theme = q.get("theme") || "light", effect = q.get("effect") || "solid", baseCss = q.get("base") || "core";
+if (theme === "dark") document.documentElement.setAttribute("data-skz-theme", "dark"); else document.documentElement.setAttribute("data-skz-theme", "light");
+for (const n of [baseCss, ...(baseCss === "base" ? ["global"] : []), "round"]) document.write(`<link rel="stylesheet" href="${n === "round" ? "./round.css" : "./dist-snap/" + n + ".css"}">`);
+</script>
+</head><body>
+<div id="out"></div>
+<script>
+const L = "天空是蓝色的，今天的天气非常好，适合出门散步";
+const cases = [
+  ["zh1", "单行中文", `<span skz-text>这是一段单行中文文字</span>`],
+  ["en1", "单行英文", `<span skz-text>Hello skeleton world, quick brown fox</span>`],
+  ["mix", "中英混排", `<span skz-text>Skeletonizer 骨架屏 v0.1 支持中英混排 OK</span>`],
+  ["num", "数字（行内）", `余额：<span skz-text>12345</span> 元，积分 <span skz-text>9,876.50</span>`],
+  ["desc", "下探字形 gypqj", `<span skz-text>gypqj 你好 yg 笑笑 jQ</span>`],
+  ["wrap", "多行 span（220px 折行）", `<span skz-text>${L}。Skeleton screens keep the layout stable while data loads, so the page does not jump.</span>`, "w220"],
+  ["wrapeven", "多行 span（300px，整齐）", `<span skz-text>${L}，${L}，${L}。</span>`, "w300"],
+  ["blockp", "块元素 <p skz-text>（220px）", `<p skz-text style="margin:0">${L}。Skeleton screens keep the layout stable.</p>`, "w220"],
+  ["blockh3", "块元素 <h3 skz-text> 单行短文字（300px 容器）", `<h3 skz-text style="margin:0">短标题</h3>`, "w300"],
+  ["blockflex", "flex 子项 <span skz-text>（被块化）", `<div class="flex"><span skz-text>弹性子项文字</span><span skz-text>${L}</span></div>`, "w300"],
+  ["hkinline", "hack：p 改 display:inline", `<div class="hk-inline"><p skz-text style="margin:0">${L}。Skeleton screens keep the layout stable.</p><p skz-text style="margin:0">紧跟着的第二段</p></div>`, "w220"],
+  ["hkfit", "hack：p width:fit-content", `<div class="hk-fit"><p skz-text style="margin:0">${L}。Skeleton screens keep the layout stable.</p><p skz-text style="margin:0">短段落</p></div>`, "w220"],
+  ["card", "典型卡片（img/按钮 skz-bone，h3/p/span skz-text）", `<div class="card"><img skz-bone src="data:image/gif;base64,R0lGODlhAQABAAAAACH5BAEKAAEALAAAAAABAAEAAAICTAEAOw==" alt=""><div><h3 skz-text style="margin:0 0 4px">用户昵称标题</h3><p skz-text style="margin:0 0 4px">这是一段简介文字，会折行显示出两到三行的内容给你看看效果。</p><span skz-text>标签文字</span> <button skz-bone>按钮</button></div></div>`, "w300"],
+  ["ign", "嵌套 skz-ignore", `<span skz-text>价格 <span skz-ignore>实时</span> 更新于今天，第二行文字继续</span>`, "w220"],
+  ["nest", "嵌套子元素 b/a/em", `<span skz-text>价格 <b>¥5.00</b> 折后 <em>特价</em> 点击 <a href="#">查看详情</a> 了解更多内容文字</span>`, "w220"],
+  ["divmix", "容器标记 <div skz-text> 混合内容", `<div skz-text>价格：<b>¥5</b> 数量：3 件</div>`, "w300"],
+  ["bigchild", "嵌套更大字号的子元素", `<span skz-text>正文文字 <b style="font-size:2em">大字号</b> 后续文字继续折行</span>`, "w220"],
+  ["br", "含 <br> 的 span", `<span skz-text>第一行<br>第二行较长一点的文字<br>三</span>`, "w220"],
+  ["inlblk", "含 inline-block 子元素", `<span skz-text>前 <span style="display:inline-block;width:40px;height:40px;background:#c00;vertical-align:middle"></span> 后文字 <sup>上标</sup> <sub>下标</sub></span>`, "w220"],
+  ["grid", "grid 子项 span（被块化）", `<div style="display:grid;grid-template-columns:1fr 1fr;gap:6px"><span skz-text>网格一</span><span skz-text>网格二的文字更长一些折行</span></div>`, "w300"],
+  ["lh12ya", "line-height 1.2 的多行（YaHei 默认）", `<div style="line-height:1.2"><span skz-text>${L}。${L}。</span></div>`, "w220"],
+];
+const sizes = [[12,1.2],[12,1.8],[16,1.2],[16,1.8],[24,1.2],[24,1.8]];
+for (const [fs, lh] of sizes) cases.push([`sz${fs}_${lh}`, `字号 ${fs}px / line-height ${lh}（两行折行）`, `<div style="font-size:${fs}px;line-height:${lh}"><span skz-text>Hello 你好 gypq 12345 这是一段会折行的文字，用来看每一行条的高度与圆角。Another sentence here.</span></div>`, "w220"]);
+for (const f of ["Microsoft YaHei", "Segoe UI", "Arial", "Georgia", "Consolas", "SimSun", "Times New Roman"]) cases.push([`f_${f.replace(/\W/g,"")}`, `字体 ${f}`, `<div style="font-family:'${f}';font-size:16px;line-height:1.5"><span skz-text>Hello gypq 你好世界 12345 折行文字 文字</span></div>`, "w220"]);
+const only = (q.get("cases") || "").split(",").filter(Boolean);
+const out = document.getElementById("out");
+const mk = (cls, inner, attrs) => `<div class="side ${cls[0]}"><div class="lbl">${cls[1]}</div><div class="box" ${attrs}>${inner}</div></div>`;
+out.innerHTML = cases.filter((c) => !only.length || only.includes(c[0])).map(([id, title, html, w = ""]) =>
+  `<section id="c-${id}" class="${w}"><h4>${id} — ${title}</h4><div class="pair">` +
+  mk(["", "原文（无骨架）"], html, "") +
+  mk(["", "现状 clip"], html, `skz skz-effect="${effect}"`) +
+  mk(["", "A 方案 round（全部）"], html, `skz skz-round skz-effect="${effect}"`) +
+  mk(["", "A 混合（仅行内标签）"], html, `skz skz-round="inline" skz-effect="${effect}"`) +
+  `</div></section>`).join("");
+window.ready = true;
+</script></body></html>

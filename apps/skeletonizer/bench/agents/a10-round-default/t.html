@@ -1,0 +1,61 @@
+<!doctype html>
+<html lang="zh"><head><meta charset="utf-8" /><title>a10 round default</title>
+<style>
+/* 验证页。URL 参数：d=样式目录（相对包根，默认 dist）css=逗号分隔的 css 名 theme=light|dark effect=solid|shimmer|pulse|fade
+   mode=根上的 skz-text-mode（不传则不写）js=要 import 的 mjs（相对 d，传了就用 JS 开骨架，否则纯 CSS 写根属性）engine=global|svg
+   freeze=毫秒（把根动画暂停在该时刻，便于像素比对）only=逗号分隔的区块 id */
+:root{color-scheme:light dark}
+body{font:16px/1.5 system-ui,"Microsoft YaHei",sans-serif;margin:0;padding:12px;background:#fff;color:#222}
+:root[data-skz-theme=dark] body{background:#111827;color:#e5e7eb}
+h4{margin:14px 0 4px;font:600 12px/1.2 system-ui;color:#888}
+.row{display:flex;gap:16px;align-items:flex-start;flex-wrap:wrap}
+.box{border:1px dashed rgba(128,128,128,.35);padding:6px;width:220px}
+.w300{width:300px}
+.card{display:flex;gap:8px;padding:8px;border:1px solid rgba(128,128,128,.3)}
+.card img{width:48px;height:48px;border-radius:50%}
+.flex{display:flex;gap:8px;align-items:flex-start}
+p,h3{margin:0 0 4px}
+</style>
+</head><body>
+<div id="root"></div>
+<script type="module">
+const q = new URLSearchParams(location.search);
+const d = q.get("d") || "dist", theme = q.get("theme") || "light", effect = q.get("effect") || "solid";
+const mode = q.get("mode"), js = q.get("js"), engine = q.get("engine") || "global", freeze = q.get("freeze");
+document.documentElement.setAttribute("data-skz-theme", theme);
+const L = "天空是蓝色的，今天的天气非常好，适合出门散步";
+const blocks = {
+  span: ["行内 span 多行（220px）", `<span skz-text>${L}。Skeleton screens keep the layout stable while data loads.</span>`, ""],
+  p: ["块元素 p skz-text（220px）", `<p skz-text>${L}。Skeleton screens keep the layout stable.</p>`, ""],
+  h3: ["h3 skz-text（300px）", `<h3 skz-text>短标题</h3>`, "w300"],
+  div: ["div skz-text 混合（300px）", `<div skz-text>价格：<b>¥5.00</b> 数量：3 件，<em>包邮</em></div>`, "w300"],
+  ign: ["嵌套 skz-ignore", `<span skz-text>价格 <span skz-ignore>实时 ¥5</span> 更新于今天，第二行继续</span>`, ""],
+  nest: ["嵌套 b/a/em", `<span skz-text>价格 <b>¥5.00</b> 折后 <em>特价</em> 点击 <a href="#">查看详情</a> 了解更多内容文字</span>`, ""],
+  card: ["卡片（img/button skz-bone）", `<div class="card"><img skz-bone src="data:image/gif;base64,R0lGODlhAQABAAAAACH5BAEKAAEALAAAAAABAAEAAAICTAEAOw==" alt=""><div><h3 skz-text>用户昵称标题</h3><p skz-text>这是一段简介文字，会折行显示出两到三行的内容给你看看效果。</p><span skz-text>标签文字</span> <button skz-bone>按钮</button></div></div>`, "w300"],
+  flex: ["flex 子项 span", `<div class="flex"><span skz-text>弹性子项</span><span skz-text>${L}</span></div>`, "w300"],
+  auto: ["skz-auto 区域（推导）", `<div skz-auto><h3>推导标题文字</h3><p>${L}。推导区里的段落文字，会折行。</p><span>行内 span 在 div 里 ${L}</span> <a href="#">带下划线的链接文字链接</a><ul><li>列表项一</li><li>列表项二比较长一点点的文字</li></ul><button>按钮</button></div>`, "w300"],
+  lh12: ["line-height 1.2 多行", `<div style="line-height:1.2"><span skz-text>${L}。${L}。</span></div>`, ""],
+  en: ["英文下探 gypqj（Arial）", `<div style="font-family:Arial"><span skz-text>gypqj Hello skeleton world, quick brown fox jumps over</span></div>`, ""],
+};
+const only = (q.get("only") || "").split(",").filter(Boolean);
+const attrs = ["skz", effect !== "fade" ? `skz-effect="${effect}"` : "", mode ? `skz-text-mode="${mode}"` : ""].filter(Boolean).join(" ");
+const html = Object.entries(blocks).filter(([id]) => !only.length || only.includes(id)).map(([id, [t, h, w]]) => `<section id="b-${id}"><h4>${id} — ${t}</h4><div class="box ${w}">${h}</div></section>`).join("");
+const root = document.getElementById("root");
+// 根包一层 row，两列并排
+root.innerHTML = `<div id="skroot" ${js ? "" : attrs} class="row">${html}</div>`;
+const skroot = document.getElementById("skroot");
+for (const name of (q.get("css") || "core").split(",")) {
+  await new Promise((r) => { const l = document.createElement("link"); l.rel = "stylesheet"; l.href = `/${d}/${name}.css`; l.onload = l.onerror = r; document.head.appendChild(l); });
+}
+if (js) {
+  const m = await import(`/${d}/${js}`);
+  const enable = m.enable ?? m.default?.enable ?? globalThis.skz.enable;
+  enable(skroot, { effect, ...(mode ? { text: mode } : {}), engine });
+}
+await document.fonts.ready;
+await new Promise((r) => setTimeout(r, 400));
+if (freeze) { for (const a of document.getAnimations()) { a.pause(); a.currentTime = +freeze; } }
+await new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)));
+window.ready = true;
+</script>
+</body></html>

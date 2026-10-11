@@ -1,0 +1,1 @@
+import{r as e}from"./full-Dmbvp8V2.mjs";import{n as t,t as n}from"./svg-BPlGwRFv.mjs";e({engine:`svg`,sync:n,release:t});

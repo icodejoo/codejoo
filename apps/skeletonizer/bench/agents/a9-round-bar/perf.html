@@ -1,0 +1,81 @@
+<!doctype html>
+<html lang="zh"><head><meta charset="utf-8" /><title>perf-a9</title>
+<style>body{font:14px/1.5 system-ui,sans-serif;margin:0}.card{display:flex;gap:8px;padding:8px;border:1px solid #ddd;margin:4px}.card img{width:48px;height:48px;border-radius:50%}</style>
+</head><body><div id="root"></div>
+<script type="module">
+// a9 基准页：显式标记版（文字元素打 skz-text，图 / 图标 / 按钮打 skz-bone，根上不写 skz-auto），CSS / JS 取自 ./dist-snap/（冻结的 dist 快照）。
+// URL 参数 css 是逗号分隔的令牌（其余令牌，如换页用的 f<序号>，忽略）：
+//   global | svg   加载 base.css + 对应变体 css + 变体 JS（global-js.mjs / svg-js.mjs，等价于 import "skeletonizer/global" / "skeletonizer/svg"）
+//   round          叠 round.css，并在根上写 skz-round（A 方案，全部 skz-text 走 A）
+//   roundr         替换版 A：用 ./base-roundr.css（把 dist/base.css 里的下划线 / clip 规则直接改成 A 的声明，不叠 round.css，也不写 skz-round）
+//   roundi         叠 round.css，并在根上写 skz-round="inline"（混合：只有行内标签走 A）
+//   inl            卡片用"全行内"结构：文字元素全是 <span skz-text>（包在 div 里），A 方案真正适用的结构；缺省是 h3 / p / span 的老结构
+const q = new URLSearchParams(location.search);
+const tokens = (q.get("css") || "global").split(",").filter(Boolean);
+const has = (t) => tokens.includes(t);
+const DIST = "./dist-snap/";
+const engine = has("svg") ? "svg" : "global";
+const cssList = [has("roundr") ? "./base-roundr.css" : DIST + "base.css", DIST + engine + ".css"];
+if (has("round") || has("roundi")) cssList.push("./round.css");
+await Promise.all(cssList.map((href) => new Promise((res) => { const l = document.createElement("link"); l.rel = "stylesheet"; l.href = href; l.onload = l.onerror = res; document.head.appendChild(l); })));
+const { Bone, enable } = await import(DIST + engine + "-js.mjs");
+const root = document.getElementById("root");
+const GIF = Bone.image();
+const nf = () => new Promise((r) => requestAnimationFrame(r));
+const roundAttr = has("roundi") ? "inline" : has("round") ? "" : null;
+let off = null, curSpec = null;
+
+/** 一张卡片：老结构 h3 / p / span 文字，或全行内结构（文字全是 span） */
+const cardHtml = has("inl")
+  ? () => `<div class="card"><img skz-bone src="${GIF}" alt=""><div><div><span skz-text>${Bone.text(10)}</span></div><div><span skz-text>${Bone.lines(2)}</span></div><span skz-text>${Bone.text(6)}</span> <i skz-bone class="icon-star"></i><button skz-bone>${Bone.text(4)}</button></div></div>`
+  : () => `<div class="card"><img skz-bone src="${GIF}" alt=""><div><h3 skz-text>${Bone.text(10)}</h3><p skz-text>${Bone.lines(2)}</p><span skz-text>${Bone.text(6)}</span> <i skz-bone class="icon-star"></i><button skz-bone>${Bone.text(4)}</button></div></div>`;
+
+/** 搭场景：n 张卡片，spec 走真实 enable(root, spec)；返回根下元素总数 */
+window.setup = async (n, spec) => {
+  off?.(); off = null;
+  root.getAttributeNames().forEach((a) => a !== "id" && root.removeAttribute(a));
+  root.removeAttribute("style");
+  window.scrollTo(0, 0);
+  root.innerHTML = Array.from({ length: n }, cardHtml).join("");
+  curSpec = spec;
+  off = enable(root, { ...spec, engine });
+  if (roundAttr !== null) root.setAttribute("skz-round", roundAttr);
+  await nf(); await nf();
+  return root.querySelectorAll("*").length;
+};
+
+/** 数 ms 毫秒内的帧数 */
+window.frames = async (ms) => {
+  let f = 0; const end = performance.now() + ms;
+  while (performance.now() < end) { await nf(); f++; }
+  return f;
+};
+
+/** 开启耗时：真实 enable() 调用（含防火墙 / inert）加一次强制样式 + 布局 */
+window.toggleCost = async () => {
+  off?.(); off = null; void root.offsetHeight; await nf(); await nf();
+  const t = performance.now(); off = enable(root, { ...curSpec, engine }); void root.offsetHeight; const d = performance.now() - t;
+  await nf(); await nf(); return d;
+};
+
+/** 状态快照：根属性 / 防火墙标记数 / 第一个 skz-text 的计算样式（确认方案真的在生效） */
+window.snap = () => {
+  const probe = root.querySelector("[skz-text]");
+  const cs = probe ? getComputedStyle(probe) : null;
+  const rcs = getComputedStyle(root);
+  return {
+    tokens, engine, items: root.children.length, fw: [...root.children].filter((c) => c.hasAttribute("skz-fw")).length,
+    rootAttrs: Object.fromEntries(root.getAttributeNames().map((a) => [a, root.getAttribute(a).slice(0, 40)])), rootAnim: rcs.animationName,
+    clip: cs && (cs.webkitBackgroundClip || cs.backgroundClip), deco: cs && cs.textDecorationLine, radius: cs && cs.borderRadius, bdb: cs && (cs.boxDecorationBreak || cs.webkitBoxDecorationBreak),
+    bgImg: cs && cs.backgroundImage.slice(0, 40), bgPos: cs && cs.backgroundPosition,
+  };
+};
+/** 采样根上 --skz-shimmer-p 的变化频率（只对 global；会触发强制样式重算，仅在非 trace 阶段用） */
+window.sampleP = async (ms) => {
+  const vals = []; const t0 = performance.now();
+  while (performance.now() - t0 < ms) { await nf(); vals.push(+getComputedStyle(root).getPropertyValue("--skz-shimmer-p")); }
+  let changes = 0; for (let i = 1; i < vals.length; i++) if (vals[i] !== vals[i - 1]) changes++;
+  return { frames: vals.length, changesPerSec: +(changes / ((performance.now() - t0) / 1000)).toFixed(1) };
+};
+window.ready = true;
+</script></body></html>

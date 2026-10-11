@@ -1,0 +1,13 @@
+<!doctype html>
+<html lang="zh"><head><meta charset="utf-8" /><title>a9 zoom</title>
+<link rel="stylesheet" href="./dist-snap/core.css"><link rel="stylesheet" href="./round.css">
+<style>body{margin:0;padding:8px;font:16px/1.5 system-ui,"Microsoft YaHei";background:#fff}:root[data-skz-theme=dark] body{background:#111827}
+#o{display:flex;gap:14px;width:fit-content}.c{width:150px}.l{font:9px monospace;color:#888;margin-bottom:3px}</style></head>
+<body><div id="o"></div>
+<script>
+const q = new URLSearchParams(location.search);
+document.documentElement.setAttribute("data-skz-theme", q.get("theme") || "light");
+const T = "天空是蓝色的 Hello gypq 价格 12345 元，今天天气非常好";
+document.getElementById("o").innerHTML = [["现状 clip", ""], ["A 全部", "skz-round"]].map(([n, a]) => `<div><div class="l">${n}</div><div class="c" skz ${a} skz-effect="${q.get("effect") || "solid"}"><span skz-text>${T}</span></div></div>`).join("");
+window.ready = true;
+</script></body></html>

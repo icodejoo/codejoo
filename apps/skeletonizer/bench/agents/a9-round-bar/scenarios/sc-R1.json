@@ -1,0 +1,99 @@
+[
+ {
+  "name": "WARM",
+  "css": "global,inl,f103",
+  "n": 2000,
+  "attrs": {
+   "effect": "shimmer"
+  },
+  "toggle": false,
+  "toggleN": 7,
+  "probe": false,
+  "snap": false,
+  "noTrace": true
+ },
+ {
+  "name": "R global clip inl @2000",
+  "css": "global,inl,f104",
+  "n": 2000,
+  "attrs": {
+   "effect": "shimmer"
+  },
+  "toggle": true,
+  "toggleN": 7,
+  "probe": true,
+  "snap": true
+ },
+ {
+  "name": "R global round inl @2000",
+  "css": "global,round,inl,f105",
+  "n": 2000,
+  "attrs": {
+   "effect": "shimmer"
+  },
+  "toggle": true,
+  "toggleN": 7,
+  "probe": true,
+  "snap": true
+ },
+ {
+  "name": "R global roundr inl @2000",
+  "css": "global,roundr,inl,f106",
+  "n": 2000,
+  "attrs": {
+   "effect": "shimmer"
+  },
+  "toggle": true,
+  "toggleN": 7,
+  "probe": true,
+  "snap": true
+ },
+ {
+  "name": "R svg clip inl @2000",
+  "css": "svg,inl,f107",
+  "n": 2000,
+  "attrs": {
+   "effect": "shimmer"
+  },
+  "toggle": true,
+  "toggleN": 7,
+  "probe": false,
+  "snap": true
+ },
+ {
+  "name": "R svg round inl @2000",
+  "css": "svg,round,inl,f108",
+  "n": 2000,
+  "attrs": {
+   "effect": "shimmer"
+  },
+  "toggle": true,
+  "toggleN": 7,
+  "probe": false,
+  "snap": true
+ },
+ {
+  "name": "R svg roundr inl @2000",
+  "css": "svg,roundr,inl,f109",
+  "n": 2000,
+  "attrs": {
+   "effect": "shimmer"
+  },
+  "toggle": true,
+  "toggleN": 7,
+  "probe": false,
+  "snap": true
+ },
+ {
+  "name": "CAN-b clip global inl @2000 R0",
+  "css": "global,inl,f110",
+  "n": 2000,
+  "attrs": {
+   "effect": "shimmer"
+  },
+  "toggle": true,
+  "toggleN": 7,
+  "probe": true,
+  "snap": true
+ }
+]

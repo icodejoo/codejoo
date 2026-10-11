@@ -1,0 +1,27 @@
+// 共用：起独立 Chrome（临时 user-data-dir、专用调试端口 9932）、CDP 封装。只按端口关自己起的 Chrome，不碰用户的。
+import { spawn, execFileSync } from "node:child_process";
+import fs from "node:fs";
+import os from "node:os";
+import path from "node:path";
+export const PORT = +(process.env.PORT_CDP || 9932);
+const KIT = "D:/workspaces/codejoo/apps/skeletonizer/bench/kit";
+export const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+export async function launch({ headless = true, w = 1280, h = 900 } = {}) {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "a11-chrome-"));
+  const args = [`--remote-debugging-port=${PORT}`, `--user-data-dir=${dir}`, "--no-first-run", "--no-default-browser-check", `--window-size=${w},${h}`];
+  if (headless) args.push("--headless=new");
+  args.push("about:blank");
+  const c = spawn("C:/Program Files/Google/Chrome/Application/chrome.exe", args, { detached: true, stdio: "ignore" }); c.unref();
+  let tabs; for (let i = 0; i < 60; i++) { try { tabs = await (await fetch(`http://127.0.0.1:${PORT}/json`)).json(); if (tabs.find((t) => t.type === "page")) break; } catch {} await sleep(300); }
+  const ws = new WebSocket(tabs.find((t) => t.type === "page").webSocketDebuggerUrl);
+  await new Promise((r) => ws.addEventListener("open", r));
+  let id = 0; const pend = new Map();
+  ws.addEventListener("message", (m) => { const d = JSON.parse(m.data); if (d.id && pend.has(d.id)) { pend.get(d.id)(d); pend.delete(d.id); } });
+  const send = (method, params = {}) => new Promise((r) => { const i = ++id; pend.set(i, r); ws.send(JSON.stringify({ id: i, method, params })); });
+  const ev = async (e) => { const r = await send("Runtime.evaluate", { expression: e, awaitPromise: true, returnByValue: true }); if (r.result.exceptionDetails) throw new Error(JSON.stringify(r.result.exceptionDetails).slice(0, 600)); return r.result.result.value; };
+  await send("Page.enable"); await send("Page.bringToFront");
+  const goto = async (url, ready = "document.readyState==='complete'") => { await send("Page.navigate", { url }); await sleep(500); for (let i = 0; i < 80 && !(await ev(ready).catch(() => false)); i++) await sleep(250); await sleep(300); };
+  const shot = async (file, clip, scale = 1) => { const p = { format: "png", captureBeyondViewport: true }; if (clip) p.clip = { ...clip, scale }; const r = await send("Page.captureScreenshot", p); const buf = Buffer.from(r.result.data, "base64"); if (file) fs.writeFileSync(file, buf); return buf; };
+  const close = async () => { try { await send("Browser.close"); } catch {} try { execFileSync("powershell", ["-NoProfile", "-ExecutionPolicy", "Bypass", "-File", path.join(KIT, "kill-chrome.ps1"), "-Port", String(PORT)]); } catch {} };
+  return { send, ev, goto, shot, close };
+}

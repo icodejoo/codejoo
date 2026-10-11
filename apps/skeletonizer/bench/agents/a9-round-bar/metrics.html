@@ -1,0 +1,18 @@
+<!doctype html>
+<html lang="zh"><head><meta charset="utf-8" /><title>a9 metrics</title>
+<link rel="stylesheet" href="./dist-snap/core.css"><link rel="stylesheet" href="./round.css">
+<style>body{margin:0;padding:10px;background:#fff;font-size:100px}
+/* 每行：左 clip、右 A；行高固定，便于逐像素量条的上下沿；.bl 是基线标记（空 inline-block 的底边 = 基线） */
+.row{display:flex;gap:40px;height:230px;align-items:flex-start}.cell{position:relative;white-space:nowrap}
+.bl{display:inline-block;width:0;height:0}</style></head><body>
+<div id="out"></div>
+<script>
+const q = new URLSearchParams(location.search);
+const fonts = ["Microsoft YaHei","Segoe UI","Arial","Georgia","Consolas","SimSun","Times New Roman","system-ui"];
+const lh = q.get("lh") || "normal";
+const txt = q.get("txt") || "Hxg你好";
+document.getElementById("out").innerHTML = fonts.map((f, i) => `<div class="row" data-f="${f}" style="font-family:${f === "system-ui" ? "system-ui" : `'${f}'`};line-height:${lh}">` +
+  `<div class="cell" skz skz-effect="solid"><span skz-text>${txt}</span><i class="bl"></i></div>` +
+  `<div class="cell" skz skz-round skz-effect="solid"><span skz-text>${txt}</span><i class="bl"></i></div></div>`).join("");
+window.ready = true;
+</script></body></html>

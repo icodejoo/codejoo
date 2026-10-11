@@ -1,0 +1,75 @@
+[
+ {
+  "name": "smoke ul global",
+  "css": "global,inl,f1",
+  "n": 30,
+  "attrs": {
+   "effect": "shimmer",
+   "text": "underline"
+  },
+  "toggle": true,
+  "toggleN": 2,
+  "probe": true,
+  "snap": true
+ },
+ {
+  "name": "smoke clip global",
+  "css": "global,inl,f2",
+  "n": 30,
+  "attrs": {
+   "effect": "shimmer"
+  },
+  "toggle": true,
+  "toggleN": 2,
+  "probe": true,
+  "snap": true
+ },
+ {
+  "name": "smoke round global",
+  "css": "global,round,inl,f3",
+  "n": 30,
+  "attrs": {
+   "effect": "shimmer"
+  },
+  "toggle": true,
+  "toggleN": 2,
+  "probe": true,
+  "snap": true
+ },
+ {
+  "name": "smoke roundi global",
+  "css": "global,roundi,inl,f4",
+  "n": 30,
+  "attrs": {
+   "effect": "shimmer"
+  },
+  "toggle": true,
+  "toggleN": 2,
+  "probe": true,
+  "snap": true
+ },
+ {
+  "name": "smoke clip svg",
+  "css": "svg,inl,f5",
+  "n": 30,
+  "attrs": {
+   "effect": "shimmer"
+  },
+  "toggle": true,
+  "toggleN": 2,
+  "probe": false,
+  "snap": true
+ },
+ {
+  "name": "smoke round svg",
+  "css": "svg,round,inl,f6",
+  "n": 30,
+  "attrs": {
+   "effect": "shimmer"
+  },
+  "toggle": true,
+  "toggleN": 2,
+  "probe": false,
+  "snap": true
+ }
+]

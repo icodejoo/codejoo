@@ -1,0 +1,26 @@
+/* a9 A 方案原型：文字元素 color 透明 + 背景渐变 + border-radius + box-decoration-break:clone。
+ * 叠在 dist 的 core.css（或 base.css + global/svg.css）之后，挂在根上写 skz-round 才生效，便于同页对比现状 clip。
+ * 做法：不动现有填充（背景色 / 图 / fixed / --skz-tbg 回落都沿用 clip 规则已声明的那份），只改三件事：
+ *   1) 标记元素及其后代不画装饰线（形状不再靠下划线）；
+ *   2) background-clip 由 text 改回 border-box（背景铺满行内盒的每个行片段）；
+ *   3) 圆角 + box-decoration-break:clone，每个行片段各自圆角。
+ * 文字本身已被现有规则设成 -webkit-text-fill-color:transparent，不用再改 color。
+ * 两种挂法：
+ *   skz-round         所有 skz-text 元素都走 A（块元素会变成整块圆角矩形，见 NOTES）
+ *   skz-round="inline" 只有天然行内的标签走 A，p / h1-6 / li / div 等块标签保持现状 clip（混合方案） */
+@supports (text-decoration-thickness: 1em) and selector(:has(*)) {
+  [skz][skz-round]:not([skz-round="inline"]) [skz-text]:where(:not([skz-ignore]):not([skz-bone]):not([skz-leaf]):not([skz-ignore] *):not([skz-leaf] *)),
+  [skz][skz-round="inline"] :is(span, a, b, strong, em, small, label, code, mark, abbr, cite, time, q, i, u, s, sub, sup)[skz-text]:where(:not([skz-ignore]):not([skz-bone]):not([skz-leaf]):not([skz-ignore] *):not([skz-leaf] *)) {
+    -webkit-background-clip: border-box !important;
+    background-clip: border-box !important;
+    -webkit-box-decoration-break: clone;
+    box-decoration-break: clone;
+    border-radius: var(--skz-round-radius, .22em);
+    padding-block: var(--skz-round-py, 0);
+    text-decoration: none !important;
+  }
+  [skz][skz-round]:not([skz-round="inline"]) :where([skz-text]) :not([skz-ignore]),
+  [skz][skz-round="inline"] :is(span, a, b, strong, em, small, label, code, mark, abbr, cite, time, q, i, u, s, sub, sup)[skz-text] :not([skz-ignore]) {
+    text-decoration: none !important;
+  }
+}
