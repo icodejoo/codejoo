@@ -46,3 +46,16 @@
   background-image: none !important;
   -webkit-text-fill-color: currentColor !important;
 }
+
+/* 骨头内部的后代藏起来，媒体骨头把真实内容推出盒子（background 才露得出来）。
+ * 所有基底共用：skz-bone 写在 img / video / canvas / svg 上，不管有没有 skz-auto 推导都要盖住真实内容 */
+[skz] [skz-bone] * {
+  visibility: hidden !important;
+}
+
+[skz] img[skz-bone],
+[skz] video[skz-bone],
+[skz] canvas[skz-bone] {
+  object-fit: none !important;
+  object-position: 99999px 0 !important;
+}
