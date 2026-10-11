@@ -188,6 +188,33 @@
       [data-demo-root] {
         min-height: 20px;
       }
+      .vendor-head {
+        display: flex;
+        gap: 10px;
+        align-items: center;
+        margin-bottom: 8px;
+      }
+      .vendor-avatar {
+        width: 36px;
+        height: 36px;
+        border-radius: 50%;
+        background: #8b5cf6;
+        flex: none;
+      }
+      .vendor-title {
+        font-weight: 700;
+      }
+      .vendor code {
+        display: block;
+        margin: 8px 0;
+        font:
+          12px/1.5 ui-monospace,
+          monospace;
+      }
+      .live {
+        color: #16a34a;
+        font-weight: 700;
+      }
       .tag-ok {
         color: #16a34a;
       }
@@ -219,7 +246,7 @@
         </select>
       </label>
       <label
-        >档位
+        >档位（skz-auto 区域）
         <select id="sel-tier">
           <option value="0">仅兜底层</option>
           <option value="1">+ 第 0 档</option>
@@ -228,9 +255,10 @@
         </select>
       </label>
       <label
-        >文字骨头
+        >文字模式（skz-text-mode）
         <select id="sel-text">
-          <option value="clip">裁剪填充（clip，默认）</option>
+          <option value="round" selected>圆角条（round，默认）</option>
+          <option value="clip">裁剪填充（clip）</option>
           <option value="underline">下划线法</option>
           <option value="leaf">叶子背景法</option>
           <option value="tofu">方块字体（tofu）</option>
@@ -239,81 +267,117 @@
     </header>
 
     <main>
-      <!-- 1 文字：下划线法 vs 叶子背景法 -->
+      <!-- 1 文字模式对比 -->
       <section>
-        <h2 class="sec">1 · 文字骨头：下划线法 vs 叶子背景法</h2>
-        <p class="note">同一份内容，左边固定下划线法，右边固定叶子背景法（右边在第 2 档才有效）。看粗细、垂直位置、不同字号、混合文字、嵌套、最后一行。</p>
+        <h2 class="sec">1 · 文字骨头：skz-text 与 skz-text-mode</h2>
+        <p class="note">
+          同一份内容，每个元素都标了 skz-text；五个根各自写不同的 skz-text-mode，文字统一用 &lt;span skz-text&gt;
+          包在块元素内层；round（默认，行内元素每行圆角，直接标在块元素上则是整块圆角矩形，见右下角对照；浏览器不支持 box-decoration-break 时自动退回 clip）、clip、underline、leaf、tofu（顶部「文字模式」不影响本节；显式
+          skz-text 要档位 ≥「第 1 档」才出条）。看粗细、垂直位置、不同字号、混合文字、嵌套、最后一行。已知局限：雅黑 / Segoe UI / system-ui 下 round 的条比 clip 高约 0.1~0.16em；line-height 1.2 时多行条可能相互叠出凹口。
+        </p>
         <div class="grid2">
           <div class="box">
-            <h4>下划线法</h4>
-            <div data-demo-root data-fixed-text="underline" id="cmp-a"></div>
+            <h4 skz-ignore>round（默认）</h4>
+            <div data-demo-root data-fixed-text="round" id="cmp-round"></div>
           </div>
           <div class="box">
-            <h4>叶子背景法</h4>
-            <div data-demo-root data-fixed-text="leaf" id="cmp-b"></div>
+            <h4 skz-ignore>clip</h4>
+            <div data-demo-root data-fixed-text="clip" id="cmp-clip"></div>
+          </div>
+          <div class="box">
+            <h4 skz-ignore>underline</h4>
+            <div data-demo-root data-fixed-text="underline" id="cmp-underline"></div>
+          </div>
+          <div class="box">
+            <h4 skz-ignore>leaf（叶子背景）</h4>
+            <div data-demo-root data-fixed-text="leaf" id="cmp-leaf"></div>
+          </div>
+          <div class="box">
+            <h4 skz-ignore>tofu（方块字体）</h4>
+            <div data-demo-root data-fixed-text="tofu" id="cmp-tofu"></div>
+          </div>
+          <div class="box">
+            <h4 skz-ignore>round 下：标在块元素 vs 内包 span</h4>
+            <div data-demo-root data-fixed-text="round" id="cmp-block">
+              <p class="tiny" skz-ignore>① &lt;p skz-text&gt; 直接标在块元素上：整块圆角矩形，看不出文字长短。</p>
+              <p skz-text style="max-width: 260px">这是一段比较长的正文，在窄容器里折成好几行，整块的条完全看不出最后一行有多长。</p>
+              <p class="tiny" skz-ignore>② &lt;p&gt;&lt;span skz-text&gt; 内包 span（推荐）：每行一条，最后一行较短。</p>
+              <p style="max-width: 260px"><span skz-text>这是一段比较长的正文，在窄容器里折成好几行，每行一条，最后一行明显比前面短。</span></p>
+            </div>
           </div>
         </div>
       </section>
 
       <!-- 2 :has 叶子 / 卡片 -->
       <section>
-        <h2 class="sec">2 · 卡片：结构叶子 + 图标启发式</h2>
-        <p class="note">avatar 用 Bone.image 透明图；按钮、标题、描述、图标（i.icon-star）自动命中，容器的边框背景保留。</p>
+        <h2 class="sec">2 · 卡片：skz-text 容器 + skz-bone</h2>
+        <p class="note">头像（Bone.image 透明图）、星标图标、按钮写 skz-bone；昵称、时间、简介的文字各包一层 skz-text。卡片自己的边框背景保留。</p>
         <div class="grid3" data-demo-root id="cards"></div>
       </section>
 
       <!-- 3 媒体叶子 -->
       <section>
-        <h2 class="sec">3 · 媒体叶子</h2>
-        <p class="note">img（透明 mock 图 / 真实图片）、内联 svg、video、canvas。观察真实图片能否被藏起来。</p>
+        <h2 class="sec">3 · 媒体：skz-bone</h2>
+        <p class="note">img（透明 mock 图 / 真实图片）、内联 svg、video、canvas、input、button 都写 skz-bone。观察真实图片能否被藏起来；小标题写 skz-ignore，保持可读。</p>
         <div class="grid3" data-demo-root id="media">
           <div class="box">
-            <h4>img · Bone.image(160,100)</h4>
-            <img id="img-mock" width="160" height="100" alt="" />
+            <h4 skz-ignore>img · Bone.image(160,100)</h4>
+            <img skz-bone id="img-mock" width="160" height="100" alt="" />
           </div>
           <div class="box">
-            <h4>img · 真实图片（没 mock）</h4>
-            <img id="img-real" width="160" height="100" alt="" />
+            <h4 skz-ignore>img · 真实图片（没 mock）</h4>
+            <img skz-bone id="img-real" width="160" height="100" alt="" />
           </div>
           <div class="box">
-            <h4>svg</h4>
-            <svg width="160" height="100" viewBox="0 0 160 100">
+            <h4 skz-ignore>svg</h4>
+            <svg skz-bone width="160" height="100" viewBox="0 0 160 100">
               <rect width="160" height="100" fill="#fca5a5" />
               <circle cx="80" cy="50" r="30" fill="#b91c1c" />
             </svg>
           </div>
           <div class="box">
-            <h4>video</h4>
-            <video width="160" height="100" poster="" muted></video>
+            <h4 skz-ignore>video</h4>
+            <video skz-bone width="160" height="100" poster="" muted></video>
           </div>
           <div class="box">
-            <h4>canvas</h4>
-            <canvas id="cv" width="160" height="100"></canvas>
+            <h4 skz-ignore>canvas</h4>
+            <canvas skz-bone id="cv" width="160" height="100"></canvas>
           </div>
           <div class="box">
-            <h4>input / button</h4>
-            <input value="已填写的内容" style="width: 100%" /><br /><button class="btn">提交</button>
+            <h4 skz-ignore>input / button</h4>
+            <input skz-bone value="已填写的内容" style="width: 100%" /><br /><button skz-bone class="btn">提交</button>
           </div>
         </div>
       </section>
 
       <!-- 4 标记 -->
       <section>
-        <h2 class="sec">4 · 标记：skz-bone / skz-leaf / skz-ignore</h2>
-        <div class="grid3" data-demo-root id="marks">
+        <h2 class="sec">4 · 标记：skz-text / skz-bone / skz-leaf / skz-ignore</h2>
+        <p class="note">skz-text：写在行内元素（span）上，整个子树的文字按行出条；skz-bone：整块当骨头；skz-leaf：整块并藏起子树；skz-ignore：原样显示、可交互。</p>
+        <div class="grid2" data-demo-root id="marks">
           <div class="box">
-            <h4>skz-ignore（Logo 保持原样）</h4>
+            <h4 skz-ignore>skz-ignore（Logo 保持原样）</h4>
             <div skz-ignore style="font-weight: 700; font-size: 20px; color: var(--accent)">⌘ Brand<span style="color: #16a34a"> Logo</span></div>
-            <p>这段会变骨头：欢迎回来，今天也要加油。</p>
+            <p><span skz-text>这段会变骨头：欢迎回来，今天也要加油。</span></p>
           </div>
           <div class="box">
-            <h4>skz-leaf（整块合并）</h4>
+            <h4 skz-ignore>skz-leaf（整块合并）</h4>
             <div skz-leaf style="padding: 10px; border-radius: 8px; border: 1px solid var(--line)"><b>订单 #8841</b><br /><span>3 件商品 · ¥ 128.00</span><br /><small>预计明天送达</small></div>
           </div>
           <div class="box">
-            <h4>skz-bone（装饰 div 强制当骨头）</h4>
+            <h4 skz-ignore>skz-bone（装饰 div 当骨头）</h4>
             <div skz-bone style="height: 40px; border-radius: 8px; background: linear-gradient(90deg, #f97316, #ec4899)"></div>
-            <p class="tiny">上面是渐变装饰条，没有标记时不会被识别。</p>
+            <p class="tiny"><span skz-text>上面是渐变装饰条，没有标记时不会被识别。</span></p>
+          </div>
+          <div class="box">
+            <h4 skz-ignore>skz-text（行内元素上标一次，覆盖混合内容）</h4>
+            <p>
+              <span skz-text
+                >价格：<b>¥ 5.00</b> 起，<em>包邮</em>。<span
+                  >外层 <em>斜体中的 <strong>加粗</strong> 内容</em> 收尾，换行时最后一行会变短。</span
+                ></span
+              >
+            </p>
           </div>
         </div>
       </section>
@@ -332,22 +396,22 @@
       <!-- 7 Bone -->
       <section>
         <h2 class="sec">6/7 · 动画与 Bone mock</h2>
-        <p class="note">顶部切换 fade（默认，根级 opacity，几乎零成本）/ solid / pulse / shimmer（元素级动画，仅适合小骨架）。下面的文字全部由 Bone 生成（确定性、不用 Math.random）。</p>
+        <p class="note">顶部切换 fade（默认，根级 opacity，几乎零成本）/ solid / pulse / shimmer。下面的文字全部由 Bone 生成（确定性、不用 Math.random），写 skz-text 出条；小标题写 skz-ignore。</p>
         <div class="grid2" data-demo-root id="bones"></div>
       </section>
 
       <!-- 8 兜底层失败场景 -->
       <section>
-        <h2 class="sec">8 · 兜底层的边界（Q29）</h2>
-        <p class="note">把顶部「档位」切到「仅兜底层」再看。根的直接子元素依次是：普通块 / 绝对定位悬浮角标 / display:contents 包装 / canvas / 裸文字。</p>
-        <div class="box rel" data-demo-root id="fails" style="display: flex; flex-direction: column; gap: 10px">
+        <h2 class="sec">8 · 兜底层的边界（skz-auto，Q29）</h2>
+        <p class="note">根自身写了 skz-auto，档位切换在这里才有效果：切到「仅兜底层」，每个直接子元素变一整块灰、后代全藏。根的直接子元素依次是：普通块 / 绝对定位悬浮角标 / display:contents 包装 / canvas / 裸文字。</p>
+        <div class="box rel" data-demo-root skz-auto id="fails" style="display: flex; flex-direction: column; gap: 10px">
           <div>普通块：直接子元素一</div>
           <span class="float">NEW</span>
           <div style="display: contents">
             <p style="margin: 0">display:contents 包装里的段落一</p>
             <p style="margin: 0">段落二</p>
           </div>
-          <canvas width="160" height="60" id="cv2"></canvas>
+          <canvas width="160" height="60" id="cv2" style="align-self: flex-start"></canvas>
           这是直接放在根下的裸文字，没有被元素包住。
         </div>
       </section>
@@ -356,7 +420,8 @@
         <h2 class="sec">9 · fit：不撑出滚动条</h2>
         <p class="note">
           同一个 100 项列表骨架放进三种容器——固定高度滚动容器（300px overflow:auto）、无确定高度的普通 div（靠页面/视口）、应用壳布局（固定高度的 flex 列，标题下面 flex:1 的区域负责滚动，常见于后台/App 页面）；每个带 fit
-          开关对比。开启 fit 后骨架不会把容器撑出滚动条，多余项会被 display:none。本区在页面末尾（首屏以下），页面本来就能滚，所以「普通 div」放宽为一屏高；容器内的两个贴着容器底边。
+          开关对比。每个列表项里用 &lt;span skz-text&gt; 包文字。开启 fit 后骨架不会把容器撑出滚动条，多余项会被 display:none。本区在页面靠后（首屏以下），页面本来就能滚，所以「普通
+          div」放宽为一屏高；容器内的两个贴着容器底边。
         </p>
         <div style="margin-bottom: 10px">
           <button id="btn-fit">fit：开</button>
@@ -375,6 +440,42 @@
             <div style="flex: 1; min-height: 0; overflow: auto">
               <div data-demo-fit id="fit-flex"></div>
             </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- 10 skz-auto 第三方组件 -->
+      <section>
+        <h2 class="sec">10 · skz-auto：第三方组件</h2>
+        <p class="note">
+          左：无法加标记的第三方组件，外层写 skz-auto，按标签清单推导（档位切换在这里有效）。已知局限：清单外的裸文字（div / code / 自定义元素里直接写的文字）在 round / clip 下不可见，空 div 做的头像 /
+          色块不识别，要自己写 skz-text / skz-bone 补上。中、右：忽略区放在 skz-text 元素里，它的文字会压在骨头条上（不再关掉祖先的下划线）；想要干净的忽略区，拆成兄弟元素。
+        </p>
+        <div class="grid3">
+          <div class="box" data-demo-root id="vendor">
+            <h4 skz-ignore>第三方组件（外层 skz-auto）</h4>
+            <div skz-auto class="vendor">
+              <div class="vendor-head">
+                <img id="vendor-img" width="48" height="48" alt="" />
+                <div class="vendor-avatar"></div>
+                <div class="vendor-title">裸 div 里的标题文字</div>
+              </div>
+              <p>段落文字会出骨头，<span>行内 span</span> 也会。</p>
+              <code>code 里的裸文字：不可见</code>
+              <button class="btn">订阅</button>
+            </div>
+          </div>
+          <div class="box" data-demo-root id="ignore-in">
+            <h4 skz-ignore>忽略区在 skz-text 内</h4>
+            <p>
+              <span skz-text>价格 <span skz-ignore class="live">实时 ¥ 5.00</span> 起，包邮</span>
+            </p>
+            <p class="tiny" skz-ignore>整行都有骨头条，实时那段的真实文字压在条上。</p>
+          </div>
+          <div class="box" data-demo-root id="ignore-sib">
+            <h4 skz-ignore>推荐：拆成兄弟元素</h4>
+            <p><span skz-text>价格</span> <span skz-ignore class="live">实时 ¥ 5.00</span> <span skz-text>起，包邮</span></p>
+            <p class="tiny" skz-ignore>骨头条和忽略区互不重叠。</p>
           </div>
         </div>
       </section>
