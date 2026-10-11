@@ -1,13 +1,13 @@
 ---
 title: 当前状态与待办
 status: active
-updated: 2026-10-10
+updated: 2026-10-11
 summary: 原型已跑通的范围、没做的事、下一步。
 ---
 
 ## TL;DR
 
-设计已拍板，桌面 Chrome 验证通过，单测 170 条全绿（含类型测试与产物测试），准备首次发布 npm（0.1.0）。2026-10-10 包拆成 core + 完整版并列两种用法、CSS 重新分层；core 的规模上限有实测（见 `bench/2026-10-10-core/NOTES.md`）。其他浏览器（Firefox / Safari）、真机验证、视觉快照测试还没开始。
+设计已拍板，桌面 Chrome 验证通过，单测 183 条全绿（含类型测试与产物测试），0.1.0 已发布 npm，0.2.0 待发布。2026-10-10 包拆成 core + 完整版并列两种用法、CSS 重新分层；2026-10-11 默认改为显式标记（`skz-text` / `skz-bone` / `skz-leaf`，推导只在 `skz-auto` 区域）、默认文字模式改为 `round`（0.2.0）。core 的规模上限有实测（见 `bench/2026-10-10-core/NOTES.md`）。其他浏览器（Firefox / Safari）、真机验证、视觉快照测试还没开始。
 
 ## 已完成
 
@@ -30,6 +30,8 @@ summary: 原型已跑通的范围、没做的事、下一步。
 - 2026-10-10 拆包与分层：包拆成 core（`skeletonizer`，默认，现代浏览器、单个根约 2000 元素以内）与完整版（`skeletonizer/full`，上限高得多）并列，`registerExtension` 变成通用扩展点（方案注册改名 `registerEngine`），全局 `skz`、类型随版本变宽、开发模式警告；CSS 分成 `core.css` / `explicit.css` / `base.css` / `global.css`，根驱动挪进各基底，`explicit.css` 恢复懒渲染规则。验证见 `bench/2026-10-10-layering/`（逐规则对比、计算样式 + 截图、老浏览器模拟）与 `bench/2026-10-10-core/`（core 实测：125 / 250 / 500 卡 × fade·solid·pulse·shimmer，对照完整版，4× 降速，规模上限）。README（中英）、`llms.md`、ARCHITECTURE 按新结构重写：开头并列对比表、两条快速开始、迁移说明、每项标明属于 core 还是完整版
 - 2026-10-10 文档补齐：README（中英）加「类型」章节与无打包器（import map）示例，补按钮 / clip / tofu / 降频的限制，功能总表性能数字统一到默认 clip 口径（未重测的标「underline 时测得」），修正防火墙机制、`engine` 指定未引入方案的实测表现、体积表；`llms.md` 补 `enable` 选项、`<skz-box>` 属性、适配层导出与全部主题变量速查
 
+- 2026-10-11 0.2.0：默认显式标记，根上的文字模式属性改名 `skz-text-mode`，`skz-text` 变成元素级标记，自动推导（第 0 档 / 兜底层 / 图标 / 控件 / leaf / tofu）只在 `skz-auto` 区域里生效；移除 `skz-has-ignore`，忽略区只靠 `skz-ignore`；新增文字模式 `round` 并成为默认（与 clip 共用规则，根上切四个内部变量，不支持 `box-decoration-break` 时降级为 clip）；`explicit.css` 含义改为「不含 `skz-auto` 推导」；规则改用 `:is()` / `:where()`（Chrome 88+ / Safari 14+ / Firefox 84+，标记规则里的 `:not()` 用了选择器列表）。README（中英）、`llms.md`、ARCHITECTURE、设计总结按新默认重写，对比章节的性能数据仍是 0.2.0 之前在 clip 下测的（未重跑）。原型与截图在 `bench/agents/a9-round-bar/`、`a10-round-default/`、`a11-demo-round/`
+
 ## 待办（按优先级）
 
 1. 真机 / 其他引擎验证：iOS Safari（降频、iOS 分支的 pulse 与防火墙目前只在 Chrome 里模拟）、Safari、Firefox（报告里的"未验证"项；含 clip 的装饰线裁剪、tofu 的 cmap format 13；core 与完整版目前都只在 Chrome 实测）
@@ -38,6 +40,7 @@ summary: 原型已跑通的范围、没做的事、下一步。
 4. Vitest + Playwright 三引擎视觉快照，强制单档 CSS 的降级快照
 5. 框架使用示例文档（Vue 指令 / React / Svelte / Solid）
 6. 评估运行时测量模式作为精确文字骨头的逃生口
+7. round 补测：把对比章节的矩阵按 round 默认重跑一遍（目前只有 a9 原型「GPU 约为 clip 一半」这一条）；Firefox / Safari 上 `box-decoration-break` 的行为与条高
 
 ## 怎么跑
 

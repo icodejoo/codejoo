@@ -1,7 +1,7 @@
 ---
 title: 文档索引
 status: active
-updated: 2026-10-10
+updated: 2026-10-11
 summary: skeletonizer 项目文档的唯一入口。
 ---
 
@@ -27,3 +27,4 @@ summary: skeletonizer 项目文档的唯一入口。
 - 骨头 = bone = 骨架里的一块灰色占位。
 - core / 完整版 = 包的两种并列用法：`skeletonizer`（默认，现代浏览器、中小骨架）与 `skeletonizer/full`（加按需样式与变体，不设规模上限），见设计总结 §5.1。
 - 兜底 / 第 0 / 1 / 2 档 = 渐进增强的四层 CSS，见设计总结 §3。
+- `skz-auto` 区域 = 自动推导（兜底 / 第 0 / 1 / 2 档的推导规则）只作用于的子树；默认（不写）由开发者用 `skz-text` / `skz-bone` / `skz-leaf` 标记骨头，见设计总结 §4。

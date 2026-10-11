@@ -1,5 +1,24 @@
 # Changelog
 
+## 0.2.0 - 2026-10-11
+
+- **新增文字模式 `round`，并成为默认文字模式**（core / `explicit.css` / 完整版 `base.css` 都是；作用于显式 `skz-text` 标记和 `skz-auto` 推导区的文字）。外观：文字透明 + 带圆角的背景盒，行内元素折行后每一行各自圆角，块元素（p / h3 / div / flex 子项等）按自身 display 整块圆角矩形，不对行内 / 块做任何区分；shimmer 光带、`fixed` 背景同步、防火墙、深浅主题、driver-color 都照常。GPU 约为 clip 的一半（a9 原型实测），也不依赖「装饰线参与 `background-clip:text` 裁剪」这一只在 Chrome 实测过的行为。
+  - **纯 CSS 就是默认**：根上只写 `skz` 不写 `skz-text-mode`（或写 `skz-text-mode="round"`）即 round；JS 的 `text` 选项新增 `"round"`，不传 = 不写属性 = round（与无 JS 结果一致）。
+  - **不支持则降级到 clip**：round 只在 `@supports ((box-decoration-break: clone) or (-webkit-box-decoration-break: clone))` 里生效（Chrome 130 前与 Safari 只认 `-webkit-` 前缀，两种写法都查）；不支持的浏览器整块不生效，默认外观就是原来的 clip，clip 自己的降级链（不支持 `background-clip:text` 退回 underline 等）不变。
+  - **结构**：不另写一套目标规则，round 与 clip 共用同一批形状 / 填充 / 圆角规则，只在 round 根上切四个变量：`--skz-ul-line: none`（装饰线种类，缺省 underline）、`--skz-bgclip: border-box`（缺省 text）、`--skz-bdb: clone`（`box-decoration-break`，缺省 slice）、`--skz-tradius: initial`（清掉 clip 的 0px，圆角回落到现有的 `--skz-radius`，不新增圆角变量）。目标规则只读这些变量、缺省值就是 clip 原来的写法，所以 round 与 clip 不会同时生效；文字条家族根（没写 / round / clip）上同时把前三个变量复位成 clip 的值，嵌套在 round 根里的 clip 根不继承外层。四个变量都是内部开关，不属于公开 API。
+  - **显式 `skz-text-mode="clip"` 行为与改动前像素一致**（core / explicit 也认 `round` / `clip` 这两个取值，可以手写强制 clip；其余取值仍不认）；underline / leaf / tofu / 未知取值不受影响。
+  - **已知局限**：1) 雅黑 / Segoe UI / system-ui 下 round 的条比 clip 高约 0.1~0.16em（条高 = 字体内容区，CSS 只能加高不能收窄；Arial / Georgia / Consolas / SimSun / Times 与 clip 像素一致）；2) line-height 为 1.2 时多行条可能相互叠出凹口（雅黑条高 1.32em，叠 0.12em）；3) 块元素整块：长段落是一整块矩形、短标题被拉成整行宽，`<div skz-text>` 的混合内容同样整块，没有纯 CSS 补救（要文字宽度的条，在里面包一层行内 `<span skz-text>`，或显式写 `skz-text-mode="clip"`）；4) 圆角固定读 `--skz-radius`（默认 4px），不随字号缩放；5) 只在 Chrome 154 上实测，Firefox / Safari 未验证。
+  - 体积：core.css 增加约 1.2 KB（minified，gzip 约 +0.1 KB），主要是文字条家族根选择器（`:is(没写, round, clip)`）在推导前缀里重复出现。
+- **BREAKING：默认改为显式标记，自动推导只在 `skz-auto` 区域里生效。** 以前 `core.css` / `base.css` 按标签白名单推断骨头，白名单外的裸文字（div / 自定义元素 / code 里直接写的字）在 clip 下不可见，只能发现一个补一个。现在默认由开发者自己标（最精准）：根上没有任何标记、也没有 `skz-auto` 的内容原样显示。给无法加标记的第三方组件用：在根自身或根内任意后代上写裸属性 `skz-auto`，推导规则（第 0 档 / 兜底层 / 图标 / 控件 / leaf / tofu）只作用于该子树；局限不变——推导区域里不在文字标签清单里的裸文字不可见（要包进 `p` / `span` 或自己标 `skz-text`）。
+- **BREAKING：根上的文字模式属性 `skz-text` 改名为 `skz-text-mode`**（取值不变：clip / underline / leaf / tofu，另新增 round 并成为默认，见上；未知取值仍落 underline 外观）。JS 选项名 `text` 不变，只是写到新属性。手写根属性的要同步改。
+- **新增元素级文字骨头标记 `skz-text`**（裸属性，写在根内任意后代上）：该元素整个子树的文字按文字行出条（最后一行变短）；标在容器上也覆盖混合内容（`<div skz-text>价格：<b>¥5</b></div>`）。外观跟随根上的 `skz-text-mode`：round（默认，见上）= 带圆角的背景盒；clip = 骨头背景 + `background-clip:text`；underline / tofu / 未知 = 可见下划线条；leaf = 该元素整块骨头。`core.css` / `explicit.css` 只有 round（默认）/ clip。区域内的 `skz-ignore` / `skz-bone` / `skz-leaf` 照常生效；`skz-text` 在推导区域内外都生效，只认根的后代。
+- **`explicit.css` / `skeletonizer/explicit` 含义改为「不含 `skz-auto` 推导规则的精简版」**，同样支持 `skz-text`（clip）、`skz-bone`、`skz-leaf`、`skz-ignore`。`core.css` / `base.css` 都 = 显式标记规则 + 门控在 `skz-auto` 上的推导规则。
+- **BREAKING：移除 `skz-has-ignore`，忽略区的修正只靠 `skz-ignore` 一个标记、纯 CSS 生效**，不再依赖 JS 往根上写属性（`enable()` 不再写它）。**不再有「含忽略区的祖先关下划线」的修正规则**（`:has([skz-ignore])` 逐元素检查整条删除）：忽略区放在 `skz-text` 元素或 `skz-auto` 区域内时，它的文字显示在骨头条之上（真实文字色压在灰条上）；想要完全干净的忽略区，把骨头文字和忽略区拆成兄弟元素，如 `<span skz-text>价格</span> <span skz-ignore>实时</span>`。根上的默认 fade 遇到忽略区改为用 `:has()` 对根自己检查一次来撤销（老浏览器不认 `:has` 时保留 fade）；tofu 里含忽略区的元素改用 `:not(:has([skz-ignore]))` 守卫。
+- 根级变量（`--skz-dc` / `--skz-tbg` / 驱动变量等）仍挂在 `[skz]` 根上，不经过 `skz-auto`；CSS 完全依赖根上的 `skz` 属性开关，JS 只负责切这个开关，不用我们的 JS 自己 `setAttribute` 也能得到正确渲染（懒渲染 `skz-paused`、继承防火墙 `skz-fw`、svg 引擎 `skz-engine` 属于性能 / 降级路径，不影响正确性）。
+- 第 0 档 / 推导规则改用 `:is()` / `:where()` 写区域前缀（`skz-auto` 包在 `:where()` 里，优先级与原来的单 `[skz]` 前缀一致，层叠关系不变），门槛随之为支持 `:is()` / `:where()` 的浏览器（Chrome 88+ / Safari 14+ / Firefox 84+，标记规则里的 `:not()` 用了选择器列表）。
+- **体积**（`pnpm build` 实测，minified / `gzip -9 -n`，字节）：`core.css` 9572 / 1684、`explicit.css` 6186 / 1454、`base.css` 12106 / 1945、`all.css` 18777 / 4295（`global.css` 1018 / 330、`svg.css` 468 / 193、`sweep.css` 1724 / 566、`tofu.css` 3932 / 2014）；JS 闭包（gzip）core 3173、`full` 4758、`global/js` 6267、`all/js` 6400，比 0.1.0 文档里的数字各少约 30 B（`enable()` 不再写 `skz-has-ignore`）。整套组合：core 4.74 KB、`full` + `base.css` 6.55 KB、`full` + `global` 8.34 KB、`all` 10.44 KB（1 KB = 1024 B）。
+- **文档**：README（中英）、`llms.md`、`ARCHITECTURE.md`、设计总结按显式标记 / `skz-auto` / `round` 重写：新增「标记骨头」与「升级到 0.2.0」两节，示例全部改为显式标记写法（块元素里包 `<span skz-text>`），体积表、浏览器支持表、属性 / 选项参考表同步；`ARCHITECTURE.md` 补上 round 的规则结构（四个内部变量、`@supports` 门控、规则顺序）。README 里的性能数据仍是 0.2.0 之前在 clip + 全根推导下测的，已在对比章节开头注明，未重跑。
+
 ## 0.1.0 - 2026-10-10
 
 首次发布。下面前半部分是发布前最后一轮的 core / 完整版拆分（其中的"迁移说明"针对发布前的预览写法），后半部分是更早的开发记录。

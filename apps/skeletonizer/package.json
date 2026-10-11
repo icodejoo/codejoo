@@ -1,6 +1,6 @@
 {
   "name": "skeletonizer",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Web skeleton screens from your real DOM + mock data + pure CSS. 运行时 + mock + 覆盖标记的 Web 骨架屏。",
   "keywords": [
     "css",
