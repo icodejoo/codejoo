@@ -1,4 +1,4 @@
-import { readdirSync } from "node:fs";
+import { readdirSync, readFileSync } from "node:fs";
 import { compile, compileString } from "sass";
 import { describe, expect, it } from "vitest";
 import { buildHostCss } from "../src/full/hosts.ts";
@@ -14,17 +14,53 @@ const ALL_ENTRIES = readdirSync("src/styles/entries")
 /** SVG 根规则的特征片段：只对 skz-engine=svg 的根生效 */
 const SVG_ROOT = "[skz][skz-engine=svg][skz-effect=pulse],";
 
-/** clip（默认文字模式）的根选择器（完整版）：没写 skz-text，或明写 clip（正向选择，其他取值都不是 clip） */
-const CLIP_ROOT = "[skz]:not([skz-text]), [skz][skz-text=clip]";
+/** 文字条家族（round 默认 / clip）的根限定后缀：没写 skz-text-mode、明写 round、明写 clip（正向选择，其他取值都不在家族里）；core / explicit / 完整版共用 */
+const CLIP_MOD = ":is(:not([skz-text-mode]), [skz-text-mode=round], [skz-text-mode=clip])";
 
-/** 颜色由根上变量驱动的文字模式：有 skz-text 且不是 clip / leaf（underline / tofu / 未知取值），:where() 后缀 */
-const COLOR_MODES = ":where([skz-text]:not([skz-text=clip]):not([skz-text=leaf]))";
+/** 文字条家族的根选择器 */
+const CLIP_ROOT = `[skz]${CLIP_MOD}`;
+
+/** round（默认文字模式）的根限定后缀：没写 skz-text-mode，或明写 round */
+const ROUND_MOD = ":is(:not([skz-text-mode]), [skz-text-mode=round])";
+
+/** round 的特性查询：box-decoration-break（Chrome 130 前 / Safari 只认 -webkit- 前缀，两种写法都查） */
+const ROUND_SUPPORTS = "@supports (box-decoration-break: clone) or (-webkit-box-decoration-break: clone) {";
+
+/** 颜色由根上变量驱动的文字模式：有 skz-text-mode 且不是 round / clip / leaf（underline / tofu / 未知取值），:where() 后缀 */
+const COLOR_MODES = ":where([skz-text-mode]:not([skz-text-mode=round]):not([skz-text-mode=clip]):not([skz-text-mode=leaf]))";
+
+/**
+ * 推导区域前缀（skz-auto 在根自身 / 根内后代两种写法；skz-auto 包在 :where() 里不计优先级），后面接空格 + 目标
+ * @param mod 根上的限定后缀，如 ":not([skz-text-mode=leaf])"；不传 = 不限定
+ * @returns 单个 :is() 选择器
+ */
+const auto = (mod = ""): string => `:is([skz]${mod}:where([skz-auto]), [skz]${mod} :where([skz-auto]))`;
+
+/** 无限定的推导区域前缀 */
+const AUTO = auto();
+
+/** 非 leaf 根的限定（完整版） */
+const NONLEAF_MOD = ":not([skz-text-mode=leaf])";
+
+/**
+ * 把空白（含换行 / 缩进）压成单个空格，便于跨缩进比对规则文本
+ * @param text CSS 文本
+ * @returns 压平后的文本
+ */
+const flat = (text: string): string => text.replace(/\s+/g, " ");
+
+/**
+ * 找出所有以 `:is(p, span` 开头的文字推导选择器里，前面没挂 skz-auto 区域前缀的（应为空）
+ * @param out 不含注释的 CSS 文本
+ * @returns 不带区域前缀的出处片段
+ */
+const unguardedText = (out: string): string[] => (out.match(/.{0,24}:is\(p, span/g) ?? []).filter((m) => !m.includes("[skz-auto])) :is(p, span"));
 
 /** 带 :where() 后缀的 core 入口之外，所有基底入口（带根驱动） */
 const DRIVER_ENTRIES = ["core", "explicit", "base"];
 
-/** 文字模式取值名：core / explicit / global 里不应出现 */
-const TEXT_MODE_VALUE = /skz-text=(clip|underline|leaf|tofu)/;
+/** 文字模式取值名（underline / leaf / tofu）：core / explicit / global 里不应出现；round / clip 是 core 认的文字条家族，不在此列 */
+const TEXT_MODE_VALUE = /skz-text-mode=(underline|leaf|tofu)/;
 
 /** 降频时间函数（缺省值写在 var() 兜底里） */
 const SHIMMER_TIMING = "var(--skz-shimmer-timing, steps(36))";
@@ -77,17 +113,19 @@ describe("样式入口的组成", () => {
     for (const name of ALL_ENTRIES) expect(css(name).length).toBeGreaterThan(100);
   });
 
-  it("core：现代档用一个 @supports 同时要求 text-decoration-thickness 和 :has()，没有撤回分支，没有文字模式取值名", () => {
+  it("core：现代档用一个 @supports 同时要求 text-decoration-thickness 和 :has()，没有撤回分支，只认 round / clip 两个文字模式取值", () => {
     const core = css("core");
     expect(count(core, "@supports (text-decoration-thickness: 1em) and selector(:has(*)) {")).toBe(1);
-    // 门槛已保证 background-clip:text，不带撤回分支；只有现代档 / 根驱动 / iOS 三个 @supports
+    // 门槛已保证 background-clip:text，不带撤回分支；只有现代档 / round 的 box-decoration-break 门控 / 根驱动 / iOS / 忽略区撤销 fade（默认 fade 与 pulse、shimmer 退回 fade 共用一个 :has）五个 @supports
     expect(core).not.toContain("@supports not");
-    expect(count(core, "@supports")).toBe(3);
-    expect(core).toContain("background-clip: text");
+    expect(count(core, "@supports")).toBe(5);
+    expect(count(core, ROUND_SUPPORTS)).toBe(1);
+    // clip 的填充仍是 background-clip:text，只是读 --skz-bgclip（round 根上切成 border-box）
+    expect(core).toContain("background-clip: var(--skz-bgclip, text)");
     expect(core).not.toMatch(TEXT_MODE_VALUE);
-    // 根选择器只认没写 skz-text 的根：同时引完整版样式时，core 的规则碰不到 leaf / underline / tofu 根
-    expect(core).toContain("[skz]:not([skz-text]) :is(p, span");
-    expect(rule(core, "[skz]:not([skz-text])")).toContain("--skz-tradius: 0px");
+    // 根选择器只认文字条家族（没写 skz-text-mode / round / clip）：同时引完整版样式时，core 的规则碰不到 leaf / underline / tofu 根
+    expect(core).toContain(`${auto(CLIP_MOD)} :is(p, span`);
+    expect(rule(core, `[skz]${CLIP_MOD}`)).toContain("--skz-tradius: 0px");
     // 没有 underline / tofu 根要隔离，不写 --skz-tbg / --skz-timg
     expect(core).not.toMatch(/--skz-(tbg|timg): (initial|transparent|none)/);
   });
@@ -102,7 +140,7 @@ describe("样式入口的组成", () => {
       expect(out, name).not.toMatch(TEXT_MODE_VALUE);
       // 根驱动里 underline / tofu 的纯色驱动不在这两个入口
       expect(out, name).not.toMatch(/--skz-ul-fill:/);
-      expect(out, name).not.toContain("skz-text=leaf");
+      expect(out, name).not.toContain("skz-text-mode=leaf");
     }
   });
 
@@ -121,12 +159,11 @@ describe("样式入口的组成", () => {
     }
   });
 
-  it("core 入口 = 第 0 档 + 现代档 + 标记 + 根驱动：有 tier0 的文字标签骨头、图标启发式、控件整块，没有 underline / leaf", () => {
+  it("core 入口 = 第 0 档 + 现代档 + 标记 + 根驱动：有 tier0 的文字标签骨头、图标启发式、控件整块（都在 skz-auto 区域里），没有 underline / leaf", () => {
     const core = css("core");
-    expect(core).toContain("[skz] p:not([skz-ignore])");
-    expect(core).toContain("[skz] :is(i:empty, [class*=icon]:empty):not([skz-ignore]) {");
-    expect(core).toContain("[skz][skz-has-ignore]:not([skz-text]) *:has([skz-ignore]):not([skz-ignore])");
-    expect(core).toContain("[skz]:not([skz-text]) select:not([skz-ignore]) *");
+    expect(core).toContain(`${AUTO} :is(p, span, h1`);
+    expect(core).toContain(`${AUTO} :is(i:empty, [class*=icon]:empty):not([skz-ignore]) {`);
+    expect(core).toContain(`${auto(CLIP_MOD)} select:not([skz-ignore]) *`);
     expect(core).toContain("[skz] [skz-ignore] {");
     expect(core).toContain("[skz] [skz-leaf] * {");
     expect(core).not.toContain(":not(:has(> *))");
@@ -142,8 +179,8 @@ describe("样式入口的组成", () => {
     expect(explicit).toContain("animation: none !important");
     expect(explicit).toContain("--skz-bg-img: none !important");
     const fallback = base.indexOf("linear-gradient(rgba(128, 128, 128, 0.2)");
-    const exit = base.indexOf("[skz] > *:not([skz-ignore]) {\n  background-image: none");
-    const tier0 = base.indexOf("[skz] p:not([skz-ignore])");
+    const exit = base.indexOf(`${AUTO} > *:not([skz-ignore]) {\n  background-image: none`);
+    const tier0 = base.indexOf(`${AUTO} :is(p, span, h1`);
     expect(fallback).toBeGreaterThanOrEqual(0);
     expect(fallback).toBeLessThan(exit);
     expect(exit).toBeLessThan(tier0);
@@ -153,9 +190,9 @@ describe("样式入口的组成", () => {
   it("base 含 core 的全部能力：根驱动、fade、marks、控件 / 图标 / 忽略区规则，另有完整的 tier1 / tier2（underline / leaf）", () => {
     const base = css("base");
     expect(base).toContain("text-decoration-thickness: 1em");
-    expect(base).toContain("[skz][skz-text=leaf] *:not([skz-ignore])");
+    expect(base).toContain(`${auto("[skz-text-mode=leaf]")} *:not([skz-ignore])`);
     expect(base).toContain("@supports selector(:has(*))");
-    expect(base).toContain("[skz] :is(i:empty, [class*=icon]:empty):not([skz-ignore]) {");
+    expect(base).toContain(`${AUTO} :is(i:empty, [class*=icon]:empty):not([skz-ignore]) {`);
     // core 的合并现代档只在 core.css，不重复叠进 base（同一批规则在 base 里由 tier1 / tier2 带完整根选择器生成）
     expect(base).not.toContain("@supports (text-decoration-thickness: 1em) and selector");
     // pulse / shimmer 的纯色驱动（underline / tofu）只在 base
@@ -164,15 +201,27 @@ describe("样式入口的组成", () => {
 
   it("base：pulse / shimmer 退回 fade 的规则在 :where() 里（优先级 0，不能压过变体）", () => {
     const out = css("base");
-    expect(out).toMatch(/:where\(\[skz\]\[skz-effect=pulse\]:not\(\[skz-has-ignore\]\)/);
+    expect(out).toContain(":where([skz][skz-effect=pulse], [skz][skz-effect=shimmer]) {\n  animation: skz-fade");
     // 不允许出现优先级高于 (0,2,0) 的 pulse / shimmer fade 规则
     expect(out).not.toMatch(/^\[skz\]\[skz-effect=(pulse|shimmer)\]:not/m);
   });
 
-  it("explicit：不含任何推导规则，只认显式标记", () => {
+  it("explicit：不含任何推导规则（没有 skz-auto），只认显式标记：skz-bone / skz-leaf / skz-ignore 和 skz-text（默认 round，不支持时 clip）", () => {
     const out = css("explicit");
-    expect(out).not.toMatch(/text-decoration-thickness|:has\(|skz-mode/);
+    expect(out).not.toMatch(/skz-auto|skz-mode|:is\(p, span/);
     expect(out).toContain("[skz] [skz-bone] *");
+    expect(out).toContain("@supports (text-decoration-thickness: 1em) and selector(:has(*))");
+    expect(out).toContain(`[skz]${CLIP_MOD} [skz-text]:where(`);
+    expect(out).toContain("background-clip: var(--skz-bgclip, text)");
+    expect(count(out, ROUND_SUPPORTS)).toBe(1);
+  });
+
+  it("skz-bone 的媒体处理在所有基底里都有：后代藏起来，img / video / canvas 把真实内容推出盒子（不依赖 skz-auto）", () => {
+    for (const name of ["core", "base", "explicit", "all"]) {
+      const out = flat(css(name));
+      expect(out, name).toContain("[skz] [skz-bone] * { visibility: hidden !important; }");
+      expect(out, name).toContain("[skz] img[skz-bone], [skz] video[skz-bone], [skz] canvas[skz-bone] { object-fit: none !important; object-position: 99999px 0 !important; }");
+    }
   });
 
   it("svg：不依赖 @property，也不带根驱动和 sweep", () => {
@@ -201,7 +250,7 @@ describe("样式入口的组成", () => {
     expect(out).toContain("@property");
     expect(out).toContain("skz-effect=sweep");
     expect(out).toContain("@font-face");
-    expect(out).toContain("[skz][skz-text=tofu]");
+    expect(out).toContain("[skz][skz-text-mode=tofu]");
   });
 
   it("tofu：@font-face 带内联 woff2 + block，文字规则用方块字体、读 --skz-ul-fill、撤下划线，不碰控件和忽略区", () => {
@@ -220,14 +269,30 @@ describe("样式入口的组成", () => {
     ]) {
       expect(out, decl).toContain(decl);
     }
-    // 只对 tofu 根生效；排除忽略区 / 骨头 / 叶子 / 媒体与控件内部
-    expect(out).toContain("[skz][skz-text=tofu]:not([skz-has-ignore]) :is(p, span");
-    // 根上有忽略区时，含 skz-ignore 的文字元素不套方块（行内忽略区否则会被画成骨头），需要 :has
-    expect(out).toMatch(/@supports selector\(:has\(\*\)\)\s*\{\s*\[skz\]\[skz-text=tofu\]\[skz-has-ignore\] :is\(p, span[^{]*:not\(:has\(\[skz-ignore\]\)\)/);
+    // 只对 tofu 根生效（自动推导只在 skz-auto 区域里，显式 skz-text 标记在区域内外都生效）；排除忽略区 / 骨头 / 叶子 / 媒体与控件内部
+    expect(out).toContain(`${auto("[skz-text-mode=tofu]")} :is(p, span`);
+    expect(out).toContain("[skz][skz-text-mode=tofu] [skz-text]:where(");
+    // 含 skz-ignore 的文字元素不套方块（行内忽略区否则会被画成骨头）：只靠 skz-ignore 一个标记、纯 CSS。
+    // 守卫写成 :not(:where(:has()))：:where() 宽容解析，不认 :has 的浏览器里 :not() 恒真、规则照常生效，所以全部目标只输出一份，没有 @supports 分支
+    expect(out).not.toContain("@supports");
+    expect(count(out, ":not(:where(:has([skz-ignore])))")).toBe(4);
+    expect(out).not.toMatch(/:not\(:has\(/);
+    // 显式标记的目标只补「不在媒体里」：忽略区 / 骨头 / 叶子已由 :where() 里的排除项承担，不再重复套 :not([skz-ignore])...
+    expect(out).toContain(
+      "[skz][skz-text-mode=tofu] [skz-text]:where(:not([skz-ignore], [skz-bone], [skz-leaf], [skz-leaf] *, [skz-ignore] *)):not(:is(img, video, canvas, picture, iframe, svg, input, textarea, select, button) *):not(:where(:has([skz-ignore])))",
+    );
+    expect(out).not.toContain("skz-has-ignore");
     expect(out).toContain(":not([skz-ignore] *)");
     expect(out).toMatch(/:not\(:is\(img, video, canvas, picture, iframe, svg, input, textarea, select, button\) \*\)/);
     // 不画下划线也不用 background-clip
     expect(out).not.toContain("background-clip");
+  });
+
+  it("tofu 压缩产物里忽略区守卫仍是 :not(:where(:has()))：压缩器不能把它拆成裸 :not(:has())（否则不认 :has 的浏览器会整条规则作废）", () => {
+    const dist = readFileSync("dist/tofu.css", "utf8");
+    expect(dist.split(":not(:where(:has([skz-ignore])))").length - 1).toBe(4);
+    expect(dist).not.toContain(":not(:has(");
+    expect(dist).not.toContain("@supports");
   });
 
   it("tofu 字体只在 tofu.css / all.css 里，base / global / svg / sweep / explicit 不带", () => {
@@ -255,7 +320,9 @@ describe("样式入口的组成", () => {
   it("base：clip 是默认文字模式（非 underline 非 leaf），不支持 background-clip:text 时撤回", () => {
     const out = css("base");
     expect(out).toContain(`${CLIP_ROOT} {`);
-    expect(out).toMatch(/--skz-ul-thickness: 1\.15em/);
+    expect(out).toMatch(/--skz-ul-thickness: 1\.22em/);
+    // 下划线上移 0.07em（底边不变），盖住 █ 方块字形顶部，避免含 █ 的行比普通文字行高、空格处出现缺口
+    expect(out).toMatch(/--skz-ul-offset: -0\.92em/);
     expect(out).toContain("background-clip: text");
     // 装饰线颜色走 --skz-dc：clip 根设透明（继承给后代），不再有 clip 专用的通配规则；
     // tbg / timg 只置为静态的 initial（防嵌套在 underline / tofu 根里时继承 transparent），不再转发逐帧变化的 --skz-fill
@@ -291,40 +358,46 @@ describe("样式入口的组成", () => {
 describe("base 的推导规则", () => {
   it("tier0 圆角用 :is() 收拢成单条 :where 规则，读 --skz-tradius", () => {
     const out = css("base");
-    expect(out).toMatch(/:where\(\[skz\] :is\(p, span[^)]*\):not\(\[skz-ignore\]\)\)\s*\{\s*border-radius: var\(--skz-tradius/);
+    const i = out.indexOf(`:where(${AUTO} :is(p, span`);
+    expect(i).toBeGreaterThanOrEqual(0);
+    expect(out.slice(i, out.indexOf("}", i))).toContain("border-radius: var(--skz-tradius");
   });
 
-  it("tier1 不再逐标签撤销背景，改成根上的变量开关：圆角归零对非 leaf 根，背景开关只挂 underline / tofu 根", () => {
+  it("tier1 不再逐标签撤销背景，改成根上的变量开关：圆角归零写在文字条根（sk-clip-root）和 underline / tofu 根里，背景开关只挂 underline / tofu 根", () => {
     const out = css("base");
-    expect(out).toMatch(/\[skz\]:not\(\[skz-text=leaf\]\)\s*\{\s*--skz-tradius: 0px;\s*\}/);
+    // 不再有单独对非 leaf 根写 --skz-tradius: 0px 的规则（sk-text-radius 已并入两处）
+    expect(out).not.toMatch(/\[skz\]:not\(\[skz-text-mode=leaf\]\)\s*\{/);
+    expect(rule(out, CLIP_ROOT)).toContain("--skz-tradius: 0px");
     const colorBody = rule(out, `[skz]${COLOR_MODES}`);
+    expect(colorBody).toContain("--skz-tradius: 0px");
     expect(colorBody).toContain("--skz-tbg: transparent");
     expect(colorBody).toContain("--skz-timg: none");
-    expect(out).not.toMatch(/:not\(\[skz-text=leaf\]\) p:not\(/);
+    expect(out).not.toMatch(/:not\(\[skz-text-mode=leaf\]\) p:not\(/);
     expect(out).not.toContain("border-radius: 0;");
   });
 
   it("button 是控件：走整块骨头规则，不在文字类（clip / 圆角）里，后代藏起来且不画下划线", () => {
     const out = css("base");
     // 整块骨头规则（media 那条）的选择器里有 button，文字类的 :is() 清单里没有
-    expect(out).toMatch(/\[skz\] select:not\(\[skz-ignore\]\),\s*\[skz\] button:not\(\[skz-ignore\]\)\s*\{[^}]*object-fit: none/);
+    const media = out.indexOf(`${AUTO} :is(img, video, canvas, picture, iframe, svg, input, textarea, select, button):not([skz-ignore]) {`);
+    expect(media).toBeGreaterThanOrEqual(0);
+    expect(out.slice(media, out.indexOf("}", media))).toContain("object-fit: none");
     expect(out).not.toMatch(/:is\(p, span[^)]*button/);
     // 后代藏起来；忽略区里的按钮后代恢复可见
-    expect(out).toMatch(/\[skz\] button:not\(\[skz-ignore\]\) \*\s*\{\s*visibility: hidden !important/);
-    expect(out).toMatch(/\[skz\] \[skz-ignore\] button \*\s*\{\s*visibility: visible !important/);
+    expect(out).toContain(`${AUTO} button:not([skz-ignore]) * {\n  visibility: hidden !important`);
+    expect(out).toContain(`${AUTO} [skz-ignore] button * {\n  visibility: visible !important`);
     // 圆角：独立的 :where 规则（按钮自己写了 border-radius 就保留）
-    expect(out).toMatch(/:where\(\[skz\] button:not\(\[skz-ignore\]\)\)\s*\{\s*border-radius: var\(--skz-radius\)/);
+    expect(out).toContain(`:where(${AUTO} button:not([skz-ignore])) {\n  border-radius: var(--skz-radius)`);
     // 自身不画下划线，优先级(0,3,1)高于通配下划线规则(0,3,0)；后代只有 select 的 option 需要单独压（button 后代已藏起来，input / textarea 没有元素后代）
-    expect(out).toMatch(
-      /\[skz\]:not\(\[skz-text=leaf\]\) :is\(input, textarea, select, button\):not\(\[skz-ignore\]\),\s*\[skz\]:not\(\[skz-text=leaf\]\) select:not\(\[skz-ignore\]\) \*\s*\{\s*text-decoration: none !important/,
-    );
+    expect(flat(out)).toContain(`${auto(NONLEAF_MOD)} :is(input, textarea, select, button):not([skz-ignore]), ${auto(NONLEAF_MOD)} select:not([skz-ignore]) * { text-decoration: none !important`);
     expect(out).not.toMatch(/:is\(input, textarea, select, button\):not\(\[skz-ignore\]\) \*/);
   });
 
-  it("推导规则的根前缀现在是单 [skz]：退出兜底层的规则", () => {
+  it("推导规则的根前缀是 skz-auto 区域：兜底层与退出兜底层都只作用于区域的直接子元素 / 后代", () => {
     const out = css("base");
-    expect(out).toContain("[skz] > *:not([skz-ignore]) {");
-    expect(out).toContain("[skz] > * * {");
+    expect(count(out, `${AUTO} > *:not([skz-ignore]) {`)).toBe(2);
+    expect(count(out, `${AUTO} > * * {`)).toBe(2);
+    expect(out).not.toMatch(/(^|\n)\[skz\] > /);
   });
 
   it("所有入口：不含 [skz][skz]、skz-box[、旧前缀", () => {
@@ -427,14 +500,17 @@ describe("根驱动动画（core / explicit / base 共用）与防火墙（globa
 });
 
 describe("clip 正向选择器", () => {
-  it("完整版：clip 根 = 没写 skz-text 或明写 clip；不再用 :not(underline):not(leaf):not(tofu) 排除法", () => {
+  it("完整版：文字条家族根 = 没写 skz-text-mode / 明写 round / 明写 clip；不再用 :not(underline):not(leaf):not(tofu) 排除法", () => {
     const out = css("base");
     expect(out).toContain(`${CLIP_ROOT} {`);
     expect(out).not.toContain(":not([skz-text=underline])");
     expect(out).not.toContain(":not([skz-text=tofu])");
-    // 作前缀拼后代选择器时用 :is() 收拢两个根，clip 填充只有这一处
-    expect(out).toContain(":is([skz]:not([skz-text]), [skz][skz-text=clip]) :is(p, span");
-    expect(count(out, " background-clip: text;")).toBe(1);
+    // 作前缀拼后代选择器时用 :is() 收拢两个根（各自带 skz-auto 区域的两种写法）：自动推导的 clip 填充一处，显式 skz-text 标记的 clip 填充一处
+    expect(out).toContain(`${auto(CLIP_MOD)} :is(p, span`);
+    // 自动推导一处、显式 skz-text 标记一处，都读 --skz-bgclip；字面量 background-clip:text 只剩不支持时撤回分支的 @supports 条件里
+    // （-webkit- 前缀一行 + 标准写法一行，各两处）
+    expect(count(out, "background-clip: var(--skz-bgclip, text);")).toBe(4);
+    expect(out).not.toMatch(/ background-clip: text;/);
   });
 
   it("未知取值（含 tofu 没引 tofu.css）落到 underline 外观：不是 clip，背景开关（--skz-tbg / --skz-timg）和纯色驱动按 color 处理；leaf 不受影响", () => {
@@ -443,21 +519,214 @@ describe("clip 正向选择器", () => {
     const color = rule(out, `[skz]${COLOR_MODES}`);
     expect(color).toContain("--skz-tbg: transparent");
     expect(color).toContain("--skz-timg: none");
-    // 下划线形状 / 圆角归零对所有非 leaf 根生效（含未知取值），leaf 根被排除
-    expect(rule(out, "[skz]:not([skz-text=leaf])")).toContain("--skz-tradius: 0px");
-    expect(out).toContain("[skz]:not([skz-text=leaf]) *:not([skz-ignore]) {");
+    // 下划线形状对所有非 leaf 根生效（含未知取值），leaf 根被排除；圆角归零由文字条根和 color 根各自声明
+    expect(color).toContain("--skz-tradius: 0px");
+    expect(rule(out, CLIP_ROOT)).toContain("--skz-tradius: 0px");
+    expect(out).toContain(`${auto(NONLEAF_MOD)} *:not([skz-ignore]),`);
     // clip 的透明装饰线、填充都不碰 underline / leaf / tofu / 未知取值
     expect(rule(out, CLIP_ROOT)).toContain("--skz-dc: transparent");
     // leaf 根自己的规则还在，且没写 skz-text=leaf 的根不会进去
-    expect(out).toContain("[skz][skz-text=leaf] *:not([skz-ignore]) {");
+    expect(out).toContain(`${auto("[skz-text-mode=leaf]")} *:not([skz-ignore]) {`);
     // 没引 tofu.css（base 不含方块字体）：tofu 根没有任何专属规则，只会走上面的 underline 外观
     expect(out).not.toContain("skz-tofu");
   });
 
-  it("core：clip 根只认没写 skz-text 的根（core 里没有文字模式）", () => {
+  it("underline / tofu / 未知取值的根复位 round / clip 根写的 gradient 驱动变量，嵌套在文字条根里时才不会继承 --skz-ul-line: none / 透明装饰线", () => {
+    const out = css("base");
+    const body = rule(out, `[skz]${COLOR_MODES}`);
+    for (const decl of ["--skz-ul-line: initial", "--skz-dc: initial", "--skz-bgclip: initial", "--skz-bdb: initial"]) expect(body, decl).toContain(decl);
+    // core 不认 underline / tofu 根，没有这条规则
+    expect(css("core")).not.toContain(COLOR_MODES);
+  });
+
+  it("自动推导和显式 skz-text 的下划线声明合并成一条规则（不再各写一份）；explicit 没有推导，只有标记那部分", () => {
+    for (const name of ["core", "explicit", "base"]) expect(count(css(name), "text-decoration-skip-ink: none"), name).toBe(1);
+    const mark = `${CLIP_ROOT} :where([skz-text]) *:not([skz-ignore]) {`;
+    expect(css("explicit")).toContain(mark);
+    expect(css("explicit")).not.toContain(`${auto(CLIP_MOD)} *:not([skz-ignore])`);
+    expect(css("core")).toContain(`${auto(CLIP_MOD)} *:not([skz-ignore]),`);
+    expect(css("core")).toContain(mark);
+  });
+
+  it("core：文字条根只认 round / clip 家族（没写 skz-text-mode、round、clip），没有 underline / leaf / tofu", () => {
     const out = css("core");
-    expect(out).not.toContain("[skz][skz-text");
-    expect(out).toContain("[skz]:not([skz-text]) :is(p, span");
+    expect(out).not.toContain("[skz][skz-text-mode");
+    expect(out).toContain(`${auto(CLIP_MOD)} :is(p, span`);
+    expect(out).not.toMatch(TEXT_MODE_VALUE);
+  });
+});
+
+describe("round（默认文字模式）：同一批 clip 规则 + 根上变量切换，门控在 box-decoration-break", () => {
+  /** round 根规则体：从特性查询开头到它里面第一条规则的结尾 */
+  const roundBlock = (out: string): string => {
+    const i = out.indexOf(ROUND_SUPPORTS);
+    expect(i).toBeGreaterThanOrEqual(0);
+    return out.slice(i, out.indexOf("}", i));
+  };
+
+  it("core / explicit / base：round 根规则只有一条，在 box-decoration-break 的 @supports 里（含 -webkit- 前缀写法），只认没写 skz-text-mode / 明写 round 的根", () => {
+    for (const name of ["core", "explicit", "base", "all"]) {
+      const out = css(name);
+      expect(count(out, ROUND_SUPPORTS), name).toBe(1);
+      const body = roundBlock(out);
+      expect(body, name).toContain(`[skz]${ROUND_MOD} {`);
+      expect(body, name).toContain("--skz-ul-line: none");
+      expect(body, name).toContain("--skz-bgclip: border-box");
+      expect(body, name).toContain("--skz-bdb: clone");
+      // 圆角清掉 sk-clip-root 的 0px，回落到现有的 --skz-radius，不新造圆角变量
+      expect(body, name).toContain("--skz-tradius: initial");
+      expect(body, name).not.toMatch(/skz-text-mode=clip|skz-text-mode=leaf|skz-text-mode=underline|skz-text-mode=tofu/);
+    }
+    expect(css("global")).not.toContain("box-decoration-break");
+    expect(css("sweep")).not.toContain("box-decoration-break");
+  });
+
+  it("round 排在 clip 根变量（含圆角归零）之后（同优先级靠顺序覆盖），clip 根的复位在 round 之前", () => {
+    for (const name of ["core", "explicit", "base"]) {
+      const out = css(name);
+      const round = out.indexOf(ROUND_SUPPORTS);
+      const clipRoot = out.indexOf(`${CLIP_ROOT} {`);
+      expect(clipRoot, name).toBeGreaterThanOrEqual(0);
+      expect(rule(out, CLIP_ROOT), name).toContain("--skz-tradius: 0px");
+      expect(clipRoot, name).toBeLessThan(round);
+      const radius0 = out.indexOf("--skz-tradius: 0px");
+      const reset = out.indexOf("--skz-ul-line: initial");
+      expect(radius0, name).toBeGreaterThanOrEqual(0);
+      expect(radius0, name).toBeLessThan(round);
+      expect(reset, name).toBeGreaterThanOrEqual(0);
+      expect(reset, name).toBeLessThan(round);
+    }
+  });
+
+  it("clip 根（明写 clip，以及 round 不支持时的默认）：文字条家族根上把三个开关复位成 clip 的值，嵌套在 round 根里的 clip 根才不继承 round", () => {
+    for (const name of ["core", "explicit", "base"]) {
+      const out = css(name);
+      const i = out.indexOf("--skz-dc: transparent");
+      expect(i, name).toBeGreaterThanOrEqual(0);
+      // 声明所在的规则：选择器是文字条家族根
+      expect(out.slice(out.lastIndexOf("}", i), i), name).toContain(`${CLIP_ROOT} {`);
+      const body = out.slice(i, out.indexOf("}", i));
+      expect(body, name).toContain("--skz-ul-line: initial");
+      expect(body, name).toContain("--skz-bgclip: initial");
+      expect(body, name).toContain("--skz-bdb: initial");
+      // clip 原有的变量不变
+      expect(body, name).toContain("--skz-ul-thickness: 1.22em");
+      expect(body, name).toContain("--skz-ul-offset: -0.92em");
+    }
+  });
+
+  it("目标规则只读变量、缺省值就是 clip 原来的写法：装饰线 underline、background-clip:text、box-decoration-break:slice；没有写死的 clone / border-box", () => {
+    for (const name of ["core", "explicit", "base"]) {
+      const out = css(name);
+      expect(out, name).toContain("text-decoration-line: var(--skz-ul-line, underline) !important");
+      expect(out, name).not.toMatch(/text-decoration-line: underline/);
+      expect(out, name).toContain("box-decoration-break: var(--skz-bdb, slice)");
+      expect(out, name).toContain("-webkit-box-decoration-break: var(--skz-bdb, slice)");
+      // 写死的 clone 只出现在特性查询条件里；border-box 只出现在 round 根变量里
+      expect(
+        out
+          .replace(roundBlock(out), "")
+          .replace(ROUND_SUPPORTS, "")
+          .match(/box-decoration-break: clone|--skz-bgclip: border-box/g) ?? [],
+        name,
+      ).toEqual([]);
+    }
+  });
+
+  it("underline / leaf / tofu 根不受影响：round 根选择器不含它们；color 驱动的挂载选择器把 round 排除在外", () => {
+    const base = css("base");
+    expect(roundBlock(base)).not.toContain("leaf");
+    expect(COLOR_MODES).toContain(":not([skz-text-mode=round])");
+    expect(rule(base, `[skz]${COLOR_MODES}`)).toContain("--skz-tbg: transparent");
+  });
+
+  it("完整版：不支持 background-clip:text 的撤回分支排在 round 之后，同时把 --skz-ul-line 清回缺省（round 根同样退回 underline，不会文字透明又没形状）", () => {
+    const out = css("base");
+    const fallback = out.indexOf("@supports not");
+    expect(fallback).toBeGreaterThan(out.indexOf(ROUND_SUPPORTS));
+    const body = out.slice(fallback, out.indexOf("}", fallback));
+    expect(body).toContain("--skz-ul-line: initial");
+    expect(body).toContain(`${CLIP_ROOT} {`);
+  });
+
+  it("core 的门槛里没有 background-clip:text 的撤回分支，round 的降级只靠根变量缺省（不需要 @supports not）", () => {
+    expect(css("core")).not.toContain("@supports not");
+    expect(css("explicit")).not.toContain("@supports not");
+  });
+});
+
+describe("默认即显式：skz-text 标记与 skz-auto 推导区域", () => {
+  it("(c) 推导规则只在 skz-auto 区域前缀下出现：core / base 里没有不带 skz-auto 的文字类推导选择器，兜底层 / 图标 / 控件同理", () => {
+    for (const name of ["core", "base", "all"]) {
+      const out = css(name);
+      expect(unguardedText(out), name).toEqual([]);
+      // 根后面直接接空格 + 标签 / 通配的旧写法（[skz] p、[skz] > *、[skz] svg …）一条都不该有；显式标记（[skz] [skz-xxx]）除外
+      expect(out, name).not.toMatch(/\[skz\](:not\([^)]*\))* (?!\[skz-)(\*|[a-z]+(:|\s|,|\{))/);
+      expect(out, name).not.toMatch(/(^|\n|, )\[skz\] > /);
+    }
+    expect(css("explicit")).not.toContain("skz-auto");
+    expect(css("global")).not.toContain("skz-auto");
+  });
+
+  it("(d) skz-auto 写在根自身和写在根内后代两种情况都能命中：前缀同时含 [skz]:where([skz-auto]) 与 [skz] :where([skz-auto])，根限定始终挂在 [skz] 根上", () => {
+    const out = compileString('@use "lists" as *; @use "sass:string"; x { a: string.unquote(sk-auto()); b: string.unquote(sk-auto(":not([skz-text-mode=leaf])")); }', { loadPaths: ["src/styles"] }).css;
+    expect(out).toContain(`a: ${AUTO};`);
+    expect(out).toContain(`b: ${auto(NONLEAF_MOD)};`);
+    expect(AUTO).toContain("[skz]:where([skz-auto])");
+    expect(AUTO).toContain("[skz] :where([skz-auto])");
+    // 区域自己的限定后缀写在 [skz] 上，不会拼到 skz-auto 后面
+    expect(auto(NONLEAF_MOD)).toContain("[skz]:not([skz-text-mode=leaf]):where([skz-auto])");
+    expect(auto(NONLEAF_MOD)).toContain("[skz]:not([skz-text-mode=leaf]) :where([skz-auto])");
+    // skz-auto 在 :where() 里不计优先级：区域前缀的优先级和旧的单 [skz] 一样
+    const out2 = css("core");
+    expect(out2).not.toMatch(/\[skz\]\[skz-auto\]/);
+  });
+
+  it("(b) skz-text 标记：core / explicit 只有文字条家族（round / clip，根限定 CLIP_MOD），base 另有 leaf；标记元素读文字骨头变量，后代画（透明）下划线", () => {
+    for (const name of ["core", "explicit"]) {
+      const out = css(name);
+      const target = `[skz]${CLIP_MOD} [skz-text]:where(:not([skz-ignore], [skz-bone], [skz-leaf], [skz-leaf] *, [skz-ignore] *))`;
+      expect(flat(out), name).toContain(`${target} { background-color: var(--skz-tbg, var(--skz-fill, var(--skz-color))) !important;`);
+      expect(out, name).toContain(`[skz]${CLIP_MOD} :where([skz-text]) *:not([skz-ignore])`);
+      expect(rule(out, `[skz]${CLIP_MOD}`)).toBeTruthy();
+      expect(out, name).not.toContain("[skz-text-mode=leaf] [skz-text]");
+    }
+    const base = css("base");
+    expect(base).toContain(`${CLIP_ROOT} [skz-text]:where(`);
+    expect(base).toContain(`[skz]${NONLEAF_MOD} :where([skz-text]) *:not([skz-ignore])`);
+    // leaf 根：标记元素整块当骨头（同 skz-bone）
+    const leaf = rule(base, "[skz][skz-text-mode=leaf] [skz-text]:where(:not([skz-ignore], [skz-bone], [skz-leaf], [skz-leaf] *, [skz-ignore] *))");
+    expect(leaf).toContain("-webkit-text-fill-color: transparent !important");
+    // clip 标记元素的背景读 --skz-tbg，所以不支持 background-clip:text 时同样退回 underline
+    expect(base).toContain("@supports not");
+    // 下划线形状是标记元素自己 + 后代，装饰线颜色走 --skz-dc
+    expect(base).toMatch(/\[skz\]:not\(\[skz-text-mode=leaf\]\) \[skz-text\]:where\([^{]*\{[^}]*text-decoration-color: var\(--skz-dc/);
+  });
+
+  it("标记规则只认根的后代（[skz] [skz-text]），不认根自身，也没有不带 [skz] 的 [skz-text] 规则", () => {
+    for (const name of ["core", "explicit", "base", "all"]) {
+      const out = css(name);
+      expect(out, name).not.toMatch(/(^|\n|, )\[skz-text\]/);
+      expect(out, name).not.toMatch(/\[skz\]\[skz-text\]/);
+    }
+  });
+
+  it("skz-has-ignore 已移除：所有入口都不再出现；忽略区不再关祖先的下划线，:has([skz-ignore]) 只剩根上的 fade 撤销和 tofu 守卫", () => {
+    for (const name of ALL_ENTRIES) expect(css(name), name).not.toContain("skz-has-ignore");
+    for (const name of ["core", "explicit", "base", "all"]) {
+      const out = css(name);
+      // 已删除的下划线修正：skz-auto 区域和 skz-text 子树里「含忽略区的祖先 text-decoration:none」都不再出现
+      expect(flat(out), name).not.toMatch(/:has\(\[skz-ignore\]\):not\(\[skz-ignore\]\)\s*\{[^}]*text-decoration: none/);
+      expect(out, name).not.toContain("*:has([skz-ignore]):not([skz-ignore])");
+      // 其余 :has([skz-ignore]) 只出现在根上（默认 fade / pulse、shimmer 退回 fade 的撤销，每个根只检查一次）和 tofu 的 :not(:where(:has())) 守卫里
+      const stray = (out.match(/[^\n{},]*:has\(\[skz-ignore\]\)[^\n{]*/g) ?? []).map((m) => m.trim()).filter((m) => !m.includes(":not(:where(:has([skz-ignore])))"));
+      for (const m of stray)
+        expect(m, name).toMatch(/^(\[skz\]:not\(\[skz-effect\]\):has\(\[skz-ignore\]\)|:where\(\[skz\]\[skz-effect=pulse\]:has\(\[skz-ignore\]\), \[skz\]\[skz-effect=shimmer\]:has\(\[skz-ignore\]\)\))$/);
+    }
+    const fade = css("core");
+    expect(fade).toContain("@supports selector(:has(*)) {\n  [skz]:not([skz-effect]):has([skz-ignore]) {\n    animation: none;");
+    // 老浏览器（不认 :has）仍保留默认 fade：撤销规则在 @supports 里，基础规则不带 :has
+    expect(fade).toContain("[skz]:not([skz-effect]),\n[skz][skz-effect=fade] {\n  animation: skz-fade");
   });
 });
 
@@ -465,9 +734,9 @@ describe("Sass 文字模式挂载与驱动 mixin", () => {
   /** 用 src/styles 做 loadPaths 编译一小段 SCSS，去掉注释 */
   const sassOut = (src: string): string => compileString(src, { loadPaths: ["src/styles"] }).css.replace(/\/\*[\s\S]*?\*\//g, "");
 
-  it("color 驱动的挂载选择器：排除 clip / leaf 两个 gradient 模式，其余（含未知取值）都挂", () => {
+  it("color 驱动的挂载选择器：排除 round / clip / leaf 三个 gradient 模式，其余（含未知取值）都挂", () => {
     const out = sassOut('@use "sass:string"; @use "lists" as *; x { m: string.unquote($color-modes); }');
-    expect(out).toContain(`m: ${COLOR_MODES.split("=clip").join('="clip"').split("=leaf").join('="leaf"')};`);
+    expect(out).toContain(`m: ${COLOR_MODES.split("=round").join('="round"').split("=clip").join('="clip"').split("=leaf").join('="leaf"')};`);
   });
 
   it("防火墙规则的派生变量与根规则共用驱动 mixin：gradient 的 pulse / shimmer 各一条，color 一条（pulse + shimmer 合并）", () => {

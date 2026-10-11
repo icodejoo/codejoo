@@ -146,9 +146,9 @@ describe("SkzBox", () => {
     el.loading = true;
 
     expect(seen.at(-1)).toEqual({ effect: "pulse", text: "leaf", fallback: "fade", engine: "svg", fit: true });
-    // core 不认识 text：根上只有 effect，没有 skz-text
+    // core 不认识 text：根上只有 effect，没有 skz-text-mode
     expect(child.getAttribute("skz-effect")).toBe("pulse");
-    expect(child.hasAttribute("skz-text")).toBe(false);
+    expect(child.hasAttribute("skz-text-mode")).toBe(false);
     // fit="false" 视为关闭
     el.setAttribute("fit", "false");
     expect(seen.at(-1)?.fit).toBe(false);

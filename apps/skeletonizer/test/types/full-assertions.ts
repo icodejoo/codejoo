@@ -20,6 +20,7 @@ declare const loading: Ref<boolean>;
 
 // 完整版选项
 enable(el, { text: "leaf" });
+enable(el, { text: "round" });
 enable(el, { effect: "sweep" });
 enable(el, { effect: "pulse", engine: "svg", fallback: "fade", text: "clip", fit: true });
 const effect: SkzEffect = "sweep";

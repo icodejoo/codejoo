@@ -30,21 +30,24 @@ it("enable：加根标记属性、aria-busy、inert，off 全部撤销并清掉�
   expect(f.getAttribute("skz")).toBe("");
   expect(f.getAttribute("aria-busy")).toBe("true");
   expect(f.getAttribute("skz-effect")).toBe("pulse");
-  expect(f.getAttribute("skz-text")).toBe("leaf");
+  expect(f.getAttribute("skz-text-mode")).toBe("leaf");
   expect(f.inert).toBe(true);
   off();
   expect(f.attrs.size).toBe(0);
   expect(f.inert).toBe(false);
 });
 
-it("text：四种模式都原样写到 skz-text；不传 = 不写属性（默认 clip）", () => {
+it("text：五种模式都原样写到 skz-text-mode（根属性，不是元素级标记 skz-text）；不传 = 不写属性（默认 round，纯 CSS 的缺省就是 round，JS 与无 JS 结果一致）", () => {
   const f = new FakeEl();
   const off = enable(asEl(f), { effect: "shimmer" });
-  expect(f.getAttribute("skz-text")).toBeNull();
-  for (const mode of ["clip", "underline", "leaf", "tofu"] as const) {
+  expect(f.getAttribute("skz-text-mode")).toBeNull();
+  for (const mode of ["round", "clip", "underline", "leaf", "tofu"] as const) {
     enable(asEl(f), { effect: "shimmer", text: mode });
-    expect(f.getAttribute("skz-text")).toBe(mode);
+    expect(f.getAttribute("skz-text-mode")).toBe(mode);
   }
+  // 再次调用不传 text：属性被清掉，回到默认（round）
+  enable(asEl(f), { effect: "shimmer" });
+  expect(f.getAttribute("skz-text-mode")).toBeNull();
   off();
   expect(f.attrs.size).toBe(0);
 });
@@ -64,7 +67,7 @@ it("enable 重入：返回同一个 off，不传的选项会被清掉", () => {
   const off = enable(asEl(f), { effect: "pulse", text: "leaf" });
   expect(enable(asEl(f), {})).toBe(off);
   expect(f.getAttribute("skz-effect")).toBeNull();
-  expect(f.getAttribute("skz-text")).toBeNull();
+  expect(f.getAttribute("skz-text-mode")).toBeNull();
 });
 
 it("toggle：按 loading 开关；disable 对未开启元素无副作用", () => {
@@ -180,21 +183,21 @@ it("懒渲染：根离开视口打上 skz-paused，回来去掉；关闭时取�
   expect(f.getAttribute("skz-paused")).toBeNull();
 });
 
-it("skz-has-ignore：根里有忽略区才打上，重入时重新检测，关闭时移除", () => {
+it("忽略区：enable 不再往根上写 skz-has-ignore（忽略区修正纯靠 skz-ignore 标记的 CSS），关闭后根上一个属性都不剩", () => {
   const root = new FakeEl();
   const ignore = root.add(new FakeEl());
   ignore.setAttribute("skz-ignore", "");
   const off = enable(asEl(root));
-  expect(root.getAttribute("skz-has-ignore")).toBe("");
+  expect(root.getAttribute("skz-has-ignore")).toBeNull();
+  expect(root.attrs.size).toBe(2);
+  expect(root.attrs.has("skz") && root.attrs.has("aria-busy")).toBe(true);
 
   root.children = [];
   enable(asEl(root));
-  expect(root.getAttribute("skz-has-ignore")).toBeNull();
-
   root.add(ignore);
   enable(asEl(root));
   off();
-  expect(root.getAttribute("skz-has-ignore")).toBeNull();
+  expect(root.attrs.size).toBe(0);
 });
 
 it("engine：enable 自己不写 skz-engine（由 svg 扩展挂上 blob 后写，见 global.test.ts / svg.test.ts）", () => {

@@ -153,7 +153,7 @@ describe("打包器（vite）构建浏览器产物", () => {
       source: `import { enable } from "skeletonizer/full";\nenable(document.getElementById("a"), { text: "leaf" });\n`,
       check: ({ css, js }) => {
         expect(css).toBe("");
-        expect(js).toContain("skz-text");
+        expect(js).toContain("skz-text-mode");
       },
     },
   ];

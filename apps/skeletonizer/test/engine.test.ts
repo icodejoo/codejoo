@@ -55,13 +55,13 @@ describe("engine 误配的开发警告", () => {
 });
 
 describe("完整版扩展", () => {
-  it("text 扩展：写 skz-text，没传就清掉，关闭后撤掉", async () => {
+  it("text 扩展：写 skz-text-mode，没传就清掉，关闭后撤掉", async () => {
     const { enable } = await loadFull();
     const el = document.createElement("div");
     const off = enable(el, { text: "leaf" });
-    expect(el.getAttribute("skz-text")).toBe("leaf");
+    expect(el.getAttribute("skz-text-mode")).toBe("leaf");
     enable(el);
-    expect(el.hasAttribute("skz-text")).toBe(false);
+    expect(el.hasAttribute("skz-text-mode")).toBe(false);
     enable(el, { text: "tofu" });
     off();
     expect(el.getAttributeNames()).toEqual([]);

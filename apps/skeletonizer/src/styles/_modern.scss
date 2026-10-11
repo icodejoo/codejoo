@@ -1,30 +1,33 @@
 @use "lists" as *;
 @use "text" as *;
 
-/* ===== 现代档（core.css）：clip 文字骨头 + 控件整块骨头 + 图标启发式 + 忽略区下划线修正 =====
+/* ===== 现代档（core.css）：文字条骨头（默认 round，不支持时 clip；自动推导 + 显式 skz-text 标记）+ 控件整块骨头 + 图标启发式 =====
  * 门槛：同时具备 text-decoration-thickness 和 :has()（Chrome 105+ / Safari 15.4+ / Firefox 121+，
  * core 的目标线 Chrome 119+ / Safari 16.4+ / Firefox 128+ 都满足）。低于门槛只有第 0 档的静态色块。
  * 这里是完整版 tier1（下划线法 / clip）和 tier2（图标 / 忽略区）里 core 需要的部分合并成一个 @supports；
  * 不含 underline / leaf / tofu 文字模式，也没有 background-clip:text 的撤回分支（门槛已保证支持）。
- * 根选择器只认没写 skz-text 的根（见 $core-mod）：同时引了完整版样式时，本块碰不到 leaf / underline / tofu 根。 */
+ * 根选择器只认文字条家族的根（没写 skz-text-mode / round / clip，见 $clip-mod）：同时引了完整版样式时，本块碰不到 leaf / underline / tofu 根。
+ * 自动推导只在 skz-auto 区域里生效；显式标记 skz-text 在区域内外都生效。 */
 @supports (text-decoration-thickness: 1em) and selector(:has(*)) {
-  /* 文字标签上第 0 档的背景色退场，改用下划线当形状：圆角归零 */
-  @include sk-text-radius($core-mod);
-  @include sk-text-underline($core-mod);
+  /* 下划线当形状（自动推导 + 显式文字标记 skz-text 共用一条规则；标记元素的整个子树按文字行出条，区域内外都生效）；
+   * 文字标签上第 0 档的背景色退场，圆角归零由 sk-clip-root 声明 */
+  @include sk-text-underline($clip-mod);
 
-  /* clip：下划线当形状、background-clip:text 当填充；装饰线透明、只参与裁剪，下划线加厚到 1.15em。
-   * 局限：不在文字标签清单里、又直接含文字的元素（如裸 div 文本）不可见，要包进 p / span；
+  /* clip：下划线当形状、background-clip:text 当填充；装饰线透明、只参与裁剪，下划线加厚到 1.22em、上移 0.07em。
+   * round（默认）复用同一批规则，只在根上切变量：支持 box-decoration-break 时撤掉装饰线和 background-clip:text，改用带圆角的背景盒；不支持时就是 clip。
+   * clip 局限：skz-auto 区域里不在文字标签清单、又直接含文字的元素（如裸 div 文本）不可见，要包进 p / span 或自己标 skz-text；
    * 装饰线是否参与裁剪（规范要求参与）仅 Chrome 实测过 */
-  @include sk-clip-root($core-clip, false);
-  @include sk-clip-fill($core-clip);
+  @include sk-clip-root(false);
+  @include sk-round-root;
+  @include sk-clip-fill;
 
-  /* 控件整块当骨头，自身不画下划线；叶子元素 / 忽略区内部不画下划线 */
-  @include sk-text-controls($core-mod);
+  /* 显式文字标记 skz-text 的背景填充 */
+  @include sk-mark-text-clip;
+
+  /* 控件整块当骨头，自身不画下划线；忽略区内部不画下划线 */
+  @include sk-text-controls($clip-mod);
   @include sk-text-no-underline-marks;
 
   /* 图标启发式：空的 <i> 和类名带 icon 的空元素 -> 骨头 */
   @include sk-icons;
-
-  /* 含 skz-ignore 的祖先不再画下划线（要求根上有 skz-has-ignore，enable() 检测到忽略区时自动加） */
-  @include sk-ignore-underline($core-mod);
 }

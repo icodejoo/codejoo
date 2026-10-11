@@ -1,55 +1,78 @@
 @use "lists" as *;
 @use "text" as *;
 
-/* ===== 第 1 档：下划线法文字骨头（Safari 12.1+/Chrome 89+/Firefox 70+）=====
+/* ===== 第 1 档：下划线法文字骨头（Safari 14+/Chrome 89+/Firefox 84+，:is() 与 `:not()` 选择器列表的门槛）=====
  * 给所有文字画一根超粗下划线：沿真实文字行延伸，最后一行自然变短，混合文字也覆盖。
+ * 两类目标：skz-auto 区域里的文字标签（自动推导），和显式标记 skz-text 的元素子树（开发者自己标）；形状 / 填充规则由同一批积木生成。
  * 本身不能渐变、没有圆角：颜色读 --skz-ul-fill，pulse / shimmer 时由根驱动只能变色（见 driver-color）；
- * 默认的 clip 模式在它之上叠一层 background-clip:text 填充（见下）。
+ * 文字条家族（round 默认 / clip）在它之上叠一层背景填充：clip 用 background-clip:text 裁进文字，round 撤掉装饰线改用带圆角的背景盒（见下）。
  * 完整版保留这一档的全部渐进行为，给"有 text-decoration-thickness、没有 :has()"的浏览器用；
  * 支持两者的浏览器在 core.css 里走合并后的现代档（_modern.scss），规则由同一批积木（_text.scss）生成。
- * skz-text="tofu" 的根：$clip 不含它，没引 tofu.css 时外观就是这里的 underline；引了 tofu.css 则换成方块字体；
+ * skz-text-mode="tofu" 的根：$clip 不含它，没引 tofu.css 时外观就是这里的 underline；引了 tofu.css 则换成方块字体；
  * 其他未知取值同样落到 underline 外观。 */
 @supports (text-decoration-thickness: 1em) {
-  /* 文字标签上第 0 档的背景色退场，改用下划线：圆角归零对 clip / underline / tofu 都生效；
-   * 背景色 / 背景图开关只挂在 underline / tofu / 未知取值的根上（$color-modes），clip 根不声明
-   * （tier0 读 --skz-tbg 缺省时自然回落到 --skz-fill / --skz-bg-img） */
-  @include sk-text-radius($nonleaf-mod);
-  #{$auto}#{$color-modes} {
+  /* 文字标签上第 0 档的背景色退场，改用下划线：圆角归零（--skz-tradius: 0px），round / clip 根由 sk-clip-root 声明，underline / tofu / 未知取值的根在这里（$color-modes）；
+   * 背景色 / 背景图开关同样只挂在 $color-modes 的根上，round / clip 根不声明
+   * （tier0 读 --skz-tbg 缺省时自然回落到 --skz-fill / --skz-bg-img）。这些都是根上的变量，不经过 skz-auto。
+   * 其余四个变量复位成 initial：round / clip 根把它们设成了 gradient 驱动的值（--skz-ul-line: none、--skz-dc: transparent、background-clip / box-decoration-break），
+   * 而变量会继承，underline / tofu 根嵌套在文字条根里时不复位，会继承到 none / 透明装饰线，下划线整个消失。
+   * 装饰线粗度 / 偏移不复位：它们是用户可在根上覆盖的公开变量，复位会在样式表顺序不利时盖掉用户的值 */
+  [skz]#{$color-modes} {
     --skz-tbg: transparent;
     --skz-timg: none;
+    --skz-tradius: 0px;
+    --skz-ul-line: initial;
+    --skz-dc: initial;
+    --skz-bgclip: initial;
+    --skz-bdb: initial;
   }
 
-  /* 装饰线颜色读 --skz-dc（clip 根设成透明，下面）；没设时读 --skz-ul-fill（pulse / shimmer 时脉冲），再回落静态 --skz-color */
+  /* 下划线当形状：自动推导（skz-auto 区域）和显式文字标记 skz-text 共用一条规则（见 sk-text-underline）。
+   * 显式标记：标记元素的整个子树按文字行出条（clip 时背景 + background-clip:text，其余模式是可见的下划线），
+   * 标在容器上也覆盖混合内容；与 skz-auto 区域无关，区域内外都生效。
+   * 装饰线颜色读 --skz-dc（round / clip 根设成透明，下面）；没设时读 --skz-ul-fill（pulse / shimmer 时脉冲），再回落静态 --skz-color */
   @include sk-text-underline($nonleaf-mod);
 
-  /* clip 文字模式（默认；根上不写 skz-text，或写 skz-text="clip"）：下划线当形状、background-clip:text 当填充，
+  /* clip 文字模式（根上写 skz-text-mode="clip"；不支持 box-decoration-break 的浏览器里，默认的 round 也退回它）：下划线当形状、background-clip:text 当填充，
    * 文字条里也能有 shimmer 光带（含 svg 引擎），形状仍沿真实文字行延伸（最后一行较短）。
    * 1) 文字标签读背景骨头的同一套变量（--skz-fill / --skz-bg-img / --skz-bg-pos），再 clip 到文字（含装饰线）；
    * 2) 根上 --skz-dc 设透明，继承给所有后代的装饰线颜色：装饰线只参与裁剪、自己不显示，祖先块的下划线会穿过后代文字，不清掉会盖住渐变；
-   * 3) 下划线加厚到 1.15em，盖住 g / p / y 等下探字形。
-   * 想要纯下划线（颜色脉冲，最便宜）在根上写 skz-text="underline"。
-   * 局限：不在文字标签清单里、又直接含文字的元素（如裸 div 文本）会不可见；比 underline 贵（GPU 约 2.5 倍）；
+   * 3) 下划线加厚到 1.22em、上移 0.07em，盖住 g / p / y 等下探字形。
+   * 想要纯下划线（颜色脉冲，最便宜）在根上写 skz-text-mode="underline"。
+   * 局限：skz-auto 区域里不在文字标签清单、又直接含文字的元素（如裸 div 文本）会不可见（要包进 p / span，或自己标 skz-text）；比 underline 贵（GPU 约 2.5 倍）；
    * @supports 只能判断属性存在，判断不了装饰线是否参与裁剪（规范要求参与，仅 Chrome 实测过）。 */
   /* tbg / timg 置为 initial（无效值），文字骨头回落读 --skz-fill / --skz-bg-img；
    * 显式写出是为了嵌套在 underline / tofu 根里时不继承外层的 transparent。值是静态的，不增加逐帧重算 */
-  @include sk-clip-root($clip);
-  @include sk-clip-fill($clip);
+  @include sk-clip-root;
+  /* round（默认；根上不写 skz-text-mode，或写 round）：复用 clip 的全部目标规则，支持 box-decoration-break 时根上切变量改用带圆角的背景盒（见 sk-round-root）。
+   * 必须在 sk-clip-root 之后、下面的 background-clip:text 撤回分支之前 */
+  @include sk-round-root;
+  @include sk-clip-fill;
+
+  /* 显式文字标记 skz-text 的背景填充（文字条根） */
+  @include sk-mark-text-clip;
   /* 浏览器不认 background-clip:text：撤回 clip，退回上面的 underline（规则与 clip 同优先级，写在后面）。
    * 装饰线颜色：--skz-dc 清掉后读 --skz-ul-fill，clip 根上没有 pulse 驱动的 --skz-ul-fill，所以回落到静态 --skz-color
    * （这类浏览器没有 clip 的光带，文字条是静态灰，可接受；svg 引擎本来就是静态 --skz-color）。
+   * --skz-ul-line 清回缺省：round 根在这类浏览器里同样退回 underline（否则文字透明、背景撤掉、装饰线又是 none，什么都看不见）。
    * core 的门槛（Chrome 119+ / Safari 16.4+ / Firefox 128+）都认 background-clip:text，core 里没有这一支 */
   @supports not ((-webkit-background-clip: text) or (background-clip: text)) {
     #{$clip} {
       --skz-tbg: transparent;
       --skz-timg: none;
       --skz-dc: initial;
-      --skz-ul-thickness: 1em;
+      --skz-ul-thickness: initial;
+      --skz-ul-offset: initial;
+      --skz-ul-line: initial;
     }
   }
 
   /* 控件（见 $control-tags）整块当骨头：自身不画下划线，见 sk-text-controls */
   @include sk-text-controls($nonleaf-mod);
 
-  /* 叶子背景模式 / 媒体 / 标记元素不画下划线 */
+  /* 叶子背景模式 / 媒体 / 标记元素不画下划线（必须排在下划线规则之后：优先级相同时靠顺序） */
   @include sk-text-no-underline-marks;
 }
+
+/* leaf 模式下显式文字标记 skz-text 整块当骨头（同 skz-bone）；不画下划线，不需要 @supports */
+@include sk-mark-text-leaf;

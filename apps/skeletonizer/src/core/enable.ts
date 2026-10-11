@@ -9,9 +9,6 @@ export const ROOT_ATTR = "skz";
 /** 根上记录效果的属性名 */
 const EFFECT_ATTR = "skz-effect";
 
-/** 根里含忽略区时打上的属性：CSS 据此关闭隐式 fade、修正下划线，代替昂贵的 :has([skz-ignore]) */
-const HAS_IGNORE_ATTR = "skz-has-ignore";
-
 /** 已启用根元素的运行时状态 */
 interface ActiveState {
   /** 关闭骨架的函数 */
@@ -100,10 +97,9 @@ function syncExtensions(el: HTMLElement, opts: EnableOptions): void {
  * off();
  */
 export function enable(el: HTMLElement, opts: EnableOptions = {}): () => void {
-  // 忽略区可能随内容变化，每次调用都重新检测（只查一次，结果同时给属性和交互锁用）
+  // 忽略区可能随内容变化，每次调用都重新检测（只查一次，给交互锁用）
   const hasIgnore = !!el.querySelector(IGNORE_SEL);
   syncAttr(el, EFFECT_ATTR, opts.effect);
-  el.toggleAttribute(HAS_IGNORE_ATTR, hasIgnore);
   const prev = active.get(el);
   if (!prev) {
     el.setAttribute(ROOT_ATTR, "");
@@ -127,7 +123,6 @@ export function enable(el: HTMLElement, opts: EnableOptions = {}): () => void {
     el.removeAttribute(ROOT_ATTR);
     el.removeAttribute("aria-busy");
     el.removeAttribute(EFFECT_ATTR);
-    el.removeAttribute(HAS_IGNORE_ATTR);
     active.delete(el);
   };
   active.set(el, { off, unlock: lock(el, hasIgnore) });

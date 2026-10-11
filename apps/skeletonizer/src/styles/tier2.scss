@@ -6,25 +6,22 @@
 $leaf-node: ":not([skz-ignore] *):not([skz-ignore]):not(:has(> *)):not(:empty)";
 
 /* ===== 第 2 档：:has() 结构判断（Safari 15.4+/Chrome 105+/Firefox 121+）=====
- * 叶子背景法（根上写 skz-text="leaf" 启用）、图标启发式、精确的 skz-ignore。
- * 图标启发式和忽略区的下划线修正在 core.css 里随现代档（_modern.scss）一起提供；叶子背景法只在完整版。 */
+ * 叶子背景法（根上写 skz-text-mode="leaf" 启用，只在 skz-auto 区域里推导）、图标启发式。
+ * 图标启发式在 core.css 里随现代档（_modern.scss）一起提供；叶子背景法只在完整版。 */
 @supports selector(:has(*)) {
   /* 叶子背景法：没有子元素、但有文字节点的元素 -> 一块骨头，可 shimmer、有圆角 */
-  #{$auto}[skz-text="leaf"] *:not([skz-ignore]) {
+  #{sk-auto($leaf-mod)} *:not([skz-ignore]) {
     -webkit-text-fill-color: transparent !important;
   }
   /* 用 :has(> *) 而不是 :has(*)：含义相同（有子元素即有后代元素），但只看直接子元素，
    * 实测 16000 元素下每帧样式重算少约 7ms */
-  #{$auto}[skz-text="leaf"] #{$leaf-node} {
+  #{sk-auto($leaf-mod)} #{$leaf-node} {
     @include sk-bone;
   }
-  :where(#{$auto}[skz-text="leaf"] #{$leaf-node}) {
+  :where(#{sk-auto($leaf-mod)} #{$leaf-node}) {
     border-radius: var(--skz-radius);
   }
 
   /* 图标启发式：空的 <i> 和类名带 icon 的空元素 -> 骨头；图标字体靠伪元素出字形，一并藏掉 */
   @include sk-icons;
-
-  /* 含 skz-ignore 的祖先不再画下划线（要求根上有 skz-has-ignore） */
-  @include sk-ignore-underline($nonleaf-mod);
 }

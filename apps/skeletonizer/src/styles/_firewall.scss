@@ -25,7 +25,7 @@
   [skz][skz-effect="shimmer"] [skz-fw] {
     @include sk-shimmer-pos;
   }
-  #{$auto}:is([skz-effect="pulse"], [skz-effect="shimmer"])#{$color-modes} [skz-fw] {
+  [skz]:is([skz-effect="pulse"], [skz-effect="shimmer"])#{$color-modes} [skz-fw] {
     @include sk-pulse-ul;
   }
 

@@ -10,6 +10,15 @@
   background-size: var(--skz-bg-size, 60vw 100vh) !important;
 }
 
+/// 文字骨头的背景：与 sk-bone 同一套，只是颜色 / 图先读 --skz-tbg / --skz-timg（underline / tofu 根置为 transparent / none，round / clip 根回落到 --skz-fill / --skz-bg-img）。
+/// 再多一条换行断开方式：读 --skz-bdb，缺省 slice（浏览器初始值）；round 根设成 clone，让行内元素折行后每一行片段各自带圆角。
+/// 第 0 档的文字标签和显式文字标记 skz-text 共用。
+@mixin sk-text-bone {
+  @include sk-bone(var(--skz-tbg, var(--skz-fill, var(--skz-color))), var(--skz-timg, var(--skz-bg-img, none)));
+  -webkit-box-decoration-break: var(--skz-bdb, slice);
+  box-decoration-break: var(--skz-bdb, slice);
+}
+
 /// 深色主题：系统深色且没强制 light，或显式 data-skz-theme="dark"，两种情况下都应用 @content。
 /// @param {String} $sel 作用的选择器，如 '[skz]'；可以是逗号分隔的列表，@content 里可用 & 引用它
 @mixin sk-dark($sel) {

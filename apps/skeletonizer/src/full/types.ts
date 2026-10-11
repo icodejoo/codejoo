@@ -1,13 +1,15 @@
 import type { registerCustomElements } from "./hosts.js";
 
 /**
- * 文字骨头模式：不传 = "clip"（默认）。
+ * 文字骨头模式：不传 = "round"（默认；纯 CSS 里根上不写 skz-text-mode 也是 round）。
+ * - "round"：用背景盒 + 圆角画文字条：行内元素折行后每行一条、各自圆角，块元素（p / h3 / div / flex 子项）按自身 display 整块圆角矩形；
+ *   文字条里有 shimmer 光带，GPU 约为 clip 的一半；浏览器不支持 box-decoration-break（含 -webkit- 前缀）时自动退回 clip；
  * - "clip"：下划线当形状 + background-clip:text 当填充，文字条里也有 shimmer 光带，形状沿真实文字行；
  * - "underline"：纯下划线，颜色脉冲，最便宜；
  * - "leaf"：叶子元素整块当背景骨头（有圆角、能放光带）；
  * - "tofu"：方块字体（需引入 skeletonizer/tofu.css，否则退回 underline 外观），颜色脉冲。
  */
-export type SkzTextMode = "underline" | "leaf" | "clip" | "tofu";
+export type SkzTextMode = "round" | "clip" | "underline" | "leaf" | "tofu";
 
 /** 降级目标：浏览器不支持 @property、global 方案的 pulse / shimmer 跑不起来时改用的效果：svg（默认，JS 挂 blob SVG 动画）/ fade（根级淡入淡出） */
 export type SkzFallback = "svg" | "fade";
@@ -26,7 +28,7 @@ declare module "skeletonizer" {
     sweep: true;
   }
   interface EnableOptions {
-    /** 文字骨头模式，不传 = clip，各模式见 SkzTextMode */
+    /** 文字骨头模式，不传 = round，各模式见 SkzTextMode */
     text?: SkzTextMode;
     /** global 方案在不支持 @property 的浏览器里退回的效果，默认 svg（由 JS 挂 blob SVG，需加载 skeletonizer/global）；JS 执行前一律是 fade */
     fallback?: SkzFallback;

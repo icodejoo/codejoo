@@ -7,51 +7,6 @@ $control-tags: input, textarea, select, button;
 $media-tags: list.join((img, video, canvas, picture, iframe, svg), $control-tags, comma);
 $icon-selectors: "i:empty", '[class*="icon"]:empty';
 
-/// 自动推导规则的根前缀：所有带 skz 的元素（不再有 skz-mode，显式模式只能靠 explicit.css）。
-$auto: "[skz]";
-
-/// color 驱动的文字模式挂载选择器（:where() 后缀），作后缀接在 $auto / [skz][skz-effect=…] 后面。
-/// 文字模式按驱动分两类：
-/// - gradient 驱动：clip / leaf，读 --skz-fill / --skz-bg-img / --skz-bg-pos（clip 把渐变裁进文字，leaf 把渐变铺满叶子元素）；
-/// - color 驱动：underline / tofu，只有一个颜色，读 --skz-ul-fill（pulse / shimmer 时只能变色）。
-/// 挂载条件是「有 skz-text 且不是 gradient 驱动的任何取值」：用排除法而不是逐个枚举，拼错的 / 将来新增的取值才会落到 underline 的外观。
-/// 新增 gradient 驱动的文字模式时，在这里补一个 :not()（并核对 _firewall.scss 与 test/styles.test.ts）。
-/// :where() 不抬优先级：压不过 svg 引擎根规则的 animation: none / 静态 --skz-ul-fill。
-$color-modes: ':where([skz-text]:not([skz-text="clip"]):not([skz-text="leaf"]))';
-
-/// 非 leaf 根的限定（完整版）：除叶子背景法以外的所有根，含 clip / underline / tofu / 未知取值。接在 $auto 后面。
-$nonleaf-mod: ':not([skz-text="leaf"])';
-
-/// core 的根限定：core 没有文字模式，所有根都是 clip；只认没写 skz-text 的根，
-/// 这样同时引了 core.css 和完整版样式时，core 的规则碰不到 leaf / underline / tofu 根，重复加载不改变层叠结果。接在 $auto 后面。
-$core-mod: ":not([skz-text])";
-
-/// core 的 clip 根（= 所有没写 skz-text 的根）。
-$core-clip: $auto + $core-mod;
-
-/// clip（默认）文字模式的根（完整版）：没写 skz-text（即 $core-clip），或明写 clip；其余取值一律不是 clip，
-/// underline / tofu / 未知取值落到 underline 的外观（tofu 没引 tofu.css 时也是），leaf 走叶子背景法。
-/// 逗号分隔的两项，直接 #{} 插值作规则的选择器；作前缀拼后代选择器时用 sk-root-is() 包成 :is()。
-$clip: ($core-clip, $auto + '[skz-text="clip"]');
-
-/// tofu 文字模式的根选择器（方块字体，见 _tofu.scss）。
-$tofu: $auto + '[skz-text="tofu"]';
-
-/// 文字类元素排除串：显式骨头 / 叶子、叶子内部、忽略区内部（clip 和 tofu 共用；tofu 另外追加媒体排除）。
-$text-skip: ":not([skz-bone]):not([skz-leaf]):not([skz-leaf] *):not([skz-ignore] *)";
-
-/// 给清单里每一项拼上前缀，并统一加 :not([skz-ignore])，返回逗号分隔的选择器列表。
-/// @param {String} $prefix 选择器前缀（含后代空格之前的部分），如 '[skz]'
-/// @param {List} $items 标签/选择器清单
-/// @return {List} 逗号分隔的选择器列表，用 #{} 插值使用
-@function sk-sel($prefix, $items) {
-  $out: ();
-  @each $t in $items {
-    $out: list.append($out, "#{$prefix} #{$t}:not([skz-ignore])", comma);
-  }
-  @return $out;
-}
-
 /// 把清单拼成逗号分隔的字符串，供 :is() / :not() 里使用。
 /// @param {List} $items 标签/选择器清单
 /// @return {String} 形如 "p, span, h1"
@@ -67,15 +22,69 @@ $text-skip: ":not([skz-bone]):not([skz-leaf]):not([skz-leaf] *):not([skz-ignore]
   @return $joined;
 }
 
-/// 把根选择器清单包成可作前缀的单个选择器：只有一项原样返回，多项用 :is() 收拢。
-/// @param {List|String} $roots 根选择器（逗号分隔清单或单个选择器）
-/// @return {String} 单个选择器
-@function sk-root-is($roots) {
-  @if list.length($roots) == 1 {
-    @return list.nth($roots, 1);
-  }
-  @return ":is(#{$roots})";
+/// 把根上的限定展开成「推导区域」选择器：根自身带 skz-auto，或根内某个后代带 skz-auto。
+/// 根限定永远挂在 [skz] 根上，skz-auto 只决定规则作用的子树；单独用时选中区域元素本身，后面接空格 + 目标时选中区域的后代。
+/// 区域元素自己不算目标（与根自己不是目标一致）。
+/// skz-auto 包在 :where() 里不计优先级：整个前缀的优先级和旧的单 [skz] 前缀一致（根限定后缀照常计），所有推导规则与显式标记 / 忽略区 / 退出兜底层之间的层叠关系不变。
+/// @param {String} $mod 根上的限定后缀，如 ':not([skz-text-mode="leaf"])'；留空 = 不限定
+/// @return {String} 单个 :is() 选择器
+@function sk-auto($mod: "") {
+  @return ":is([skz]#{$mod}:where([skz-auto]), [skz]#{$mod} :where([skz-auto]))";
 }
+
+/// 自动推导规则的前缀：只有根自身或根内后代写了 skz-auto 的子树才推导，其余内容原样显示。
+/// 想按根上的文字模式再限定，用 sk-auto($mod)。
+$auto: sk-auto();
+
+/// color 驱动的文字模式挂载选择器（:where() 后缀），接在 [skz] 根后面（根级变量声明，不经过 skz-auto）。
+/// 文字模式按驱动分两类：
+/// - gradient 驱动：round / clip / leaf，读 --skz-fill / --skz-bg-img / --skz-bg-pos（round 把渐变铺进带圆角的行内盒，clip 把渐变裁进文字，leaf 把渐变铺满叶子元素）；
+/// - color 驱动：underline / tofu，只有一个颜色，读 --skz-ul-fill（pulse / shimmer 时只能变色）。
+/// 挂载条件是「有 skz-text-mode 且不是 gradient 驱动的任何取值」：用排除法而不是逐个枚举，拼错的 / 将来新增的取值才会落到 underline 的外观。
+/// 新增 gradient 驱动的文字模式时，在这里补一个 :not()（并核对 _firewall.scss 与 test/styles.test.ts）。
+/// :where() 不抬优先级：压不过 svg 引擎根规则的 animation: none / 静态 --skz-ul-fill。
+$color-modes: ':where([skz-text-mode]:not([skz-text-mode="round"]):not([skz-text-mode="clip"]):not([skz-text-mode="leaf"]))';
+
+/// 非 leaf 根的限定后缀：除叶子背景法以外的所有根，含 round / clip / underline / tofu / 未知取值。
+$nonleaf-mod: ':not([skz-text-mode="leaf"])';
+
+/// leaf 根的限定后缀。
+$leaf-mod: '[skz-text-mode="leaf"]';
+
+/// 文字条（gradient 驱动、读同一套背景变量）家族的根限定后缀：没写 skz-text-mode（默认 round）、明写 round、明写 clip。
+/// round 与 clip 共用同一批形状 / 填充 / 圆角规则，只靠根上的几个变量切换外观（见 sk-round-root）：
+/// 其余取值（underline / tofu / 未知）一律不在这个家族，落到 underline 的外观；leaf 走叶子背景法。
+/// core / explicit 也只认这一族（它们没有 underline / leaf / tofu，也不认那些根），同时引了 core.css 和完整版样式时，
+/// core 的规则碰不到 leaf / underline / tofu 根，重复加载不改变层叠结果。
+/// 用 :is() 收拢成单项：[skz] 后面的优先级和单个 :not() 一样，sk-auto() 前缀也只多一份。
+$clip-mod: ':is(:not([skz-text-mode]), [skz-text-mode="round"], [skz-text-mode="clip"])';
+
+/// round（默认）文字模式的根限定后缀：没写 skz-text-mode，或明写 round。只有它们会在支持 box-decoration-break 时切成圆角条。
+$round-mod: ':is(:not([skz-text-mode]), [skz-text-mode="round"])';
+
+/// 文字条家族的根选择器；作前缀拼后代选择器时直接用（单个选择器，不用再包 :is）。
+$clip: "[skz]#{$clip-mod}";
+
+/// tofu 文字模式的根限定后缀（方块字体，见 _tofu.scss）。
+$tofu-mod: '[skz-text-mode="tofu"]';
+
+/// 文字类元素的排除项：显式骨头 / 叶子、叶子内部、忽略区内部（clip 和 tofu 共用）。
+$text-skip-items: "[skz-bone]", "[skz-leaf]", "[skz-leaf] *", "[skz-ignore] *";
+
+/// 文字类元素排除串：把 $text-skip-items 逐项拼成 :not()（clip 和 tofu 共用；tofu 另外追加媒体排除）。
+/// 不能合并成单个 :not(a, b)：这个串不在 :where() 里，合并会改变优先级。
+@function sk-not-each($items) {
+  $out: "";
+  @each $t in $items {
+    $out: "#{$out}:not(#{$t})";
+  }
+  @return $out;
+}
+$text-skip: sk-not-each($text-skip-items);
+
+/// 显式文字标记 skz-text 的目标元素：本身不是忽略区 / 骨头 / 叶子，也不在忽略区 / 叶子里面。
+/// 排除条件由 $text-skip-items 派生，合并成一个 :not(...) 包在 :where() 里不抬优先级，保持与自动推导的通配下划线规则同级。
+$mark-text: "[skz-text]:where(:not([skz-ignore], #{sk-join($text-skip-items)}))";
 
 /// 用 :is 收拢标签清单，返回单个选择器：#{$prefix} :is(#{$items}):not([skz-ignore])
 @function sk-is-sel($prefix, $items) {

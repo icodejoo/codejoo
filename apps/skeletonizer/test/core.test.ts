@@ -80,12 +80,12 @@ describe("core 单独使用（不注册任何扩展）", () => {
     expect(el.inert).toBe(true);
   });
 
-  it("忽略区：打 skz-has-ignore，inert 只锁不含忽略区的分支；移除忽略区后重入会撤掉标记", async () => {
+  it("忽略区：不写 skz-has-ignore，inert 只锁不含忽略区的分支；移除忽略区后重入会整根重新上锁", async () => {
     const { enable } = await loadCore();
     const el = makeRoot();
     el.innerHTML = `<p id="a">a</p><section><span skz-ignore id="keep">k</span></section><p id="b">b</p>`;
     const off = enable(el);
-    expect(el.hasAttribute("skz-has-ignore")).toBe(true);
+    expect(el.hasAttribute("skz-has-ignore")).toBe(false);
     expect(el.inert).toBe(false);
     expect(el.querySelector<HTMLElement>("#a")!.inert).toBe(true);
     expect(el.querySelector<HTMLElement>("#b")!.inert).toBe(true);
