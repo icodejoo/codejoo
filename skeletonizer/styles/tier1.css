@@ -80,7 +80,7 @@
     background-image: var(--skz-timg, var(--skz-bg-img, none)) !important;
     background-repeat: no-repeat !important;
     background-attachment: fixed !important;
-    background-size: var(--skz-bg-size, 60vw 100vh) !important;
+    background-size: var(--skz-bg-size, var(--skz-band, 400px) 100vh) !important;
     -webkit-box-decoration-break: var(--skz-bdb, slice);
     box-decoration-break: var(--skz-bdb, slice);
     -webkit-background-clip: var(--skz-bgclip, text);
@@ -121,7 +121,7 @@
   background-image: var(--skz-bg-img, none) !important;
   background-repeat: no-repeat !important;
   background-attachment: fixed !important;
-  background-size: var(--skz-bg-size, 60vw 100vh) !important;
+  background-size: var(--skz-bg-size, var(--skz-band, 400px) 100vh) !important;
   -webkit-text-fill-color: transparent !important;
 }
 

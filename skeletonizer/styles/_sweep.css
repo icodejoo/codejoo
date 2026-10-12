@@ -71,7 +71,7 @@
    * 渐变本身就是 透明 → 高光 → 透明；用 background-size 把它缩成宽 --skz-sweep-w 并居中，其余留白。 */
   background: linear-gradient(90deg, rgba(var(--skz-sweep-rgb), 0), rgba(var(--skz-sweep-rgb), var(--skz-sweep-a)) 30%, rgba(var(--skz-sweep-rgb), var(--skz-sweep-a)), rgba(var(--skz-sweep-rgb), var(--skz-sweep-a)) 70%, rgba(var(--skz-sweep-rgb), 0)) center/var(--skz-sweep-w) 100% no-repeat;
   transform: translateX(-100%) skewX(var(--skz-sweep-skew));
-  animation: skz-sweep var(--skz-duration) ease-out infinite;
+  animation: skz-sweep var(--skz-duration, 2s) ease-out infinite;
   will-change: transform;
   -webkit-mask-image: var(--skz-sweep-mask);
   mask-image: var(--skz-sweep-mask);

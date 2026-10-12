@@ -11,7 +11,7 @@
   background-image: var(--skz-timg, var(--skz-bg-img, none)) !important;
   background-repeat: no-repeat !important;
   background-attachment: fixed !important;
-  background-size: var(--skz-bg-size, 60vw 100vh) !important;
+  background-size: var(--skz-bg-size, var(--skz-band, 400px) 100vh) !important;
   -webkit-box-decoration-break: var(--skz-bdb, slice);
   box-decoration-break: var(--skz-bdb, slice);
   -webkit-text-fill-color: transparent !important;
@@ -24,7 +24,7 @@
   background-image: var(--skz-bg-img, none) !important;
   background-repeat: no-repeat !important;
   background-attachment: fixed !important;
-  background-size: var(--skz-bg-size, 60vw 100vh) !important;
+  background-size: var(--skz-bg-size, var(--skz-band, 400px) 100vh) !important;
   -webkit-text-fill-color: transparent !important;
   /* 把真实图片/视频/canvas 的内容推出盒子外（替换元素内容会被裁在盒内），背景色才露得出来 */
   object-fit: none !important;
@@ -51,7 +51,7 @@
   border-radius: var(--skz-tradius, var(--skz-radius));
 }
 
-/* button 整块骨头的圆角：同样降到 0 优先级，按钮自己写了 border-radius 就保留 */
-:where(:is([skz]:where([skz-auto]), [skz] :where([skz-auto])) button:not([skz-ignore])) {
+/* 媒体与控件整块骨头的圆角：同样降到 0 优先级，元素自己写了 border-radius（如圆形头像）就保留 */
+:where(:is([skz]:where([skz-auto]), [skz] :where([skz-auto])) :is(img, video, canvas, picture, iframe, svg, input, textarea, select, button):not([skz-ignore])) {
   border-radius: var(--skz-radius);
 }

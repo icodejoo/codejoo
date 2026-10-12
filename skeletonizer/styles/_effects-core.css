@@ -12,7 +12,7 @@
  * 在下面的 @supports 里单独撤销，不认 :has 的浏览器仍保留默认 fade */
 [skz]:not([skz-effect]),
 [skz][skz-effect=fade] {
-  animation: skz-fade var(--skz-duration) ease-in-out infinite alternate;
+  animation: skz-fade var(--skz-duration, 2s) ease-in-out infinite alternate;
 }
 
 /* pulse / shimmer 的根驱动不可用（浏览器不认 @property / 相对颜色，见 _driver.scss）时，退回 fade。
@@ -21,7 +21,7 @@
  * 单独成一条：不支持 :where() 的老浏览器只丢这条，不连累上面的默认 fade。
  * 根里有忽略区时同样不退回 fade（撤销规则也包在 :where() 里，优先级仍是 0，在 :has 的 @supports 里；两条撤销规则共用下面这一个 @supports） */
 :where([skz][skz-effect=pulse], [skz][skz-effect=shimmer]) {
-  animation: skz-fade var(--skz-duration) ease-in-out infinite alternate;
+  animation: skz-fade var(--skz-duration, 2s) ease-in-out infinite alternate;
 }
 
 @supports selector(:has(*)) {

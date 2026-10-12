@@ -7,6 +7,6 @@
     --skz-ul-fill: var(--skz-pulse-c);
   }
   [skz][skz-effect=shimmer]:where([skz-text-mode]:not([skz-text-mode=round]):not([skz-text-mode=clip]):not([skz-text-mode=leaf])) {
-    animation: skz-shimmer-root var(--skz-duration) var(--skz-shimmer-timing, steps(36)) infinite, skz-pulse-root var(--skz-duration) var(--skz-shimmer-timing, steps(36)) infinite alternate;
+    animation: skz-shimmer-root var(--skz-duration, var(--skz-tier-dur, 2s)) var(--skz-shimmer-timing, var(--skz-tier-steps, steps(30))) infinite, skz-pulse-root var(--skz-duration, var(--skz-tier-dur, 2s)) var(--skz-shimmer-timing, var(--skz-tier-steps, steps(30))) infinite alternate;
   }
 }
