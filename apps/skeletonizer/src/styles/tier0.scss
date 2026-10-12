@@ -38,7 +38,7 @@
 :where(#{sk-is-sel($auto, $text-tags)}) {
   border-radius: var(--skz-tradius, var(--skz-radius));
 }
-/* button 整块骨头的圆角：同样降到 0 优先级，按钮自己写了 border-radius 就保留 */
-:where(#{$auto} button:not([skz-ignore])) {
+/* 媒体与控件整块骨头的圆角：同样降到 0 优先级，元素自己写了 border-radius（如圆形头像）就保留 */
+:where(#{sk-is-sel($auto, $media-tags)}) {
   border-radius: var(--skz-radius);
 }

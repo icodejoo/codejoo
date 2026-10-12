@@ -19,7 +19,6 @@ skz-box {
   --skz-color: #d9dde3;
   --skz-highlight: #eceff3;
   --skz-radius: 4px;
-  --skz-duration: 1.5s;
 }
 @include sk-dark("[skz]") {
   --skz-color: #374151;

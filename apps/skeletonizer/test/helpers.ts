@@ -6,7 +6,7 @@ import { vi } from "vitest";
 
 /** 假元素的构造选项 */
 export interface FakeElOptions {
-  /** 主题变量（模拟 getComputedStyle 读到的值），默认带高光色和时长 */
+  /** 主题变量（模拟 getComputedStyle 读到的值），默认带高光色（时长不带，模拟用户没写 --skz-duration） */
   vars?: Record<string, string>;
   /** 初始子元素：给元素数组，或给个数（自动造空元素） */
   children?: FakeEl[] | number;
@@ -22,8 +22,8 @@ export interface FakeStyle {
   removeProperty(name: string): void;
 }
 
-/** 默认的主题变量：svg 方案生成 blob 时要读的高光色和时长 */
-const DEFAULT_VARS = { "--skz-highlight": "#eceff3", "--skz-duration": "1.5s" };
+/** 默认的主题变量：svg 方案生成 blob 时要读的高光色 */
+const DEFAULT_VARS = { "--skz-highlight": "#eceff3" };
 
 /**
  * 最小假元素：只实现 enable / svg / global / firewall / 宿主样式用到的那部分 DOM 接口。

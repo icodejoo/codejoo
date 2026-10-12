@@ -95,3 +95,70 @@ it("读不到主题变量（样式表未加载）时不生成、不写 engine，
   expect(f.props.size).toBe(0);
   expect(f.getAttribute("skz-engine")).toBeNull();
 });
+
+it("shimmer 光带两侧按 smoothstep 缓动：9 个色标，透明度 0 → 1 → 0 对称", async () => {
+  const { applySvg } = await import("../src/full/svg.ts");
+  applySvg(asEl(new FakeEl()));
+  const shimmer = env.made.find((s) => s.includes("animateTransform"));
+  const stops = [...(shimmer ?? "").matchAll(/<stop offset="([\d.]+)" stop-color="[^"]+" stop-opacity="([\d.]+)"\/>/g)].map((m) => [Number(m[1]), Number(m[2])]);
+  expect(stops).toEqual([
+    [0, 0],
+    [0.125, 0.156],
+    [0.25, 0.5],
+    [0.375, 0.844],
+    [0.5, 1],
+    [0.625, 0.844],
+    [0.75, 0.5],
+    [0.875, 0.156],
+    [1, 0],
+  ]);
+});
+
+/** 桩一个视口宽（svg 引擎按它取档位、换算光带宽） */
+const stubWidth = (w: number): void => void vi.stubGlobal("window", { innerWidth: w });
+
+/** 取生成的 shimmer 图文本 */
+const shimmerOf = (): string => env.made.find((s) => s.includes("animateTransform")) ?? "";
+
+it("svg 光带扫过占 62.5%，之后停住：从 -光带宽 走到 100（视口宽），与 CSS 关键帧一致", async () => {
+  stubWidth(800);
+  const { applySvg } = await import("../src/full/svg.ts");
+  applySvg(asEl(new FakeEl()));
+  expect(shimmerOf()).toContain('values="-50 0;100 0;100 0" keyTimes="0;0.625;1"');
+});
+
+it("光带宽固定 400px，按视口宽换算成 viewBox 单位（400 / innerWidth * 100）", async () => {
+  const { applySvg } = await import("../src/full/svg.ts");
+  stubWidth(1600);
+  applySvg(asEl(new FakeEl()));
+  expect(shimmerOf()).toContain('<rect width="25"');
+  expect(shimmerOf()).toContain('values="-25 0;100 0;100 0"');
+});
+
+it.each([
+  [639, "2000ms"],
+  [640, "2800ms"],
+  [1279, "2800ms"],
+  [1280, "3600ms"],
+])("没写 --skz-duration：视口 %ipx 取档位时长 %s；pulse 图仍是 2s（来回 4000ms）", async (w, dur) => {
+  stubWidth(w);
+  const { applySvg } = await import("../src/full/svg.ts");
+  applySvg(asEl(new FakeEl()));
+  expect(shimmerOf()).toContain(`dur="${dur}"`);
+  expect(env.made.find((s) => s.includes("<animate "))).toContain('dur="4000ms"');
+});
+
+it("用户写了 --skz-duration：shimmer 与 pulse 都用它，档位不起作用", async () => {
+  stubWidth(1920);
+  const { applySvg } = await import("../src/full/svg.ts");
+  const f = new FakeEl();
+  f.vars["--skz-duration"] = "1s";
+  applySvg(asEl(f));
+  expect(shimmerOf()).toContain('dur="1000ms"');
+  expect(env.made.find((s) => s.includes("<animate "))).toContain('dur="2000ms"');
+});
+
+it("tierDuration 按断点取最后一个满足的档位", async () => {
+  const { tierDuration } = await import("../src/full/svg.ts");
+  expect([0, 639, 640, 1279, 1280, 4000].map(tierDuration)).toEqual([2000, 2000, 2800, 2800, 3600, 3600]);
+});

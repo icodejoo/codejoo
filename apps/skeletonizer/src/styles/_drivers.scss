@@ -1,3 +1,5 @@
+@use "mixins" as *;
+
 // ===== 根驱动的三条派生变量（不输出任何 CSS，只在规则体里 @include）=====
 // 根上的动画只驱动两个原始变量（--skz-pulse-c 颜色、--skz-shimmer-p 光带位置），
 // 骨头读的 --skz-fill / --skz-ul-fill / --skz-bg-pos 是从它们派生出来的，在根上展开后继承给所有后代。
@@ -8,9 +10,9 @@
   --skz-fill: var(--skz-pulse-c);
 }
 
-/// gradient 驱动的 shimmer：光带位置读 shimmer 位置。
+/// gradient 驱动的 shimmer：光带位置读 shimmer 进度（0 → 1），换算成 -光带宽 → 100vw，光带从左侧屏外刚好进场、右侧屏外刚好离场。
 @mixin sk-shimmer-pos {
-  --skz-bg-pos: calc(var(--skz-shimmer-p) * 1vw) 0;
+  --skz-bg-pos: calc(var(--skz-shimmer-p) * (100vw + #{$band}) - #{$band}) 0;
 }
 
 /// color 驱动（underline / tofu）：下划线 / 方块字的颜色读 pulse 颜色（pulse 与 shimmer 都用它）。

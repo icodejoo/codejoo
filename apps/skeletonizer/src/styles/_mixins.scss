@@ -1,3 +1,5 @@
+@use "sass:list";
+
 /// 骨头的公共绘制声明：背景色 + 可选流光背景图（fixed 到视口，各骨头同步）。
 /// 骨头自己不挂动画：颜色和流光位置读根上逐帧变化的 --skz-fill / --skz-bg-pos。
 /// 颜色、圆角、文字透明等差异项由调用处自行补充。
@@ -7,7 +9,7 @@
   background-image: $img !important;
   background-repeat: no-repeat !important;
   background-attachment: fixed !important;
-  background-size: var(--skz-bg-size, 60vw 100vh) !important;
+  background-size: var(--skz-bg-size, #{$band} 100vh) !important;
 }
 
 /// 文字骨头的背景：与 sk-bone 同一套，只是颜色 / 图先读 --skz-tbg / --skz-timg（underline / tofu 根置为 transparent / none，round / clip 根回落到 --skz-fill / --skz-bg-img）。
@@ -36,15 +38,46 @@
   }
 }
 
-/// 光带 / pulse 的降频时间函数：读 --skz-shimmer-timing，缺省 steps(36)。
-/// 默认值只能写在这里的 var() 兜底里：写成根上的 --skz-shimmer-timing 声明会盖掉用户写在祖先上的覆盖。
-$shimmer-timing: var(--skz-shimmer-timing, steps(36));
+/// 默认时长：pulse / fade / sweep 的兜底，也是 shimmer 小屏档的时长；svg.ts 的 DEFAULT_DURATION 同值。
+$default-duration: 2s;
+
+/// pulse / fade / sweep 的时长：用户写的 --skz-duration，没写用 2s。
+/// 默认值只写在 var() 兜底里：写成根上的 --skz-duration 声明会盖掉用户写在祖先上的覆盖。
+$duration: var(--skz-duration, #{$default-duration});
+
+/// shimmer 光带宽（各档一样）：内部变量 --skz-band，兜底 400px；svg.ts 的 SHIMMER_BAND 同值。
+$band: var(--skz-band, 400px);
+
+/// shimmer 的时长：用户写的 --skz-duration 优先，其次内部档位变量 --skz-tier-dur（_driver.scss 按屏宽设），最后 2s。
+$shimmer-duration: var(--skz-duration, var(--skz-tier-dur, #{$default-duration}));
+
+/// 光带 / pulse 的降频时间函数：用户写的 --skz-shimmer-timing 优先，其次内部档位变量 --skz-tier-steps，最后 steps(30)。
+/// 默认值只能写在 var() 兜底里：写成根上的 --skz-shimmer-timing 声明会盖掉用户写在祖先上的覆盖。
+$shimmer-timing: var(--skz-shimmer-timing, var(--skz-tier-steps, steps(30)));
+
+/// 光带半边的缓动色标（位置 透明度），按 smoothstep 取点：两端和峰值斜率为 0，看不出转折。
+/// 另一半镜像生成；svg 引擎的光带用同一组数（src/full/svg.ts 的 SHIMMER_EASE），改这里要同步改那边。
+$shimmer-ease: (12.5% 15.6%, 25% 50%, 37.5% 84.4%);
+
+/// shimmer 光带图：水平 90deg，透明 → 高光 → 透明，中间按 $shimmer-ease 缓动。
+/// 不能倾斜：背景块 no-repeat，倾斜后块的左右竖边落不到 0%，会被硬截断成一条斜边。
+/// @return {String} linear-gradient(...)
+@function sk-shimmer-gradient() {
+  $rise: ();
+  $fall: ();
+  @each $pos, $alpha in $shimmer-ease {
+    $color: color-mix(in srgb, var(--skz-highlight) $alpha, transparent);
+    $rise: list.append($rise, $color $pos, comma);
+    $fall: list.join(list.append((), $color (100% - $pos), comma), $fall, comma);
+  }
+  @return linear-gradient(90deg, transparent 0, $rise, var(--skz-highlight) 50%, $fall, transparent 100%);
+}
 
 /// 光带动画 + pulse 动画一起挂（同一个降频时间函数）：underline / tofu 根和 iOS 的 shimmer 都要颜色逐步变化。
 @mixin sk-shimmer-with-pulse {
   animation:
-    skz-shimmer-root var(--skz-duration) $shimmer-timing infinite,
-    skz-pulse-root var(--skz-duration) $shimmer-timing infinite alternate;
+    skz-shimmer-root #{$shimmer-duration} $shimmer-timing infinite,
+    skz-pulse-root #{$shimmer-duration} $shimmer-timing infinite alternate;
 }
 
 /// iOS Safari 专属分支：@content 包进 @supports (-webkit-touch-callout: none)。iOS 不支持 background-attachment:fixed，

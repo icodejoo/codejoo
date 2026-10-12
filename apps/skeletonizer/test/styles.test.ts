@@ -63,13 +63,24 @@ const DRIVER_ENTRIES = ["core", "explicit", "base"];
 const TEXT_MODE_VALUE = /skz-text-mode=(underline|leaf|tofu)/;
 
 /** 降频时间函数（缺省值写在 var() 兜底里） */
-const SHIMMER_TIMING = "var(--skz-shimmer-timing, steps(36))";
+const SHIMMER_TIMING = "var(--skz-shimmer-timing, var(--skz-tier-steps, steps(30)))";
+
+/** shimmer 的时长兜底链：用户的 --skz-duration > 档位 > 2s */
+const SHIMMER_DUR = "var(--skz-duration, var(--skz-tier-dur, 2s))";
+
+/** pulse / fade / sweep 的时长：用户的 --skz-duration > 2s */
+const PLAIN_DUR = "var(--skz-duration, 2s)";
 
 /** shimmer 的光带动画声明（只挂光带） */
-const SHIMMER_ANIM = `skz-shimmer-root var(--skz-duration) ${SHIMMER_TIMING} infinite`;
+const SHIMMER_ANIM = `skz-shimmer-root ${SHIMMER_DUR} ${SHIMMER_TIMING} infinite`;
+
+/** 按透明度取高光色的 color-mix 写法 */
+const hl = (a: string): string => `color-mix(in srgb, var(--skz-highlight) ${a}, transparent)`;
+/** shimmer 光带图：水平 90deg，透明 → 高光 → 透明，两侧按 smoothstep 缓动 */
+const SHIMMER_IMG = `--skz-bg-img: linear-gradient(90deg, transparent 0, ${hl("15.6%")} 12.5%, ${hl("50%")} 25%, ${hl("84.4%")} 37.5%, var(--skz-highlight) 50%, ${hl("84.4%")} 62.5%, ${hl("50%")} 75%, ${hl("15.6%")} 87.5%, transparent 100%);`;
 
 /** underline / tofu / iOS 的 shimmer 额外挂的 pulse 动画 */
-const PULSE_ANIM = `skz-pulse-root var(--skz-duration) ${SHIMMER_TIMING} infinite alternate`;
+const PULSE_ANIM = `skz-pulse-root ${SHIMMER_DUR} ${SHIMMER_TIMING} infinite alternate`;
 
 /** 已编译入口的缓存：同一个入口在多个用例里反复取，只编译一次 */
 const cssCache = new Map<string, string>();
@@ -152,6 +163,8 @@ describe("样式入口的组成", () => {
       expect(out, name).toContain("@keyframes skz-shimmer-root");
       expect(out, name).toContain("@keyframes skz-pulse-root");
       expect(rule(out, "[skz][skz-effect=shimmer]")).toContain(`animation: ${SHIMMER_ANIM};`);
+      // 光带水平 90deg（倾斜会让 no-repeat 背景块的竖边被硬截断），两侧缓动色标
+      expect(rule(out, "[skz][skz-effect=shimmer]"), name).toContain(SHIMMER_IMG);
       expect(out, name).toContain("@supports (-webkit-touch-callout: none)");
       expect(out, name).toContain("@media (prefers-reduced-motion: reduce)");
       expect(out, name).toContain("[skz-fit] {");
@@ -386,8 +399,9 @@ describe("base 的推导规则", () => {
     // 后代藏起来；忽略区里的按钮后代恢复可见
     expect(out).toContain(`${AUTO} button:not([skz-ignore]) * {\n  visibility: hidden !important`);
     expect(out).toContain(`${AUTO} [skz-ignore] button * {\n  visibility: visible !important`);
-    // 圆角：独立的 :where 规则（按钮自己写了 border-radius 就保留）
-    expect(out).toContain(`:where(${AUTO} button:not([skz-ignore])) {\n  border-radius: var(--skz-radius)`);
+    // 圆角：媒体与控件共用一条 :where 规则（含 button / canvas；元素自己写了 border-radius 就保留）
+    expect(out).toContain(`:where(${AUTO} :is(img, video, canvas, picture, iframe, svg, input, textarea, select, button):not([skz-ignore])) {\n  border-radius: var(--skz-radius)`);
+    expect(out).not.toContain(`:where(${AUTO} button:not([skz-ignore]))`);
     // 自身不画下划线，优先级(0,3,1)高于通配下划线规则(0,3,0)；后代只有 select 的 option 需要单独压（button 后代已藏起来，input / textarea 没有元素后代）
     expect(flat(out)).toContain(`${auto(NONLEAF_MOD)} :is(input, textarea, select, button):not([skz-ignore]), ${auto(NONLEAF_MOD)} select:not([skz-ignore]) * { text-decoration: none !important`);
     expect(out).not.toMatch(/:is\(input, textarea, select, button\):not\(\[skz-ignore\]\) \*/);
@@ -440,9 +454,39 @@ describe("根驱动动画（core / explicit / base 共用）与防火墙（globa
     expect(out).not.toMatch(/--skz-shimmer-timing:/);
   });
 
-  it("shimmer 根动画读 --skz-shimmer-timing，缺省 steps(36)（24 次/秒）", () => {
+  it("shimmer 根动画读 --skz-shimmer-timing，其次档位档数，缺省 steps(30)（2s 下扫过段 24 次/秒）", () => {
     const out = css("base");
     expect(rule(out, "[skz][skz-effect=shimmer]")).toContain(`animation: ${SHIMMER_ANIM};`);
+  });
+
+  it("光带进度 0 → 1，扫过占 62.5%，之后停在屏幕外直到一轮结束；@property 初始值 0", () => {
+    const out = css("base");
+    expect(flat(out)).toContain("@keyframes skz-shimmer-root { from { --skz-shimmer-p: 0; } 62.5%, to { --skz-shimmer-p: 1; } }");
+    expect(flat(out)).toMatch(/@property --skz-shimmer-p \{[^}]*initial-value: 0;/);
+  });
+
+  it("光带位置按光带宽换算：-光带宽 → 100vw，宽度默认 400px，背景尺寸 = 光带宽 × 100vh", () => {
+    const out = css("base");
+    const band = "var(--skz-band, 400px)";
+    expect(flat(rule(out, "[skz][skz-effect=shimmer]"))).toContain(`--skz-bg-pos: calc(var(--skz-shimmer-p) * (100vw + ${band}) - ${band}) 0`);
+    expect(out).toContain(`var(--skz-bg-size, ${band} 100vh)`);
+    expect(out).not.toContain("60vw");
+  });
+
+  it("shimmer 三档（小屏优先）：< 640px 2s / steps(30)，≥ 640px 2.8s / steps(42)，≥ 1280px 3.6s / steps(54)；档位变量是内部变量", () => {
+    const out = flat(css("base"));
+    expect(out).toContain("[skz] { --skz-tier-dur: 2s; --skz-tier-steps: steps(30); }");
+    expect(out).toMatch(/@media \(min-width: 640px\) \{ \[skz\] \{ --skz-tier-dur: 2\.8s; --skz-tier-steps: steps\(42\); \} \}/);
+    expect(out).toMatch(/@media \(min-width: 1280px\) \{ \[skz\] \{ --skz-tier-dur: 3\.6s; --skz-tier-steps: steps\(54\); \} \}/);
+  });
+
+  it("时长兜底链：shimmer 用 --skz-duration > 档位 > 2s；pulse / fade / sweep 只有 --skz-duration > 2s；根上不声明 --skz-duration", () => {
+    const base = css("base");
+    expect(rule(base, "[skz][skz-effect=shimmer]")).toContain(SHIMMER_DUR);
+    expect(rule(base, "[skz][skz-effect=pulse]")).toContain(`skz-pulse-root ${PLAIN_DUR}`);
+    expect(base).toContain(`animation: skz-fade ${PLAIN_DUR}`);
+    expect(css("sweep")).toContain(`skz-sweep ${PLAIN_DUR}`);
+    for (const name of ["core", "explicit", "base", "global", "sweep"]) expect(css(name), name).not.toMatch(/--skz-duration:/);
   });
 
   it("clip（默认）根的 shimmer 不挂 skz-pulse-root，也不声明 --skz-ul-fill", () => {
@@ -465,7 +509,7 @@ describe("根驱动动画（core / explicit / base 共用）与防火墙（globa
 
   it("单独的 pulse 效果的时间函数不变（ease-in-out，不读降频变量）", () => {
     const body = rule(css("base"), "[skz][skz-effect=pulse]");
-    expect(body).toContain("animation: skz-pulse-root var(--skz-duration) ease-in-out infinite alternate");
+    expect(body).toContain(`animation: skz-pulse-root ${PLAIN_DUR} ease-in-out infinite alternate`);
     expect(body).not.toContain("shimmer-timing");
   });
 
@@ -495,6 +539,7 @@ describe("根驱动动画（core / explicit / base 共用）与防火墙（globa
     const pulseFw = rule(out, "[skz][skz-effect=pulse] [skz-fw]");
     expect(pulseFw).toContain("--skz-fill: var(--skz-pulse-c)");
     expect(pulseFw).not.toContain("--skz-ul-fill");
+    expect(rule(out, "[skz] [skz-fw]")).toContain("--skz-shimmer-p: 0");
     expect(rule(out, `[skz]:is([skz-effect=pulse], [skz-effect=shimmer])${COLOR_MODES} [skz-fw]`)).toContain("--skz-ul-fill: var(--skz-pulse-c)");
   });
 });
@@ -742,12 +787,13 @@ describe("Sass 文字模式挂载与驱动 mixin", () => {
   it("防火墙规则的派生变量与根规则共用驱动 mixin：gradient 的 pulse / shimmer 各一条，color 一条（pulse + shimmer 合并）", () => {
     const out = css("global");
     expect(rule(out, "[skz][skz-effect=pulse] [skz-fw]")).toContain("--skz-fill: var(--skz-pulse-c)");
-    expect(rule(out, "[skz][skz-effect=shimmer] [skz-fw]")).toContain("--skz-bg-pos: calc(var(--skz-shimmer-p) * 1vw) 0");
+    expect(rule(out, "[skz][skz-effect=shimmer] [skz-fw]")).toContain("--skz-bg-pos: calc(var(--skz-shimmer-p) * (100vw + var(--skz-band, 400px)) - var(--skz-band, 400px)) 0");
+    expect(rule(out, "[skz] [skz-fw]")).toContain("--skz-shimmer-p: 0");
     expect(rule(out, `[skz]:is([skz-effect=pulse], [skz-effect=shimmer])${COLOR_MODES} [skz-fw]`)).toContain("--skz-ul-fill: var(--skz-pulse-c)");
     // 根规则里的派生变量用的是同一组 mixin：声明和防火墙里的一致
     const base = css("base");
     expect(rule(base, "[skz][skz-effect=pulse]")).toContain("--skz-fill: var(--skz-pulse-c)");
-    expect(rule(base, "[skz][skz-effect=shimmer]")).toContain("--skz-bg-pos: calc(var(--skz-shimmer-p) * 1vw) 0");
+    expect(rule(base, "[skz][skz-effect=shimmer]")).toContain("--skz-bg-pos: calc(var(--skz-shimmer-p) * (100vw + var(--skz-band, 400px)) - var(--skz-band, 400px)) 0");
   });
 });
 

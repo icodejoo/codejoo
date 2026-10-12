@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased
+
+- **shimmer 光带改为水平 90deg + 缓动过渡**：原来的 `linear-gradient(100deg, …)` 铺在 no-repeat 的 60vw × 100vh 背景块上，倾斜后块的左右竖边落不到 0%（1920×1080 下左下角约 28% 高光），被硬截断成一条斜边，光带尾部发硬。现在光带不倾斜，两侧按 smoothstep 取 3 个中间色标（`color-mix` 调透明度），两端和峰值都没有转折；svg 引擎的光带用同一组色标。
+- **shimmer 光带固定 400px 宽，时长按屏宽分三档，每轮加停顿**：原来光带宽 60vw，大屏上一闪而过。现在光带固定 400px（内部变量 `--skz-band`），`--skz-shimmer-p` 改为 0 → 1 的进度，位置换算成「-光带宽 → 100vw」，任何屏宽下都从左侧屏外刚好进场、右侧屏外刚好离场。前 62.5% 扫过、后 37.5% 停在屏幕外再开始下一轮（停顿段值不变，不重绘）；一轮时长与降频档数按屏宽三档（小屏优先）：< 640px 2s / `steps(30)`，≥ 640px 2.8s / `steps(42)`，≥ 1280px 3.6s / `steps(54)`，扫过段都是 24 次/秒（档数 = 时长（秒）× 15）。pulse / fade / sweep 保持 2s（pulse 一个来回 4s）。自己写了 `--skz-duration` 的，pulse 和 shimmer 都用它（档位不再起作用），自己写了 `--skz-shimmer-timing` 的用你的；根上不再声明 `--skz-duration` 默认值（改为 var() 兜底，不会盖掉写在祖先上的覆盖）。svg 引擎同步（SMIL `keyTimes`）：按生成时的 `innerWidth` 取档位，光带宽按 400px 换算成 viewBox 单位，窗口缩放后不重算。
+- **修复：`skz-auto` 区域里推导出的媒体 / 控件骨头没有圆角**：第 0 档的圆角规则只覆盖文字标签和 `button`，img / video / canvas / picture / iframe / svg / input / textarea / select 是直角。现在这些都读 `--skz-radius`（仍是 `:where()` 零优先级，元素自己写的圆角保留）。
+
 ## 0.2.0 - 2026-10-11
 
 - **新增文字模式 `round`，并成为默认文字模式**（core / `explicit.css` / 完整版 `base.css` 都是；作用于显式 `skz-text` 标记和 `skz-auto` 推导区的文字）。外观：文字透明 + 带圆角的背景盒，行内元素折行后每一行各自圆角，块元素（p / h3 / div / flex 子项等）按自身 display 整块圆角矩形，不对行内 / 块做任何区分；shimmer 光带、`fixed` 背景同步、防火墙、深浅主题、driver-color 都照常。GPU 约为 clip 的一半（a9 原型实测），也不依赖「装饰线参与 `background-clip:text` 裁剪」这一只在 Chrome 实测过的行为。

@@ -3,7 +3,7 @@
 
 /* ===== 根驱动：pulse / shimmer 的纯 CSS 动画（core.css / explicit.css / base.css 共用）=====
  * 根上的动画驱动注册过的 --skz-pulse-c（颜色）/ --skz-shimmer-p（流光位置），骨头只读继承下来的
- * --skz-fill / --skz-ul-fill / --skz-bg-pos，自己不挂动画。颜色精确、跟主题走，光带默认降频。
+ * --skz-fill / --skz-ul-fill / --skz-bg-pos，自己不挂动画。颜色精确、跟主题走，光带固定 400px 宽、默认降频。
  * 这里只有 gradient 驱动（round / clip、leaf、显式骨头、core 的全部骨头）；underline / tofu 的纯色驱动在 _driver-color.scss（只在 base.css）。
  * 继承防火墙和老浏览器的 SVG 降级在 skeletonizer/global（global.css）。
  * 不支持 @property（或相对颜色）的浏览器：pulse / shimmer 退回基底的根级 fade；装了 skeletonizer/global 则由它把根切到 SVG 方案。 */
@@ -11,19 +11,21 @@
 @property --skz-shimmer-p {
   syntax: "<number>";
   inherits: true;
-  initial-value: -60;
+  initial-value: 0;
 }
 @property --skz-pulse-c {
   syntax: "<color>";
   inherits: true;
   initial-value: #d9dde3;
 }
+/* 进度 0 → 1，位置换算见 _drivers.scss（-光带宽 → 100vw）。前 62.5% 的时间扫过，后 37.5% 停在屏幕外（2s 档 = 扫 1.25s + 停 0.75s）；停顿段值不变，不重绘 */
 @keyframes skz-shimmer-root {
   from {
-    --skz-shimmer-p: -60;
+    --skz-shimmer-p: 0;
   }
+  62.5%,
   to {
-    --skz-shimmer-p: 110;
+    --skz-shimmer-p: 1;
   }
 }
 @keyframes skz-pulse-root {
@@ -35,18 +37,40 @@
   }
 }
 
+/* shimmer 三档（小屏优先）：内部变量 --skz-tier-dur / --skz-tier-steps 只是档位默认值，用户的 --skz-duration / --skz-shimmer-timing 优先（见 _mixins.scss 的兜底链）。
+ * 扫过仍占 62.5%，档数 = 时长 × 15（24 次/秒）。断点与 svg.ts 的 SHIMMER_TIERS 同步。
+ *   小（< 640px）2s / steps(30)；中（≥ 640px）2.8s / steps(42)；大（≥ 1280px）3.6s / steps(54) */
+[skz] {
+  --skz-tier-dur: 2s;
+  --skz-tier-steps: steps(30);
+}
+@media (min-width: 640px) {
+  [skz] {
+    --skz-tier-dur: 2.8s;
+    --skz-tier-steps: steps(42);
+  }
+}
+@media (min-width: 1280px) {
+  [skz] {
+    --skz-tier-dur: 3.6s;
+    --skz-tier-steps: steps(54);
+  }
+}
+
 /* @property 无法用 @supports 检测，借同版本落地的相对颜色语法判断（Safari 16.4 / Firefox 128 两者同时支持；
  * Chrome 85~118 有 @property 但没有相对颜色，被保守地判为不支持，退回 fade） */
 @supports (color: rgb(from red r g b)) {
   /* pulse（单独的效果）：骨头背景色脉冲，时间函数固定 ease-in-out，不受 --skz-shimmer-timing 影响 */
   [skz][skz-effect="pulse"] {
     @include sk-pulse-fill;
-    animation: skz-pulse-root var(--skz-duration) ease-in-out infinite alternate;
+    animation: skz-pulse-root #{$duration} ease-in-out infinite alternate;
   }
   /* shimmer：fixed 渐变背景在视口坐标里平移，各骨头同步。
-   * 光带默认降频到 24 次/秒：时间函数读 --skz-shimmer-timing（缺省 steps(36)），值没变的帧 Chrome 不重绘。
-   *   - 档数和 --skz-duration 绑定：24 次/秒 = 时长（秒）× 24，默认 1.5s → steps(36)；改了时长要同步改档数
-   *     （例：--skz-duration: 3s 配 --skz-shimmer-timing: steps(72)）。calc() 没法把时间换算成整数，没法自动跟随；
+   * 光带默认降频到 24 次/秒：时间函数读 --skz-shimmer-timing（缺省 steps(30)），值没变的帧 Chrome 不重绘。
+   *   - 光带宽固定 400px（--skz-band），时长按屏宽分三档（见上方 --skz-tier-*），默认档数 = 时长 × 15；
+   *   - 用户写了 --skz-duration，shimmer 与 pulse 都用它，档位时长不再起作用，要同步改档数
+   *     （时间函数按关键帧分段生效，只落在扫过的 62.5%：24 次/秒 = 时长 × 15，例：3s 配 --skz-shimmer-timing: steps(45)；
+   *     calc() 没法把时间换算成整数，没法自动跟随）；
    *   - steps(18) 更省（12 次/秒）；linear 恢复逐帧平滑；变量写在根上或任一祖先上都行。
    * 要不要额外挂 pulse 动画，看文字条的颜色是谁驱动的：
    *   - round（默认）/ clip：文字条的光带由背景图承担，--skz-fill 在 shimmer 下不变；pulse 只改 --skz-ul-fill，round / clip 下装饰线是透明的，
@@ -55,9 +79,9 @@
    *   - iOS：不支持 fixed 背景，光带图去掉改成骨头色脉冲（--skz-fill 读 pulse），所有模式都要挂（见下）。
    * 带 :where() 的规则优先级保持 (0,2,0)，压不过 svg 引擎根规则的 animation: none / 静态 --skz-ul-fill。 */
   [skz][skz-effect="shimmer"] {
-    --skz-bg-img: linear-gradient(100deg, transparent 0, var(--skz-highlight) 50%, transparent 100%);
+    --skz-bg-img: #{sk-shimmer-gradient()};
     @include sk-shimmer-pos;
-    animation: skz-shimmer-root var(--skz-duration) $shimmer-timing infinite;
+    animation: skz-shimmer-root #{$shimmer-duration} $shimmer-timing infinite;
   }
 
   /* iOS Safari 不支持 background-attachment:fixed，流光会各自为政，改成骨头颜色脉冲：

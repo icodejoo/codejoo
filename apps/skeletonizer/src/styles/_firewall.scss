@@ -17,7 +17,7 @@
    * 实测 16000 元素 shimmer 从约 19 帧到 60 帧。打了防火墙的项里骨头静止，所以只用于视口外 */
   [skz] [skz-fw] {
     --skz-pulse-c: var(--skz-color);
-    --skz-shimmer-p: -60;
+    --skz-shimmer-p: 0;
   }
   [skz][skz-effect="pulse"] [skz-fw] {
     @include sk-pulse-fill;

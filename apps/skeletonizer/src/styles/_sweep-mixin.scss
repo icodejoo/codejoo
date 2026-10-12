@@ -73,7 +73,7 @@
         )
         center / var(--skz-sweep-w) 100% no-repeat;
       transform: translateX(-100%) skewX(var(--skz-sweep-skew));
-      animation: skz-sweep var(--skz-duration) ease-out infinite;
+      animation: skz-sweep #{$duration} ease-out infinite;
       will-change: transform;
       -webkit-mask-image: var(--skz-sweep-mask);
       mask-image: var(--skz-sweep-mask);
