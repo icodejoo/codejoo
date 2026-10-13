@@ -1,0 +1,4 @@
+[{"name":"V-ul-auto","css":"base,global","n":20,"attrs":{"effect":"pulse","text":"underline","_attrs":[["skz-auto",""]]},"noTrace":true,"snap":true},
+{"name":"V-tofu-auto","css":"base,global,tofu","n":20,"attrs":{"effect":"pulse","text":"tofu","_attrs":[["skz-auto",""]]},"noTrace":true,"snap":true},
+{"name":"V-tofu-ex","css":"base,global,tofu,ex","n":20,"attrs":{"effect":"pulse","text":"tofu"},"noTrace":true,"snap":true},
+{"name":"V-tofu-ign","css":"base,global,tofu,ign","n":20,"attrs":{"effect":"pulse","text":"tofu","_attrs":[["skz-auto",""]]},"noTrace":true,"snap":true}]
