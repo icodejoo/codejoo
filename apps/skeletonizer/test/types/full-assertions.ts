@@ -24,10 +24,12 @@ enable(el, { text: "round" });
 enable(el, { effect: "sweep" });
 enable(el, { effect: "pulse", engine: "svg", fallback: "fade", text: "clip", fit: true });
 const effect: SkzEffect = "sweep";
-const opts: EnableOptions = { effect, text: "tofu", engine: "global", fallback: "svg" };
+const opts: EnableOptions = { effect, text: "underline", engine: "global", fallback: "svg" };
 enable(el, opts);
 
 // 取值仍然受限
+// @ts-expect-error tofu 已移除
+enable(el, { text: "tofu" });
 // @ts-expect-error 不存在的文字模式
 enable(el, { text: "nope" });
 // @ts-expect-error 不存在的方案

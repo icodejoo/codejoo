@@ -7,9 +7,8 @@ import type { registerCustomElements } from "./hosts.js";
  * - "clip"：下划线当形状 + background-clip:text 当填充，文字条里也有 shimmer 光带，形状沿真实文字行；
  * - "underline"：纯下划线，颜色脉冲，最便宜；
  * - "leaf"：叶子元素整块当背景骨头（有圆角、能放光带）；
- * - "tofu"：方块字体（需引入 skeletonizer/tofu.css，否则退回 underline 外观），颜色脉冲。
  */
-export type SkzTextMode = "round" | "clip" | "underline" | "leaf" | "tofu";
+export type SkzTextMode = "round" | "clip" | "underline" | "leaf";
 
 /** 降级目标：浏览器不支持 @property、global 方案的 pulse / shimmer 跑不起来时改用的效果：svg（默认，JS 挂 blob SVG 动画）/ fade（根级淡入淡出） */
 export type SkzFallback = "svg" | "fade";

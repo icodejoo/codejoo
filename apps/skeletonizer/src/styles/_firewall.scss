@@ -28,11 +28,4 @@
   [skz]:is([skz-effect="pulse"], [skz-effect="shimmer"])#{$color-modes} [skz-fw] {
     @include sk-pulse-ul;
   }
-
-  /* iOS 分支（见 _driver.scss）里 --skz-fill 读 pulse 颜色，防火墙里同步钉住 */
-  @include sk-ios {
-    [skz][skz-effect="shimmer"] [skz-fw] {
-      @include sk-pulse-fill;
-    }
-  }
 }

@@ -22,7 +22,7 @@ defineSkzBox();
 
 // ---------- 内容填充 ----------
 const $ = (s) => document.querySelector(s);
-// 文字统一用 <span skz-text> 包在块元素内层：round 下行内元素逐行圆角条，直接标在块元素上会变整块；五个对比根各写自己的 skz-text-mode
+// 文字统一用 <span skz-text> 包在块元素内层：round 下行内元素逐行圆角条，直接标在块元素上会变整块；四个对比根各写自己的 skz-text-mode
 const mixedContent = `
   <h1 class="big"><span skz-text>大标题：夏季新品发布</span></h1>
   <h3><span skz-text>三号标题：限时折扣信息</span></h3>
@@ -31,7 +31,7 @@ const mixedContent = `
   <div><span skz-text>价格：<b>¥ 5.00</b> 起，<em>包邮</em></span></div>
   <p><span skz-text>嵌套：<span>外层 <em>斜体中的 <strong>加粗</strong> 内容</em> 收尾</span></span></p>
   <ul><li><span skz-text>列表项一：第一条说明</span></li><li><span skz-text>列表项二：第二条说明比较长一点点</span></li></ul>`;
-for (const id of ["round", "clip", "underline", "leaf", "tofu"]) $(`#cmp-${id}`).innerHTML = mixedContent;
+for (const id of ["round", "clip", "underline", "leaf"]) $(`#cmp-${id}`).innerHTML = mixedContent;
 
 $("#cards").innerHTML = [1, 2, 3]
   .map(
@@ -106,9 +106,9 @@ function apply() {
   $("#btn-fit").textContent = `fit：${state.fit ? "开" : "关"}`;
 }
 
-// 按层叠顺序排列的样式分片（与 src/styles/entries/all.scss 的输出顺序一致：base -> global（svg 先于 firewall，Sass 同一模块只输出一次）-> sweep -> tofu；
+// 按层叠顺序排列的样式分片（与 src/styles/entries/all.scss 的输出顺序一致：base -> global（svg 先于 firewall，Sass 同一模块只输出一次）-> sweep；
 // core 的合并现代档 _modern 不在这里，demo 走完整版）。build-demo 脚本按这一行解析，保持单行
-const CSS_FILES = ["base", "_theme", "_tier0-exit", "tier0", "_marks", "tier1", "tier2", "_effects-core", "_fit", "_driver", "_driver-color", "_lazy", "_svg", "_firewall", "_sweep", "_tofu"];
+const CSS_FILES = ["base", "_theme", "_tier0-exit", "tier0", "_marks", "tier1", "tier2", "_effects-core", "_fit", "_driver", "_driver-color", "_lazy", "_svg", "_firewall", "_sweep"];
 // 返回 Promise：样式表全部加载完才 resolve（fit 要按已生效的样式测量，所以 apply 要等它）
 function loadTier(n) {
   document.querySelectorAll("link[data-skz-css]").forEach((l) => l.remove());
@@ -116,7 +116,7 @@ function loadTier(n) {
   // n=0 仅兜底层（含主题、标记）；n=1 + 第 0 档和全部效果；n=2 + 第 1 档；n=3 + 第 2 档
   const want = ["base", "_theme", "_marks", "_fit"];
   if (n >= 1) want.push("_tier0-exit", "tier0", "_effects-core", "_driver", "_driver-color", "_lazy", "_svg", "_firewall", "_sweep");
-  if (n >= 2) want.push("tier1", "_tofu");
+  if (n >= 2) want.push("tier1");
   if (n >= 3) want.push("tier2");
   const loads = CSS_FILES.filter((f) => want.includes(f)).map(
     (f) =>

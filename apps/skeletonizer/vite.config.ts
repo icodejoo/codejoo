@@ -3,7 +3,7 @@ import { defineConfig } from "vite-plus";
 
 /**
  * CSS 入口：取 src/styles/entries 下的 *.scss 文件名，每个各编一份压缩 CSS（新增入口只需加文件）。
- * core 为 core 默认样式（第 0 档 + 现代档 + 根驱动）；基底三选一（core / base 完整版 / explicit 只认显式标记），变体按需叠加（global 防火墙 + svg 降级 / svg / sweep / tofu），all 为 base + 全部变体
+ * core 为 core 默认样式（第 0 档 + 现代档 + 根驱动）；基底三选一（core / base 完整版 / explicit 只认显式标记），变体按需叠加（global 防火墙 + svg 降级 / svg / sweep），all 为 base + 全部变体
  */
 const CSS_ENTRIES = readdirSync("src/styles/entries")
   .filter((f) => f.endsWith(".scss"))

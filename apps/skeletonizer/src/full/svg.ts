@@ -18,30 +18,11 @@ const SHIMMER_VAR = "--skz-svg-shimmer";
 /** 根上存放 pulse 图的变量 */
 const PULSE_VAR = "--skz-svg-pulse";
 
-/** 默认时长（毫秒），pulse 图的兜底，也是 shimmer 小屏档的时长；与 _mixins.scss 的 $default-duration 一致 */
+/** 默认时长（毫秒），pulse / shimmer 图的兜底；与 _mixins.scss 的 $default-duration 一致 */
 const DEFAULT_DURATION = 2000;
 
-/** shimmer 光带宽（px），各档一样；与 _mixins.scss 的 $band 一致 */
-const SHIMMER_BAND = 400;
-
-/** shimmer 时长的响应式档位（小屏优先，取最后一个满足 minWidth 的）；断点与时长和 _driver.scss 的 --skz-tier-dur 媒体查询一致 */
-const SHIMMER_TIERS: { minWidth: number; dur: number }[] = [
-  { minWidth: 0, dur: DEFAULT_DURATION },
-  { minWidth: 640, dur: 2800 },
-  { minWidth: 1280, dur: 3600 },
-];
-
-/**
- * 按视口宽取 shimmer 的档位时长。
- * @param width 视口宽（px）
- * @returns 毫秒
- * @example tierDuration(1440); // 3600
- */
-export function tierDuration(width: number): number {
-  let dur = DEFAULT_DURATION;
-  for (const t of SHIMMER_TIERS) if (width >= t.minWidth) dur = t.dur;
-  return dur;
-}
+/** shimmer 光带宽占图宽（= 骨头宽）的百分比。svg 图按骨头拉伸、动画在图里，写不了固定 px，只能按比例（CSS 根驱动是固定 300px） */
+const SHIMMER_BAND = 60;
 
 /**
  * 把 CSS 时长（如 "1.5s"、"750ms"）换算成毫秒，解析不了时返回默认值。
@@ -109,14 +90,13 @@ function shimmerStops(hl: string): string {
 }
 
 /**
- * shimmer 图：高光色光带（透明 → 高光 → 透明）从左侧屏外扫到右侧屏外再停一会儿，铺满视口（配合 fixed 背景各骨头同步）。
+ * shimmer 图：高光色光带（透明 → 高光 → 透明）从骨头左边界外扫到右边界外再停一会儿；图拉伸到骨头自身盒子（各骨头同步）。
  * @param hl 高光色
  * @param dur 时长（毫秒）
- * @param band 光带宽（viewBox 单位，视口宽 = 100）
  * @returns SVG 文本
  */
-function shimmerSvg(hl: string, dur: number, band: number): string {
-  return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" preserveAspectRatio="none"><linearGradient id="g">${shimmerStops(hl)}</linearGradient><rect width="${band}" height="100" fill="url(#g)"><animateTransform attributeName="transform" type="translate" values="${-band} 0;100 0;100 0" keyTimes="0;${SHIMMER_SWEEP};1" dur="${dur}ms" repeatCount="indefinite"/></rect></svg>`;
+function shimmerSvg(hl: string, dur: number): string {
+  return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" preserveAspectRatio="none"><linearGradient id="g">${shimmerStops(hl)}</linearGradient><rect width="${SHIMMER_BAND}" height="100" fill="url(#g)"><animateTransform attributeName="transform" type="translate" values="${-SHIMMER_BAND} 0;100 0;100 0" keyTimes="0;${SHIMMER_SWEEP};1" dur="${dur}ms" repeatCount="indefinite"/></rect></svg>`;
 }
 
 /**
@@ -166,13 +146,9 @@ export function applySvg(root: HTMLElement): boolean {
     releaseSvg(root);
     return false;
   }
-  // 档位和光带宽按生成时的视口宽定，窗口缩放后不重算（下次 applySvg 才更新）；用户写了 --skz-duration 则 shimmer 与 pulse 都用它
-  const width = typeof window === "undefined" ? 0 : window.innerWidth;
-  const userDur = toMs(cs.getPropertyValue("--skz-duration"), 0);
-  const dur = userDur || DEFAULT_DURATION;
-  const shimmerDur = userDur || tierDuration(width);
-  const band = width > 0 ? Math.round((SHIMMER_BAND / width) * 10000) / 100 : 60;
-  const key = `${hl}|${dur}|${shimmerDur}|${band}`;
+  // 用户写了 --skz-duration 则 shimmer 与 pulse 都用它，没写 2s
+  const dur = toMs(cs.getPropertyValue("--skz-duration"), DEFAULT_DURATION);
+  const key = `${hl}|${dur}`;
   if (owned.get(root) === key) {
     root.setAttribute(ENGINE_ATTR, ENGINE_SVG);
     return true;
@@ -180,7 +156,7 @@ export function applySvg(root: HTMLElement): boolean {
   releaseSvg(root);
   let entry = cache.get(key);
   if (!entry) {
-    entry = { shimmer: toUrl(shimmerSvg(hl, shimmerDur, band)), pulse: toUrl(pulseSvg(hl, dur)), refs: 0 };
+    entry = { shimmer: toUrl(shimmerSvg(hl, dur)), pulse: toUrl(pulseSvg(hl, dur)), refs: 0 };
     cache.set(key, entry);
   }
   entry.refs++;

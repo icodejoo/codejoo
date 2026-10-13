@@ -114,51 +114,29 @@ it("shimmer 光带两侧按 smoothstep 缓动：9 个色标，透明度 0 → 1 
   ]);
 });
 
-/** 桩一个视口宽（svg 引擎按它取档位、换算光带宽） */
-const stubWidth = (w: number): void => void vi.stubGlobal("window", { innerWidth: w });
-
 /** 取生成的 shimmer 图文本 */
 const shimmerOf = (): string => env.made.find((s) => s.includes("animateTransform")) ?? "";
 
-it("svg 光带扫过占 62.5%，之后停住：从 -光带宽 走到 100（视口宽），与 CSS 关键帧一致", async () => {
-  stubWidth(800);
+it("svg 光带宽 60（图宽 = 骨头宽的 60%），扫过占 62.5%：从 -60 走到 100，之后停住，与 CSS 关键帧一致；与视口宽无关", async () => {
+  vi.stubGlobal("window", { innerWidth: 1600 });
   const { applySvg } = await import("../src/full/svg.ts");
   applySvg(asEl(new FakeEl()));
-  expect(shimmerOf()).toContain('values="-50 0;100 0;100 0" keyTimes="0;0.625;1"');
+  expect(shimmerOf()).toContain('<rect width="60"');
+  expect(shimmerOf()).toContain('values="-60 0;100 0;100 0" keyTimes="0;0.625;1"');
 });
 
-it("光带宽固定 400px，按视口宽换算成 viewBox 单位（400 / innerWidth * 100）", async () => {
-  const { applySvg } = await import("../src/full/svg.ts");
-  stubWidth(1600);
-  applySvg(asEl(new FakeEl()));
-  expect(shimmerOf()).toContain('<rect width="25"');
-  expect(shimmerOf()).toContain('values="-25 0;100 0;100 0"');
-});
-
-it.each([
-  [639, "2000ms"],
-  [640, "2800ms"],
-  [1279, "2800ms"],
-  [1280, "3600ms"],
-])("没写 --skz-duration：视口 %ipx 取档位时长 %s；pulse 图仍是 2s（来回 4000ms）", async (w, dur) => {
-  stubWidth(w);
+it("没写 --skz-duration：shimmer 2s，pulse 来回 4s", async () => {
   const { applySvg } = await import("../src/full/svg.ts");
   applySvg(asEl(new FakeEl()));
-  expect(shimmerOf()).toContain(`dur="${dur}"`);
+  expect(shimmerOf()).toContain('dur="2000ms"');
   expect(env.made.find((s) => s.includes("<animate "))).toContain('dur="4000ms"');
 });
 
-it("用户写了 --skz-duration：shimmer 与 pulse 都用它，档位不起作用", async () => {
-  stubWidth(1920);
+it("用户写了 --skz-duration：shimmer 与 pulse 都用它", async () => {
   const { applySvg } = await import("../src/full/svg.ts");
   const f = new FakeEl();
   f.vars["--skz-duration"] = "1s";
   applySvg(asEl(f));
   expect(shimmerOf()).toContain('dur="1000ms"');
   expect(env.made.find((s) => s.includes("<animate "))).toContain('dur="2000ms"');
-});
-
-it("tierDuration 按断点取最后一个满足的档位", async () => {
-  const { tierDuration } = await import("../src/full/svg.ts");
-  expect([0, 639, 640, 1279, 1280, 4000].map(tierDuration)).toEqual([2000, 2000, 2800, 2800, 3600, 3600]);
 });

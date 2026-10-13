@@ -5,8 +5,8 @@
  * 门槛：同时具备 text-decoration-thickness 和 :has()（Chrome 105+ / Safari 15.4+ / Firefox 121+，
  * core 的目标线 Chrome 119+ / Safari 16.4+ / Firefox 128+ 都满足）。低于门槛只有第 0 档的静态色块。
  * 这里是完整版 tier1（下划线法 / clip）和 tier2（图标 / 忽略区）里 core 需要的部分合并成一个 @supports；
- * 不含 underline / leaf / tofu 文字模式，也没有 background-clip:text 的撤回分支（门槛已保证支持）。
- * 根选择器只认文字条家族的根（没写 skz-text-mode / round / clip，见 $clip-mod）：同时引了完整版样式时，本块碰不到 leaf / underline / tofu 根。
+ * 不含 underline / leaf 文字模式，也没有 background-clip:text 的撤回分支（门槛已保证支持）。
+ * 根选择器只认文字条家族的根（没写 skz-text-mode / round / clip，见 $clip-mod）：同时引了完整版样式时，本块碰不到 leaf / underline 根。
  * 自动推导只在 skz-auto 区域里生效；显式标记 skz-text 在区域内外都生效。 */
 @supports (text-decoration-thickness: 1em) and selector(:has(*)) {
   /* 下划线当形状（自动推导 + 显式文字标记 skz-text 共用一条规则；标记元素的整个子树按文字行出条，区域内外都生效）；
@@ -23,6 +23,8 @@
 
   /* 显式文字标记 skz-text 的背景填充 */
   @include sk-mark-text-clip;
+  /* clip 下多行标记文字的光带同步：标记的直接父级接管背景 */
+  @include sk-clip-parent(false);
 
   /* 控件整块当骨头，自身不画下划线；忽略区内部不画下划线 */
   @include sk-text-controls($clip-mod);

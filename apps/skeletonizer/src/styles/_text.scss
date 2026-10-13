@@ -45,7 +45,7 @@
 /// 文字标签上第 0 档的背景色退场改用下划线，圆角归零（--skz-tradius: 0px）。
 /// 同时把 round 专用的三个开关（--skz-ul-line / --skz-bgclip / --skz-bdb）复位成 clip 的值，嵌套在 round 根里的 clip 根才不会继承外层的 round；
 /// 真正的 round 根由后面的 sk-round-root 覆盖（同优先级，写在后面）。
-/// @param {Boolean} $isolate 是否把 --skz-tbg / --skz-timg 置为 initial：完整版里文字条根可能嵌套在 underline / tofu 根里，
+/// @param {Boolean} $isolate 是否把 --skz-tbg / --skz-timg 置为 initial：完整版里文字条根可能嵌套在 underline 根里，
 ///   要显式写出才不会继承外层的 transparent；core 没有这类根，省掉
 @mixin sk-clip-root($isolate: true) {
   #{$clip} {
@@ -134,6 +134,44 @@
   }
   :where(#{$clip} #{$mark-text}) {
     border-radius: var(--skz-tradius, var(--skz-radius));
+  }
+}
+
+/// clip 下多行文字的光带同步：行内标记元素（slice 断行）折行后背景是各行首尾相接的一条，光带会先扫完第一行再扫第二行。
+/// 改由标记的直接父级（$mark-parent）铺背景并 background-clip:text：背景只露在子树全部文字 + 装饰线的形状里，
+/// 标记元素文字透明 + 透明粗下划线 -> 露出骨头条；未标记的文字不透明 -> 原样显示。父级只接管背景，不加下划线、不改文字颜色，原有底色会被盖掉。
+/// 标记元素自己不再铺背景（background:none）。根自身不接管（后代选择器），父级是行内元素或标记直接挂在根下时仍是一行接一行。
+/// 只作用于 clip 实际生效的根：显式 clip 根，以及不支持 box-decoration-break 时退回 clip 的 round / 默认根（用 @supports not 门控，round 生效时一条规则都不输出）。
+/// 自动推导（skz-auto）的文字不在范围内。需要放在 sk-mark-text-clip 之后。
+/// @param {Boolean} $gate 是否自带 background-clip:text 与 :has() 的特性查询：完整版 tier1 要（它的门槛只有装饰线粗度），core / explicit 的外层 @supports 已保证，传 false
+@mixin sk-clip-parent($gate: true) {
+  @if $gate {
+    @supports ((-webkit-background-clip: text) or (background-clip: text)) and selector(:has(*)) {
+      @include sk-clip-parent-body;
+    }
+  } @else {
+    @include sk-clip-parent-body;
+  }
+}
+
+/// sk-clip-parent 的内容：显式 clip 根无条件，默认 / round 根只在不支持 box-decoration-break 时（退回 clip）。
+@mixin sk-clip-parent-body {
+  @include sk-clip-parent-rules('[skz][skz-text-mode="clip"]');
+  @supports not ((box-decoration-break: clone) or (-webkit-box-decoration-break: clone)) {
+    @include sk-clip-parent-rules($clip);
+  }
+}
+
+/// sk-clip-parent 的规则体。
+/// @param {String} $root 根选择器
+@mixin sk-clip-parent-rules($root) {
+  #{$root} #{$mark-parent} {
+    @include sk-text-bone;
+    -webkit-background-clip: text !important;
+    background-clip: text !important;
+  }
+  #{$root} #{$mark-parent} > #{$mark-text} {
+    background: none !important;
   }
 }
 

@@ -1,3 +1,5 @@
+> 已于 2026-10-13 移除 tofu，见 [对比报告](../../../docs/reports/2026-10-13-tofu-vs-underline.md)；本目录仅作历史留存。
+
 # a8：全方块字体（tofu / redacted font）原型
 
 环境：Chrome 154（Windows 真实窗口，独立实例端口 9588），静态服务 `scripts/serve.mjs`（端口 5198，不走 vite），CSS/JS 用 `dist/`（注意：测试中途 dist 被别人重建过一次，button 从文字标签挪进了控件骨头，之后的数据全部基于新 dist，见"坑点"）。没有改 src/、README、docs/。

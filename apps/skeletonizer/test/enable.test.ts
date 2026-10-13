@@ -41,7 +41,7 @@ it("text：五种模式都原样写到 skz-text-mode（根属性，不是元素�
   const f = new FakeEl();
   const off = enable(asEl(f), { effect: "shimmer" });
   expect(f.getAttribute("skz-text-mode")).toBeNull();
-  for (const mode of ["round", "clip", "underline", "leaf", "tofu"] as const) {
+  for (const mode of ["round", "clip", "underline", "leaf"] as const) {
     enable(asEl(f), { effect: "shimmer", text: mode });
     expect(f.getAttribute("skz-text-mode")).toBe(mode);
   }
@@ -140,7 +140,8 @@ it("registerCustomElements：宿主 ::before 的画法与 sk-bone 一致，读�
   const [sheet] = root.adoptedStyleSheets;
   expect(sheet.css).toContain("background-color:var(--skz-fill,var(--skz-color,#d9dde3)) !important");
   expect(sheet.css).toContain("background-image:var(--skz-bg-img,none) !important");
-  expect(sheet.css).toContain("background-attachment:fixed !important");
+  expect(sheet.css).not.toContain("background-attachment");
+  expect(sheet.css).toContain("background-size:var(--skz-bg-size,300px 100%) !important");
   // 保持原有的伪元素铺满、圆角
   expect(sheet.css).toContain('content:"" !important');
   expect(sheet.css).toContain("border-radius:var(--skz-radius,4px) !important");

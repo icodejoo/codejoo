@@ -62,7 +62,7 @@ describe("完整版扩展", () => {
     expect(el.getAttribute("skz-text-mode")).toBe("leaf");
     enable(el);
     expect(el.hasAttribute("skz-text-mode")).toBe(false);
-    enable(el, { text: "tofu" });
+    enable(el, { text: "underline" });
     off();
     expect(el.getAttributeNames()).toEqual([]);
   });

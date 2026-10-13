@@ -1,7 +1,7 @@
 ---
 title: 文档索引
 status: active
-updated: 2026-10-11
+updated: 2026-10-13
 summary: skeletonizer 项目文档的唯一入口。
 ---
 
@@ -15,6 +15,7 @@ summary: skeletonizer 项目文档的唯一入口。
 
 ## 想看实测结果
 
+- [tofu 与 underline 成对压测](reports/2026-10-13-tofu-vs-underline.md) — tofu 无一场景更快，已于 2026-10-13 移除；附 pulse global 回退线索。active
 - [原型验证报告（桌面 Chrome）](reports/2026-10-08-prototype-verification.md) — 各假设成立与否、最终参数、未验证项。active
 - [全量性能矩阵（控制变量版）](reports/2026-10-09-benchmark-matrix.md) — 各模式同条件对比、剔除依据、sweep 修复补测；README 数据来源。active
 - [CSS 方案性能评估与优化复测](reports/2026-10-08-performance.md) — 历次优化过程与成本分析（数据为分轮测得，横向比较以矩阵为准）。active

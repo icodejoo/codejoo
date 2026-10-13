@@ -10,12 +10,13 @@
   --skz-fill: var(--skz-pulse-c);
 }
 
-/// gradient 驱动的 shimmer：光带位置读 shimmer 进度（0 → 1），换算成 -光带宽 → 100vw，光带从左侧屏外刚好进场、右侧屏外刚好离场。
+/// gradient 驱动的 shimmer：光带位置读 shimmer 进度（0 → 1），按骨头自身盒子换算（推导见 _mixins.scss 的 $band-pos），
+/// 光带从骨头左边界外刚好进场、右边界外刚好离场。
 @mixin sk-shimmer-pos {
-  --skz-bg-pos: calc(var(--skz-shimmer-p) * (100vw + #{$band}) - #{$band}) 0;
+  --skz-bg-pos: #{$band-pos};
 }
 
-/// color 驱动（underline / tofu）：下划线 / 方块字的颜色读 pulse 颜色（pulse 与 shimmer 都用它）。
+/// color 驱动（underline）：下划线的颜色读 pulse 颜色（pulse 与 shimmer 都用它）。
 @mixin sk-pulse-ul {
   --skz-ul-fill: var(--skz-pulse-c);
 }
