@@ -1,6 +1,6 @@
 @charset "UTF-8";
-/* ===== 基底效果：fade（默认）/ solid，以及减少动态效果（core.css / explicit.css / base.css 共用）=====
- * pulse / shimmer 的根驱动在 _driver.scss（同样在所有基底里），sweep 在 sweep.css，视口外暂停和 skz-cv 在 _lazy.scss（只在 base.css）。
+/* ===== 基底效果：fade（默认）/ solid，以及减少动态效果（lite.css / full.css 的基底 共用）=====
+ * pulse / shimmer 的根驱动在 _driver.scss（同样在所有基底里），视口外暂停和 skz-cv 在 _lazy.scss（只在完整版基底）。
  * 不支持 @property / 相对颜色的浏览器里，pulse / shimmer 退回根级 fade。 */
 [skz] {
   --skz-bg-img: none;

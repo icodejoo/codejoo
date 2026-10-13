@@ -5,7 +5,7 @@
  * 本身不能渐变、没有圆角：颜色读 --skz-ul-fill，pulse / shimmer 时由根驱动只能变色（见 driver-color）；
  * 文字条家族（round 默认 / clip）在它之上叠一层背景填充：clip 用 background-clip:text 裁进文字，round 撤掉装饰线改用带圆角的背景盒（见下）。
  * 完整版保留这一档的全部渐进行为，给"有 text-decoration-thickness、没有 :has()"的浏览器用；
- * 支持两者的浏览器在 core.css 里走合并后的现代档（_modern.scss），规则由同一批积木（_text.scss）生成。
+ * 支持两者的浏览器在 lite.css 里走合并后的现代档（_modern.scss），规则由同一批积木（_text.scss）生成。
  * skz-text-mode 为 underline 的根与未知取值的根，外观都在这里。 */
 @supports (text-decoration-thickness: 1em) {
   /* 文字标签上第 0 档的背景色退场，改用下划线：圆角归零（--skz-tradius: 0px），round / clip 根由 sk-clip-root 声明，underline / 未知取值的根在这里（$color-modes）；
@@ -124,7 +124,7 @@
    * 装饰线颜色：--skz-dc 清掉后读 --skz-ul-fill，clip 根上没有 pulse 驱动的 --skz-ul-fill，所以回落到静态 --skz-color
    * （这类浏览器没有 clip 的光带，文字条是静态灰，可接受；svg 引擎本来就是静态 --skz-color）。
    * --skz-ul-line 清回缺省：round 根在这类浏览器里同样退回 underline（否则文字透明、背景撤掉、装饰线又是 none，什么都看不见）。
-   * core 的门槛（Chrome 119+ / Safari 16.4+ / Firefox 128+）都认 background-clip:text，core 里没有这一支 */
+   * core 现代档的门槛（Chrome 105+ / Safari 15.4+ / Firefox 121+）都认 background-clip:text，core 里没有这一支 */
   @supports not ((-webkit-background-clip: text) or (background-clip: text)) {
     [skz]:is(:not([skz-text-mode]), [skz-text-mode=round], [skz-text-mode=clip]) {
       --skz-tbg: transparent;

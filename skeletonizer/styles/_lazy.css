@@ -1,9 +1,8 @@
 @charset "UTF-8";
-/* ===== 懒渲染与视口外跳过渲染（base.css 与 explicit.css 带，core.css 不带）=====
- * skz-paused 由完整版的懒渲染扩展写上，skz-cv 由使用者写在根上，core.css 里没有。 */
-/* 懒渲染：根在视口外（enable() 打上 skz-paused）时移除根上和 sweep 光带的动画，SVG 方案去掉背景图 */
-[skz][skz-paused],
-[skz][skz-paused]::after {
+/* ===== 懒渲染与视口外跳过渲染（完整版基底带，lite.css 不带）=====
+ * skz-paused 由完整版的懒渲染扩展写上，skz-cv 由使用者写在根上，lite.css 里没有。 */
+/* 懒渲染：根在视口外（enable() 打上 skz-paused）时移除根上的动画，SVG 方案去掉背景图 */
+[skz][skz-paused] {
   animation: none !important;
 }
 

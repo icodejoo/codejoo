@@ -107,6 +107,20 @@
         letter-spacing: 0.06em;
         opacity: 0.6;
       }
+      .span-compare {
+        display: grid;
+        gap: 4px;
+        max-width: 420px;
+      }
+      .span-row {
+        display: flex;
+        gap: 12px;
+        align-items: center;
+      }
+      .span-row > i {
+        display: block;
+        height: 14px;
+      }
       .narrow {
         max-width: 240px;
       }
@@ -222,7 +236,7 @@
         color: #dc2626;
       }
     </style>
-    <script type="module" crossorigin src="/codejoo/skeletonizer/assets/index-C_uxKZr4.js"></script>
+    <script type="module" crossorigin src="/codejoo/skeletonizer/assets/index-ClD4b2Xr.js"></script>
   </head>
   <body>
     <header class="bar">
@@ -233,7 +247,6 @@
         >效果
         <select id="sel-effect">
           <option>fade</option>
-          <option>sweep</option>
           <option>solid</option>
           <option>pulse</option>
           <option selected>shimmer</option>
@@ -249,7 +262,7 @@
       <label
         >档位（skz-auto 区域）
         <select id="sel-tier">
-          <option value="0">仅兜底层</option>
+          <option value="0">无推导（仅主题与标记）</option>
           <option value="1">+ 第 0 档</option>
           <option value="2">+ 第 1 档</option>
           <option value="3" selected>+ 第 2 档（全部）</option>
@@ -262,6 +275,13 @@
           <option value="clip">裁剪填充（clip）</option>
           <option value="underline">下划线法</option>
           <option value="leaf">叶子背景法</option>
+        </select>
+      </label>
+      <label
+        >光带模式（skz-shimmer-mode）
+        <select id="sel-shimmer-mode">
+          <option value="even" selected>同速（even，默认）</option>
+          <option value="fit">按骨头盒子（fit）</option>
         </select>
       </label>
     </header>
@@ -381,11 +401,54 @@
       <!-- 5 Web Component -->
       <section>
         <h2 class="sec">5 · Web Component（Shadow DOM）</h2>
-        <p class="note">demo-card 内部有 shadow DOM。宿主 visibility:hidden + ::before 铺骨头，样式表由 registerCustomElements 运行时生成。</p>
-        <div class="grid3" data-demo-root id="wc">
-          <demo-card heading="Shadow 卡片 A" text="这里的文字都在 shadow DOM 里，外部选择器进不去。"></demo-card>
-          <demo-card heading="Shadow 卡片 B" text="第二张卡片，用来确认多个实例都命中。"></demo-card>
-          <demo-card heading="Shadow 卡片 C" text="第三张。"></demo-card>
+        <p class="note">demo-card 内部有 shadow DOM。给宿主写 skz-host 标记：宿主 visibility:hidden + ::before 铺骨头，样式是 CSS 里静态写好的。</p>
+        <div class="grid3" data-demo-root id="host">
+          <demo-card skz-host heading="Shadow 卡片 A" text="这里的文字都在 shadow DOM 里，外部选择器进不去。"></demo-card>
+          <demo-card skz-host heading="Shadow 卡片 B" text="第二张卡片，用来确认多个实例都命中。"></demo-card>
+          <demo-card skz-host heading="Shadow 卡片 C" text="第三张。"></demo-card>
+        </div>
+      </section>
+
+      <!-- 5.4 shimmer 光带行程对照 -->
+      <section>
+        <h2 class="sec">5.4 · shimmer 光带行程对照（even 模式）</h2>
+        <p class="note">
+          顶部效果选 shimmer、光带模式选 even 时看：两排都是宽 420px 的根里放几个小骨头，只差光带一轮的行程参考宽度（100cqw）。第一排没有容器，100cqw 等于视口宽，屏越宽空等越久；第二排根上写了 container-type:
+          inline-size，按根自己的宽度走，几乎不空等。
+        </p>
+        <div class="span-compare">
+          <div>
+            <p class="note">没有容器：100cqw 等于视口宽（与以前的 100vw 相同）</p>
+            <div class="box span-row" data-demo-root><i skz-bone style="width: 40px"></i><i skz-bone style="width: 70px"></i><i skz-bone style="width: 120px"></i><i skz-bone style="width: 56px"></i></div>
+          </div>
+          <div>
+            <p class="note">根上 container-type: inline-size：按根的内容宽度（约 390px）走</p>
+            <div class="box span-row" data-demo-root style="container-type: inline-size">
+              <i skz-bone style="width: 40px"></i><i skz-bone style="width: 70px"></i><i skz-bone style="width: 120px"></i><i skz-bone style="width: 56px"></i>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- 5.5 <skz-box> 自定义元素 -->
+      <section>
+        <h2 class="sec">5.5 · &lt;skz-box&gt; 自定义元素（skeletonizer/element）</h2>
+        <p class="note">
+          不调用 enable()：宿主 &lt;skz-box&gt; 只认自己的 loading / effect / text / engine 等属性，skz 落在它的第一个元素子节点上。顶部开关通过 el.loading 与属性同步过来；需要先 import "skeletonizer"（或 lite）再
+          defineSkzBox()。
+        </p>
+        <div class="grid3">
+          <skz-box class="demo-skzbox" loading>
+            <div class="box card">
+              <img class="avatar" skz-bone alt="" />
+              <div class="body">
+                <h3><span skz-text>&lt;skz-box&gt; 包着的卡片</span></h3>
+                <small skz-text>由 defineSkzBox() 注册</small>
+                <p><span skz-text>宿主只负责开关，骨架状态作用在里面这张卡片上。</span></p>
+                <button class="btn" skz-bone>按钮</button>
+              </div>
+            </div>
+          </skz-box>
         </div>
       </section>
 
@@ -396,10 +459,10 @@
         <div class="grid2" data-demo-root id="bones"></div>
       </section>
 
-      <!-- 8 兜底层失败场景 -->
+      <!-- 8 skz-auto 直接写在根上的边界场景 -->
       <section>
-        <h2 class="sec">8 · 兜底层的边界（skz-auto，Q29）</h2>
-        <p class="note">根自身写了 skz-auto，档位切换在这里才有效果：切到「仅兜底层」，每个直接子元素变一整块灰、后代全藏。根的直接子元素依次是：普通块 / 绝对定位悬浮角标 / display:contents 包装 / canvas / 裸文字。</p>
+        <h2 class="sec">8 · skz-auto 写在根上的边界场景</h2>
+        <p class="note">根自身写了 skz-auto，档位切换在这里才有效果：切到「无推导」时这里什么都不显示（骨头全靠推导规则）。根的直接子元素依次是：普通块 / 绝对定位悬浮角标 / display:contents 包装 / canvas / 裸文字。</p>
         <div class="box rel" data-demo-root skz-auto id="fails" style="display: flex; flex-direction: column; gap: 10px">
           <div>普通块：直接子元素一</div>
           <span class="float">NEW</span>
