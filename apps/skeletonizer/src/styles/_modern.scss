@@ -1,9 +1,9 @@
 @use "lists" as *;
 @use "text" as *;
 
-/* ===== 现代档（core.css）：文字条骨头（默认 round，不支持时 clip；自动推导 + 显式 skz-text 标记）+ 控件整块骨头 + 图标启发式 =====
+/* ===== 现代档（lite.css）：文字条骨头（默认 round，不支持时 clip；自动推导 + 显式 skz-text 标记）+ 控件整块骨头 + 图标启发式 =====
  * 门槛：同时具备 text-decoration-thickness 和 :has()（Chrome 105+ / Safari 15.4+ / Firefox 121+，
- * core 的目标线 Chrome 119+ / Safari 16.4+ / Firefox 128+ 都满足）。低于门槛只有第 0 档的静态色块。
+ * 根驱动门槛之上的 Safari 16.4+ / Firefox 128+ 都满足；Chrome 要 105+）。低于门槛只有第 0 档的静态色块。
  * 这里是完整版 tier1（下划线法 / clip）和 tier2（图标 / 忽略区）里 core 需要的部分合并成一个 @supports；
  * 不含 underline / leaf 文字模式，也没有 background-clip:text 的撤回分支（门槛已保证支持）。
  * 根选择器只认文字条家族的根（没写 skz-text-mode / round / clip，见 $clip-mod）：同时引了完整版样式时，本块碰不到 leaf / underline 根。

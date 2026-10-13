@@ -1,1 +1,1 @@
-import "skeletonizer/full";
+import "skeletonizer";

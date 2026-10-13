@@ -1,13 +1,14 @@
 /**
  * Vue 3 适配层：`v-skeleton` 指令、`useSkeleton` 组合式 API 与 `<SkzBox>` 组件，按 loading 自动开关骨架。
- * 前提：入口处引入一次样式（`skeletonizer` 默认带 core.css，或 `skeletonizer/explicit`）；text / engine / sweep 等完整版能力再引入 `skeletonizer/full` 或 `/global`、`/svg`、`/all`。
+ * 前提：入口处导入一次 `skeletonizer`（完整版）或 `skeletonizer/lite`（只导入一个，样式随之自带）；适配层不含 core，通过私有全局键取实现，未导入时开发模式报错。
+ * text / engine 等完整版选项只有导入完整版后才有类型与效果。
  * 加载中照常渲染真实组件，用 `Bone` 造的 mock 数据填充；空元素没有尺寸，不会出骨头。
  */
 import { defineComponent, h, onBeforeUnmount, onMounted, ref, watch } from "vue";
 import type { App, DefineComponent, Directive, Ref } from "vue";
-// 直接引用 core 模块（不经过 core 入口）：不带 core.css，也不挂全局 skz
-import { disable, toggle } from "./core/enable.js";
-import type { EnableOptions } from "./core/types.js";
+// 类型来自 skeletonizer/lite（导入完整版后自动变宽）；运行时只经 adapter-api 取全局 API，不含 core 代码
+import type { EnableOptions, SkzHtmlAttributes } from "skeletonizer/lite";
+import { disable, toggle } from "./adapter-api.js";
 
 /** v-skeleton 的绑定值：布尔，或带选项的对象 */
 export type SkzBinding = boolean | (EnableOptions & { loading: boolean });
@@ -51,7 +52,7 @@ export function useSkeleton(target: Ref<HTMLElement | null | undefined>, loading
   onBeforeUnmount(() => target.value && disable(target.value));
 }
 
-/** SkzBox 组件的 props：选项部分继承 EnableOptions，导入完整版后自动多出 text / engine / fallback */
+/** SkzBox 组件的 props：选项部分继承 EnableOptions，导入完整版后自动多出 text / shimmerMode / engine / fallback */
 export interface SkzBoxProps extends EnableOptions {
   /** 是否加载中 */
   loading?: boolean;
@@ -75,6 +76,8 @@ export const SkzBox = defineComponent({
     effect: String,
     /** 文字骨头模式（完整版） */
     text: String,
+    /** shimmer 光带模式：even（默认）/ fit（完整版） */
+    shimmerMode: String,
     /** global 方案在不支持 @property 时的降级：svg（默认）/ fade（完整版） */
     fallback: String,
     /** pulse / shimmer 的实现：global / svg（完整版） */
@@ -107,3 +110,11 @@ export const SkzPlugin = {
     app.component("SkzBox", SkzBox);
   },
 };
+
+/**
+ * 让模板里的 skz-* 属性有补全与取值检查：把 SkzHtmlAttributes 并入 Vue 的 HTMLAttributes（导入本适配层即生效；Volar 的识别情况未在真实编辑器验证）。
+ * 模板里的裸写法 `<img skz-bone>` 在 Vue 里就是 `""`。
+ */
+declare module "vue" {
+  interface HTMLAttributes extends SkzHtmlAttributes {}
+}

@@ -7,7 +7,7 @@ import { fileURLToPath } from "node:url";
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 
 /** 判断产物是否过期时对照的标志文件（最后生成的 d.ts 之一） */
-const STAMP = path.join(ROOT, "dist/core.d.mts");
+const STAMP = path.join(ROOT, "dist/full.d.mts");
 
 /**
  * 递归取目录下最新的修改时间

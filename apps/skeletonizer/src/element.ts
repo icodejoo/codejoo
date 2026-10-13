@@ -1,11 +1,17 @@
-import { disable, toggle } from "./enable.js";
-import type { EnableOptions } from "./types.js";
+/**
+ * skeletonizer/element 入口：`<skz-box>` 自定义元素（light DOM）。
+ * 本文件不含 core 运行时代码：开关骨架经 adapter-api 取私有全局键上的实现，
+ * 实现由使用方导入 skeletonizer（完整版）或 skeletonizer/lite 提供；都没导入时开发模式提示一次，元素不做任何事。
+ * 导入本模块没有副作用，需要手动调用一次 defineSkzBox() 注册。
+ */
+import type { EnableOptions } from "skeletonizer/lite";
+import { disable, toggle } from "./adapter-api.js";
 
 /** 非浏览器环境（SSR）没有 HTMLElement，用空类占位，保证 import 不报错 */
 const BaseElement: typeof HTMLElement = typeof HTMLElement !== "undefined" ? HTMLElement : (class {} as unknown as typeof HTMLElement);
 
-/** <skz-box> 的默认标签名（包内共用，不从入口导出） */
-export const SKZ_BOX_TAG = "skz-box";
+/** <skz-box> 的默认标签名（包内用，不导出） */
+const SKZ_BOX_TAG = "skz-box";
 
 /** 宿主上的加载开关属性名 */
 const ATTR_LOADING = "loading";
@@ -45,14 +51,14 @@ function sync(host: SkzBox): void {
 
 /**
  * <skz-box loading> 自定义元素：light DOM、不用 shadow，子节点仍归你的框架管。
- * 属性：loading（布尔开关，属性存在且值不为 "false" 即为开启）、effect（fade|solid|pulse|shimmer，完整版另有 sweep，默认 fade）、
+ * 属性：loading（布尔开关，属性存在且值不为 "false" 即为开启）、effect（fade|solid|pulse|shimmer，默认 fade）、
  * fit（存在且不为 "false" 即开启）；另有 text / fallback / engine 三个属性原样传给 enable，
- * 它们由完整版（skeletonizer/full）的扩展处理，没加载完整版时被忽略。
+ * 它们由完整版（skeletonizer）的扩展处理，只导入 lite 时被忽略。
  * 宿主只负责读取 loading 开关和选项，实际的骨架状态（skz 属性等）作用在【第一个元素子节点】上。
- * 使用前先调用一次 defineSkzBox()。
+ * 使用前先从 skeletonizer/element 导入并调用一次 defineSkzBox()，且应用里要导入过 skeletonizer 或 skeletonizer/lite 之一。
  * 注意：不带 MutationObserver，子根被框架替换后需要由用户自己处理（例如切一下 loading）。
  *
- * SSR / 无 JS：直接在子根上写 skz，浏览器仅靠 CSS 兜底层就能显示骨架；JS 起来后 enable 是幂等的。
+ * SSR / 无 JS：直接在子根上写 skz（及需要的标记），浏览器仅靠 CSS 就能显示骨架；JS 起来后 enable 是幂等的。
  *
  * @example
  * <skz-box loading effect="pulse"><div>……</div></skz-box>

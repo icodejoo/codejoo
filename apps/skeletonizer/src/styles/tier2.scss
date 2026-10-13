@@ -7,7 +7,7 @@ $leaf-node: ":not([skz-ignore] *):not([skz-ignore]):not(:has(> *)):not(:empty)";
 
 /* ===== 第 2 档：:has() 结构判断（Safari 15.4+/Chrome 105+/Firefox 121+）=====
  * 叶子背景法（根上写 skz-text-mode="leaf" 启用，只在 skz-auto 区域里推导）、图标启发式。
- * 图标启发式在 core.css 里随现代档（_modern.scss）一起提供；叶子背景法只在完整版。 */
+ * 图标启发式在 lite.css 里随现代档（_modern.scss）一起提供；叶子背景法只在完整版。 */
 @supports selector(:has(*)) {
   /* 叶子背景法：没有子元素、但有文字节点的元素 -> 一块骨头，可 shimmer、有圆角 */
   #{sk-auto($leaf-mod)} *:not([skz-ignore]) {

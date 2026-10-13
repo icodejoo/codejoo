@@ -18,7 +18,7 @@ afterEach(() => {
 });
 
 describe("engine 误配的开发警告", () => {
-  it("只注册了 global 却传 engine: svg：警告一次，指明该引入哪个入口", async () => {
+  it("只注册了 global 却传 engine: svg：警告一次，提示用 registerEngine 或改用完整版", async () => {
     const { enable, registerEngine } = await loadFull();
     registerEngine({ engine: "global", ...noop });
     const el = document.createElement("div");
@@ -26,7 +26,7 @@ describe("engine 误配的开发警告", () => {
     enable(el, { effect: "shimmer", engine: "svg" });
     expect(warn).toHaveBeenCalledTimes(1);
     expect(String(warn.mock.calls[0]![0])).toContain('engine: "svg"');
-    expect(String(warn.mock.calls[0]![0])).toContain("skeletonizer/svg");
+    expect(String(warn.mock.calls[0]![0])).toContain("registerEngine");
   });
 
   it("只注册了 svg 却传 engine: global：警告", async () => {
@@ -35,7 +35,7 @@ describe("engine 误配的开发警告", () => {
     const el = document.createElement("div");
     enable(el, { effect: "pulse", engine: "global" });
     expect(warn).toHaveBeenCalledTimes(1);
-    expect(String(warn.mock.calls[0]![0])).toContain("skeletonizer/global");
+    expect(String(warn.mock.calls[0]![0])).toContain("registerEngine");
   });
 
   it("没显式传 engine、或传的方案已注册：不警告", async () => {
@@ -55,6 +55,19 @@ describe("engine 误配的开发警告", () => {
 });
 
 describe("完整版扩展", () => {
+  it("shimmerMode 扩展：写 skz-shimmer-mode，没传就清掉，关闭后撤掉", async () => {
+    const { enable } = await loadFull();
+    const el = document.createElement("div");
+    const off = enable(el, { shimmerMode: "fit" });
+    expect(el.getAttribute("skz-shimmer-mode")).toBe("fit");
+    enable(el);
+    expect(el.hasAttribute("skz-shimmer-mode")).toBe(false);
+    enable(el, { shimmerMode: "even" });
+    expect(el.getAttribute("skz-shimmer-mode")).toBe("even");
+    off();
+    expect(el.getAttributeNames()).toEqual([]);
+  });
+
   it("text 扩展：写 skz-text-mode，没传就清掉，关闭后撤掉", async () => {
     const { enable } = await loadFull();
     const el = document.createElement("div");

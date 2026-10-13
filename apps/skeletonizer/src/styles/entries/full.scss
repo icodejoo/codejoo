@@ -1,0 +1,4 @@
+// skeletonizer/full.css：完整版样式 = 完整版基底 + 全部变体（global 防火墙与 svg 降级、svg）
+@use "../parts/base";
+@use "../parts/global";
+@use "../parts/svg";

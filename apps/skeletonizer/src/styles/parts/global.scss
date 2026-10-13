@@ -1,0 +1,3 @@
+// global 方案拼装件（内部，不单独产出）：global 方案（继承防火墙 + 老浏览器 SVG 降级规则）。
+// pulse / shimmer 的根驱动在各基底（lite.css / full.css 的基底）里，这里不再有。
+@use "../firewall";

@@ -10,10 +10,18 @@
   --skz-fill: var(--skz-pulse-c);
 }
 
-/// gradient 驱动的 shimmer：光带位置读 shimmer 进度（0 → 1），按骨头自身盒子换算（推导见 _mixins.scss 的 $band-pos），
-/// 光带从骨头左边界外刚好进场、右边界外刚好离场。
+/// gradient 驱动的 shimmer（even 模式）：光带位置读 shimmer 进度（0 → 1），各骨头同速（推导见 _mixins.scss 的 $band-pos）。
 @mixin sk-shimmer-pos {
   --skz-bg-pos: #{$band-pos};
+  // 不认 cqw 的浏览器改用 100vw 版；嵌套 @supports 会冒泡成规则外的独立块（同优先级、后写的赢），fit 的属性选择器优先级更高，不受影响
+  @supports not (width: 1cqw) {
+    --skz-bg-pos: #{$band-pos-vw};
+  }
+}
+
+/// gradient 驱动的 shimmer（fit 模式）：按骨头自身盒子换算，各骨头同时走完（推导见 _mixins.scss 的 $band-pos-fit）。
+@mixin sk-shimmer-pos-fit {
+  --skz-bg-pos: #{$band-pos-fit};
 }
 
 /// color 驱动（underline）：下划线的颜色读 pulse 颜色（pulse 与 shimmer 都用它）。

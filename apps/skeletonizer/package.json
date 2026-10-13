@@ -1,6 +1,6 @@
 {
   "name": "skeletonizer",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "description": "Web skeleton screens from your real DOM + mock data + pure CSS. 运行时 + mock + 覆盖标记的 Web 骨架屏。",
   "keywords": [
     "css",
@@ -9,6 +9,7 @@
     "react",
     "skeleton",
     "skeleton-screen",
+    "solid",
     "svelte",
     "vue",
     "web-component",
@@ -30,7 +31,9 @@
     "README.md",
     "README.zh-CN.md",
     "CHANGELOG.md",
-    "llms.md"
+    "llms.md",
+    "web-types.json",
+    "html-custom-data.json"
   ],
   "type": "module",
   "sideEffects": [
@@ -38,28 +41,22 @@
     "./src/core/index.ts",
     "./src/full/index.ts",
     "./src/full/variants/*.ts",
-    "./dist/*.mjs"
+    "./dist/full.mjs",
+    "./dist/lite.mjs"
   ],
-  "main": "./dist/core-js.mjs",
-  "module": "./dist/core-js.mjs",
-  "types": "./dist/core.d.mts",
+  "main": "./dist/full.mjs",
+  "module": "./dist/full.mjs",
+  "types": "./dist/full.d.mts",
   "exports": {
     ".": {
-      "types": "./dist/core.d.mts",
-      "node": "./dist/core-js.mjs",
-      "default": "./dist/core.mjs"
-    },
-    "./core.css": "./dist/core.css",
-    "./explicit": {
-      "types": "./dist/explicit.d.mts",
-      "node": "./dist/explicit-js.mjs",
-      "default": "./dist/explicit.mjs"
-    },
-    "./explicit.css": "./dist/explicit.css",
-    "./full": {
       "types": "./dist/full.d.mts",
       "import": "./dist/full.mjs",
       "default": "./dist/full.mjs"
+    },
+    "./lite": {
+      "types": "./dist/lite.d.mts",
+      "import": "./dist/lite.mjs",
+      "default": "./dist/lite.mjs"
     },
     "./vue": {
       "types": "./dist/vue.d.mts",
@@ -76,42 +73,18 @@
       "import": "./dist/svelte.mjs",
       "default": "./dist/svelte.mjs"
     },
-    "./global": {
-      "types": "./dist/global.d.mts",
-      "import": "./dist/global.mjs",
-      "default": "./dist/global.mjs"
+    "./solid": {
+      "types": "./dist/solid.d.mts",
+      "import": "./dist/solid.mjs",
+      "default": "./dist/solid.mjs"
     },
-    "./global/js": {
-      "types": "./dist/global-js.d.mts",
-      "import": "./dist/global-js.mjs",
-      "default": "./dist/global-js.mjs"
+    "./element": {
+      "types": "./dist/element.d.mts",
+      "import": "./dist/element.mjs",
+      "default": "./dist/element.mjs"
     },
-    "./svg": {
-      "types": "./dist/svg.d.mts",
-      "import": "./dist/svg.mjs",
-      "default": "./dist/svg.mjs"
-    },
-    "./svg/js": {
-      "types": "./dist/svg-js.d.mts",
-      "import": "./dist/svg-js.mjs",
-      "default": "./dist/svg-js.mjs"
-    },
-    "./all": {
-      "types": "./dist/all.d.mts",
-      "import": "./dist/all.mjs",
-      "default": "./dist/all.mjs"
-    },
-    "./all/js": {
-      "types": "./dist/all-js.d.mts",
-      "import": "./dist/all-js.mjs",
-      "default": "./dist/all-js.mjs"
-    },
-    "./base.css": "./dist/base.css",
-    "./global.css": "./dist/global.css",
-    "./svg.css": "./dist/svg.css",
-    "./sweep.css": "./dist/sweep.css",
-    "./all.css": "./dist/all.css",
-    "./style.css": "./dist/all.css",
+    "./full.css": "./dist/full.css",
+    "./lite.css": "./dist/lite.css",
     "./package.json": "./package.json"
   },
   "publishConfig": {
@@ -121,7 +94,8 @@
     "fmt": "vp fmt -c oxfmt.config.ts",
     "lint": "vp lint -c oxlint.config.ts",
     "check": "vp fmt -c oxfmt.config.ts --check && vp lint -c oxlint.config.ts",
-    "build": "vp pack",
+    "gen:editor": "node scripts/gen-editor-data.mjs",
+    "build": "node scripts/gen-editor-data.mjs && vp pack",
     "build:demo": "node scripts/build-demo.mjs",
     "dev": "vp dev",
     "dev:lib": "vp pack --watch",
@@ -135,12 +109,14 @@
     "@typescript/native-preview": "catalog:",
     "react": "^19.0.0",
     "sass": "^1.105.1",
+    "solid-js": "^1.9.0",
     "vite-plus": "catalog:",
     "vitest": "catalog:",
     "vue": "catalog:"
   },
   "peerDependencies": {
     "react": ">=16.8.0",
+    "solid-js": ">=1.6.0",
     "vue": ">=3.0.0"
   },
   "peerDependenciesMeta": {
@@ -149,6 +125,10 @@
     },
     "react": {
       "optional": true
+    },
+    "solid-js": {
+      "optional": true
     }
-  }
+  },
+  "web-types": "./web-types.json"
 }

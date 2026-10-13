@@ -21,7 +21,7 @@ const PULSE_VAR = "--skz-svg-pulse";
 /** 默认时长（毫秒），pulse / shimmer 图的兜底；与 _mixins.scss 的 $default-duration 一致 */
 const DEFAULT_DURATION = 2000;
 
-/** shimmer 光带宽占图宽（= 骨头宽）的百分比。svg 图按骨头拉伸、动画在图里，写不了固定 px，只能按比例（CSS 根驱动是固定 300px） */
+/** shimmer 光带宽占图宽（= 骨头宽）的百分比。svg 引擎只能按比例，相当于 CSS 根驱动的 fit 模式（不认 skz-shimmer-mode，也不分屏宽档）。svg 图按骨头拉伸、动画在图里，写不了固定 px，只能按比例（CSS 根驱动是固定 300px） */
 const SHIMMER_BAND = 60;
 
 /**
@@ -65,8 +65,8 @@ function canBlob(): boolean {
   return typeof Blob !== "undefined" && typeof URL !== "undefined" && typeof URL.createObjectURL === "function" && typeof getComputedStyle === "function";
 }
 
-/** 光带扫过占一轮的比例，其余时间停在屏幕外；与 _driver.scss 的 skz-shimmer-root 关键帧一致 */
-const SHIMMER_SWEEP = 0.625;
+/** 光带扫过占一轮的比例，其余时间停在屏幕外；与 _driver.scss 小档 / fit 的 skz-shimmer-root 关键帧一致（2s 里扫 1.6s + 停 0.4s） */
+const SHIMMER_SWEEP = 0.8;
 
 /** 光带半边的缓动色标 [位置, 透明度]（smoothstep 取点），另一半镜像；与 _mixins.scss 的 $shimmer-ease 同一组数 */
 const SHIMMER_EASE: [number, number][] = [

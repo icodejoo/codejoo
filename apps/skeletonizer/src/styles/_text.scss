@@ -2,8 +2,8 @@
 @use "mixins" as *;
 
 // ===== 文字骨头规则的积木（不输出任何 CSS）=====
-// 完整版的 tier1 / tier2（原样保留渐进行为）、core 的现代档（_modern.scss）和 explicit.css 用同一批积木生成，
-// 区别只在根选择器：完整版的下划线规则认 $nonleaf-mod，core / explicit 只认文字条家族（$clip-mod）。改一条规则，几边同时生效。
+// 完整版的 tier1 / tier2（原样保留渐进行为）、core 的现代档（_modern.scss）用同一批积木生成，
+// 区别只在根选择器：完整版的下划线规则认 $nonleaf-mod，lite 只认文字条家族（$clip-mod）。改一条规则，几边同时生效。
 // 两类规则：
 // - 根级：只挂在 [skz] 根上声明变量（根限定 + 变量），不经过 skz-auto，没有 JS 也照常生效；
 // - 目标级：真正给元素上骨头。自动推导的目标限定在 skz-auto 区域里（sk-auto()），显式文字标记 skz-text 的目标是标记元素的子树（sk-mark-text-*）。
@@ -25,8 +25,8 @@
 /// 标在容器上也覆盖混合内容（如 <div skz-text>价格：<b>¥5</b></div>）：background-clip:text 会裁到该元素及后代的全部文字和装饰线。
 /// 显式标记只认根的后代，不认根自身；忽略区 / 骨头 / 叶子不当标记目标。
 /// 后代规则的 [skz-text] 包在 :where() 里：优先级与自动推导的通配下划线一致，压不过忽略区子树的修正规则（见 marks.scss）。
-/// @param {String} $mod 根的限定，接在 [skz] 后面（完整版 $nonleaf-mod，core / explicit $clip-mod）
-/// @param {Boolean} $with-auto 是否包含自动推导（explicit.css 没有推导，传 false）
+/// @param {String} $mod 根的限定，接在 [skz] 后面（完整版 $nonleaf-mod，lite $clip-mod）
+/// @param {Boolean} $with-auto 是否包含自动推导（只有显式标记时传 false）
 @mixin sk-text-underline($mod, $with-auto: true) {
   $mark: "[skz]#{$mod} #{$mark-text}, [skz]#{$mod} :where([skz-text]) *:not([skz-ignore])";
   @if $with-auto {
@@ -143,7 +143,7 @@
 /// 标记元素自己不再铺背景（background:none）。根自身不接管（后代选择器），父级是行内元素或标记直接挂在根下时仍是一行接一行。
 /// 只作用于 clip 实际生效的根：显式 clip 根，以及不支持 box-decoration-break 时退回 clip 的 round / 默认根（用 @supports not 门控，round 生效时一条规则都不输出）。
 /// 自动推导（skz-auto）的文字不在范围内。需要放在 sk-mark-text-clip 之后。
-/// @param {Boolean} $gate 是否自带 background-clip:text 与 :has() 的特性查询：完整版 tier1 要（它的门槛只有装饰线粗度），core / explicit 的外层 @supports 已保证，传 false
+/// @param {Boolean} $gate 是否自带 background-clip:text 与 :has() 的特性查询：完整版 tier1 要（它的门槛只有装饰线粗度），lite 的外层 @supports 已保证，传 false
 @mixin sk-clip-parent($gate: true) {
   @if $gate {
     @supports ((-webkit-background-clip: text) or (background-clip: text)) and selector(:has(*)) {

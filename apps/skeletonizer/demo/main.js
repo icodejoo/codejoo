@@ -1,7 +1,8 @@
 // demo 页入口脚本：由 index.html 以 <script type="module" src> 引入（Vite 构建时才会打包它）
-// 走完整版源码入口（等同 import "skeletonizer/full"）：demo 要用到 engine / text / sweep / registerCustomElements 全部能力
-import { Bone, enable, disable, registerCustomElements, defineSkzBox } from "../src/full/index.ts";
-// 注册 global / svg 两个方案（等同 import "skeletonizer/all/js"；样式由下方 loadTier 按档位加载）
+// 走完整版源码入口（等同 import "skeletonizer"（完整版））：demo 要用到 engine / text 全部能力
+import { Bone, enable, disable } from "../src/full/index.ts";
+import { defineSkzBox } from "../src/element.ts";
+// 注册 global / svg 两个方案（完整版入口自带的方案注册；样式由下方 loadTier 按档位加载）
 import "../src/full/variants/global.ts";
 import "../src/full/variants/svg.ts";
 
@@ -83,22 +84,30 @@ document.querySelectorAll("[data-demo-fit]").forEach((el) => (el.innerHTML = lis
 
 // ---------- 开关与控制 ----------
 const roots = [...document.querySelectorAll("[data-demo-root]")];
+/** 演示 <skz-box> 的宿主：不调 enable()，靠 loading 属性与 effect / text / engine 属性驱动 */
+const skzBoxes = [...document.querySelectorAll(".demo-skzbox")];
+skzBoxes.forEach((box) => box.querySelectorAll("img.avatar").forEach((img) => (img.src = Bone.image(48))));
 const fitRoots = [...document.querySelectorAll("[data-demo-fit]")];
-const state = { loading: true, dark: true, effect: "shimmer", engine: "global", tier: 3, text: "round", fit: true };
-let hosts;
+const state = { loading: true, dark: true, effect: "shimmer", engine: "global", tier: 3, text: "round", shimmerMode: "even", fit: true };
 
 function apply() {
   document.documentElement.toggleAttribute("data-skz-theme", false);
   document.documentElement.setAttribute("data-skz-theme", state.dark ? "dark" : "light");
   roots.forEach((el) => {
     const text = el.dataset.fixedText ?? state.text;
-    if (state.loading) enable(el, { effect: state.effect, text, engine: state.engine });
+    if (state.loading) enable(el, { effect: state.effect, text, shimmerMode: state.shimmerMode, engine: state.engine });
     else disable(el);
     el.setAttribute("skz-effect", state.effect);
     el.setAttribute("skz-text-mode", text);
   });
+  skzBoxes.forEach((box) => {
+    box.setAttribute("effect", state.effect);
+    box.setAttribute("text", state.text);
+    box.setAttribute("engine", state.engine);
+    box.loading = state.loading;
+  });
   fitRoots.forEach((el) => {
-    if (state.loading) enable(el, { effect: state.effect, text: state.text, engine: state.engine, fit: state.fit });
+    if (state.loading) enable(el, { effect: state.effect, text: state.text, shimmerMode: state.shimmerMode, engine: state.engine, fit: state.fit });
     else disable(el);
   });
   $("#btn-loading").textContent = `loading：${state.loading ? "开" : "关"}`;
@@ -106,16 +115,16 @@ function apply() {
   $("#btn-fit").textContent = `fit：${state.fit ? "开" : "关"}`;
 }
 
-// 按层叠顺序排列的样式分片（与 src/styles/entries/all.scss 的输出顺序一致：base -> global（svg 先于 firewall，Sass 同一模块只输出一次）-> sweep；
+// 按层叠顺序排列的样式分片（与 src/styles/entries/full.scss 的输出顺序一致：base -> global（svg 先于 firewall，Sass 同一模块只输出一次）；
 // core 的合并现代档 _modern 不在这里，demo 走完整版）。build-demo 脚本按这一行解析，保持单行
-const CSS_FILES = ["base", "_theme", "_tier0-exit", "tier0", "_marks", "tier1", "tier2", "_effects-core", "_fit", "_driver", "_driver-color", "_lazy", "_svg", "_firewall", "_sweep"];
+const CSS_FILES = ["_theme", "tier0", "_marks", "tier1", "tier2", "_effects-core", "_fit", "_driver", "_driver-color", "_lazy", "_svg", "_firewall"];
 // 返回 Promise：样式表全部加载完才 resolve（fit 要按已生效的样式测量，所以 apply 要等它）
 function loadTier(n) {
   document.querySelectorAll("link[data-skz-css]").forEach((l) => l.remove());
   // 档位只影响 skz-auto 区域里的推导；显式 skz-text 标记在 tier1 里，要 n>=2 才有文字骨头（skz-bone / skz-leaf / skz-ignore 在 _marks 里，各档都有）
-  // n=0 仅兜底层（含主题、标记）；n=1 + 第 0 档和全部效果；n=2 + 第 1 档；n=3 + 第 2 档
-  const want = ["base", "_theme", "_marks", "_fit"];
-  if (n >= 1) want.push("_tier0-exit", "tier0", "_effects-core", "_driver", "_driver-color", "_lazy", "_svg", "_firewall", "_sweep");
+  // n=0 无推导（只有主题、标记）；n=1 + 第 0 档和全部效果；n=2 + 第 1 档；n=3 + 第 2 档
+  const want = ["_theme", "_marks", "_fit"];
+  if (n >= 1) want.push("tier0", "_effects-core", "_driver", "_driver-color", "_lazy", "_svg", "_firewall");
   if (n >= 2) want.push("tier1");
   if (n >= 3) want.push("tier2");
   const loads = CSS_FILES.filter((f) => want.includes(f)).map(
@@ -162,7 +171,11 @@ $("#sel-text").onchange = (e) => {
   apply();
 };
 
+$("#sel-shimmer-mode").onchange = (e) => {
+  state.shimmerMode = e.target.value;
+  apply();
+};
+
 await loadTier(state.tier);
-hosts = registerCustomElements(document, { watch: true });
 apply();
-window.__sk = { state, apply, loadTier, hosts, enable, disable };
+window.__sk = { state, apply, loadTier, enable, disable };

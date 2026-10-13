@@ -1,10 +1,10 @@
 import { warnOnce } from "../core/dev.js";
-import type { SkzExtension } from "../core/extension.js";
-import type { EnableOptions } from "../core/types.js";
+// 公开类型从 skeletonizer/lite 取（与 d.mts 里的增强同一份，不在完整版 d.mts 里再生成一份副本）
+import type { EnableOptions, SkzExtension } from "skeletonizer/lite";
 import type { SkzEngine } from "./types.js";
 
 /**
- * 方案实现：变体入口（skeletonizer/global、skeletonizer/svg）注册进来，
+ * 方案实现：变体模块（full/variants 下的 global、svg）注册进来，
  * 给根挂上 / 撤掉该方案特有的运行时处理（global：继承防火墙与老浏览器降级；svg：blob SVG 动画图）。
  */
 export interface SkzEngineImpl {
@@ -46,13 +46,18 @@ function resolveEngine(opts: EnableOptions): SkzEngine {
 }
 
 /**
- * 开发模式下提示 engine 误配：显式指定了没注册的方案（如只引了 global 却写 engine: "svg"）。每个方案名只提示一次。
+ * 开发模式下提示 engine 误配：显式指定了没注册的方案（如只注册了 global 却写 engine: "svg"）。每个方案名只提示一次。
  * @param engine 显式指定的方案
  */
 function warnUnregistered(engine: SkzEngine): void {
   if (engines.has(engine)) return;
-  const entry = engine === "svg" ? "skeletonizer/svg" : "skeletonizer/global";
-  warnOnce(`engine:${engine}`, `[skeletonizer] engine: "${engine}" 对应的方案没有注册，pulse / shimmer 不会有该方案的运行时处理。请引入 ${entry}（或 skeletonizer/all）。`);
+  try {
+    if (process.env.NODE_ENV !== "production")
+      warnOnce(
+        `engine:${engine}`,
+        `[skeletonizer] No scheme is registered for engine: "${engine}", so pulse / shimmer get no runtime handling from it. The full entry (skeletonizer) ships both schemes; make sure you did not switch to skeletonizer/lite. When assembling the modules yourself, register it with registerEngine.`,
+      );
+  } catch {}
 }
 
 /**

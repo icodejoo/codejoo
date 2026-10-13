@@ -1,4 +1,5 @@
 @use "sass:list";
+@use "sass:math";
 
 /// 骨头的公共绘制声明：背景色 + 可选流光背景图（按骨头自身盒子铺，各骨头同步）。
 /// 骨头自己不挂动画：颜色和流光位置读根上逐帧变化的 --skz-fill / --skz-bg-pos。
@@ -37,30 +38,93 @@
   }
 }
 
-/// 默认时长：pulse / fade / shimmer / sweep 的兜底；svg.ts 的 DEFAULT_DURATION 同值。
+/// 默认时长：pulse / fade 的兜底，也是 shimmer 小屏档与 fit 模式的时长；svg.ts 的 DEFAULT_DURATION 同值。
 $default-duration: 2s;
 
-/// pulse / fade / sweep 的时长：用户写的 --skz-duration，没写用 2s。
+/// pulse / fade 的时长：用户写的 --skz-duration，没写用 2s。
 /// 默认值只写在 var() 兜底里：写成根上的 --skz-duration 声明会盖掉用户写在祖先上的覆盖。
 $duration: var(--skz-duration, #{$default-duration});
 
-/// shimmer 光带宽：固定 300px，不随骨头大小变（按比例的话小元素上只剩一条细线扫过）；hosts.ts 的宿主样式同值。
+/// shimmer 光带宽：固定 300px，不随骨头大小变（按比例的话小元素上只剩一条细线扫过）。
 $band: 300px;
 
 /// 光带背景尺寸：宽固定 $band，高铺满骨头。
 $band-size: $band 100%;
 
-/// 光带位置（进度 p 为 0 → 1），每个骨头都从自己的左边界外起步、右边界外离场，所有骨头同时走完：
-/// 设骨头宽 w、光带宽 W，光带左边缘要从 -W 走到 w，即 x = p(w + W) - W；
-/// background-position 的 calc(A% + B) 含义是 (w - W) × A + B，取 A = p、B = 2pW - W 即得 x。
-$band-pos: calc(var(--skz-shimmer-p) * (100% + #{2 * $band}) - #{$band}) 0;
+/// 光带位置，even 模式（根没写 skz-shimmer-mode，或写了 even / 未知取值；进度 p 为 0 → 1）：各骨头同速，每个都从自己左边界外起步。
+/// 光带左边缘（相对骨头左边界）x = p(L + W) - W，一轮行程 L + W，L = max(骨头宽, 参考宽度)，宽骨头也能完整离场。
+/// 参考宽度 = 100cqw：取最近 query container 的宽（没有容器时按规范退回小视口宽，等同 100vw）；根或外层写 container-type: inline-size 就按那块区域走。
+/// background-position 里的 100% 解析为 骨头宽 - 光带宽，所以 100% + W 就是骨头宽。
+$band-pos: calc(var(--skz-shimmer-p) * (max(100% + #{$band}, 100cqw) + #{$band}) - #{$band}) 0;
 
-/// shimmer 的时长：与 pulse 同一个兜底（用户写的 --skz-duration，没写 2s：扫过 1.25s、停 0.75s）。
-$shimmer-duration: $duration;
+/// even 模式位置的老浏览器回退：不认 cqw 的浏览器（Chrome 85~104 等）用 100vw 代替 100cqw。
+/// 经 --skz-bg-pos 中转时单位不认识会“计算值时无效”，必须靠 @supports 覆盖，见 _drivers.scss 的 sk-shimmer-pos。
+$band-pos-vw: calc(var(--skz-shimmer-p) * (max(100% + #{$band}, 100vw) + #{$band}) - #{$band}) 0;
 
-/// 光带 / pulse 的降频时间函数：用户写的 --skz-shimmer-timing，没写 steps(30)（24 次/秒）。
+/// 光带位置，fit 模式（根写 skz-shimmer-mode=fit）：每个骨头在自己的盒子里扫，同时走完，宽骨头走得快。
+/// x = p(w + W) - W，w = 100% + W，即 p(100% + 2W) - W。
+$band-pos-fit: calc(var(--skz-shimmer-p) * (100% + #{2 * $band}) - #{$band}) 0;
+
+/// 根上写这个取值 = fit 模式，其余一律按 even（属性名 skz-shimmer-mode）；写成属性选择器。
+$fit-mode: "[skz-shimmer-mode=fit]";
+
+/// 每轮 shimmer 末尾的停顿（光带在骨头外等一会儿）：各档固定 0.4s，总长减去它都用来扫。
+$shimmer-pause: 0.4s;
+
+/// 降频目标：每秒更新次数。档数 = 扫过秒数 × 它，取整。
+$shimmer-fps: 24;
+
+/// shimmer 档位：名字后缀 → 总时长。s（小屏 / fit，关键帧不带后缀）、m（≥ 640px）、l（≥ 1280px）；media query 断点在 _driver.scss。
+$shimmer-tiers: (
+  s: 2s,
+  m: 2.8s,
+  l: 3.6s,
+);
+
+/// 某档的扫过占比：(总长 - 停顿) / 总长，如 2s → 80%、2.8s → 85.714%、3.6s → 88.889%。
+/// @param {Number} $total 总时长（秒）
+/// @return {Number} 百分比
+@function sk-shimmer-share($total) {
+  @return math.percentage(math.div($total - $shimmer-pause, $total));
+}
+
+/// 某档的降频档数：扫过秒数 × $shimmer-fps 取整，如 2s → steps(38)、2.8s → steps(58)、3.6s → steps(77)。
+/// 时间函数按关键帧分段生效，所以只数扫过段。
+/// @param {Number} $total 总时长（秒）
+/// @return {String} steps(n)
+@function sk-shimmer-steps($total) {
+  @return steps(#{math.round(math.div($total - $shimmer-pause, 1s) * $shimmer-fps)});
+}
+
+/// 某档的关键帧名：小档沿用 skz-shimmer-root，其余加后缀。
+/// @param {String} $tier 档位名（s / m / l）
+/// @return {String} 关键帧名
+@function sk-shimmer-keyframes($tier) {
+  @if $tier == s {
+    @return skz-shimmer-root;
+  }
+  @return skz-shimmer-root-#{$tier};
+}
+
+/// shimmer 动画挂的关键帧名：内部变量 --skz-tier-anim（_driver.scss 按屏宽设，fit 复位成小档），最后小档。
+/// 用户写了 --skz-duration 时关键帧仍按当前档的比例，停顿不再恰好 0.4s。
+$shimmer-anim-name: var(--skz-tier-anim, skz-shimmer-root);
+
+/// shimmer 的时长：用户写的 --skz-duration 优先，其次内部档位变量 --skz-tier-dur（_driver.scss 按屏宽设，fit 固定小档），最后 2s。
+/// 默认值只写在 var() 兜底里：写成根上的 --skz-duration 声明会盖掉用户写在祖先上的覆盖。
+$shimmer-duration: var(--skz-duration, var(--skz-tier-dur, #{$default-duration}));
+
+/// 光带 / pulse 的降频时间函数：用户写的 --skz-shimmer-timing 优先，其次内部档位变量 --skz-tier-steps，最后 steps(38)（小档，约 24 次/秒）。
 /// 默认值只能写在 var() 兜底里：写成根上的 --skz-shimmer-timing 声明会盖掉用户写在祖先上的覆盖。
-$shimmer-timing: var(--skz-shimmer-timing, steps(30));
+$shimmer-timing: var(--skz-shimmer-timing, var(--skz-tier-steps, steps(38)));
+
+/// 根驱动（pulse / shimmer）的 @supports 门槛：浏览器认 @property。@property 没法直接用 @supports 检测，只能找同期或更早落地的特性当代理，两个条件满足任一即可：
+/// - 相对颜色语法 rgb(from ...)：Chrome 119 / Safari 16.4 / Firefox 128 落地，三家都晚于各自的 @property；
+/// - content-visibility: auto：Chrome 85 上线（覆盖 Chrome 88~118），Safari 18 才有（那时早有 @property）。
+/// 已知误判：Firefox 125~127（2024 年 4~7 月）有 content-visibility、没有 @property，动画会跳变而不是平滑过渡，可接受。
+/// 用法：`@supports #{$prop-gate} { ... }`；取反必须写 `@supports not (#{$prop-gate}) { ... }`（整体再包一层括号，or 才在 not 之内）。
+/// JS 侧 full/variants/global.ts 的 supportsRootDriven 用同样两个条件，改这里要同步改那边。
+$prop-gate: "(color: rgb(from red r g b)) or (content-visibility: auto)";
 
 /// 光带半边的缓动色标（位置 透明度），按 smoothstep 取点：两端和峰值斜率为 0，看不出转折。
 /// 另一半镜像生成；svg 引擎的光带用同一组数（src/full/svg.ts 的 SHIMMER_EASE），改这里要同步改那边。
@@ -80,9 +144,20 @@ $shimmer-ease: (12.5% 15.6%, 25% 50%, 37.5% 84.4%);
   @return linear-gradient(90deg, transparent 0, $rise, var(--skz-highlight) 50%, $fall, transparent 100%);
 }
 
+/// 线性光带图：不依赖 color-mix（Chrome 88~110 也能用）。水平 90deg，透明 → 高光 → 透明。
+$shimmer-gradient-linear: linear-gradient(90deg, transparent 0, var(--skz-highlight) 50%, transparent 100%);
+
+/// shimmer 光带图的 smoothstep 版覆盖：认 color-mix 的浏览器（Chrome 111+）才生效，默认的线性版由调用处写 --skz-bg-img: $shimmer-gradient-linear。
+/// 两段式渐进增强。要放在规则体最后：嵌套的 @supports 会冒泡成规则外的独立块（同优先级、后写的赢），前面的声明留在原规则里。
+@mixin sk-shimmer-bg-img-smooth {
+  @supports (color: color-mix(in srgb, red, blue)) {
+    --skz-bg-img: #{sk-shimmer-gradient()};
+  }
+}
+
 /// 光带动画 + pulse 动画一起挂（同一个降频时间函数）：underline 根的 shimmer 要颜色逐步变化。
 @mixin sk-shimmer-with-pulse {
   animation:
-    skz-shimmer-root #{$shimmer-duration} $shimmer-timing infinite,
+    #{$shimmer-anim-name} #{$shimmer-duration} $shimmer-timing infinite,
     skz-pulse-root #{$shimmer-duration} $shimmer-timing infinite alternate;
 }

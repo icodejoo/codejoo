@@ -1,0 +1,139 @@
+{
+  "$schema": "https://json.schemastore.org/web-types",
+  "name": "skeletonizer",
+  "version": "0.3.0",
+  "description-markup": "none",
+  "contributions": {
+    "html": {
+      "attributes": [
+        {
+          "name": "skz-text",
+          "description": "Element mark. Marks a text element: the text of its whole subtree becomes bars that follow the real text lines, drawn according to the root's skz-text-mode. Ignored on a skz-bone / skz-leaf / skz-ignore element itself and inside skz-leaf / skz-ignore.",
+          "doc-url": "https://github.com/icodejoo/codejoo/tree/main/apps/skeletonizer#element-marks",
+          "value": {
+            "kind": "no-value"
+          }
+        },
+        {
+          "name": "skz-bone",
+          "description": "Element mark. The element becomes one bone and its descendants get visibility: hidden; the real content of img / video / canvas is pushed out of the box. Radius defaults to --skz-radius, an element's own border-radius is kept.",
+          "doc-url": "https://github.com/icodejoo/codejoo/tree/main/apps/skeletonizer#element-marks",
+          "value": {
+            "kind": "no-value"
+          }
+        },
+        {
+          "name": "skz-leaf",
+          "description": "Element mark. Merges the whole subtree into one bone: descendants hidden, underlines in the subtree removed. Drawn like skz-bone except that media content is not handled (use skz-bone on img etc.).",
+          "doc-url": "https://github.com/icodejoo/codejoo/tree/main/apps/skeletonizer#element-marks",
+          "value": {
+            "kind": "no-value"
+          }
+        },
+        {
+          "name": "skz-host",
+          "description": "Element mark. Marks a Web Component host (Shadow DOM): the host gets visibility: hidden and its ::before paints one bone, with the same variables and animation as skz-bone.",
+          "doc-url": "https://github.com/icodejoo/codejoo/tree/main/apps/skeletonizer#element-marks",
+          "value": {
+            "kind": "no-value"
+          }
+        },
+        {
+          "name": "skz-ignore",
+          "description": "Element mark. Kept as-is, clickable and focusable; the enable() interaction lock skips branches that contain it. While the root contains one, the implicit default fade is off (an explicit effect: fade still runs).",
+          "doc-url": "https://github.com/icodejoo/codejoo/tree/main/apps/skeletonizer#element-marks",
+          "value": {
+            "kind": "no-value"
+          }
+        },
+        {
+          "name": "skz-auto",
+          "description": "Element mark. Marks an inference region (the root itself or any element inside it): bones are inferred from a tag allow-list (text tags, media and controls, empty <i> and empty elements whose class contains icon).",
+          "doc-url": "https://github.com/icodejoo/codejoo/tree/main/apps/skeletonizer#element-marks",
+          "value": {
+            "kind": "no-value"
+          }
+        },
+        {
+          "name": "skz",
+          "description": "Root attribute. Turns the skeleton on for this root: styles, theme variables and the interaction lock hang off it. Normally written by enable() / the adapters; hand-write it for plain HTML without JS.",
+          "doc-url": "https://github.com/icodejoo/codejoo/tree/main/apps/skeletonizer#root-attributes",
+          "value": {
+            "kind": "no-value"
+          }
+        },
+        {
+          "name": "skz-effect",
+          "description": "Root attribute. The animation effect, matching the effect option. fade is the default when omitted.",
+          "doc-url": "https://github.com/icodejoo/codejoo/tree/main/apps/skeletonizer#root-attributes",
+          "value": {
+            "kind": "plain",
+            "type": "enum"
+          },
+          "values": [
+            {
+              "name": "fade"
+            },
+            {
+              "name": "solid"
+            },
+            {
+              "name": "pulse"
+            },
+            {
+              "name": "shimmer"
+            }
+          ]
+        },
+        {
+          "name": "skz-text-mode",
+          "description": "Root attribute. How text bones are drawn, matching the text option. round is the default when omitted. lite only reads a hand-written round / clip; underline and leaf are full only.",
+          "doc-url": "https://github.com/icodejoo/codejoo/tree/main/apps/skeletonizer#root-attributes",
+          "value": {
+            "kind": "plain",
+            "type": "enum"
+          },
+          "values": [
+            {
+              "name": "round"
+            },
+            {
+              "name": "clip"
+            },
+            {
+              "name": "underline"
+            },
+            {
+              "name": "leaf"
+            }
+          ]
+        },
+        {
+          "name": "skz-shimmer-mode",
+          "description": "Root attribute. How the shimmer band sweeps, matching the shimmerMode option. even (default) moves all bones at the same speed; fit sweeps each bone inside its own box. Full only.",
+          "doc-url": "https://github.com/icodejoo/codejoo/tree/main/apps/skeletonizer#root-attributes",
+          "value": {
+            "kind": "plain",
+            "type": "enum"
+          },
+          "values": [
+            {
+              "name": "even"
+            },
+            {
+              "name": "fit"
+            }
+          ]
+        },
+        {
+          "name": "skz-cv",
+          "description": "Root attribute. Gives the root's direct children content-visibility: auto, so children scrolled out of view skip style, layout and paint (--skz-cv-size is the height estimate, default 200px). Full only.",
+          "doc-url": "https://github.com/icodejoo/codejoo/tree/main/apps/skeletonizer#root-attributes",
+          "value": {
+            "kind": "no-value"
+          }
+        }
+      ]
+    }
+  }
+}

@@ -1,11 +1,12 @@
 /**
  * Svelte 适配层：`skeleton` action，按 loading 自动开关骨架。
- * 前提：入口处引入一次样式（`skeletonizer` 默认带 core.css，或 `skeletonizer/explicit`）；text / engine / sweep 等完整版能力再引入 `skeletonizer/full` 或 `/global`、`/svg`、`/all`。
+ * 前提：入口处导入一次 `skeletonizer`（完整版）或 `skeletonizer/lite`（只导入一个，样式随之自带）；适配层不含 core，通过私有全局键取实现，未导入时开发模式报错。
+ * text / engine 等完整版选项只有导入完整版后才有类型与效果。
  * 加载中照常渲染真实组件，用 `Bone` 造的 mock 数据填充；空元素没有尺寸，不会出骨头。
  */
-// 直接引用 core 模块（不经过 core 入口）：不带 core.css，也不挂全局 skz
-import { disable, toggle } from "./core/enable.js";
-import type { EnableOptions } from "./core/types.js";
+// 类型来自 skeletonizer/lite（导入完整版后自动变宽）；运行时只经 adapter-api 取全局 API，不含 core 代码
+import type { EnableOptions, SkzBareAttr, SkzHtmlAttributesFor } from "skeletonizer/lite";
+import { disable, toggle } from "./adapter-api.js";
 
 /** skeleton action 的参数 */
 export interface SkzParams extends EnableOptions {
@@ -27,4 +28,14 @@ export function skeleton(node: HTMLElement, params: SkzParams) {
     update: (next: SkzParams): void => toggle(node, next.loading, next),
     destroy: (): void => disable(node),
   };
+}
+
+/**
+ * 让模板里的 skz-* 属性有补全与取值检查：把 SkzHtmlAttributes 并入 svelte/elements 的 HTMLAttributes（导入本适配层即生效）。
+ * 裸写法 `<img skz-bone>` 在 Svelte 里是 `true`，所以裸属性类型多收一个 true。
+ * 注意：svelte 不是本包依赖，用户没装 svelte 时这段增强指向找不到的模块，只在没开 skipLibCheck 时报 TS2664。
+ */
+// @ts-ignore -- svelte 不是本包依赖，源码构建时解析不到它；使用方装了 svelte 就能解析
+declare module "svelte/elements" {
+  interface HTMLAttributes<T extends EventTarget> extends SkzHtmlAttributesFor<SkzBareAttr | true> {}
 }

@@ -78,10 +78,10 @@ function syncExtensions(el: HTMLElement, opts: EnableOptions): void {
 
 /**
  * 对元素开启骨架加载态：加根标记属性 skz、aria-busy、锁定交互。
- * 前提：入口处引入一次样式（`skeletonizer` 默认带 core.css，或 `skeletonizer/explicit`）；el 里照常渲染真实组件 + `Bone` mock 数据。
+ * 前提：入口处引入一次样式（`skeletonizer/lite` 自带 lite.css）；el 里照常渲染真实组件 + `Bone` mock 数据。
  * 框架项目优先用子路径适配层（`/react`、`/vue`、`/svelte`），它们会自动开关。
  * 完整用法与坑点：包内 `llms.md`。
- * 文字模式（text）、pulse / shimmer 的方案调度（engine / fallback）、视口外暂停动画等增强属于完整版（`skeletonizer/full`），
+ * 文字模式（text）、pulse / shimmer 的方案调度（engine / fallback）、视口外暂停动画等增强属于完整版（`skeletonizer` 完整版），
  * 通过通用扩展点 registerExtension 挂接；core 自己只处理 effect、fit、交互锁和忽略区。
  * 重复调用是幂等的，会按本次选项重新同步 effect 属性（没传的会被清掉），并让所有扩展再同步一遍。
  *
@@ -89,7 +89,7 @@ function syncExtensions(el: HTMLElement, opts: EnableOptions): void {
  * @param opts
  *   effect：动画效果（写到 skz-effect 属性），不写则用默认的 fade（根级 opacity，几乎零成本）；
  *   fit：保证骨架自身绝不撑出滚动条；
- *   导入完整版后还可传 text / engine / fallback，见 skeletonizer/full
+ *   导入完整版后还可传 text / engine / fallback，见 skeletonizer
  * @returns 关闭函数，调用后恢复真实内容
  * @example
  * const off = enable(document.querySelector('#card'), { effect: 'shimmer' });

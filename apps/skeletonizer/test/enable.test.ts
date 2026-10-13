@@ -2,9 +2,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { disable, enable, toggle } from "../src/core/enable.ts";
 import type { EnableOptions } from "../src/core/types.ts";
-// 完整版入口：注册 text / engine / lazy 扩展，再注册两个方案（等同于用户导入 skeletonizer/all）
+// 完整版入口：注册 text / engine / lazy 扩展，再注册两个方案（等同于用户导入 skeletonizer）
 import "../src/full/index.ts";
-import { registerCustomElements } from "../src/full/hosts.ts";
 import { resetRootDrivenCache } from "../src/full/variants/global.ts";
 import "../src/full/variants/svg.ts";
 import { asEl, FakeEl, FakeIO, fresh, loadFull } from "./helpers.ts";
@@ -52,6 +51,20 @@ it("text：五种模式都原样写到 skz-text-mode（根属性，不是元素�
   expect(f.attrs.size).toBe(0);
 });
 
+it("shimmerMode：原样写到 skz-shimmer-mode；不传 = 不写属性（默认 even，纯 CSS 的缺省就是 even）；off 撤销", () => {
+  const f = new FakeEl();
+  const off = enable(asEl(f), { effect: "shimmer" });
+  expect(f.getAttribute("skz-shimmer-mode")).toBeNull();
+  for (const mode of ["even", "fit"] as const) {
+    enable(asEl(f), { effect: "shimmer", shimmerMode: mode });
+    expect(f.getAttribute("skz-shimmer-mode")).toBe(mode);
+  }
+  enable(asEl(f), { effect: "shimmer" });
+  expect(f.getAttribute("skz-shimmer-mode")).toBeNull();
+  off();
+  expect(f.attrs.size).toBe(0);
+});
+
 it("fallback：不再写 skz-fallback 属性（降级由 JS 完成）", () => {
   const f = new FakeEl();
   const off = enable(asEl(f), { effect: "shimmer", fallback: "fade" });
@@ -78,74 +91,6 @@ it("toggle：按 loading 开关；disable 对未开启元素无副作用", () =>
   expect(f.getAttribute("skz")).toBe("");
   toggle(asEl(f), false);
   expect(f.attrs.size).toBe(0);
-});
-
-/** 假的可构造样式表 */
-class FakeSheet {
-  /** 最近一次写入的 CSS */
-  css = "";
-  /** replaceSync 调用次数 */
-  writes = 0;
-  /** @param css 新的样式文本 */
-  replaceSync(css: string): void {
-    this.css = css;
-    this.writes++;
-  }
-}
-
-/**
- * 造一个带 adoptedStyleSheets 的假 root。
- * @param tags 文档里的元素标签名
- */
-function fakeRoot(tags: string[]) {
-  return {
-    adoptedStyleSheets: [] as FakeSheet[],
-    ownerDocument: null,
-    nodes: tags.map((localName) => ({ localName })),
-    querySelectorAll(): { localName: string }[] {
-      return this.nodes;
-    },
-  };
-}
-
-it("registerCustomElements：每次调用各持一张表，标签没变不重写，dispose 只摘自己的", () => {
-  vi.stubGlobal("CSSStyleSheet", FakeSheet);
-  const root = fakeRoot(["div", "sl-button", "skz"]);
-  const asRoot = root as unknown as Document;
-
-  const a = registerCustomElements(asRoot, { tags: ["MY-CARD"] });
-  const b = registerCustomElements(asRoot);
-  expect(root.adoptedStyleSheets).toHaveLength(2);
-
-  const [sheetA] = root.adoptedStyleSheets;
-  expect(a.refresh()).toEqual(["my-card", "sl-button"]);
-  expect(sheetA.css).toContain("sl-button");
-  expect(sheetA.css).not.toContain("skz:not");
-  expect(sheetA.writes).toBe(1);
-
-  root.nodes.push({ localName: "new-el" });
-  a.refresh();
-  expect(sheetA.writes).toBe(2);
-
-  a.dispose();
-  expect(root.adoptedStyleSheets).toHaveLength(1);
-  b.dispose();
-  expect(root.adoptedStyleSheets).toHaveLength(0);
-});
-
-it("registerCustomElements：宿主 ::before 的画法与 sk-bone 一致，读动画驱动的变量（pulse / shimmer 才会动）", () => {
-  vi.stubGlobal("CSSStyleSheet", FakeSheet);
-  const root = fakeRoot(["sl-button"]);
-  const h = registerCustomElements(root as unknown as Document);
-  const [sheet] = root.adoptedStyleSheets;
-  expect(sheet.css).toContain("background-color:var(--skz-fill,var(--skz-color,#d9dde3)) !important");
-  expect(sheet.css).toContain("background-image:var(--skz-bg-img,none) !important");
-  expect(sheet.css).not.toContain("background-attachment");
-  expect(sheet.css).toContain("background-size:var(--skz-bg-size,300px 100%) !important");
-  // 保持原有的伪元素铺满、圆角
-  expect(sheet.css).toContain('content:"" !important');
-  expect(sheet.css).toContain("border-radius:var(--skz-radius,4px) !important");
-  h.dispose();
 });
 
 it("忽略区：只锁不含忽略区的分支，忽略区自己保持可交互", () => {

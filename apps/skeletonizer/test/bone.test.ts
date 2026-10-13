@@ -2,8 +2,9 @@ import { expect, it } from "vitest";
 
 import { Bone } from "../src/core/bone.ts";
 
-it("Bone 不能被实例化", () => {
-  expect(() => new Bone()).toThrow(TypeError);
+it("Bone 是普通对象，不是类：没有 prototype，不能 new", () => {
+  expect(typeof Bone).toBe("object");
+  expect(() => new (Bone as unknown as new () => unknown)()).toThrow(TypeError);
 });
 
 it("text：长度精确、确定性、词间有空格", () => {

@@ -1,7 +1,8 @@
 // @vitest-environment jsdom
 import { afterEach, beforeAll, beforeEach, describe, expect, it } from "vitest";
-import { defineSkzBox } from "../src/core/element.js";
-import type { SkzBox } from "../src/core/element.js";
+import "../src/core/index.js";
+import { defineSkzBox } from "../src/element.js";
+import type { SkzBox } from "../src/element.js";
 import { registerExtension } from "../src/core/extension.js";
 import { ROOT_ATTR } from "../src/core/enable.js";
 

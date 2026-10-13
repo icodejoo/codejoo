@@ -117,12 +117,12 @@ it("shimmer 光带两侧按 smoothstep 缓动：9 个色标，透明度 0 → 1 
 /** 取生成的 shimmer 图文本 */
 const shimmerOf = (): string => env.made.find((s) => s.includes("animateTransform")) ?? "";
 
-it("svg 光带宽 60（图宽 = 骨头宽的 60%），扫过占 62.5%：从 -60 走到 100，之后停住，与 CSS 关键帧一致；与视口宽无关", async () => {
+it("svg 光带宽 60（图宽 = 骨头宽的 60%），扫过占 80%：从 -60 走到 100，之后停住，与 CSS 关键帧一致；与视口宽无关", async () => {
   vi.stubGlobal("window", { innerWidth: 1600 });
   const { applySvg } = await import("../src/full/svg.ts");
   applySvg(asEl(new FakeEl()));
   expect(shimmerOf()).toContain('<rect width="60"');
-  expect(shimmerOf()).toContain('values="-60 0;100 0;100 0" keyTimes="0;0.625;1"');
+  expect(shimmerOf()).toContain('values="-60 0;100 0;100 0" keyTimes="0;0.8;1"');
 });
 
 it("没写 --skz-duration：shimmer 2s，pulse 来回 4s", async () => {

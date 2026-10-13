@@ -34,7 +34,31 @@ describe("supportsRootDriven", () => {
     expect(globalMod.supportsRootDriven()).toBe(false);
   });
 
-  it("按相对颜色语法判断，结果惰性缓存只算一次", async () => {
+  it("门槛是两个条件任一成立：相对颜色语法 或 content-visibility（与 CSS 的 $prop-gate 一致）", async () => {
+    const only =
+      (prop: string): ((p: string) => boolean) =>
+      (p) =>
+        p === prop;
+    for (const [prop, expected] of [
+      ["color", true],
+      ["content-visibility", true],
+      ["other", false],
+    ] as const) {
+      vi.stubGlobal("CSS", { supports: only(prop) });
+      const { globalMod } = await load();
+      globalMod.resetRootDrivenCache();
+      expect(globalMod.supportsRootDriven(), prop).toBe(expected);
+    }
+    const supports = vi.fn((p: string) => p === "content-visibility");
+    vi.stubGlobal("CSS", { supports });
+    const { globalMod } = await load();
+    globalMod.resetRootDrivenCache();
+    expect(globalMod.supportsRootDriven()).toBe(true);
+    expect(supports).toHaveBeenCalledWith("color", "rgb(from red r g b)");
+    expect(supports).toHaveBeenCalledWith("content-visibility", "auto");
+  });
+
+  it("结果惰性缓存只算一次（第一个条件成立就不再查第二个）", async () => {
     const supports = vi.fn(() => true);
     vi.stubGlobal("CSS", { supports });
     const { globalMod } = await load();

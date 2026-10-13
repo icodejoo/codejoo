@@ -17,8 +17,8 @@ function hash(n: number): number {
   return x >>> 0;
 }
 
-/** 1×1 透明 GIF 的 data URI（模块级常量：类静态字段在 es2015 目标下会多带一套属性键 helper，这里改用静态 getter 暴露） */
-const GIF_1PX = "data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7";
+/** 1×1 透明 GIF 的 data URI */
+const GIF_1PX: string = "data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7";
 
 /** seed 的步长：不同 seed 落到哈希序列的不同区段 */
 const SEED_STRIDE = 131;
@@ -37,26 +37,16 @@ function pick(i: number, seed: number, base: number, span: number): number {
 
 /**
  * 骨架 mock 数据工具集：只造"数据"，不渲染；渲染仍由你自己的真实组件负责。
- * 全部是静态方法，不可实例化；所有结果都是确定性的，不使用 Math.random。
+ * 它是一个普通对象（不是类，不能 new）；所有结果都是确定性的，不使用 Math.random。
  * 用法：加载中把 mock 对象传给真实组件（`loading ? mock : data`），列表按预期条数造 mock 项；
  * 图片用 `Bone.image(w, h)` 保住盒子尺寸。
  *
  * @example
  * const user = { name: Bone.text(8), bio: Bone.lines(3), avatar: Bone.image(48, 48) };
  */
-export class Bone {
-  /** 禁止实例化 */
-  constructor() {
-    if (new.target === Bone) throw new TypeError("Bone 是抽象类，只能使用静态方法");
-  }
-
-  /**
-   * 1×1 透明 GIF 的 data URI，没有尺寸参数时的兜底占位图（只读）。
-   * @returns data URI 字符串
-   */
-  static get GIF_1PX(): string {
-    return GIF_1PX;
-  }
+export const Bone = {
+  /** 1×1 透明 GIF 的 data URI，没有尺寸参数时的兜底占位图（只读） */
+  GIF_1PX,
 
   /**
    * 生成 n 个字符的「方块词」文本，词与词之间用空格，长文本可以自然换行。
@@ -65,7 +55,7 @@ export class Bone {
    * @returns 恰好 n 个字符的占位文本；n<=0 返回空串
    * @example Bone.text(12) // "███ ████ ███"（词长为示意）
    */
-  static text(n: number, opts: { seed?: number } = {}): string {
+  text(n: number, opts: { seed?: number } = {}): string {
     const seed = opts.seed ?? 0;
     if (!(n > 0)) return "";
     let out = "";
@@ -75,7 +65,7 @@ export class Bone {
       out += BLOCK.repeat(wordLen);
     }
     return out.slice(0, n).replace(/ $/, BLOCK);
-  }
+  },
 
   /**
    * 生成大约 k 行的占位段落，实际行数取决于容器宽度。
@@ -84,10 +74,10 @@ export class Bone {
    * @returns 占位文本
    * @example Bone.lines(3, { perLine: 30 })
    */
-  static lines(k: number, opts: { perLine?: number; seed?: number } = {}): string {
+  lines(k: number, opts: { perLine?: number; seed?: number } = {}): string {
     const perLine = opts.perLine ?? 40;
     return Bone.text(Math.max(0, k) * perLine, opts);
-  }
+  },
 
   /**
    * 生成中日韩文本的占位串：纯方块，每隔 3~6 个字符放一个零宽空格用于断行。
@@ -96,7 +86,7 @@ export class Bone {
    * @returns 占位文本
    * @example Bone.cjk(20)
    */
-  static cjk(n: number, opts: { seed?: number } = {}): string {
+  cjk(n: number, opts: { seed?: number } = {}): string {
     const seed = opts.seed ?? 0;
     let out = "";
     let count = 0;
@@ -106,7 +96,7 @@ export class Bone {
       count += run;
     }
     return out;
-  }
+  },
 
   /**
    * 生成数字占位（固定宽度方块）。
@@ -114,9 +104,9 @@ export class Bone {
    * @returns 占位文本
    * @example Bone.number(4)
    */
-  static number(digits: number = 3): string {
+  number(digits: number = 3): string {
     return BLOCK.repeat(Math.max(0, digits));
-  }
+  },
 
   /**
    * 生成透明占位图（重载）：
@@ -133,9 +123,9 @@ export class Bone {
    * @example <img :src="Bone.image(48)" />
    * @example <img :src="Bone.image(120, 80)" />
    */
-  static image(width?: number, height: number | undefined = width): string {
+  image(width?: number, height: number | undefined = width): string {
     if (!width || !height || !(width > 0) || !(height > 0)) return GIF_1PX;
     const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}" viewBox="0 0 ${width} ${height}"/>`;
     return `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}`;
-  }
-}
+  },
+} as const;

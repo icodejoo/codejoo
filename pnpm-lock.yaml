@@ -248,6 +248,9 @@ importers:
       sass:
         specifier: ^1.105.1
         version: 1.105.1
+      solid-js:
+        specifier: ^1.9.0
+        version: 1.9.14
       vite-plus:
         specifier: 'catalog:'
         version: 0.1.22(@tsdown/css@0.22.0)(@types/node@24.12.2)(happy-dom@20.10.6)(jiti@2.6.1)(jsdom@25.0.1)(sass@1.105.1)(terser@5.47.1)(typescript@6.0.3)(vite@8.0.10(@types/node@24.12.2)(jiti@2.6.1)(sass@1.105.1)(terser@5.47.1)(yaml@2.8.3))(yaml@2.8.3)
@@ -2767,7 +2770,7 @@ snapshots:
 
   '@babel/generator@8.0.0-rc.6':
     dependencies:
-      '@babel/parser': 8.0.0-rc.6
+      '@babel/parser': 8.0.7
       '@babel/types': 8.0.6
       '@jridgewell/gen-mapping': 0.3.13
       '@jridgewell/trace-mapping': 0.3.31

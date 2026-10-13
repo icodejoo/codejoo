@@ -1,13 +1,14 @@
 /**
  * React 适配层：`useSkeleton` Hook 与 `<SkzBox>` 组件，按 loading 自动开关骨架。
- * 前提：入口处引入一次样式（`skeletonizer` 默认带 core.css，或 `skeletonizer/explicit`）；text / engine / sweep 等完整版能力再引入 `skeletonizer/full` 或 `/global`、`/svg`、`/all`。
+ * 前提：入口处导入一次 `skeletonizer`（完整版）或 `skeletonizer/lite`（只导入一个，样式随之自带）；适配层不含 core，通过私有全局键取实现，未导入时开发模式报错。
+ * text / engine 等完整版选项只有导入完整版后才有类型与效果。
  * 加载中照常渲染真实组件，用 `Bone` 造的 mock 数据填充；空元素没有尺寸，不会出骨头。
  */
 import { createElement, useEffect, useRef } from "react";
 import type { ElementType, ReactNode, RefObject } from "react";
-// 直接引用 core 模块（不经过 core 入口）：不带 core.css，也不挂全局 skz
-import { enable } from "./core/enable.js";
-import type { EnableOptions } from "./core/types.js";
+// 类型来自 skeletonizer/lite（导入完整版后自动变宽）；运行时只经 adapter-api 取全局 API，不含 core 代码
+import type { EnableOptions, SkzHtmlAttributes } from "skeletonizer/lite";
+import { enable } from "./adapter-api.js";
 
 /** SkzBox 自己消费的 props，其余原样当作骨架选项（含自定义扩展的选项）透传给 enable */
 const OWN_PROPS = ["loading", "as", "children", "className"];
@@ -61,4 +62,13 @@ export function SkzBox(props: SkzProps) {
   }
   useSkeleton(ref, props.loading, opts as EnableOptions);
   return createElement(props.as ?? "div", { ref, className: props.className }, props.children);
+}
+
+/**
+ * 让 JSX 里的 skz-* 属性有补全与取值检查：把 SkzHtmlAttributes 并入 React 的 HTMLAttributes（导入本适配层即生效）。
+ * 裸属性写 `skz-bone=""`：React 对未知属性传 `true` 会丢掉属性，所以类型只收 `""`。
+ */
+declare module "react" {
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars -- 类型参数必须与 React 原声明一致才能合并
+  interface HTMLAttributes<T> extends SkzHtmlAttributes {}
 }

@@ -1,5 +1,7 @@
 // @vitest-environment jsdom
 import { afterEach, describe, expect, it, vi } from "vitest";
+// 引入 core 入口：它执行时把 API 挂到私有全局键，适配层靠这个键取 enable / disable
+import "../src/core/index.ts";
 import { registerExtension } from "../src/core/extension.ts";
 import type { EnableOptions } from "../src/core/types.ts";
 

@@ -68,13 +68,21 @@ function findBoundary(root: HTMLElement): HTMLElement | null {
 }
 
 /**
+ * 取视口高度（innerHeight 取不到时退回文档元素的 clientHeight）。
+ * @returns 视口高度（px）
+ */
+function viewportHeight(): number {
+  return window.innerHeight || document.documentElement.clientHeight;
+}
+
+/**
  * 取边界可视区底边（视口坐标）。
  * @param boundary 边界元素；null 表示视口
  * @returns 底边的 y 值（px）
  */
 function boundaryBottom(boundary: HTMLElement | null): number {
   if (boundary) return boundary.getBoundingClientRect().top + boundary.clientTop + boundary.clientHeight;
-  return window.innerHeight || document.documentElement.clientHeight;
+  return viewportHeight();
 }
 
 /**
@@ -105,7 +113,7 @@ function stillScrollable(boundary: HTMLElement | null): boolean {
  * @returns 一屏高度（px）
  */
 function screenHeight(boundary: HTMLElement | null): number {
-  return boundary ? boundary.clientHeight : window.innerHeight || document.documentElement.clientHeight;
+  return boundary ? boundary.clientHeight : viewportHeight();
 }
 
 /**
