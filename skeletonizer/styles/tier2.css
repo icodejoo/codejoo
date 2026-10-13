@@ -14,8 +14,7 @@
     background-position: var(--skz-bg-pos, 0 0);
     background-image: var(--skz-bg-img, none) !important;
     background-repeat: no-repeat !important;
-    background-attachment: fixed !important;
-    background-size: var(--skz-bg-size, var(--skz-band, 400px) 100vh) !important;
+    background-size: var(--skz-bg-size, 300px 100%) !important;
   }
   :where(:is([skz][skz-text-mode=leaf]:where([skz-auto]), [skz][skz-text-mode=leaf] :where([skz-auto])) :not([skz-ignore] *):not([skz-ignore]):not(:has(> *)):not(:empty)) {
     border-radius: var(--skz-radius);
@@ -26,8 +25,7 @@
     background-position: var(--skz-bg-pos, 0 0);
     background-image: var(--skz-bg-img, none) !important;
     background-repeat: no-repeat !important;
-    background-attachment: fixed !important;
-    background-size: var(--skz-bg-size, var(--skz-band, 400px) 100vh) !important;
+    background-size: var(--skz-bg-size, 300px 100%) !important;
     border-radius: 50%;
   }
   :is([skz]:where([skz-auto]), [skz] :where([skz-auto])) i:empty::before,

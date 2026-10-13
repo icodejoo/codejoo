@@ -6,14 +6,13 @@
  * 文字条家族（round 默认 / clip）在它之上叠一层背景填充：clip 用 background-clip:text 裁进文字，round 撤掉装饰线改用带圆角的背景盒（见下）。
  * 完整版保留这一档的全部渐进行为，给"有 text-decoration-thickness、没有 :has()"的浏览器用；
  * 支持两者的浏览器在 core.css 里走合并后的现代档（_modern.scss），规则由同一批积木（_text.scss）生成。
- * skz-text-mode="tofu" 的根：$clip 不含它，没引 tofu.css 时外观就是这里的 underline；引了 tofu.css 则换成方块字体；
- * 其他未知取值同样落到 underline 外观。 */
+ * skz-text-mode 为 underline 的根与未知取值的根，外观都在这里。 */
 @supports (text-decoration-thickness: 1em) {
-  /* 文字标签上第 0 档的背景色退场，改用下划线：圆角归零（--skz-tradius: 0px），round / clip 根由 sk-clip-root 声明，underline / tofu / 未知取值的根在这里（$color-modes）；
+  /* 文字标签上第 0 档的背景色退场，改用下划线：圆角归零（--skz-tradius: 0px），round / clip 根由 sk-clip-root 声明，underline / 未知取值的根在这里（$color-modes）；
    * 背景色 / 背景图开关同样只挂在 $color-modes 的根上，round / clip 根不声明
    * （tier0 读 --skz-tbg 缺省时自然回落到 --skz-fill / --skz-bg-img）。这些都是根上的变量，不经过 skz-auto。
    * 其余四个变量复位成 initial：round / clip 根把它们设成了 gradient 驱动的值（--skz-ul-line: none、--skz-dc: transparent、background-clip / box-decoration-break），
-   * 而变量会继承，underline / tofu 根嵌套在文字条根里时不复位，会继承到 none / 透明装饰线，下划线整个消失。
+   * 而变量会继承，underline 根嵌套在文字条根里时不复位，会继承到 none / 透明装饰线，下划线整个消失。
    * 装饰线粗度 / 偏移不复位：它们是用户可在根上覆盖的公开变量，复位会在样式表顺序不利时盖掉用户的值 */
   [skz]:where([skz-text-mode]:not([skz-text-mode=round]):not([skz-text-mode=clip]):not([skz-text-mode=leaf])) {
     --skz-tbg: transparent;
@@ -47,7 +46,7 @@
    * 局限：skz-auto 区域里不在文字标签清单、又直接含文字的元素（如裸 div 文本）会不可见（要包进 p / span，或自己标 skz-text）；比 underline 贵（GPU 约 2.5 倍）；
    * @supports 只能判断属性存在，判断不了装饰线是否参与裁剪（规范要求参与，仅 Chrome 实测过）。 */
   /* tbg / timg 置为 initial（无效值），文字骨头回落读 --skz-fill / --skz-bg-img；
-   * 显式写出是为了嵌套在 underline / tofu 根里时不继承外层的 transparent。值是静态的，不增加逐帧重算 */
+   * 显式写出是为了嵌套在 underline 根里时不继承外层的 transparent。值是静态的，不增加逐帧重算 */
   [skz]:is(:not([skz-text-mode]), [skz-text-mode=round], [skz-text-mode=clip]) {
     --skz-tbg: initial;
     --skz-timg: initial;
@@ -79,8 +78,7 @@
     background-position: var(--skz-bg-pos, 0 0);
     background-image: var(--skz-timg, var(--skz-bg-img, none)) !important;
     background-repeat: no-repeat !important;
-    background-attachment: fixed !important;
-    background-size: var(--skz-bg-size, var(--skz-band, 400px) 100vh) !important;
+    background-size: var(--skz-bg-size, 300px 100%) !important;
     -webkit-box-decoration-break: var(--skz-bdb, slice);
     box-decoration-break: var(--skz-bdb, slice);
     -webkit-background-clip: var(--skz-bgclip, text);
@@ -88,6 +86,39 @@
   }
   :where([skz]:is(:not([skz-text-mode]), [skz-text-mode=round], [skz-text-mode=clip]) [skz-text]:where(:not([skz-ignore], [skz-bone], [skz-leaf], [skz-leaf] *, [skz-ignore] *))) {
     border-radius: var(--skz-tradius, var(--skz-radius));
+  }
+  /* clip 下多行标记文字的光带同步：标记的直接父级接管背景（自带 background-clip:text 与 :has() 门控） */
+  @supports ((-webkit-background-clip: text) or (background-clip: text)) and selector(:has(*)) {
+    [skz][skz-text-mode=clip] :where(:not([skz-ignore], [skz-bone], [skz-leaf], [skz-leaf] *, [skz-ignore] *)):has(> [skz-text]:where(:not([skz-ignore], [skz-bone], [skz-leaf], [skz-leaf] *, [skz-ignore] *))) {
+      background-color: var(--skz-tbg, var(--skz-fill, var(--skz-color))) !important;
+      background-position: var(--skz-bg-pos, 0 0);
+      background-image: var(--skz-timg, var(--skz-bg-img, none)) !important;
+      background-repeat: no-repeat !important;
+      background-size: var(--skz-bg-size, 300px 100%) !important;
+      -webkit-box-decoration-break: var(--skz-bdb, slice);
+      box-decoration-break: var(--skz-bdb, slice);
+      -webkit-background-clip: text !important;
+      background-clip: text !important;
+    }
+    [skz][skz-text-mode=clip] :where(:not([skz-ignore], [skz-bone], [skz-leaf], [skz-leaf] *, [skz-ignore] *)):has(> [skz-text]:where(:not([skz-ignore], [skz-bone], [skz-leaf], [skz-leaf] *, [skz-ignore] *))) > [skz-text]:where(:not([skz-ignore], [skz-bone], [skz-leaf], [skz-leaf] *, [skz-ignore] *)) {
+      background: none !important;
+    }
+    @supports not ((box-decoration-break: clone) or (-webkit-box-decoration-break: clone)) {
+      [skz]:is(:not([skz-text-mode]), [skz-text-mode=round], [skz-text-mode=clip]) :where(:not([skz-ignore], [skz-bone], [skz-leaf], [skz-leaf] *, [skz-ignore] *)):has(> [skz-text]:where(:not([skz-ignore], [skz-bone], [skz-leaf], [skz-leaf] *, [skz-ignore] *))) {
+        background-color: var(--skz-tbg, var(--skz-fill, var(--skz-color))) !important;
+        background-position: var(--skz-bg-pos, 0 0);
+        background-image: var(--skz-timg, var(--skz-bg-img, none)) !important;
+        background-repeat: no-repeat !important;
+        background-size: var(--skz-bg-size, 300px 100%) !important;
+        -webkit-box-decoration-break: var(--skz-bdb, slice);
+        box-decoration-break: var(--skz-bdb, slice);
+        -webkit-background-clip: text !important;
+        background-clip: text !important;
+      }
+      [skz]:is(:not([skz-text-mode]), [skz-text-mode=round], [skz-text-mode=clip]) :where(:not([skz-ignore], [skz-bone], [skz-leaf], [skz-leaf] *, [skz-ignore] *)):has(> [skz-text]:where(:not([skz-ignore], [skz-bone], [skz-leaf], [skz-leaf] *, [skz-ignore] *))) > [skz-text]:where(:not([skz-ignore], [skz-bone], [skz-leaf], [skz-leaf] *, [skz-ignore] *)) {
+        background: none !important;
+      }
+    }
   }
   /* 浏览器不认 background-clip:text：撤回 clip，退回上面的 underline（规则与 clip 同优先级，写在后面）。
    * 装饰线颜色：--skz-dc 清掉后读 --skz-ul-fill，clip 根上没有 pulse 驱动的 --skz-ul-fill，所以回落到静态 --skz-color
@@ -120,8 +151,7 @@
   background-position: var(--skz-bg-pos, 0 0);
   background-image: var(--skz-bg-img, none) !important;
   background-repeat: no-repeat !important;
-  background-attachment: fixed !important;
-  background-size: var(--skz-bg-size, var(--skz-band, 400px) 100vh) !important;
+  background-size: var(--skz-bg-size, 300px 100%) !important;
   -webkit-text-fill-color: transparent !important;
 }
 
