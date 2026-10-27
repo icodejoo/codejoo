@@ -28,8 +28,8 @@
     background-size: var(--skz-bg-size, 300px 100%) !important;
     border-radius: 50%;
   }
-  :is([skz]:where([skz-auto]), [skz] :where([skz-auto])) i:empty::before,
-  :is([skz]:where([skz-auto]), [skz] :where([skz-auto])) [class*=icon]:empty::before {
+  :is([skz]:where([skz-auto]), [skz] :where([skz-auto])) i:empty:not([skz-ignore], [skz-ignore] *)::before,
+  :is([skz]:where([skz-auto]), [skz] :where([skz-auto])) [class*=icon]:empty:not([skz-ignore], [skz-ignore] *)::before {
     color: transparent !important;
     visibility: hidden !important;
   }

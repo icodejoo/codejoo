@@ -11,12 +11,6 @@
   -webkit-text-fill-color: currentColor;
 }
 
-/* 忽略区保持原样可见 */
-[skz] [skz-ignore],
-[skz] [skz-ignore] * {
-  visibility: visible !important;
-}
-
 [skz] [skz-bone],
 [skz] [skz-leaf] {
   background-color: var(--skz-fill, var(--skz-color)) !important;
@@ -52,6 +46,13 @@
   visibility: hidden !important;
 }
 
+/* 忽略区保持原样可见。与上面 [skz] [skz-leaf] * / [skz] [skz-bone] * 的优先级相同（0,2,0），
+ * 必须写在它们后面：同优先级后写的赢，才能盖过骨头 / 叶子对后代的隐藏，写在 skz-leaf / skz-bone 里的忽略区仍可见 */
+[skz] [skz-ignore],
+[skz] [skz-ignore] * {
+  visibility: visible !important;
+}
+
 [skz] img[skz-bone],
 [skz] video[skz-bone],
 [skz] canvas[skz-bone] {
@@ -63,13 +64,13 @@
  * 宿主 visibility:hidden 藏住 Shadow DOM 里的内容（visibility 会继承进 Shadow DOM），
  * 再用宿主的 ::before 铺一块可见的骨头（宿主自己的背景会被 visibility 一起藏掉，所以借伪元素）。
  * 骨头的画法与 sk-bone 同一套，读根上动画驱动继承下来的 --skz-fill / --skz-bg-img / --skz-bg-pos，所以 pulse / shimmer（含 svg 引擎）对宿主同样生效；
- * 忽略区（skz-ignore）本身不处理。 */
-[skz] [skz-host]:not([skz-ignore]) {
+ * 忽略区（skz-ignore）自身及其子树里的宿主不处理。 */
+[skz] [skz-host]:not([skz-ignore], [skz-ignore] *) {
   visibility: hidden !important;
   position: relative;
 }
 
-[skz] [skz-host]:not([skz-ignore])::before {
+[skz] [skz-host]:not([skz-ignore], [skz-ignore] *)::before {
   background-color: var(--skz-fill, var(--skz-color)) !important;
   background-position: var(--skz-bg-pos, 0 0);
   background-image: var(--skz-bg-img, none) !important;

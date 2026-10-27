@@ -15,8 +15,9 @@
   -webkit-text-fill-color: transparent !important;
 }
 
-/* 媒体与控件 -> 背景色骨头（图片靠透明 mock 图让背景透出来） */
-:is([skz]:where([skz-auto]), [skz] :where([skz-auto])) :is(img, video, canvas, picture, iframe, svg, input, textarea, select, button):not([skz-ignore]) {
+/* 媒体与控件 -> 背景色骨头（图片靠透明 mock 图让背景透出来）。
+ * 忽略区自身及其子树都不处理：忽略区的撤销规则只撤背景和文字色，撤不了 object-*，真实图片会被推出盒外看不见 */
+:is([skz]:where([skz-auto]), [skz] :where([skz-auto])) :is(img, video, canvas, picture, iframe, svg, input, textarea, select, button):not([skz-ignore], [skz-ignore] *) {
   background-color: var(--skz-fill, var(--skz-color)) !important;
   background-position: var(--skz-bg-pos, 0 0);
   background-image: var(--skz-bg-img, none) !important;
@@ -28,19 +29,16 @@
   object-position: 99999px 0 !important;
 }
 
-/* svg 内部藏起来，背景由 svg 自己画 */
-:is([skz]:where([skz-auto]), [skz] :where([skz-auto])) svg:not([skz-ignore]) * {
+/* svg 内部藏起来，背景由 svg 自己画；忽略区里的 svg 保持原样（优先级高于忽略区的 visible 规则，所以要在这里排除） */
+:is([skz]:where([skz-auto]), [skz] :where([skz-auto])) svg:not([skz-ignore], [skz-ignore] *) * {
   visibility: hidden !important;
 }
 
 /* button 是控件，整块当一块骨头（见 $media-tags）：内部的 span / 图标一并藏起来，不在按钮块上再叠小骨头。
- * 忽略区里的 button 自己不当骨头，后代恢复可见（同优先级，写在后面） */
-:is([skz]:where([skz-auto]), [skz] :where([skz-auto])) button:not([skz-ignore]) * {
+ * 两端都排除忽略区：忽略区里的 button 不当骨头，按钮里的忽略区子树（如 <span skz-ignore>）保持可见；
+ * 因为本规则压根不命中它们，所以不需要再写"恢复可见"的规则 */
+:is([skz]:where([skz-auto]), [skz] :where([skz-auto])) button:not([skz-ignore], [skz-ignore] *) *:not([skz-ignore], [skz-ignore] *) {
   visibility: hidden !important;
-}
-
-:is([skz]:where([skz-auto]), [skz] :where([skz-auto])) [skz-ignore] button * {
-  visibility: visible !important;
 }
 
 /* 骨头圆角：用 :where() 把优先级降到 0，元素自己写了 border-radius（如圆形头像）就保留它的形状 */

@@ -4,9 +4,6 @@
 /* 懒渲染：根在视口外（enable() 打上 skz-paused）时移除根上的动画，SVG 方案去掉背景图 */
 [skz][skz-paused] {
   animation: none !important;
-}
-
-[skz][skz-paused] {
   --skz-bg-img: none !important;
 }
 
