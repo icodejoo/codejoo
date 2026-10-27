@@ -97,4 +97,16 @@ describe("codec — 混淆/编解码", () => {
     expect(c.get("dirty")).toEqual(null);
     expect(localStorage.getItem("dirty")).toEqual(null);
   });
+  it("空字符串口令按真实口令使用：codecAtob/codecBase64 往返", () => {
+    for (const make of [codecAtob, codecBase64]) {
+      const c = make("");
+      expect(c.decode(c.encode("abc"))).toEqual("abc");
+    }
+  });
+  it("以 U+FEFF 开头的明文往返不丢首字符", () => {
+    for (const make of [codecAtob, codecBase64]) {
+      const c = make();
+      expect(c.decode(c.encode("﻿abc"))).toEqual("﻿abc");
+    }
+  });
 });

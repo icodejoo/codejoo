@@ -1,8 +1,10 @@
 // IndexedDB 异步后端：Idb 直接用法 + db（异步 proxy）全特性 + 批量 + purge + namespace clear。
 // 每个 it 用独立 db 名，避免跨用例污染。
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { factory } from "../src/core";
 import { Idb } from "../src/idb";
+import { Memory } from "../src/memory";
+import { proxy } from "../src/proxy";
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
@@ -100,7 +102,7 @@ describe("db 批量 / purge（异步，批量走循环）", () => {
     const { db: mdb } = factory({ db: new Idb("codejoo-bt-batch2"), namespace: "bm", memoized: true });
     await mdb.clear();
     await mdb.set("hit", "cached");
-    await mdb.set("miss", "fromdb");
+    await mdb.set("miss", "fromdb", { memoized: false }); // 不进 memo，覆盖读穿后端路径
     expect(await mdb.get(["hit", "miss", "none"], [0, 0, "d"])).toEqual(["cached", "fromdb", "d"]);
     await mdb.clear();
   });
@@ -141,5 +143,76 @@ describe("destroy — 资源回收", () => {
     expect(await store.db.get("k")).toEqual("dv");
     await store.db.clear();
     store.ls.clear();
+  });
+});
+
+describe("Idb — 事务提交语义", () => {
+  it("写事务 abort（如配额）→ 触发 onError、不写 memo，值未落盘", async () => {
+    const put = IDBObjectStore.prototype.put;
+    // 模拟配额类失败：request 先成功（success 回调里），随后事务被 abort 回滚
+    const spy = vi.spyOn(IDBObjectStore.prototype, "put").mockImplementation(function (this: IDBObjectStore, value: unknown, key?: IDBValidKey) {
+      const req = put.call(this, value, key);
+      const tx = this.transaction;
+      req.addEventListener("success", () => tx.abort());
+      return req;
+    });
+    const onError = vi.fn();
+    const { db } = factory({ db: new Idb("codejoo-bt-abort"), onError, memoized: true });
+    try {
+      await db.set("k", 1);
+    } finally {
+      spy.mockRestore();
+    }
+    expect(onError).toHaveBeenCalledTimes(1);
+    expect(await db.get("k")).toEqual(null);
+    await db.clear();
+  });
+});
+
+describe("db — sliding 续期在途时其他键写入（memo 不留旧 expireAt）", () => {
+  it("续期 persist 在途时 set 另一个键：该键 memo 被失效，之后仍可读", async () => {
+    const memo = new Memory();
+    const db = proxy(new Idb("codejoo-bt-slide-race"), memo, { sliding: true });
+    await db.clear();
+    await db.set("k", "v", { ttl: 1000, memoized: true });
+    await sleep(150); // 剩余 <90%，读时会触发续期
+    const p = db.get("k"); // memo 命中 → 续期 persist 在途
+    const w = db.set("other", 1); // 同步递增 epoch，续期回填随后被判作过期
+    await Promise.all([p, w]);
+    expect(memo.get("k")).toEqual(null); // 失效而非留着旧 expireAt
+    expect(await db.get("k")).toEqual("v"); // 读穿后端（已续期）
+    await db.clear();
+  });
+});
+
+describe("db — 异步读在途时的写/删竞态（不回填旧值）", () => {
+  it("读在途时 remove：之后读不到旧值", async () => {
+    const { db } = factory({ db: new Idb("codejoo-bt-race-rm"), namespace: "r", memoized: true });
+    await db.clear();
+    await db.set("k", "old", { memoized: false });
+    const p = db.get("k");
+    const r = db.remove("k");
+    await Promise.all([p, r]);
+    expect(await db.get("k")).toEqual(null);
+    await db.clear();
+  });
+  it("读在途时 set 新值：之后读到新值", async () => {
+    const { db } = factory({ db: new Idb("codejoo-bt-race-set"), namespace: "r", memoized: true });
+    await db.clear();
+    await db.set("k", "old", { memoized: false });
+    const p = db.get("k");
+    const w = db.set("k", "new", { memoized: false });
+    await Promise.all([p, w]);
+    expect(await db.get("k")).toEqual("new");
+    await db.clear();
+  });
+  it("读在途时 clear：之后读不到旧值", async () => {
+    const { db } = factory({ db: new Idb("codejoo-bt-race-clear"), namespace: "r", memoized: true });
+    await db.clear();
+    await db.set("k", "old", { memoized: false });
+    const p = db.get("k");
+    const c = db.clear();
+    await Promise.all([p, c]);
+    expect(await db.get("k")).toEqual(null);
   });
 });

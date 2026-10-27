@@ -49,75 +49,82 @@
 ## 主要特性
 
 ### 1. **多存储后端统一**
+
 - **localStorage**: 持久存储（~5-10MB），同步操作
 - **sessionStorage**: 会话存储（~5-10MB），同步操作，关闭标签页自动清除
 - **IndexedDB**: 大容量存储（GB 级），异步操作，持久化
 
 ### 2. **类型安全**
+
 ```typescript
 interface User {
-  id: number
-  name: string
+  id: number;
+  name: string;
 }
 
 // 完全类型推导
-const storage = createStorage<User>()
-const user = await storage.get('user-1')  // user: User | null
+const storage = createStorage<User>();
+const user = await storage.get("user-1"); // user: User | null
 ```
 
 ### 3. **命名空间**
+
 ```typescript
 // 避免键冲突
 const userStorage = createStorage({
-  namespace: 'user:'
-})
+  namespace: "user:",
+});
 const settingStorage = createStorage({
-  namespace: 'settings:'
-})
+  namespace: "settings:",
+});
 ```
 
 ### 4. **TTL 和过期**
+
 ```typescript
 // 设置过期时间
-await storage.set('token', 'abc123', {
-  ttl: 3600 * 1000  // 1 小时后自动删除
-})
+await storage.set("token", "abc123", {
+  ttl: 3600 * 1000, // 1 小时后自动删除
+});
 
 // 滑动过期（访问时续期）
-await storage.set('session', sessionData, {
+await storage.set("session", sessionData, {
   ttl: 3600 * 1000,
-  sliding: true  // 每次访问时重置过期时间
-})
+  sliding: true, // 每次访问时重置过期时间
+});
 ```
 
 ### 5. **可插拔序列化**
+
 ```typescript
 // 自定义序列化器
 const storage = createStorage({
   serializer: {
     serialize: (value) => JSON.stringify(value),
-    deserialize: (str) => JSON.parse(str)
-  }
-})
+    deserialize: (str) => JSON.parse(str),
+  },
+});
 ```
 
 ### 6. **加密和混淆**
+
 ```typescript
 // 使用混淆编解码
 const storage = createStorage({
   codec: {
-    encode: (str) => btoa(str),  // Base64 编码
-    decode: (encoded) => atob(encoded)
-  }
-})
+    encode: (str) => btoa(str), // Base64 编码
+    decode: (encoded) => atob(encoded),
+  },
+});
 ```
 
 ### 7. **跨标签页同步**
+
 ```typescript
 // 监听其他标签页的更新
-storage.subscribe('key', (newValue, oldValue) => {
-  console.log('Value updated:', newValue)
-})
+storage.subscribe("key", (newValue, oldValue) => {
+  console.log("Value updated:", newValue);
+});
 ```
 
 ## 文件结构
@@ -156,21 +163,26 @@ src/
 ## 核心流程
 
 ### 1. 初始化
+
 ```typescript
-import { createStorage } from '@codejoo/storage'
+import { createStorage } from "@codejoo/storage";
 
 // 基础使用
-const storage = createStorage()
+const storage = createStorage();
 
 // 完整配置
 const userStorage = createStorage({
-  backend: 'indexeddb',      // 存储后端
-  namespace: 'app:user:',    // 键前缀
-  ttl: 86400 * 1000,         // 默认 TTL (24h)
-  sliding: true,             // 滑动过期
-  serializer: { /* ... */ }, // 自定义序列化
-  codec: { /* ... */ }       // 加密编解码
-})
+  backend: "indexeddb", // 存储后端
+  namespace: "app:user:", // 键前缀
+  ttl: 86400 * 1000, // 默认 TTL (24h)
+  sliding: true, // 滑动过期
+  serializer: {
+    /* ... */
+  }, // 自定义序列化
+  codec: {
+    /* ... */
+  }, // 加密编解码
+});
 ```
 
 ### 2. 数据写入流程
@@ -281,18 +293,18 @@ const userStorage = createStorage({
 // 场景：用户会话 Token 管理
 
 // 固定过期：设置后 1 小时内必须有新 Token
-await storage.set('token', 'abc123', {
-  ttl: 3600 * 1000,  // 1 小时
-  sliding: false     // 不滑动
-})
+await storage.set("token", "abc123", {
+  ttl: 3600 * 1000, // 1 小时
+  sliding: false, // 不滑动
+});
 
 // 滑动过期：最后一次访问后 1 小时内自动删除
-await storage.set('session', sessionData, {
+await storage.set("session", sessionData, {
   ttl: 3600 * 1000,
-  sliding: true      // 滑动
-})
+  sliding: true, // 滑动
+});
 // 访问时自动续期
-const session = await storage.get('session')  // 过期时间重置
+const session = await storage.get("session"); // 过期时间重置
 ```
 
 ## 与其他项目的关系

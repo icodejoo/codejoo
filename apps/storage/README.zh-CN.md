@@ -62,7 +62,7 @@ await db.get("user"); // Promise<{ id: 1 }>
 | `codec`       | `Codec`                                                      | 否   | —                | 对序列化字符串做编解码（混淆/压缩）。仅 `codeable` 为 true 时生效。                                                                                                          |
 | `sliding`     | `boolean`                                                    | 否   | `false`          | 滑动过期：每次读命中按原始 `ttl` 续期（适合会话/登录态）。剩余寿命超过 90% 时跳过续期回写，高频读不产生写放大。                                                              |
 | `namespace`   | `string`                                                     | 否   | `""`             | key 前缀（`namespace:key`），隔离同源下不同应用/模块。                                                                                                                       |
-| `raw`         | `boolean`                                                    | 否   | `false`          | 直接存原始值，跳过 entity 信封（无 ttl/codec）。用于与外部数据互通。                                                                                                         |
+| `raw`         | `boolean`                                                    | 否   | `false`          | 直接存原始值，跳过 entity 信封（无 ttl/codec）。用于与外部数据互通。`purge()`/容量清理不处理 `raw` 实例。                                                                    |
 | `force`       | `boolean`                                                    | 否   | `true`           | 容量不足时清理过期项后重试写入，否则记录日志并放弃。**仅同步后端生效。**                                                                                                     |
 | `readonly`    | `boolean`                                                    | 否   | `false`          | 只写一次：仅当键为空（不存在/已过期）才写入，否则丢弃本次写入。                                                                                                              |
 | `enckey`      | `boolean`                                                    | 否   | `false`          | 是否对**键**也混淆：配置了 `codec` 时，存储键经 codec 确定性混淆（隐藏明文键名）。仅用 codec 混淆键名、**非安全防护**；且需配合 `codec`，否则告警并降级为明文键。            |
@@ -84,7 +84,7 @@ await db.get("user"); // Promise<{ id: 1 }>
 | `set(keys, values, options?)` | `R<void>`         | **批量写入**：逐位配对；第三参对全部键生效。`values` 偏短时缺位键跳过（告警）。                                                                      |
 | `remove(keys)`                | `R<void>`         | **批量删除**。批量 `get`/`set`/`remove` 在键数组上逐键复用单键逻辑实现（异步后端为逐键一事务）。                                                     |
 | `keys()`                      | `R<string[]>`     | 本实例管辖范围内的全部逻辑键（已解密、去命名空间前缀）。                                                                                             |
-| `purge()`                     | `R<void>`         | 主动清理过期条目（仅管辖内、本库写入的数据）。平时为惰性过期，长期不被读取的过期数据靠它回收配额。                                                   |
+| `purge()`                     | `R<void>`         | 主动清理过期条目（仅管辖内、本库写入的数据）。平时为惰性过期，长期不被读取的过期数据靠它回收配额。`raw` 实例（无 entity 信封）不处理。               |
 | `clear()`                     | `R<void>`         | 配置了 `namespace` 或 `enckey` 时仅清本实例管辖的键（不波及其他命名空间/外部数据）；否则整库清空。                                                   |
 | `destroy()`                   | `R<void>`         | 释放资源：清空 memo 读缓存并断开可关闭后端（IndexedDB 连接）。**保留已落盘数据。**                                                                   |
 | `key(index)`                  | `R<string\|null>` | 第 index 个逻辑键（已解密、去命名空间前缀）。                                                                                                        |
@@ -192,7 +192,7 @@ ls.set("x", { when: new Date(), ids: new Set([1n, 2n]) }); // 完整还原
 
 ### `crossTab(handler, channel?)`
 
-独立插件（未用到即被 tree-shake）。仅在**纯内存模式**（原生 storage 不可用：隐私模式、沙箱 iframe）下启用：经 `BroadcastChannel` 把 `set`/`remove`/`clear` 回放到同源其他标签页，保持各标签内存数据一致。原生 storage 可用时为空操作（数据本就共享）；重复挂载同一 handler 也为空操作。本地写入**先于**广播生效，广播失败（值不可结构化克隆）仅告警；`setNamespace` 不参与同步，需各标签自行切换。返回停止函数。
+独立插件（未用到即被 tree-shake）。仅在**纯内存模式**（原生 storage 不可用：隐私模式、沙箱 iframe）下启用：经 `BroadcastChannel` 把 `set`/`remove`/`clear` 回放到同源其他标签页，保持各标签内存数据一致。原生 storage 可用时为空操作（数据本就共享）；重复挂载同一 handler 也为空操作。本地写入**先于**广播生效，广播失败（值不可结构化克隆）仅告警；`setNamespace` 不参与同步，需各标签自行切换；消息带发送方命名空间，仅**当前命名空间相同**的标签才回放（未知/格式不符的消息一律忽略）。返回停止函数（可重复调用）。
 
 ```ts
 import { factory, crossTab } from "@codejoo/storage";

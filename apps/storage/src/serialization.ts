@@ -50,7 +50,7 @@ function reviver(_key: string, value: any) {
     case ext.bigint:
       return BigInt(value.value as string);
     case ext.date:
-      return new Date(value.value as number);
+      return new Date((value.value as number | null) ?? NaN); // 无效 Date 序列化后为 null，须还原成 Invalid Date 而非 1970 年
     case ext.map:
       return new Map(value.value as Iterable<[unknown, unknown]>);
     case ext.set:
@@ -65,9 +65,20 @@ function reviver(_key: string, value: any) {
  * 方法不依赖 this，可安全解构传递（如作为 storage 的 serialize/deserialize）。
  */
 export const JSONX = {
+  /**
+   * 序列化（同 JSON.stringify，额外支持 bigint/Date/Map/Set）。
+   * @param value 待序列化的值
+   * @param space 缩进，同 JSON.stringify
+   * @returns JSON 字符串
+   */
   stringify(value: any, space?: string | number): string {
     return JSON.stringify(value, replacer, space);
   },
+  /**
+   * 反序列化（同 JSON.parse，还原 bigint/Date/Map/Set）。
+   * @param text JSON 字符串
+   * @returns 还原后的值；非法 JSON 抛错
+   */
   parse(text: string): any {
     return JSON.parse(text, reviver);
   },

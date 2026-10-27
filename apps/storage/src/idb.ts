@@ -8,17 +8,32 @@ import { Memory } from "./memory";
 
 const STORE = "kv";
 
+/**
+ * IndexedDB 持久层（异步），传给 `factory({ db })` 作为 `db` 后端。
+ * 不可用时（沙箱 iframe/隐私模式等）自动退回内存兜底。
+ *
+ * ```ts
+ * const { db } = factory({ db: new Idb() });
+ * await db.set("k", 1);
+ * ```
+ */
 export class Idb {
+  /** 数据库名 */
   private name: string;
+  /** 已打开（或打开中）的连接句柄；连接断开后置空，下次操作重新 open */
   private db?: Promise<IDBDatabase>;
   /** IndexedDB 不可用时的内存兜底；为真即走纯内存 */
   private mem?: Memory;
 
+  /**
+   * @param name 数据库名，默认 `"@codejoo/storage"`；不同名称互相隔离
+   */
   constructor(name = "@codejoo/storage") {
     this.name = name;
     if (!supported.indexedDB) this.mem = new Memory();
   }
 
+  /** 打开数据库并挂连接断开回调 */
   private open(): Promise<IDBDatabase> {
     return new Promise((resolve, reject) => {
       const req = indexedDB.open(this.name, 1);
@@ -54,17 +69,26 @@ export class Idb {
     }
   }
 
-  /** 统一入口：IDB 可用则在事务里执行 fn，否则走内存兜底 mem。fn 用 any 因 IDBRequest<T> 含 this 类型而不变型 */
+  /**
+   * 统一入口：IDB 可用则在事务里执行 fn，否则走内存兜底 mem。fn 用 any 因 IDBRequest<T> 含 this 类型而不变型。
+   * 以事务 complete 为成功标志：写事务可能在 request 成功后仍因配额等原因 abort 回滚。
+   */
   private async op<T>(mode: IDBTransactionMode, fn: (s: IDBObjectStore) => IDBRequest<any>, mem: () => T): Promise<T> {
     const db = await this.database();
     if (!db) return mem();
     return new Promise<T>((resolve, reject) => {
-      const req = fn(db.transaction(STORE, mode).objectStore(STORE));
-      req.onsuccess = () => resolve(req.result as T);
-      req.onerror = () => reject(req.error);
+      const tx = db.transaction(STORE, mode);
+      const req = fn(tx.objectStore(STORE));
+      tx.oncomplete = () => resolve(req.result as T);
+      tx.onabort = () => reject(tx.error ?? req.error); // request 出错未 preventDefault 会自动 abort 事务，只挂 onabort 即可
     });
   }
 
+  /**
+   * 读取单个键。
+   * @param key 存储键
+   * @returns 字符串值；不存在为 null
+   */
   async get(key: string): Promise<string | null> {
     const v = await this.op<string | undefined>(
       "readonly",
@@ -74,6 +98,11 @@ export class Idb {
     return v ?? null;
   }
 
+  /**
+   * 写入单个键，事务提交后才 resolve（失败则 reject）。
+   * @param key 存储键
+   * @param value 字符串值
+   */
   async set(key: string, value: string): Promise<void> {
     await this.op(
       "readwrite",
@@ -82,6 +111,10 @@ export class Idb {
     );
   }
 
+  /**
+   * 删除单个键。
+   * @param key 存储键
+   */
   async remove(key: string): Promise<void> {
     await this.op(
       "readwrite",
@@ -90,6 +123,7 @@ export class Idb {
     );
   }
 
+  /** 清空整个库 */
   async clear(): Promise<void> {
     await this.op(
       "readwrite",
@@ -98,6 +132,7 @@ export class Idb {
     );
   }
 
+  /** 键总数 */
   length(): Promise<number> {
     return this.op(
       "readonly",
@@ -106,7 +141,10 @@ export class Idb {
     );
   }
 
-  /** 一次事务返回全部键（proxy 的 clear/keys/purge 据此走快路径，免逐下标 O(n²)） */
+  /**
+   * 一次事务返回全部键（proxy 的 clear/keys/purge 据此走快路径，免逐下标 O(n²)）
+   * @returns 全部键名
+   */
   async keys(): Promise<string[]> {
     const ks = await this.op<IDBValidKey[] | string[]>(
       "readonly",
@@ -116,6 +154,11 @@ export class Idb {
     return ks.map(String);
   }
 
+  /**
+   * 按下标取键。
+   * @param index 下标（向零取整，NaN 视为 0）
+   * @returns 键名；越界为 null
+   */
   async key(index: number): Promise<string | null> {
     index = Math.trunc(index) || 0;
     if (index < 0) return null;

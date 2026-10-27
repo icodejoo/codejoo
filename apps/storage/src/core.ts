@@ -32,6 +32,19 @@ function unimpl(): AsyncStorage {
   return new Proxy({} as AsyncStorage, { get: () => fail });
 }
 
+/**
+ * 创建 ls（localStorage）/ ss（sessionStorage）/ db（IndexedDB）三层存储处理器。
+ * 原生存储不可用时 ls/ss 各自退回内存兜底；db 需自行传入 `Idb` 实例。
+ * @param baseOptions 三层共用的选项（sliding/raw/codec/namespace/db 等）
+ * @returns `{ ls, ss, db, destroy, setNamespace }`
+ * @example
+ * ```ts
+ * import { factory, Idb } from "@codejoo/storage";
+ * const { ls, db } = factory({ namespace: "u1", db: new Idb() });
+ * ls.set("token", "abc", 60_000);
+ * await db.get("token");
+ * ```
+ */
 export function factory(baseOptions?: BaseStorageOptions) {
   // 每层独立的内存读缓存，且按 factory 实例隔离（不同实例不共享 memo，避免跨实例串读）
   const lsMemo = new Memory();
@@ -41,7 +54,7 @@ export function factory(baseOptions?: BaseStorageOptions) {
   // 二者若是同一个 Map，memo.clear()（destroy/clear/setNamespace 都会调）会把"落盘"数据本身一并清空，
   // 且 memoized 写入 entity 对象会与后端写入的 JSON 字符串互相覆盖同一个键。
   const ls = proxy(supported.storage ? adapt(window.localStorage) : new Memory(), lsMemo, baseOptions);
-  const ss = proxy(supported.storage ? adapt(window.sessionStorage) : new Memory(), ssMemo, baseOptions);
+  const ss = proxy(supported.session ? adapt(window.sessionStorage) : new Memory(), ssMemo, baseOptions);
   const dbProvided = baseOptions?.db != null;
   const db = proxy(baseOptions?.db ?? unimpl(), dbMemo, baseOptions);
 
