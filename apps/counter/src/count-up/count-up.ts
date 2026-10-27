@@ -148,6 +148,11 @@ export function tick(elapsed: number, dt: number): boolean {
         task.ctx.value = task.value;
         if (task.el) task.render(task.el, task.value, task.ctx); // 末值先落定
         task.onDone?.(task.value, task.ctx);
+        if (task.startAt < 0) {
+          // onDone 回调里已对同元素重新 countup()（原地重定目标，startAt 被重置）：保留并继续推进，本帧仍算忙碌
+          busy = true;
+          continue;
+        }
         // autoKill（默认）：出队并经 onRemove 释放（记录末值 + 清元素索引 + 调用渲染器 destroy）；
         // 否则保留实例停在末值，标记 done 跳过后续帧（可手动 remove 或同元素重定目标）
         if (task.autoKill) remove(id, task.label);
@@ -238,6 +243,10 @@ function addTask(options: ICountupFullOptions): number {
         const active = !(merged.lazy && el);
         existing.active = active;
         existing.ctx.active = active;
+        // 旧任务未激活时 renderBound 被置为 null；重定为立即激活后 scheduleStart 不会再调 onActivate，需在此直接挂载
+        if (active && newLifecycle && existing.renderBound === null) {
+          existing.renderBound = bindLifecycle(newLifecycle, el, existing.ctx);
+        }
         existing.cancel = scheduleStart(
           active,
           el,

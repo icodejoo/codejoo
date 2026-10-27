@@ -1,5 +1,5 @@
 import type { ICountupRenderer, ICountupRenderContext } from "../count-up/type";
-import { maskOf } from "./shared";
+import { isDigit, maskOf } from "./shared";
 
 export interface IOdometerRenderOptions {
   /**
@@ -70,15 +70,32 @@ interface IOState {
   lastSign?: boolean;
 }
 
-/** 数值的整数位数（trunc 后），value<1 记 1（至少显示个位的 0）。整数循环，无字符串分配。 */
+/** 数值的整数位数（trunc 后），value<1 记 1（至少显示个位的 0）。整数循环，无字符串分配；非有限值（Infinity/NaN）记 1 防死循环。 */
 function intLen(value: number): number {
   let n = Math.trunc(Math.abs(value));
+  if (!Number.isFinite(n)) return 1;
   let len = 1;
   while (n >= 10) {
     n = Math.floor(n / 10);
     len++;
   }
   return len;
+}
+
+/**
+ * 落定文本的可见整数位数：取 "." 之前的数字字符，从第一个非 0 数字起计数（分组分隔符不计），至少为 1。
+ * 与 build 一样以 "." 作小数点。用于落定帧——formatter 进位（9.9999 → "10"）时位数以文本为准，而非 intLen(value)。
+ */
+function textIntLen(text: string): number {
+  const dot = text.indexOf(".");
+  const end = dot === -1 ? text.length : dot;
+  let len = 0;
+  for (let i = 0; i < end; i++) {
+    const ch = text[i];
+    if (!isDigit(ch)) continue;
+    if (len > 0 || ch !== "0") len++;
+  }
+  return len || 1;
 }
 
 // 平移以 CSS 变量 --cd-cell-height 为单位（默认 1.25em）；提取常量避免重复字面量
@@ -90,8 +107,8 @@ const ty = (n: number) => TY_HEAD + n + "))";
  * 取更长者（含分隔符/小数）的掩码作为最大宽度模板——无需猜测分组规则。
  */
 function planMask(ctx: ICountupRenderContext): string {
-  const a = ctx.fmt(ctx.from);
-  const b = ctx.fmt(ctx.to);
+  const a = ctx.fmt(ctx.from, ctx);
+  const b = ctx.fmt(ctx.to, ctx);
   return maskOf(a.length >= b.length ? a : b);
 }
 
@@ -172,16 +189,23 @@ export function createOdometerRender(options: IOdometerRenderOptions = {}): IOdo
     return { mask, cols, seps, lastLen: -1, from: NaN, to: NaN, collapsed: false };
   }
 
-  /** 落定：每位塌缩为当前数字单格、清掉 transform，回收内存（一次性 childList，两种模式通用） */
-  function collapse(state: IOState, value: number) {
-    const v = Math.abs(value);
-    for (let i = 0; i < state.cols.length; i++) {
-      const col = state.cols[i];
-      const digit = Math.floor(v / col.pow) % 10;
+  /**
+   * 落定：每位塌缩为终值数字单格、清掉 transform，回收内存（一次性 childList，两种模式通用）。
+   * 数字直接取自 formatter 的落定文本（按顺序对应各数字位），不自行用浮点除法现算，
+   * 以免浮点误差（0.29/0.01 = 28.999…）或与 formatter 舍入规则（1.9999 → "2"）不一致。
+   * 调用前须保证 state.mask === maskOf(text)，即文本中的数字字符数等于 cols 数。
+   */
+  function collapse(state: IOState, text: string) {
+    let c = 0;
+    for (let i = 0; i < text.length && c < state.cols.length; i++) {
+      const ch = text[i];
+      if (!isDigit(ch)) continue;
+      const col = state.cols[c++];
       // full：索引 digit 的格即该数字；minimal：复用 top 格并写入最终数字
-      const keep = full ? col.strip.children[digit] : col.strip.children[0];
-      if (!full && col.topText) col.topText.data = String(digit);
-      col.strip.replaceChildren(keep);
+      const keep = full ? col.strip.children[+ch] : col.strip.children[0];
+      if (!full && col.topText) col.topText.data = ch;
+      col.strip.textContent = "";
+      col.strip.appendChild(keep);
       col.strip.style.transform = "";
     }
     state.collapsed = true;
@@ -210,6 +234,7 @@ export function createOdometerRender(options: IOdometerRenderOptions = {}): IOdo
     }
     for (let i = 0; i < state.seps.length; i++) {
       const sep = state.seps[i];
+      if (sep.isSign) continue; // 符号位显隐只归 updateSign 管，这里按 leftK 切会覆盖它
       sep.el.classList.toggle(cls.hidden, sep.leftK >= len);
     }
   }
@@ -279,7 +304,8 @@ export function createOdometerRender(options: IOdometerRenderOptions = {}): IOdo
       if (settle) {
         // 落定：按目标值裁剪到实际宽度（倒数 9999→5 会移除多余前导位），再塌缩为单格静态。
         // 仅此一帧才需要格式化字符串 → 按需调用 ctx.formatter，动画期完全不格式化
-        const live = maskOf(ctx.fmt(ctx.value, ctx));
+        const text = ctx.fmt(ctx.value, ctx);
+        const live = maskOf(text);
         if (state.mask !== live) {
           Object.assign(state, build(el, live));
           state.from = ctx.from;
@@ -287,8 +313,8 @@ export function createOdometerRender(options: IOdometerRenderOptions = {}): IOdo
           state.lastSign = undefined; // 同上，落定路径的重建也须清缓存
         }
         updateSign(state, negative);
-        reflow(state, visibleLen);
-        if (!state.collapsed) collapse(state, ctx.value);
+        reflow(state, leadingZeros ? Infinity : textIntLen(text)); // 落定帧位数以 formatter 文本为准（进位时与 intLen(value) 不同）
+        if (!state.collapsed) collapse(state, text);
         return;
       }
 

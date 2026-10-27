@@ -14,6 +14,7 @@ const disposers: (() => void)[] = [];
 function loop(now: number) {
   const dt = last < 0 ? 0 : now - last;
   last = now;
+  const self = raf; // 本帧的 rAF id，用于识别订阅者回调里是否已 stop / 重启过
   let busy = false;
   for (let i = 0; i < subscribers.length; i++) {
     try {
@@ -23,6 +24,8 @@ function loop(now: number) {
       console.error("[GT]: plugin install() threw, skipping this frame for it", err);
     }
   }
+  // 回调里已 stop / destroy / 重启过（raf 变了）：以其状态为准，不再续排，避免 stop 失效或出现双循环
+  if (raf !== self) return;
   // 所有插件都空闲时自动停止，新任务加入时由插件调用 start() 重新启动
   if (busy) {
     raf = requestAnimationFrame(loop);

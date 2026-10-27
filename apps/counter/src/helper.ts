@@ -7,10 +7,20 @@ export function $(el: string | Element): Element {
   return found;
 }
 
+/** 单条懒注册记录 */
+interface ILazyRec {
+  /** 进入视口时的回调 */
+  cb: () => void;
+  /** 所属 observer */
+  io: IntersectionObserver;
+  /** 已被取消：dispatch 批量摘出后，同批里先执行的回调可能取消后面的注册，执行前据此跳过 */
+  off?: boolean;
+}
+
 // 元素 → 该元素上所有待激活的懒注册（cb + 所属 observer）。用数组而非单条记录，
 // 允许同一元素被多个懒任务同时观察（如同一元素上先后挂了懒 countdown 又挂懒 countup）而不互相顶掉。
 // WeakMap：元素被 GC 时记录自动释放，无泄漏。
-const lazyMap = new WeakMap<Element, { cb: () => void; io: IntersectionObserver }[]>();
+const lazyMap = new WeakMap<Element, ILazyRec[]>();
 
 // 所有 lazy observer 共用同一派发回调：某元素进入视口即触发该 observer 名下匹配的回调（一次性）。
 // 用回调形参里的 observer 而非闭包变量识别"是哪个 observer 触发的"，避免多个 observer 共用同一 dispatch 时互相误判。
@@ -20,14 +30,20 @@ const dispatch: IntersectionObserverCallback = (entries, observer) => {
     if (!entry.isIntersecting) continue;
     const recs = lazyMap.get(entry.target);
     if (!recs) continue;
-    // 同一元素可能挂了多个懒注册，只摘取属于当前 observer 的那一条，其余留给各自的 observer 触发
-    const idx = recs.findIndex((r) => r.io === observer);
-    if (idx === -1) continue;
-    const [rec] = recs.splice(idx, 1);
-    if (recs.length === 0) lazyMap.delete(entry.target);
-    // 同一元素上若还有别的注册复用同一个 observer，暂不 unobserve，避免误伤它们
-    if (!recs.some((r) => r.io === observer)) observer.unobserve(entry.target);
-    rec.cb();
+    // 同一元素可能挂了多个懒注册：一次性摘出属于当前 observer 的全部（元素持续可见不会再触发 entry，留着会永远等不到），
+    // 属于其他 observer 的写回，留给各自的 observer 触发
+    const mine: ILazyRec[] = [];
+    const rest: ILazyRec[] = [];
+    for (let j = 0; j < recs.length; j++) {
+      if (recs[j].io === observer) mine.push(recs[j]);
+      else rest.push(recs[j]);
+    }
+    if (mine.length === 0) continue;
+    if (rest.length === 0) lazyMap.delete(entry.target);
+    else lazyMap.set(entry.target, rest);
+    observer.unobserve(entry.target);
+    // 摘出后再依次执行：已被同批前面回调取消的记录（off）跳过，不再执行
+    for (let j = 0; j < mine.length; j++) if (!mine[j].off) mine[j].cb();
   }
 };
 
@@ -61,12 +77,13 @@ export function lazyStart(el: Element, onEnter: () => void, observer?: Intersect
   }
   if (!defaultObserver) defaultObserver = createLazyObserver();
   const io = observer ?? defaultObserver;
-  const rec = { cb: onEnter, io };
+  const rec: ILazyRec = { cb: onEnter, io };
   const recs = lazyMap.get(el);
   if (recs) recs.push(rec);
   else lazyMap.set(el, [rec]);
   io.observe(el);
   return () => {
+    rec.off = true; // 先置取消标记：即便记录已被 dispatch 摘出，也不会再被执行
     const list = lazyMap.get(el);
     if (!list) return;
     const idx = list.indexOf(rec);

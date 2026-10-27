@@ -16,7 +16,7 @@ export interface ICardRenderOptions {
    * `ul.cd-root.cd-<effect> > li.cd-cell > span.cd-num.cd-num-next + span.cd-num.cd-num-now`。
    * 自定义前缀时需自行提供对应前缀的样式（复制 card.css 替换前缀即可）。
    *
-   * 注：动画时长不在 JS 中设置，由 CSS 变量 --<prefix>duration 控制（默认 .9s）。
+   * 注：动画时长不在 JS 中设置，由 CSS 变量 --<prefix>duration 控制（默认 500ms）。
    */
   prefix?: string;
   /**

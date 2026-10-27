@@ -160,7 +160,10 @@ export const vCountUp: Directive<Element, VCountUpValue> = {
     const opts = resolveCu(value, modifiers);
     // countup() 检测到同一元素，原地重定目标，返回新/旧 id
     const id = countup({ ...opts, el });
-    _cuStore.set(el, { id, label: opts.label ?? defaultLabel });
+    // 仅当返回的 id 与旧记录相同（引擎原地重定目标）时 label 缺省才沿用旧任务的 label，记录须一致，否则卸载时去错分组删不掉任务；
+    // id 不同说明旧任务已结束出队、引擎新建了任务，按新任务的默认 label 记录
+    const prev = _cuStore.get(el);
+    _cuStore.set(el, { id, label: opts.label ?? (prev && prev.id === id ? prev.label : defaultLabel) });
   },
 
   unmounted(el) {
