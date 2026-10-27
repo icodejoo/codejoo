@@ -44,12 +44,7 @@
     --skz-fill: var(--skz-pulse-c);
   }
   [skz][skz-effect=shimmer] [skz-fw] {
-    --skz-bg-pos: calc(var(--skz-shimmer-p) * (max(100% + 300px, 100cqw) + 300px) - 300px) 0;
-  }
-  @supports not (width: 1cqw) {
-    [skz][skz-effect=shimmer] [skz-fw] {
-      --skz-bg-pos: calc(var(--skz-shimmer-p) * (max(100% + 300px, 100vw) + 300px) - 300px) 0;
-    }
+    --skz-bg-pos: calc(var(--skz-shimmer-p) * (max(100% + 300px, 100 * var(--skz-span-unit, 1cqw)) + 300px) - 300px) 0;
   }
   [skz][skz-effect=shimmer][skz-shimmer-mode=fit] [skz-fw] {
     --skz-bg-pos: calc(var(--skz-shimmer-p) * (100% + 600px) - 300px) 0;

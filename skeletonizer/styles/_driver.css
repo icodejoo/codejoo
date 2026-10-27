@@ -82,6 +82,12 @@
   --skz-tier-anim: skz-shimmer-root;
 }
 
+/* 不认容器查询单位的浏览器：光带行程的参考宽度改按视口（单位变量的说明见 _mixins.scss 的 $band-pos） */
+@supports not (width: 1cqw) {
+  [skz] {
+    --skz-span-unit: 1vw;
+  }
+}
 /* @property 无法用 @supports 检测，用 $prop-gate 代理（见 _mixins.scss）：相对颜色语法（Chrome 119+ / Safari 16.4+ / Firefox 128+）或 content-visibility（Chrome 85+，让 Chrome 88~118 也能跑）。
  * 已知误判：Firefox 125~127 有 content-visibility 没有 @property，动画会跳变。 */
 @supports (color: rgb(from red r g b)) or (content-visibility: auto) {
@@ -107,12 +113,7 @@
   [skz][skz-effect=shimmer] {
     --skz-bg-img: linear-gradient(90deg, transparent 0, var(--skz-highlight) 50%, transparent 100%);
     animation: var(--skz-tier-anim, skz-shimmer-root) var(--skz-duration, var(--skz-tier-dur, 2s)) var(--skz-shimmer-timing, var(--skz-tier-steps, steps(38))) infinite;
-    --skz-bg-pos: calc(var(--skz-shimmer-p) * (max(100% + 300px, 100cqw) + 300px) - 300px) 0;
-  }
-  @supports not (width: 1cqw) {
-    [skz][skz-effect=shimmer] {
-      --skz-bg-pos: calc(var(--skz-shimmer-p) * (max(100% + 300px, 100vw) + 300px) - 300px) 0;
-    }
+    --skz-bg-pos: calc(var(--skz-shimmer-p) * (max(100% + 300px, 100 * var(--skz-span-unit, 1cqw)) + 300px) - 300px) 0;
   }
   @supports (color: color-mix(in srgb, red, blue)) {
     [skz][skz-effect=shimmer] {
