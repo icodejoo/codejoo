@@ -21,8 +21,6 @@ export interface SkzAttributeDef {
   boolean: boolean;
   /** 枚举取值（非裸属性才有） */
   values?: string[];
-  /** 仅完整版有效 */
-  fullOnly?: boolean;
   /** README 对应章节的锚点（不含 #） */
   anchor: string;
 }
@@ -108,7 +106,6 @@ export const SKZ_ATTRIBUTES: SkzAttributeDef[] = [
     scope: "root",
     boolean: false,
     values: ["even", "fit"],
-    fullOnly: true,
     anchor: ANCHOR_ROOT,
   },
   {
@@ -116,7 +113,6 @@ export const SKZ_ATTRIBUTES: SkzAttributeDef[] = [
     description: "Gives the root's direct children content-visibility: auto, so children scrolled out of view skip style, layout and paint (--skz-cv-size is the height estimate, default 200px). Full only.",
     scope: "root",
     boolean: true,
-    fullOnly: true,
     anchor: ANCHOR_ROOT,
   },
 ];

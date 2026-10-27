@@ -97,11 +97,11 @@ const SHIMMER_NAME = "var(--skz-tier-anim, skz-shimmer-root)";
 /** shimmer 的光带动画声明（只挂光带） */
 const SHIMMER_ANIM = `${SHIMMER_NAME} ${SHIMMER_DUR} ${SHIMMER_TIMING} infinite`;
 
-/** even 模式（默认）的光带位置：各骨头同速，一轮行程 max(骨头宽, 100cqw) + 300px */
-const BAND_POS_EVEN = `calc(var(--skz-shimmer-p) * (max(100% + 300px, 100cqw) + 300px) - 300px) 0`;
+/** even 模式（默认）的光带位置：各骨头同速，一轮行程 max(骨头宽, 100 个 --skz-span-unit) + 300px，单位缺省 1cqw */
+const BAND_POS_EVEN = `calc(var(--skz-shimmer-p) * (max(100% + 300px, 100 * var(--skz-span-unit, 1cqw)) + 300px) - 300px) 0`;
 
-/** 不认 cqw 的浏览器回退：100cqw 换成 100vw */
-const BAND_POS_EVEN_VW = BAND_POS_EVEN.replace("100cqw", "100vw");
+/** 不认 cqw 的浏览器回退：只在根上把单位切成 1vw，全库只有这一处 */
+const BAND_UNIT_VW = "@supports not (width: 1cqw) { [skz] { --skz-span-unit: 1vw; } }";
 
 /** fit 模式的光带位置：按骨头自身盒子，同时走完 */
 const BAND_POS_FIT = "calc(var(--skz-shimmer-p) * (100% + 600px) - 300px) 0";
@@ -464,8 +464,9 @@ describe("根驱动动画（core / base 共用）与防火墙（global）", () =
       expect(out, name).not.toContain("background-attachment");
       expect(out, name).toContain("var(--skz-bg-size, 300px 100%)");
       expect(flat(rule(out, "[skz][skz-effect=shimmer]")), name).toContain(`--skz-bg-pos: ${BAND_POS_EVEN}`);
-      // 老浏览器回退：不认 cqw 时靠 @supports 覆盖成 100vw 版（经自定义属性中转，单位不认识会计算值时无效）
-      expect(flat(out), name).toContain(`@supports not (width: 1cqw) { [skz][skz-effect=shimmer] { --skz-bg-pos: ${BAND_POS_EVEN_VW}`);
+      // 老浏览器回退：不认 cqw 时只把根上的单位变量切成 1vw（经自定义属性中转，单位不认识会计算值时无效，必须整体切换），且只输出一次
+      expect(flat(out), name).toContain(BAND_UNIT_VW);
+      expect(count(out, "@supports not (width: 1cqw)"), name).toBe(1);
       // 参考宽度不封顶：没有 --skz-shimmer-span，也没有 min(100cqw, …)
       expect(out, name).not.toMatch(/shimmer-span|min\(100cqw/);
       expect(flat(rule(out, `[skz][skz-effect=shimmer]${FIT}`)), name).toContain(`--skz-bg-pos: ${BAND_POS_FIT}`);

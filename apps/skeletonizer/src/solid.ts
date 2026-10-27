@@ -70,12 +70,15 @@ export interface SkzBoxProps extends EnableOptions {
 export function SkzBox(props: SkzBoxProps): SolidJSX.Element {
   const [own, opts] = splitProps(props, OWN_PROPS);
   const [el, setEl] = createSignal<HTMLElement>();
+  // 只跟踪元素：元素被换掉（as 变了）或组件卸载时撤掉旧元素上的骨架，选项变化不会先卸后装
   createEffect(() => {
     const node = el();
-    if (!node) return;
-    // 整体拷贝以追踪全部选项字段
-    toggle(node, !!own.loading, Object.assign({}, opts) as EnableOptions);
-    onCleanup(() => disable(node));
+    if (node) onCleanup(() => disable(node));
+  });
+  createEffect(() => {
+    const node = el();
+    // 整体拷贝以追踪全部选项字段；toggle 在 loading 为假时自己会 disable
+    if (node) toggle(node, !!own.loading, Object.assign({}, opts) as EnableOptions);
   });
   return createComponent(Dynamic, {
     get component() {

@@ -18,7 +18,7 @@ function hash(n: number): number {
 }
 
 /** 1×1 透明 GIF 的 data URI */
-const GIF_1PX: string = "data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7";
+const GIF_1PX = "data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7";
 
 /** seed 的步长：不同 seed 落到哈希序列的不同区段 */
 const SEED_STRIDE = 131;
@@ -128,4 +128,4 @@ export const Bone = {
     const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}" viewBox="0 0 ${width} ${height}"/>`;
     return `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}`;
   },
-} as const;
+};

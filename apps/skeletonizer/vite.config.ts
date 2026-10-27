@@ -31,7 +31,7 @@ const JS_COMMON = {
  * 一个自包含的 JS 入口配置：单入口单文件（没有公共 chunk）；传 styled 时在产物开头加 import "./<入口名>.css"，打包器会一并引入样式。
  * @param name 入口名（也是产物文件名与同名 CSS 名）
  * @param entry 源码入口
- * @param opts clean：是否清空 dist（只有第一份配置清）；styled：是否带 CSS 导入；dts：d.mts 配置（false 不出）；external：额外的外部依赖
+ * @param opts clean：是否清空 dist（只有第一份配置清）；styled：是否带 CSS 导入；dts：d.mts 配置（false 不出）；external：额外的外部依赖（类型底座 skeletonizer/lite 总是外部，不用写）
  * @returns 一份 pack 配置
  * @example jsEntry("lite", "src/entries/lite.ts", { clean: true, styled: true })
  */
@@ -42,7 +42,7 @@ function jsEntry(name: string, entry: string, opts: { clean?: boolean; styled?: 
     entry: { [name]: entry },
     dts: dts === false ? false : { tsgo: true, ...dts },
     clean,
-    deps: { neverBundle: external },
+    deps: { neverBundle: [LITE_TYPES, ...external] },
     outputOptions: styled ? { banner: `import "./${name}.css";` } : {},
   };
 }
@@ -70,14 +70,14 @@ export default defineConfig({
     jsEntry("lite", "src/entries/lite.ts", { clean: true, styled: true }),
     jsEntry("full", "src/entries/full.ts", { styled: true, dts: false }),
     // full 的类型入口单独构建（只出 d.mts）：类型从 skeletonizer/lite 再导出，完整版只补增强，不另生成第二份核心类型
-    jsEntry("full", "src/entries/full.types.ts", { dts: { emitDtsOnly: true }, external: [LITE_TYPES] }),
+    jsEntry("full", "src/entries/full.types.ts", { dts: { emitDtsOnly: true } }),
     // 适配层：框架本身与 skeletonizer/lite（只取类型）都是外部依赖，各自一份配置以免出共享 chunk
-    jsEntry("vue", "src/vue.ts", { external: ["vue", LITE_TYPES] }),
-    jsEntry("react", "src/react.ts", { external: ["react", LITE_TYPES] }),
-    jsEntry("svelte", "src/svelte.ts", { external: [LITE_TYPES] }),
-    jsEntry("solid", "src/solid.ts", { external: ["solid-js", "solid-js/web", LITE_TYPES] }),
+    jsEntry("vue", "src/vue.ts", { external: ["vue"] }),
+    jsEntry("react", "src/react.ts", { external: ["react"] }),
+    jsEntry("svelte", "src/svelte.ts"),
+    jsEntry("solid", "src/solid.ts", { external: ["solid-js", "solid-js/web"] }),
     // <skz-box> 自定义元素：同样不含 core，经私有全局键取实现，不带 CSS（样式随 lite.css / full.css）
-    jsEntry("element", "src/element.ts", { external: [LITE_TYPES] }),
+    jsEntry("element", "src/element.ts"),
     // CSS：每个 SCSS 入口各编一份压缩 CSS，并按最低支持线降级语法（避免产出 8 位 hex 等新写法）
     ...CSS_ENTRIES.map((name) => ({
       entry: { [name]: `src/styles/entries/${name}.scss` },

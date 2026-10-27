@@ -53,13 +53,11 @@ $band-size: $band 100%;
 
 /// 光带位置，even 模式（根没写 skz-shimmer-mode，或写了 even / 未知取值；进度 p 为 0 → 1）：各骨头同速，每个都从自己左边界外起步。
 /// 光带左边缘（相对骨头左边界）x = p(L + W) - W，一轮行程 L + W，L = max(骨头宽, 参考宽度)，宽骨头也能完整离场。
-/// 参考宽度 = 100cqw：取最近 query container 的宽（没有容器时按规范退回小视口宽，等同 100vw）；根或外层写 container-type: inline-size 就按那块区域走。
+/// 参考宽度 = 100 个 --skz-span-unit，缺省 1cqw：取最近 query container 的宽（没有容器时按规范退回小视口宽，等同 100vw）；根或外层写 container-type: inline-size 就按那块区域走。
+/// 不认 cqw 的浏览器（Chrome 85~104 等）由 _driver.scss 里唯一一处 @supports 把 --skz-span-unit 设成 1vw；
+/// 单位经自定义属性中转，不认识只会"计算值时无效"、不会回退到前一条声明，所以必须这样整体切换。
 /// background-position 里的 100% 解析为 骨头宽 - 光带宽，所以 100% + W 就是骨头宽。
-$band-pos: calc(var(--skz-shimmer-p) * (max(100% + #{$band}, 100cqw) + #{$band}) - #{$band}) 0;
-
-/// even 模式位置的老浏览器回退：不认 cqw 的浏览器（Chrome 85~104 等）用 100vw 代替 100cqw。
-/// 经 --skz-bg-pos 中转时单位不认识会“计算值时无效”，必须靠 @supports 覆盖，见 _drivers.scss 的 sk-shimmer-pos。
-$band-pos-vw: calc(var(--skz-shimmer-p) * (max(100% + #{$band}, 100vw) + #{$band}) - #{$band}) 0;
+$band-pos: calc(var(--skz-shimmer-p) * (max(100% + #{$band}, 100 * var(--skz-span-unit, 1cqw)) + #{$band}) - #{$band}) 0;
 
 /// 光带位置，fit 模式（根写 skz-shimmer-mode=fit）：每个骨头在自己的盒子里扫，同时走完，宽骨头走得快。
 /// x = p(w + W) - W，w = 100% + W，即 p(100% + 2W) - W。

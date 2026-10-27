@@ -70,6 +70,13 @@
   @include sk-tier(s);
 }
 
+/* 不认容器查询单位的浏览器：光带行程的参考宽度改按视口（单位变量的说明见 _mixins.scss 的 $band-pos） */
+@supports not (width: 1cqw) {
+  [skz] {
+    --skz-span-unit: 1vw;
+  }
+}
+
 /* @property 无法用 @supports 检测，用 $prop-gate 代理（见 _mixins.scss）：相对颜色语法（Chrome 119+ / Safari 16.4+ / Firefox 128+）或 content-visibility（Chrome 85+，让 Chrome 88~118 也能跑）。
  * 已知误判：Firefox 125~127 有 content-visibility 没有 @property，动画会跳变。 */
 @supports #{$prop-gate} {

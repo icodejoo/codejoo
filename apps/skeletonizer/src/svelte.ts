@@ -35,7 +35,7 @@ export function skeleton(node: HTMLElement, params: SkzParams) {
  * 裸写法 `<img skz-bone>` 在 Svelte 里是 `true`，所以裸属性类型多收一个 true。
  * 注意：svelte 不是本包依赖，用户没装 svelte 时这段增强指向找不到的模块，只在没开 skipLibCheck 时报 TS2664。
  */
-// @ts-ignore -- svelte 不是本包依赖，源码构建时解析不到它；使用方装了 svelte 就能解析
+// @ts-expect-error -- svelte 不是本包依赖，源码构建时解析不到它；将来装上 svelte 时这里会报错，提醒删掉本行
 declare module "svelte/elements" {
   interface HTMLAttributes<T extends EventTarget> extends SkzHtmlAttributesFor<SkzBareAttr | true> {}
 }
