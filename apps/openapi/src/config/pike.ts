@@ -2,7 +2,7 @@
 // 来源：packages/quicktype-core/src/language/Pike/language.ts
 // 注意：Pike 没有可配置的 renderer 选项。
 
-import type { CommonBase, LangConfig } from "./shared";
+import type { BaseInput, CommonBase, LangConfig } from "./shared";
 import { DEFAULT_INFERENCE_FLAGS, type InferenceFlags } from "./shared";
 
 export function configurePike(input: ConfigurePikeInput = {}): PikeLangConfig {
@@ -21,7 +21,7 @@ export function configurePike(input: ConfigurePikeInput = {}): PikeLangConfig {
 }
 
 export interface ConfigurePikeInput {
-  base?: Partial<PikeBase>;
+  base?: BaseInput<PikeBase>;
 }
 
 export interface PikeBase extends CommonBase {

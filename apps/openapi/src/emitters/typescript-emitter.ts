@@ -9,14 +9,25 @@
 //   6. ref-alias 的 `interface X extends model.Y {}` 手写补到 request 末尾（含 op 注释）
 //   7. 手写 paths.d.ts（labeled tuple 索引接口）
 
+import path from "path";
+
 import type { TsLangConfig } from "../config/typescript";
 import type { EmitContext, EmitOutput } from "../config/shared";
-import { opKey, type MegaSchemaResult, type OperationData, type ReqInfo, type ResponseRef, type Schema } from "../schema";
+import { HTTP_METHOD_ORDER, opKey, type MegaSchemaResult, type OperationData, type ReqInfo, type ResponseRef, type Schema } from "../schema";
+import { escapeSingleQuoted, opDocLines, stripQuicktypeHeader } from "./shared";
 
 // ============================================================================
 // 入口：emit
 // ============================================================================
 
+/**
+ * TypeScript emitter：产出 response / request / paths 三个 `.d.ts`。
+ * @param ctx 渲染上下文，含 quicktype 原始输出、mega-schema 元信息与 TypeScript 语言配置
+ * @returns 三个文件的 `{ filename, content }`，顺序为 response、request、paths
+ * @example
+ * const [response, request, paths] = emitTypescript(ctx);
+ * fs.writeFileSync(response.filename, response.content);
+ */
 export function emitTypescript(ctx: EmitContext): EmitOutput[] {
   const cfg = ctx.cfg as TsLangConfig;
   const { responseFile, requestFile } = splitAndWrap(ctx.raw, ctx.meta, cfg);
@@ -31,8 +42,9 @@ export function emitTypescript(ctx: EmitContext): EmitOutput[] {
 // 切分 + 包装
 // ============================================================================
 
+/** 把 quicktype 输出切成 response / request 两份，补 model. 前缀、手写别名声明，并按 namespace 或模块形态包装 */
 function splitAndWrap(quicktypeOutput: string, meta: MegaSchemaResult, cfg: TsLangConfig): { responseFile: string; requestFile: string } {
-  // 后处理 #1：T[] → Array<T>（注释行不动，保留 JSDoc 中的原始示例）
+  // 后处理 #1：T[] → Array<T>（注释行、字符串字面量都不动）
   const transformed = bracketArrayToGeneric(quicktypeOutput);
   const blocks = parseBlocks(transformed);
 
@@ -63,6 +75,7 @@ function splitAndWrap(quicktypeOutput: string, meta: MegaSchemaResult, cfg: TsLa
   const raDecl = mod ? "export " : ""; // 模块：导出；全局：namespace 内裸声明
   const raI = mod ? "" : "  "; // 顶层缩进（全局 namespace 内 +2）
   const raPI = mod ? "  " : "    "; // extends 体内属性缩进
+  const definitions: Record<string, Schema> = meta.schema.definitions ?? {};
   const refAliasLines: string[] = [];
   for (const op of meta.ops) {
     const info = meta.reqInfoOf.get(opKey(op.path, op.method));
@@ -72,15 +85,18 @@ function splitAndWrap(quicktypeOutput: string, meta: MegaSchemaResult, cfg: TsLa
     const jsdoc = renderJsDoc(op, raI);
     if (jsdoc) refAliasLines.push(jsdoc);
 
+    // 基类不是对象型（字符串/数组/enum/联合…）时 `interface extends` 非法，改走 type 别名
+    const extendable = info.refName !== undefined && canExtendInterface(definitions[info.refName]);
+
     if (info.kind === "ref-alias") {
-      refAliasLines.push(`${raI}${raDecl}interface ${info.name} extends ${ns}.${info.refName} {}`);
+      refAliasLines.push(extendable ? `${raI}${raDecl}interface ${info.name} extends ${ns}.${info.refName} {}` : `${raI}${raDecl}type ${info.name} = ${ns}.${info.refName}`);
     } else if (info.kind === "ref-alias-extends" && info.extendsProps?.length) {
-      refAliasLines.push(`${raI}${raDecl}interface ${info.name} extends ${ns}.${info.refName} {`);
+      refAliasLines.push(extendable ? `${raI}${raDecl}interface ${info.name} extends ${ns}.${info.refName} {` : `${raI}${raDecl}type ${info.name} = ${ns}.${info.refName} & {`);
       for (const prop of info.extendsProps) {
         const opt = prop.required ? "" : "?";
         const desc = typeof prop.schema?.description === "string" ? prop.schema.description : undefined;
         if (desc) refAliasLines.push(...renderPropJsDoc(desc, raPI));
-        refAliasLines.push(`${raPI}${prop.name}${opt}: ${schemaToTsType(prop.schema, ns)}`);
+        refAliasLines.push(`${raPI}${propertyKey(prop.name)}${opt}: ${schemaToTsType(prop.schema, ns)}`);
       }
       refAliasLines.push(`${raI}}`);
     } else if (info.kind === "body-alias" && info.bodySchema) {
@@ -99,7 +115,7 @@ function splitAndWrap(quicktypeOutput: string, meta: MegaSchemaResult, cfg: TsLa
     const responseText = resOrdered.map((b) => ensureExport(b.text)).join("\n\n");
     const requestText = reqOrdered.map((b) => ensureExport(rewriteRefs(b.text, needsPrefix, ns))).join("\n\n");
     const reqNeedsModel = needsPrefix.size > 0 || refAliasLines.length > 0;
-    const reqImport = reqNeedsModel ? `import type * as ${ns} from "${baseNoExt(cfg.base.responseFile)}"\n\n` : "";
+    const reqImport = reqNeedsModel ? `import type * as ${ns} from "${relativeImport(cfg.base.requestFile, cfg.base.responseFile)}"\n\n` : "";
     return {
       responseFile: `${cfg.base.fileHeader}${responseText}\n`,
       requestFile: `${cfg.base.fileHeader}${reqImport}${requestText}${refAliasText}\n`,
@@ -117,6 +133,20 @@ function splitAndWrap(quicktypeOutput: string, meta: MegaSchemaResult, cfg: TsLa
   };
 }
 
+/**
+ * 判断某个 definition 能否作为 `interface X extends model.Y` 的基类。
+ * 只有确定是对象型才返回 true：有 properties 或 type 为 object，且没有 `$ref`、oneOf/anyOf/allOf、enum，
+ * type 为数组时要求全部元素都是 "object"（含 null 或其它类型都不行）。拿不准一律返回 false，调用方会退化成总是合法的 type 别名。
+ */
+function canExtendInterface(def: Schema): boolean {
+  if (!def || typeof def !== "object" || Array.isArray(def)) return false;
+  if (def.$ref !== undefined || def.oneOf || def.anyOf || def.allOf || Array.isArray(def.enum)) return false;
+  const t = def.type;
+  if (Array.isArray(t)) return t.length > 0 && t.every((x) => x === "object");
+  if (t === undefined) return def.properties !== null && typeof def.properties === "object";
+  return t === "object";
+}
+
 /** 给声明块顶部声明行确保单个 `export` 前缀（块可能以 JSDoc 注释开头）。模块模式用。 */
 function ensureExport(text: string): string {
   const lines = text.split("\n");
@@ -129,17 +159,21 @@ function ensureExport(text: string): string {
   return lines.join("\n");
 }
 
-/** 文件名 → 去扩展名的相对 import 路径（`response.d.ts` → `./response`）。 */
-function baseNoExt(file: string): string {
-  return "./" + file.replace(/\.d\.ts$|\.ts$/, "");
+/**
+ * 计算从 fromFile 所在目录到 toFile 的相对 import 路径（去掉 `.d.ts` / `.ts` 扩展名）。
+ * 文件名可以带子目录（如 `types/request.d.ts` → `./response`，`api/req.d.ts` 引 `shared/res.d.ts` → `../shared/res`）。
+ */
+function relativeImport(fromFile: string, toFile: string): string {
+  const from = fromFile.replace(/\\/g, "/");
+  const to = toFile.replace(/\\/g, "/").replace(/\.d\.ts$|\.ts$/, "");
+  // 两边都垫上根 "/"，避免 posix.relative 把相对路径按 process.cwd() 解析
+  const rel = path.posix.relative(path.posix.dirname("/" + from), "/" + to);
+  return rel.startsWith("./") || rel.startsWith("../") ? rel : "./" + rel;
 }
 
+/** 把 quicktype 输出按空行切成声明块；先剥掉头部用法注释 */
 function parseBlocks(quicktypeOutput: string): TsBlock[] {
-  // 剥 quicktype 的头部注释行（连续 // + 空行）
-  const lines = quicktypeOutput.split("\n");
-  let i = 0;
-  while (i < lines.length && (lines[i].startsWith("//") || lines[i].trim() === "")) i++;
-  const body = lines.slice(i).join("\n").replace(/\s+$/, "");
+  const body = stripQuicktypeHeader(quicktypeOutput);
 
   // 按空行分块；再为每块抽取首个声明的类型名
   return body
@@ -176,23 +210,54 @@ function stripBlockExport(text: string): string {
     .join("\n");
 }
 
+// ----------------------------------------------------------------------------
+// 字符串字面量保护：改写代码时不碰引号里的内容
+// ----------------------------------------------------------------------------
+
+/** 匹配单行内的 `"..."` / `'...'` 字符串字面量（含反斜杠转义） */
+const STRING_LITERAL_RE = /"(?:[^"\\]|\\.)*"|'(?:[^'\\]|\\.)*'/g;
+
+/** 字面量占位符的定界字符（Unicode 私有区，不会出现在 quicktype 输出里） */
+const MASK_CHAR = "";
+const MASK_RE = new RegExp(`${MASK_CHAR}(\\d+)${MASK_CHAR}`, "g");
+
 /**
- * 在非注释行中、对每个匹配 needsPrefix 的裸标识符加 model. 前缀。
+ * 把一行里的字符串字面量先换成占位符，只对「代码部分」应用 fn，再把字面量原样还原。
+ * 这样 `"items[]"`、`"Tag"` 这类带引号的属性名/字面量不会被改写，
+ * 而 `("a" | "b")[]` 这种跨字面量的结构仍能被 fn 整体识别。
+ */
+function transformCode(line: string, fn: (maskedCode: string) => string): string {
+  const literals: string[] = [];
+  const masked = line.replace(STRING_LITERAL_RE, (m) => {
+    literals.push(m);
+    return `${MASK_CHAR}${literals.length - 1}${MASK_CHAR}`;
+  });
+  return fn(masked).replace(MASK_RE, (_m, i: string) => literals[Number(i)]);
+}
+
+/** 是否是 JSDoc / 行注释行（改写时要整行跳过） */
+function isCommentLine(line: string): boolean {
+  const trimmed = line.trim();
+  return trimmed.startsWith("//") || trimmed.startsWith("/*") || trimmed.startsWith("*");
+}
+
+/**
+ * 在非注释行的代码部分，对每个匹配 needsPrefix 的裸标识符加 model. 前缀。
  *   - 跳过 JSDoc / 行注释（确保 shape/field 注释里的原文不被改写）
+ *   - 字符串字面量不动（带引号的属性名、字面量类型）
  *   - 已是 model.X 形式不动（前置 . 检查）
+ *   - 属性键位置不动：标识符后紧跟（可选 `?`）再跟 `:` 的是属性名，不是类型引用
  */
 function rewriteRefs(text: string, needsPrefix: Set<string>, ns: string): string {
   if (needsPrefix.size === 0) return text;
   const names = [...needsPrefix].sort((a, b) => b.length - a.length);
-  const pattern = new RegExp(`(?<![\\w$.])(${names.map(escapeRe).join("|")})(?![\\w$])`, "g");
+  const pattern = new RegExp(`(?<![\\w$.])(${names.map(escapeRe).join("|")})(?![\\w$])(?!\\s*\\??\\s*:)`, "g");
 
   return text
     .split("\n")
     .map((line) => {
-      const trimmed = line.trim();
-      if (!trimmed) return line;
-      if (trimmed.startsWith("//") || trimmed.startsWith("/*") || trimmed.startsWith("*")) return line;
-      return line.replace(pattern, (_m, name) => `${ns}.${name}`);
+      if (!line.trim() || isCommentLine(line)) return line;
+      return transformCode(line, (code) => code.replace(pattern, (_m, name: string) => `${ns}.${name}`));
     })
     .join("\n");
 }
@@ -205,14 +270,11 @@ function escapeRe(s: string): string {
 // T[] → Array<T> 后处理
 // ----------------------------------------------------------------------------
 
+/** 把 quicktype 输出里的 `T[]` 改成 `Array<T>`（注释行与字符串字面量不动） */
 function bracketArrayToGeneric(src: string): string {
   return src
     .split("\n")
-    .map((line) => {
-      const trimmed = line.trim();
-      if (trimmed.startsWith("//") || trimmed.startsWith("/*") || trimmed.startsWith("*")) return line;
-      return rewriteArrayBracketsInLine(line);
-    })
+    .map((line) => (isCommentLine(line) ? line : transformCode(line, rewriteArrayBracketsInLine)))
     .join("\n");
 }
 
@@ -287,31 +349,67 @@ function isEnumLike(b: TsBlock): boolean {
 // paths.d.ts 渲染
 // ============================================================================
 
+/** paths 渲染前一次性算好的共用数据：路径表、开关、按 path / (path, method) 建好的 op 索引 */
+interface PathsContext {
+  /** 去重排序后的全部 path */
+  allPaths: string[];
+  wantPath: boolean;
+  wantMethod: boolean;
+  /** JSDoc 挂在 PathRefs 上 */
+  docOnPath: boolean;
+  /** JSDoc 挂在 MethodRefs 上（仅当不产 PathRefs） */
+  docOnMethod: boolean;
+  /** path → 该 path 下的 op（保持 meta.ops 顺序） */
+  opsByPath: Map<string, OperationData[]>;
+  /** opKey(path, method) → op */
+  opByKey: Map<string, OperationData>;
+}
+
+/** 构建 {@link PathsContext}；emitPaths 与 emitPathsModule 共用，避免各算一遍 */
+function buildPathsContext(meta: MegaSchemaResult, cfg: TsLangConfig): PathsContext {
+  const opsByPath = new Map<string, OperationData[]>();
+  const opByKey = new Map<string, OperationData>();
+  for (const op of meta.ops) {
+    const list = opsByPath.get(op.path);
+    if (list) list.push(op);
+    else opsByPath.set(op.path, [op]);
+    opByKey.set(opKey(op.path, op.method), op);
+  }
+  const wantPath = cfg.base.emitPathRefs;
+  const wantMethod = cfg.base.emitMethodRefs;
+  return {
+    allPaths: [...opsByPath.keys()].sort(),
+    wantPath,
+    wantMethod,
+    // JSDoc 只挂一处（避免 PathRefs / MethodRefs 重复一份注释徒增解析体积）：
+    // 优先放在 PathRefs；若不产 PathRefs，则放到 MethodRefs，保证文档始终存在且只存一份。
+    docOnPath: wantPath,
+    docOnMethod: wantMethod && !wantPath,
+    opsByPath,
+    opByKey,
+  };
+}
+
+/** 渲染 paths.d.ts：全局形态写 declare namespace，模块形态转交 {@link emitPathsModule} */
 function emitPaths(meta: MegaSchemaResult, cfg: TsLangConfig): string {
   if (cfg.base.module) return emitPathsModule(meta, cfg);
   const ns = cfg.base.rootNamespace;
-  const allPaths = [...new Set(meta.ops.map((o) => o.path))].sort();
-  const wantPath = cfg.base.emitPathRefs;
-  const wantMethod = cfg.base.emitMethodRefs;
-  // JSDoc 只挂一处（避免 PathRefs / MethodRefs 重复一份注释徒增解析体积）：
-  // 优先放在 PathRefs；若不产 PathRefs，则放到 MethodRefs，保证文档始终存在且只存一份。
-  const docOnPath = wantPath;
-  const docOnMethod = wantMethod && !wantPath;
+  const pc = buildPathsContext(meta, cfg);
 
   let out = cfg.base.fileHeader;
   out += `declare namespace ${ns} {\n`;
 
-  if (allPaths.length === 0) {
+  if (pc.allPaths.length === 0) {
     out += "  type Paths = never\n\n";
   } else {
     out += "  type Paths =\n";
-    out += allPaths.map((p) => `    | '${p}'`).join("\n");
+    out += pc.allPaths.map((p) => `    | '${escapeSingleQuoted(p)}'`).join("\n");
     out += "\n\n";
   }
 
   const blocks: string[] = [];
-  if (wantPath) blocks.push(renderPathRefs(meta, allPaths, cfg, docOnPath));
-  if (wantMethod) blocks.push(renderMethodRefs(meta, allPaths, cfg, docOnMethod));
+  if (pc.wantPath) blocks.push(renderPathRefs(meta, pc, cfg));
+  if (pc.wantMethod) blocks.push(renderMethodRefs(meta, pc, cfg));
   out += blocks.join("\n");
 
   out += "}\n";
@@ -320,20 +418,21 @@ function emitPaths(meta: MegaSchemaResult, cfg: TsLangConfig): string {
 
 /** path-major 索引 `PathRefs`：`{ [path]: { [method]: [response, request] } }`。
  *  openapi2lang 自己的 `OpenApi`/`Request` 消费它。 */
-function renderPathRefs(meta: MegaSchemaResult, allPaths: string[], cfg: TsLangConfig, withJsDoc: boolean): string {
+function renderPathRefs(meta: MegaSchemaResult, pc: PathsContext, cfg: TsLangConfig): string {
   let out = "  interface PathRefs {\n";
-  for (const p of allPaths) {
-    const opsOfPath = meta.ops.filter((o) => o.path === p);
+  for (const p of pc.allPaths) {
+    const opsOfPath = pc.opsByPath.get(p) ?? [];
+    const key = `'${escapeSingleQuoted(p)}'`;
     if (opsOfPath.length === 0) {
-      out += `    '${p}': {}\n`;
+      out += `    ${key}: {}\n`;
       continue;
     }
-    out += `    '${p}': {\n`;
+    out += `    ${key}: {\n`;
     for (const op of opsOfPath) {
       const reqInfo = meta.reqInfoOf.get(opKey(op.path, op.method))!;
       const resExpr = renderResponse(meta.responseRefOf.get(opKey(op.path, op.method))!, cfg);
       const reqExpr = renderReq(reqInfo, cfg);
-      if (withJsDoc) {
+      if (pc.docOnPath) {
         const jsdoc = renderJsDoc(op, "      ");
         if (jsdoc) out += `${jsdoc}\n`;
       }
@@ -353,26 +452,24 @@ function renderPathRefs(meta: MegaSchemaResult, allPaths: string[], cfg: TsLangC
  * 类型层反转：消费者（如 axp 的 `Core<T>`）按 `T[method][path]` 做 O(1) 字面查表，
  * 零条件类型计算，对 tsserver / IDE 内存友好。
  */
-const METHOD_ORDER: readonly string[] = ["get", "post", "put", "delete", "patch", "options", "head"];
-
-function renderMethodRefs(meta: MegaSchemaResult, allPaths: string[], cfg: TsLangConfig, withJsDoc: boolean): string {
+function renderMethodRefs(meta: MegaSchemaResult, pc: PathsContext, cfg: TsLangConfig): string {
   const present = [...new Set(meta.ops.map((o) => o.method))];
-  const methods: string[] = [...METHOD_ORDER.filter((m) => present.includes(m)), ...present.filter((m) => !METHOD_ORDER.includes(m)).sort()];
+  const methods: string[] = [...HTTP_METHOD_ORDER.filter((m) => present.includes(m)), ...present.filter((m) => !HTTP_METHOD_ORDER.includes(m)).sort()];
 
   let out = "  interface MethodRefs {\n";
   for (const m of methods) {
     out += `    ${m}: {\n`;
-    for (const p of allPaths) {
-      const op = meta.ops.find((o) => o.path === p && o.method === m);
+    for (const p of pc.allPaths) {
+      const op = pc.opByKey.get(opKey(p, m));
       if (!op) continue;
       const reqInfo = meta.reqInfoOf.get(opKey(p, m))!;
       const resExpr = renderResponse(meta.responseRefOf.get(opKey(p, m))!, cfg);
       const reqExpr = renderReq(reqInfo, cfg);
-      if (withJsDoc) {
+      if (pc.docOnMethod) {
         const jsdoc = renderJsDoc(op, "      ");
         if (jsdoc) out += `${jsdoc}\n`;
       }
-      out += `      '${p}': [response: ${resExpr}, request: ${reqExpr}]\n`;
+      out += `      '${escapeSingleQuoted(p)}': [response: ${resExpr}, request: ${reqExpr}]\n`;
     }
     out += "    }\n";
   }
@@ -385,21 +482,17 @@ function renderMethodRefs(meta: MegaSchemaResult, allPaths: string[], cfg: TsLan
 function emitPathsModule(meta: MegaSchemaResult, cfg: TsLangConfig): string {
   const ns = cfg.base.rootNamespace;
   const reqAlias = cfg.base.requestNamespace;
-  const allPaths = [...new Set(meta.ops.map((o) => o.path))].sort();
-  const wantPath = cfg.base.emitPathRefs;
-  const wantMethod = cfg.base.emitMethodRefs;
-  const docOnPath = wantPath;
-  const docOnMethod = wantMethod && !wantPath;
+  const pc = buildPathsContext(meta, cfg);
 
   let body = "";
-  if (allPaths.length === 0) body += "export type Paths = never\n";
-  else body += "export type Paths =\n" + allPaths.map((p) => `  | '${p}'`).join("\n") + "\n";
-  if (wantPath) body += "\n" + dedentExport(renderPathRefs(meta, allPaths, cfg, docOnPath));
-  if (wantMethod) body += "\n" + dedentExport(renderMethodRefs(meta, allPaths, cfg, docOnMethod));
+  if (pc.allPaths.length === 0) body += "export type Paths = never\n";
+  else body += "export type Paths =\n" + pc.allPaths.map((p) => `  | '${escapeSingleQuoted(p)}'`).join("\n") + "\n";
+  if (pc.wantPath) body += "\n" + dedentExport(renderPathRefs(meta, pc, cfg));
+  if (pc.wantMethod) body += "\n" + dedentExport(renderMethodRefs(meta, pc, cfg));
 
   const imports: string[] = [];
-  if (body.includes(`${ns}.`)) imports.push(`import type * as ${ns} from "${baseNoExt(cfg.base.responseFile)}"`);
-  if (body.includes(`${reqAlias}.`)) imports.push(`import type * as ${reqAlias} from "${baseNoExt(cfg.base.requestFile)}"`);
+  if (body.includes(`${ns}.`)) imports.push(`import type * as ${ns} from "${relativeImport(cfg.base.pathsFile, cfg.base.responseFile)}"`);
+  if (body.includes(`${reqAlias}.`)) imports.push(`import type * as ${reqAlias} from "${relativeImport(cfg.base.pathsFile, cfg.base.requestFile)}"`);
   const importText = imports.length ? imports.join("\n") + "\n\n" : "";
 
   return `${cfg.base.fileHeader}${importText}${body}`;
@@ -456,14 +549,9 @@ function renderReq(info: ReqInfo, cfg: TsLangConfig): string {
   return `[payload: ${reqNs}.${info.name}]`;
 }
 
+/** op 文档注释（JSDoc 形式）；没有文档信息返回 null */
 function renderJsDoc(op: OperationData, indent: string): string | null {
-  const parts: string[] = [];
-  if (op.summary) op.summary.split("\n").forEach((l) => parts.push(l));
-  if (op.description && op.description !== op.summary) {
-    if (parts.length) parts.push("");
-    op.description.split("\n").forEach((l) => parts.push(l));
-  }
-  if (op.deprecated) parts.push("@deprecated");
+  const parts = opDocLines(op);
   if (parts.length === 0) return null;
   const sanitized = parts.map((l) => l.replace(/\*\//g, "*\\/"));
   if (sanitized.length === 1) return `${indent}/** ${sanitized[0]} */`;
@@ -477,16 +565,34 @@ function renderPropJsDoc(desc: string, indent: string): string[] {
 }
 
 // ============================================================================
-// JSON Schema → TypeScript 类型字符串（仅用于 ref-alias-extends 的 extendsProps）
+// JSON Schema → TypeScript 类型字符串（仅用于 ref-alias-extends 的 extendsProps 与 body-alias）
 // ============================================================================
+
+/** 合法的 TS 标识符（可直接作属性名） */
+const TS_IDENT_RE = /^[A-Za-z_$][\w$]*$/;
+
+/** 属性名：合法标识符原样输出，否则用 JSON 字符串字面量加引号（如 `"X-Request-Id"`）。 */
+function propertyKey(name: string): string {
+  return TS_IDENT_RE.test(name) ? name : JSON.stringify(name);
+}
+
+/** schema 渲染出来是否是顶层联合类型（放进交叉类型时需要加括号） */
+function isUnionSchema(schema: Schema): boolean {
+  if (!schema || typeof schema !== "object") return false;
+  if ((Array.isArray(schema.oneOf) && schema.oneOf.length > 1) || (Array.isArray(schema.anyOf) && schema.anyOf.length > 1)) return true;
+  if (Array.isArray(schema.enum) && schema.enum.length > 1) return true;
+  return Array.isArray(schema.type) && schema.type.length > 1;
+}
 
 /**
  * JSON Schema → TypeScript 类型字符串。仅服务于 ref-alias-extends 的 extendsProps 与
  * body-alias 的 bodySchema —— 这两类 schema 不进 mega-schema，无法被 quicktype 渲染。
  *
- * 内联 enum 已经在 schema 阶段由 {@link EnumLifter} 提升为顶层 `$ref`，因此本函数无需
- * 再处理 enum 字面量分支：所有 enum 都以 `{ $ref: '#/definitions/<Name>' }` 形态出现，
- * 走通用 ref 分支即可输出 `model.<Name>`。
+ * 支持：`$ref`、`const` / `enum` 字面量、oneOf/anyOf（` | `）、allOf（` & `）、
+ * 带 properties 的对象（内联 `{ a: T; b?: U }`）、additionalProperties（`Record<string, T>`）、
+ * 数组与基础类型。纯 `{ type: "null" }` 渲染为 `null`。
+ *
+ * 内联 enum 通常已在 schema 阶段由 EnumLifter 提升为顶层 `$ref`，走通用 ref 分支即可输出 `model.<Name>`。
  */
 function schemaToTsType(schema: Schema, ns: string): string {
   if (!schema || typeof schema !== "object") return "unknown";
@@ -496,15 +602,28 @@ function schemaToTsType(schema: Schema, ns: string): string {
     return m ? `${ns}.${m[1]}` : "unknown";
   }
 
-  const types: string[] = Array.isArray(schema.type) ? schema.type : typeof schema.type === "string" ? [schema.type] : [];
+  if ("const" in schema) return JSON.stringify(schema.const) ?? "unknown";
+  if (Array.isArray(schema.enum) && schema.enum.length > 0) return schema.enum.map((v: unknown) => JSON.stringify(v) ?? "unknown").join(" | ");
+
+  for (const key of ["oneOf", "anyOf"] as const) {
+    if (Array.isArray(schema[key]) && schema[key].length > 0) return schema[key].map((s: Schema) => schemaToTsType(s, ns)).join(" | ");
+  }
+  if (Array.isArray(schema.allOf) && schema.allOf.length > 0) {
+    return schema.allOf.map((s: Schema) => (isUnionSchema(s) ? `(${schemaToTsType(s, ns)})` : schemaToTsType(s, ns))).join(" & ");
+  }
+
+  let types: string[] = Array.isArray(schema.type) ? schema.type : typeof schema.type === "string" ? [schema.type] : [];
+  // 没写 type 但有 properties / additionalProperties，按对象处理
+  if (types.length === 0 && (schema.properties || schema.additionalProperties)) types = ["object"];
   const hasNull = types.includes("null");
   const nonNull = types.filter((t) => t !== "null");
 
-  const base = nonNull.length === 0 ? "unknown" : nonNull.map((t) => primToTs(t, schema, ns)).join(" | ");
-
+  if (nonNull.length === 0) return hasNull ? "null" : "unknown";
+  const base = nonNull.map((t) => primToTs(t, schema, ns)).join(" | ");
   return hasNull ? `${base} | null` : base;
 }
 
+/** 单个 JSON Schema 基础类型名 → TS 类型字符串；array / object 会继续递归 */
 function primToTs(type: string, schema: Schema, ns: string): string {
   switch (type) {
     case "string":
@@ -519,10 +638,26 @@ function primToTs(type: string, schema: Schema, ns: string): string {
     case "array":
       return schema.items ? `Array<${schemaToTsType(schema.items, ns)}>` : "Array<unknown>";
     case "object":
-      return "Record<string, unknown>";
+      return objectToTs(schema, ns);
     default:
       return "unknown";
   }
+}
+
+/** 对象 schema → 内联对象类型 / Record；required 决定属性是否带 `?` */
+function objectToTs(schema: Schema, ns: string): string {
+  const props = schema.properties;
+  if (props && typeof props === "object" && Object.keys(props).length > 0) {
+    const required = new Set<string>(Array.isArray(schema.required) ? schema.required : []);
+    const members = Object.entries(props).map(([name, s]) => `${propertyKey(name)}${required.has(name) ? "" : "?"}: ${schemaToTsType(s, ns)}`);
+    // 同时允许额外字段时追加索引签名；unknown 与任何属性类型都兼容，不会触发签名冲突
+    if (schema.additionalProperties === true || (schema.additionalProperties && typeof schema.additionalProperties === "object")) members.push("[key: string]: unknown");
+    return `{ ${members.join("; ")} }`;
+  }
+  const ap = schema.additionalProperties;
+  if (ap && typeof ap === "object") return `Record<string, ${schemaToTsType(ap, ns)}>`;
+  if (ap === false) return "Record<string, never>";
+  return "Record<string, unknown>";
 }
 
 // ============================================================================

@@ -1,7 +1,7 @@
 // Scala 3 语言配置工厂。
 // 来源：packages/quicktype-core/src/language/Scala3/language.ts
 
-import type { CommonBase, LangConfig } from "./shared";
+import type { BaseInput, CommonBase, LangConfig } from "./shared";
 import { DEFAULT_INFERENCE_FLAGS, type InferenceFlags } from "./shared";
 
 export function configureScala3(input: ConfigureScala3Input = {}): Scala3LangConfig {
@@ -28,7 +28,7 @@ const DEFAULT_OTHERS: Scala3OthersOptions = {
 };
 
 export interface ConfigureScala3Input {
-  base?: Partial<Scala3Base>;
+  base?: BaseInput<Scala3Base>;
   primary?: Partial<Scala3PrimaryOptions>;
   others?: Partial<Scala3OthersOptions>;
 }

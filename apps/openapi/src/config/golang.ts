@@ -1,7 +1,7 @@
 // Go 语言配置工厂。
 // 来源：packages/quicktype-core/src/language/Golang/language.ts
 
-import type { CommonBase, LangConfig } from "./shared";
+import type { BaseInput, CommonBase, LangConfig } from "./shared";
 import { DEFAULT_INFERENCE_FLAGS, type InferenceFlags } from "./shared";
 
 export function configureGo(input: ConfigureGoInput = {}): GoLangConfig {
@@ -29,7 +29,7 @@ const DEFAULT_PRIMARY: GoPrimaryOptions = {
 };
 
 export interface ConfigureGoInput {
-  base?: Partial<GoBase>;
+  base?: BaseInput<GoBase>;
   primary?: Partial<GoPrimaryOptions>;
 }
 

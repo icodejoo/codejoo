@@ -1,4 +1,4 @@
-// 入口：导出 generate(base, langs) 通用函数；底部演示如何用本仓库的默认配置调用它。
+// 入口：导出 generate(base, langs) 通用函数，并统一 re-export 各语言配置工厂与类型。
 //
 // 主函数职责：
 //   1. 加载 OpenAPI doc（v2/v3、json/yaml）→ 合成 mega-schema
@@ -17,6 +17,7 @@ import path from "path";
 import { quicktype, InputData, JSONSchemaInput } from "quicktype-core";
 
 import { type BaseConfig, type EmitContext, type EmitOutput, type LangConfig } from "./config/shared";
+import { stripQuicktypeHeader } from "./emitters/shared";
 import { buildMegaSchema, loadOpenAPI, type MegaSchemaResult } from "./schema";
 
 export * from "./http-types";
@@ -51,36 +52,6 @@ export * from "./config/typescript-zod";
 export * from "./schema";
 export * from "./emitters/typescript-emitter";
 export * from "./emitters/dart-emitter";
-export * from "./http-types";
-
-// 其它 25 种语言可按需 import：
-//   import { configureJava }                    from './config/java'
-//   import { configureKotlin }                  from './config/kotlin'
-//   import { configureSwift }                   from './config/swift'
-//   import { configureGo }                      from './config/golang'
-//   import { configurePython }                  from './config/python'
-//   import { configureCSharp }                  from './config/csharp'
-//   import { configureRust }                    from './config/rust'
-//   import { configureRuby }                    from './config/ruby'
-//   import { configurePhp }                     from './config/php'
-//   import { configureCpp }                     from './config/cpp'
-//   import { configureCJson }                   from './config/cjson'
-//   import { configureObjectiveC }              from './config/objective-c'
-//   import { configureScala3 }                  from './config/scala3'
-//   import { configureSmithy4s }                from './config/smithy4s'
-//   import { configureCrystal }                 from './config/crystal'
-//   import { configureElixir }                  from './config/elixir'
-//   import { configureHaskell }                 from './config/haskell'
-//   import { configureElm }                     from './config/elm'
-//   import { configurePike }                    from './config/pike'
-//   import { configureFlow }                    from './config/flow'
-//   import { configureJavascript }              from './config/javascript'
-//   import { configureJavascriptPropTypes }     from './config/javascript-prop-types'
-//   import { configureTypescriptZod }           from './config/typescript-zod'
-//   import { configureTypescriptEffectSchema }  from './config/typescript-effect-schema'
-//   import { configureJsonSchema }              from './config/json-schema'
-
-const PROJECT_ROOT = process.cwd();
 
 /** 把 `base.source` 的 5 种形态压成一行短描述，避免内联字符串塞满日志 */
 function describeSource(source: string | Record<string, unknown>): string {
@@ -100,9 +71,19 @@ function describeSource(source: string | Record<string, unknown>): string {
 // 主函数：generate
 // ============================================================================
 
+/**
+ * 主入口：加载 OpenAPI → 合成 mega-schema → 逐语言跑 quicktype → 写盘。
+ * 相对路径（`base.source` 与各语言的 `base.dir`）以调用 generate 时的 `process.cwd()` 为基准。
+ * @param base 与语言无关的基础配置，用 {@link configureBase} 构造
+ * @param langs 要产出的语言配置列表，如 `[configureTypescript(), configureDart()]`
+ * @returns 全部文件写完后 resolve
+ * @example
+ * await generate(configureBase({ source: "./openapi.json" }), [configureTypescript()]);
+ */
 export async function generate(base: BaseConfig, langs: LangConfig[]): Promise<void> {
+  const projectRoot = process.cwd(); // 每次调用时取，避免 import 时固定住后来 chdir 的情况
   console.log(`[openapi2lang] Loading OpenAPI: ${describeSource(base.source)}`);
-  const doc = await loadOpenAPI(base.source, PROJECT_ROOT);
+  const doc = await loadOpenAPI(base.source, projectRoot);
 
   console.log("[openapi2lang] Building mega-schema...");
   const meta = buildMegaSchema(doc, base);
@@ -112,7 +93,7 @@ export async function generate(base: BaseConfig, langs: LangConfig[]): Promise<v
     console.log(`[openapi2lang] Running quicktype for language: ${lang.base.lang}`);
     const outputs = await runLang(lang, meta);
     for (const { filename, content } of outputs) {
-      const absPath = path.resolve(PROJECT_ROOT, lang.base.dir, filename);
+      const absPath = path.resolve(projectRoot, lang.base.dir, filename);
       await fs.mkdir(path.dirname(absPath), { recursive: true });
       await fs.writeFile(absPath, content, "utf-8");
       console.log(`  Written: ${absPath}`);
@@ -162,27 +143,4 @@ function defaultEmit(cfg: LangConfig, raw: string): EmitOutput[] {
       content: cfg.base.fileHeader + stripQuicktypeHeader(raw) + "\n",
     },
   ];
-}
-
-/**
- * quicktype 默认会在文件顶部加"// To parse this JSON data..."用法注释。
- * 不同语言的注释引导符不同（C 系 //、Python 系 #、Haskell --），所以这里做较宽松的匹配：
- * 剥掉前导连续的"以注释字符开头或纯空"的行。
- */
-function stripQuicktypeHeader(src: string): string {
-  const lines = src.split("\n");
-  let i = 0;
-  while (i < lines.length) {
-    const t = lines[i].trim();
-    if (!t) {
-      i++;
-      continue;
-    }
-    if (t.startsWith("//") || t.startsWith("#") || t.startsWith("--")) {
-      i++;
-      continue;
-    }
-    break;
-  }
-  return lines.slice(i).join("\n").replace(/\s+$/, "");
 }

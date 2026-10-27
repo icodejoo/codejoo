@@ -1,7 +1,7 @@
 // JavaScript PropTypes 配置工厂（生成 React PropTypes 定义）。
 // 来源：packages/quicktype-core/src/language/JavaScriptPropTypes/language.ts
 
-import type { CommonBase, LangConfig } from "./shared";
+import type { BaseInput, CommonBase, LangConfig } from "./shared";
 import { DEFAULT_INFERENCE_FLAGS, type InferenceFlags } from "./shared";
 
 export function configureJavascriptPropTypes(input: ConfigureJsPropTypesInput = {}): JsPropTypesLangConfig {
@@ -26,7 +26,7 @@ const DEFAULT_OTHERS: JsPropTypesOthersOptions = {
 };
 
 export interface ConfigureJsPropTypesInput {
-  base?: Partial<JsPropTypesBase>;
+  base?: BaseInput<JsPropTypesBase>;
   others?: Partial<JsPropTypesOthersOptions>;
 }
 

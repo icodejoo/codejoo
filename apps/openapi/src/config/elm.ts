@@ -1,7 +1,7 @@
 // Elm 语言配置工厂。
 // 来源：packages/quicktype-core/src/language/Elm/language.ts
 
-import type { CommonBase, LangConfig } from "./shared";
+import type { BaseInput, CommonBase, LangConfig } from "./shared";
 import { DEFAULT_INFERENCE_FLAGS, type InferenceFlags } from "./shared";
 
 export function configureElm(input: ConfigureElmInput = {}): ElmLangConfig {
@@ -26,7 +26,7 @@ const DEFAULT_PRIMARY: ElmPrimaryOptions = {
 };
 
 export interface ConfigureElmInput {
-  base?: Partial<ElmBase>;
+  base?: BaseInput<ElmBase>;
   primary?: Partial<ElmPrimaryOptions>;
 }
 

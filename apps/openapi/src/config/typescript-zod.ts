@@ -1,7 +1,7 @@
 // TypeScript + Zod 配置工厂（生成 zod schemas，业务侧需要 zod 运行时）。
 // 来源：packages/quicktype-core/src/language/TypeScriptZod/language.ts
 
-import type { CommonBase, LangConfig } from "./shared";
+import type { BaseInput, CommonBase, LangConfig } from "./shared";
 import { DEFAULT_INFERENCE_FLAGS, type InferenceFlags } from "./shared";
 
 export function configureTypescriptZod(input: ConfigureTsZodInput = {}): TsZodLangConfig {
@@ -24,7 +24,7 @@ const DEFAULT_PRIMARY: TsZodPrimaryOptions = {
 };
 
 export interface ConfigureTsZodInput {
-  base?: Partial<TsZodBase>;
+  base?: BaseInput<TsZodBase>;
   primary?: Partial<TsZodPrimaryOptions>;
 }
 

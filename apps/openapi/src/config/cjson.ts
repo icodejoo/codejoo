@@ -1,7 +1,7 @@
 // C (cJSON) 语言配置工厂。
 // 来源：packages/quicktype-core/src/language/CJSON/language.ts
 
-import type { CommonBase, LangConfig } from "./shared";
+import type { BaseInput, CommonBase, LangConfig } from "./shared";
 import { DEFAULT_INFERENCE_FLAGS, type InferenceFlags } from "./shared";
 
 export function configureCJson(input: ConfigureCJsonInput = {}): CJsonLangConfig {
@@ -36,7 +36,7 @@ const DEFAULT_OTHERS: CJsonOthersOptions = {
 type NamingStyle = "pascal-case" | "underscore-case" | "camel-case" | "upper-underscore-case" | "pascal-case-upper-acronyms" | "camel-case-upper-acronyms";
 
 export interface ConfigureCJsonInput {
-  base?: Partial<CJsonBase>;
+  base?: BaseInput<CJsonBase>;
   primary?: Partial<CJsonPrimaryOptions>;
   others?: Partial<CJsonOthersOptions>;
 }

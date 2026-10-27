@@ -1,7 +1,7 @@
 // Java 语言配置工厂。
 // 来源：packages/quicktype-core/src/language/Java/language.ts
 
-import type { CommonBase, LangConfig } from "./shared";
+import type { BaseInput, CommonBase, LangConfig } from "./shared";
 import { DEFAULT_INFERENCE_FLAGS, type InferenceFlags } from "./shared";
 
 export function configureJava(input: ConfigureJavaInput = {}): JavaLangConfig {
@@ -33,7 +33,7 @@ const DEFAULT_OTHERS: JavaOthersOptions = {
 };
 
 export interface ConfigureJavaInput {
-  base?: Partial<JavaBase>;
+  base?: BaseInput<JavaBase>;
   primary?: Partial<JavaPrimaryOptions>;
   others?: Partial<JavaOthersOptions>;
 }

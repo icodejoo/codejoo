@@ -2,7 +2,7 @@
 // 来源：packages/quicktype-core/src/language/Crystal/language.ts
 // 注意：Crystal 没有可配置的 renderer 选项（getOptions() 返回 {}）。
 
-import type { CommonBase, LangConfig } from "./shared";
+import type { BaseInput, CommonBase, LangConfig } from "./shared";
 import { DEFAULT_INFERENCE_FLAGS, type InferenceFlags } from "./shared";
 
 export function configureCrystal(input: ConfigureCrystalInput = {}): CrystalLangConfig {
@@ -21,7 +21,7 @@ export function configureCrystal(input: ConfigureCrystalInput = {}): CrystalLang
 }
 
 export interface ConfigureCrystalInput {
-  base?: Partial<CrystalBase>;
+  base?: BaseInput<CrystalBase>;
 }
 
 export interface CrystalBase extends CommonBase {

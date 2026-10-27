@@ -1,7 +1,7 @@
 // Smithy4s 语言配置工厂。
 // 来源：packages/quicktype-core/src/language/Smithy4s/language.ts
 
-import type { CommonBase, LangConfig } from "./shared";
+import type { BaseInput, CommonBase, LangConfig } from "./shared";
 import { DEFAULT_INFERENCE_FLAGS, type InferenceFlags } from "./shared";
 
 export function configureSmithy4s(input: ConfigureSmithyInput = {}): SmithyLangConfig {
@@ -28,7 +28,7 @@ const DEFAULT_OTHERS: SmithyOthersOptions = {
 };
 
 export interface ConfigureSmithyInput {
-  base?: Partial<SmithyBase>;
+  base?: BaseInput<SmithyBase>;
   primary?: Partial<SmithyPrimaryOptions>;
   others?: Partial<SmithyOthersOptions>;
 }

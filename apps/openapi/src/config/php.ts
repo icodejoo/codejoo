@@ -1,7 +1,7 @@
 // PHP 语言配置工厂。
 // 来源：packages/quicktype-core/src/language/Php/language.ts
 
-import type { CommonBase, LangConfig } from "./shared";
+import type { BaseInput, CommonBase, LangConfig } from "./shared";
 import { DEFAULT_INFERENCE_FLAGS, type InferenceFlags } from "./shared";
 
 export function configurePhp(input: ConfigurePhpInput = {}): PhpLangConfig {
@@ -31,7 +31,7 @@ const DEFAULT_OTHERS: PhpOthersOptions = {
 };
 
 export interface ConfigurePhpInput {
-  base?: Partial<PhpBase>;
+  base?: BaseInput<PhpBase>;
   primary?: Partial<PhpPrimaryOptions>;
   others?: Partial<PhpOthersOptions>;
 }

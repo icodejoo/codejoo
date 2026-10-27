@@ -1,7 +1,7 @@
 // Objective-C 语言配置工厂。
 // 来源：packages/quicktype-core/src/language/Objective-C/language.ts
 
-import type { CommonBase, LangConfig } from "./shared";
+import type { BaseInput, CommonBase, LangConfig } from "./shared";
 import { DEFAULT_INFERENCE_FLAGS, type InferenceFlags } from "./shared";
 
 export function configureObjectiveC(input: ConfigureObjcInput = {}): ObjcLangConfig {
@@ -31,7 +31,7 @@ const DEFAULT_OTHERS: ObjcOthersOptions = {
 };
 
 export interface ConfigureObjcInput {
-  base?: Partial<ObjcBase>;
+  base?: BaseInput<ObjcBase>;
   primary?: Partial<ObjcPrimaryOptions>;
   others?: Partial<ObjcOthersOptions>;
 }

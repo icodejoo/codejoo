@@ -8,7 +8,7 @@
 //   packages/quicktype-core/src/language/JavaScript/language.ts (TS 通过 ...javaScriptOptions 继承)
 
 import { emitTypescript } from "../emitters/typescript-emitter";
-import { DEFAULT_INFERENCE_FLAGS, type CommonBase, type InferenceFlags, type LangConfig } from "./shared";
+import { DEFAULT_INFERENCE_FLAGS, type BaseInput, type CommonBase, type InferenceFlags, type LangConfig } from "./shared";
 
 // ============================================================================
 // 工厂
@@ -64,7 +64,7 @@ const DEFAULT_TS_OTHERS: TsOthersOptions = {
 // ============================================================================
 
 export interface ConfigureTsInput {
-  base?: Partial<TsBase>;
+  base?: BaseInput<TsBase>;
   primary?: Partial<TsPrimaryOptions>;
   others?: Partial<TsOthersOptions>;
 }

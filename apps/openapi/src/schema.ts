@@ -24,6 +24,23 @@ import yaml from "js-yaml";
 
 import type { BaseConfig } from "./config/shared";
 
+/**
+ * 支持的 HTTP 方法（小写），顺序即默认的处理顺序（影响 PathRefs 字段顺序与 req 名分配优先级）。
+ *
+ * @example
+ * HTTP_METHOD_ORDER.includes("trace"); // true
+ */
+export const HTTP_METHOD_ORDER: readonly string[] = ["get", "post", "put", "delete", "patch", "options", "head", "trace"];
+
+/** HTTP 方法集合，由 {@link HTTP_METHOD_ORDER} 构造，用于 O(1) 判断。 */
+const HTTP_METHODS = new Set<string>(HTTP_METHOD_ORDER);
+
+/** 用户自定义 conflictSuffix 的最大尝试次数，防止回调总返回已占用名字时死循环。 */
+const MAX_NAME_ATTEMPTS = 10000;
+
+/** 解析本地 `$ref` 链时的最大跳数，防环。 */
+const MAX_REF_HOPS = 20;
+
 // ============================================================================
 // 加载
 // ============================================================================
@@ -42,11 +59,17 @@ import type { BaseConfig } from "./config/shared";
  *   3. 内联 JSON 字符串  —— 以 `{` 或 `[` 开头（trim 后），直接 JSON.parse
  *   4. 内联 YAML 字符串  —— 含换行符的字符串视为内联文本（路径不会有换行）
  *   5. 文件路径          —— 其余字符串当作绝对/相对路径，按扩展名 / 内容嗅探解析
+ *
+ * @param source 已解析对象、URL、内联 JSON/YAML 文本或文件路径
+ * @param projectRoot 解析相对文件路径时的基准目录
+ * @returns 归一化前的 OpenAPI 文档对象
+ * @example
+ * const doc = await loadOpenAPI("./openapi.yaml", process.cwd());
  */
 export async function loadOpenAPI(source: string | Record<string, unknown>, projectRoot: string): Promise<OpenAPIDoc> {
   // 形态 1：已是 JS 对象
   if (typeof source !== "string") {
-    return convertV2ToV3(source as OpenAPIDoc);
+    return finishLoad(source, "[object]");
   }
 
   const classified = classifySource(source);
@@ -54,27 +77,39 @@ export async function loadOpenAPI(source: string | Record<string, unknown>, proj
   switch (classified.kind) {
     // 形态 3：内联 JSON 文本——sourceLabel 用伪扩展名让 parseDoc 走 JSON 优先路径
     case "inline-json":
-      return convertV2ToV3(parseDoc(classified.text, "<inline.json>"));
+      return finishLoad(parseDoc(classified.text, "<inline.json>"), "<inline.json>");
 
     // 形态 4：内联 YAML 文本——伪 .yaml 扩展名让 parseDoc 直走 YAML
     case "inline-yaml":
-      return convertV2ToV3(parseDoc(classified.text, "<inline.yaml>"));
+      return finishLoad(parseDoc(classified.text, "<inline.yaml>"), "<inline.yaml>");
 
     // 形态 2：远程 URL
     case "url": {
       const r = await fetch(classified.value);
       if (!r.ok) throw new Error(`fetch ${classified.value} -> ${r.status} ${r.statusText}`);
       const text = await r.text();
-      return convertV2ToV3(parseDoc(text, new URL(classified.value).pathname));
+      return finishLoad(parseDoc(text, new URL(classified.value).pathname), classified.value);
     }
 
     // 形态 5：文件路径
     case "file": {
       const full = path.isAbsolute(classified.path) ? classified.path : path.resolve(projectRoot, classified.path);
       const text = await fs.readFile(full, "utf-8");
-      return convertV2ToV3(parseDoc(text, full));
+      return finishLoad(parseDoc(text, full), full);
     }
   }
+}
+
+/**
+ * 加载收尾：校验根节点必须是普通对象，再做 v2 → v3 归一化。
+ * 不校验的话，null / 数组 / 标量要到 buildMegaSchema 里才以莫名其妙的方式崩。
+ */
+function finishLoad(doc: unknown, label: string): OpenAPIDoc {
+  if (!isPlainObject(doc)) {
+    const got = doc === null ? "null" : Array.isArray(doc) ? "数组" : typeof doc;
+    throw new Error(`OpenAPI 文档根节点必须是对象，实际得到 ${got}（来源：${label}）`);
+  }
+  return convertV2ToV3(doc);
 }
 
 type ClassifiedSource = { kind: "url"; value: string } | { kind: "inline-json"; text: string } | { kind: "inline-yaml"; text: string } | { kind: "file"; path: string };
@@ -175,6 +210,11 @@ function convertV2ToV3(doc: OpenAPIDoc): OpenAPIDoc {
     }
   }
 
+  // 1.5 顶层共享 responses 同样要把 schema 包进 content，否则搬到 components.responses 后读不到
+  if (out.responses && typeof out.responses === "object") {
+    for (const resp of Object.values(out.responses)) convertV2Response(resp, producesGlobal);
+  }
+
   // 2. 组件搬迁
   out.components = out.components || {};
   if (out.definitions) out.components.schemas = { ...out.components.schemas, ...out.definitions };
@@ -215,21 +255,28 @@ function convertV2Operation(op: any, sharedParams: Record<string, any>, consumes
   }
 
   if (op.responses && typeof op.responses === "object") {
-    for (const code of Object.keys(op.responses)) {
-      const resp = op.responses[code];
-      if (!resp || typeof resp !== "object" || resp.$ref) continue;
-      if (resp.schema) {
-        const mts = produces.length ? produces : ["application/json"];
-        resp.content = {};
-        for (const mt of mts) resp.content[mt] = { schema: resp.schema };
-        delete resp.schema;
-      }
-      delete resp.examples; // v2 examples 形态与 v3 不同；后续 normalize 会再 strip example 类字段
-    }
+    for (const code of Object.keys(op.responses)) convertV2Response(op.responses[code], produces);
   }
 
   delete op.consumes;
   delete op.produces;
+}
+
+/**
+ * 把单个 v2 response 就地转成 v3 形态：`schema` 包进 `content[mediaType].schema`，丢掉 v2 的 `examples`。
+ * op 内联 response 与顶层共享 responses 共用这一份逻辑。
+ * @param resp 待转换的 response 对象；`$ref` 或非对象会被忽略
+ * @param produces 生效的 produces 列表；为空时用 application/json
+ */
+function convertV2Response(resp: any, produces: string[]): void {
+  if (!resp || typeof resp !== "object" || resp.$ref) return;
+  if (resp.schema) {
+    const mts = produces.length ? produces : ["application/json"];
+    resp.content = {};
+    for (const mt of mts) resp.content[mt] = { schema: resp.schema };
+    delete resp.schema;
+  }
+  delete resp.examples; // v2 examples 形态与 v3 不同；后续 normalize 会再 strip example 类字段
 }
 
 /** 解 op-level / path-level 参数中的 $ref（指向顶层共享 parameters），并把每个非 body 参数的 type 字段塞进 schema */
@@ -268,7 +315,8 @@ function v2NonBodyParamToV3(p: any): any {
   return { ...head, schema: schemaLike };
 }
 
-function splitV2Params(params: any[]): { rest: any[]; body: any | null; formData: any[] } {
+/** 把 v2 参数按 in 拆成三类；没有 body 参数时 body 为 null */
+function splitV2Params(params: any[]): { rest: any[]; body: any; formData: any[] } {
   const rest: any[] = [];
   let body: any = null;
   const formData: any[] = [];
@@ -339,8 +387,14 @@ function fixV2TypeFile(node: any): void {
 // 命名工具（path + method → PascalCase / camelCase）
 // ============================================================================
 
-const HTTP_METHODS = new Set(["get", "post", "put", "delete", "patch", "options", "head"]);
-
+/**
+ * 判断字符串是不是受支持的 HTTP 方法（不区分大小写）。
+ * @param s 待判断的字符串，如 path item 的键
+ * @returns 是受支持的 HTTP 方法时为 true
+ * @example
+ * isHttpMethod("GET"); // true
+ * isHttpMethod("parameters"); // false
+ */
 export function isHttpMethod(s: string): boolean {
   return HTTP_METHODS.has(s.toLowerCase());
 }
@@ -406,15 +460,23 @@ function pathMethodFallbackName(p: string, method: string): string {
   return pieces.join("") || "Op";
 }
 
-/** 在 used 集合中分配唯一名字；冲突时按 baseConfig.conflictSuffix 加后缀。 */
+/**
+ * 在 used 集合中分配唯一名字；冲突时按 baseConfig.conflictSuffix 加后缀。
+ * conflictSuffix 是用户回调，若它始终返回已占用的名字会永远转不出来，所以设了尝试上限，超限直接报错。
+ */
 function uniqueName(name: string, used: Set<string>, baseCfg: BaseConfig): string {
   if (!used.has(name)) {
     used.add(name);
     return name;
   }
   let i = 1;
-  while (used.has(baseCfg.conflictSuffix(name, i))) i++;
-  const final = baseCfg.conflictSuffix(name, i);
+  let final = baseCfg.conflictSuffix(name, i);
+  while (used.has(final)) {
+    if (++i > MAX_NAME_ATTEMPTS) {
+      throw new Error(`为 '${name}' 分配唯一名字失败：conflictSuffix 连续 ${MAX_NAME_ATTEMPTS} 次返回已占用的名字，请检查该回调是否随 n 变化`);
+    }
+    final = baseCfg.conflictSuffix(name, i);
+  }
   used.add(final);
   return final;
 }
@@ -439,13 +501,49 @@ function forEachOperation(doc: OpenAPIDoc, baseCfg: BaseConfig, fn: (op: Operati
     for (const m of methods) {
       const op = item[m];
       if (!op || typeof op !== "object") continue;
-      fn(buildOpData(p, m, op, pathLevelParams));
+      fn(buildOpData(doc, p, m, op, pathLevelParams));
     }
   }
 }
 
-function buildOpData(p: string, method: string, op: any, pathLevelParams: any[]): OperationData {
-  const params = mergeParams(pathLevelParams, op.parameters || []).map(toParamData);
+/**
+ * 解析本地 Reference Object：`{ $ref: "#/components/parameters/X" }` → 被引用的对象。
+ * 沿 `$ref` 链最多跟随 {@link MAX_REF_HOPS} 跳；只认以 `#/` 开头的 JSON Pointer
+ * （按 RFC 6901 §6：先整体百分号解码，再按 `/` 分段，最后 `~1` → `/`、`~0` → `~`）。
+ * 非引用对象原样返回；指针找不到或成环时也返回原对象，不抛错。
+ * @param doc 完整的 OpenAPI 文档
+ * @param obj 可能是 Reference Object 的值
+ * @returns 解析后的对象；无法解析时为传入的 obj 本身
+ */
+function resolveLocalRef(doc: OpenAPIDoc, obj: any): any {
+  let cur = obj;
+  const seen = new Set<string>();
+  for (let hop = 0; hop < MAX_REF_HOPS; hop++) {
+    if (!cur || typeof cur !== "object" || typeof cur.$ref !== "string" || !cur.$ref.startsWith("#/")) return cur;
+    if (seen.has(cur.$ref)) return obj; // 成环
+    seen.add(cur.$ref);
+    let target: any = doc;
+    let pointer: string = cur.$ref.slice(2);
+    try {
+      pointer = decodeURIComponent(pointer);
+    } catch {
+      // 不是合法的百分号编码，按字面处理
+    }
+    for (const raw of pointer.split("/")) {
+      const seg = raw.replace(/~1/g, "/").replace(/~0/g, "~");
+      if (target === null || typeof target !== "object" || !Object.hasOwn(target, seg)) return obj;
+      target = target[seg];
+    }
+    cur = target;
+  }
+  return obj; // 超过最大跳数
+}
+
+/** 汇总一个 op 的全部数据：参数、请求体、成功响应，引用在此处统一解开。 */
+function buildOpData(doc: OpenAPIDoc, p: string, method: string, op: any, pathLevelParams: any[]): OperationData {
+  const resolveAll = (list: any[]): any[] => list.map((x) => resolveLocalRef(doc, x));
+  const opParams: any[] = Array.isArray(op.parameters) ? op.parameters : [];
+  const params = mergeParams(resolveAll(pathLevelParams), resolveAll(opParams)).map(toParamData);
   return {
     path: p,
     method,
@@ -454,17 +552,17 @@ function buildOpData(p: string, method: string, op: any, pathLevelParams: any[])
     description: op.description,
     deprecated: op.deprecated === true,
     params,
-    body: extractBody(op),
-    responseSchema: extractSuccessResponse(op),
+    body: extractBody(doc, op),
+    responseSchema: extractSuccessResponse(doc, op),
   };
 }
 
 /** 同名同 in 的 op-level param 覆盖 path-level；按 (name, in) 唯一去重。 */
 function mergeParams(pathLevel: any[], opLevel: any[]): any[] {
-  const k = (p: any) => `${p?.in}::${p?.name}`;
   const map = new Map<string, any>();
-  for (const p of pathLevel) if (p && p.name && p.in) map.set(k(p), p);
-  for (const p of opLevel) if (p && p.name && p.in) map.set(k(p), p);
+  for (const p of [...pathLevel, ...opLevel]) {
+    if (p && p.name && p.in) map.set(`${p.in}::${p.name}`, p);
+  }
   return [...map.values()];
 }
 
@@ -480,8 +578,9 @@ function toParamData(p: any): ParamData {
   };
 }
 
-function extractBody(op: any): BodyData | null {
-  const rb = op.requestBody;
+/** 取 op 的请求体（先解开 requestBody 的 $ref）；没有可用的 content/schema 时返回 null */
+function extractBody(doc: OpenAPIDoc, op: any): BodyData | null {
+  const rb = resolveLocalRef(doc, op.requestBody);
   if (!rb || typeof rb !== "object") return null;
   const content = rb.content;
   if (!content || typeof content !== "object") return null;
@@ -492,14 +591,16 @@ function extractBody(op: any): BodyData | null {
   return { schema, required: !!rb.required, mediaType };
 }
 
-function extractSuccessResponse(op: any): Schema | null {
+/** 取 op 的成功响应 schema（responses[code] 的 $ref 会先解开）；没有时返回 null */
+function extractSuccessResponse(doc: OpenAPIDoc, op: any): Schema {
   const responses = op.responses;
   if (!responses || typeof responses !== "object") return null;
   const codes = Object.keys(responses);
+  const resolved = (c: string): any => resolveLocalRef(doc, responses[c]);
   // 优先 2xx，其次 default，其次第一个有 content 的
-  const code = codes.find((c) => /^2\d\d$/.test(c)) || (codes.includes("default") ? "default" : codes.find((c) => responses[c]?.content)) || null;
+  const code = codes.find((c) => /^2\d\d$/.test(c)) || (codes.includes("default") ? "default" : codes.find((c) => resolved(c)?.content)) || null;
   if (!code) return null;
-  const content = responses[code]?.content;
+  const content = resolved(code)?.content;
   if (!content || typeof content !== "object") return null;
   const mediaType = pickMediaType(content);
   if (!mediaType) return null;
@@ -545,6 +646,25 @@ function normalizeSchema(schema: Schema, stripTopTitle: boolean, baseCfg: BaseCo
   return walk(schema, stripTopTitle, /*depth*/ 0, baseCfg);
 }
 
+/** 值是「名字 → schema」字典的关键字：字典本身不是 schema，只有每个值才是（键是业务名字，不能当关键字处理）。 */
+const SCHEMA_MAP_KEYS = new Set(["properties", "patternProperties", "definitions", "$defs", "dependentSchemas"]);
+
+/** 值是纯数据（字面量）的关键字：不能当 schema 递归，按原样拷贝。 */
+const DATA_KEYS = new Set(["enum", "const"]);
+
+/** 是否为普通对象（非 null、非数组） */
+function isPlainObject(v: unknown): v is Record<string, any> {
+  return v !== null && typeof v === "object" && !Array.isArray(v);
+}
+
+/** 对「名字 → schema」字典的每个值应用 fn，键原样保留 */
+function mapSchemaDict(dict: Record<string, any>, fn: (schema: Schema) => Schema): Record<string, any> {
+  const out: Record<string, any> = {};
+  for (const [name, schema] of Object.entries(dict)) out[name] = fn(schema);
+  return out;
+}
+
+/** 递归归一化一个 schema 节点（返回新对象，不改源）；`properties` 等字典与 enum/const 数据有各自的处理 */
 function walk(node: any, stripTopTitle: boolean, depth: number, baseCfg: BaseConfig): any {
   if (node === null || typeof node !== "object") return node;
   if (Array.isArray(node)) return node.map((v) => walk(v, false, depth + 1, baseCfg));
@@ -557,6 +677,16 @@ function walk(node: any, stripTopTitle: boolean, depth: number, baseCfg: BaseCon
     if (k === "title" && stripTopTitle && depth === 0) continue;
     if (k === "$ref" && typeof v === "string") {
       out[k] = rewriteRef(v);
+      continue;
+    }
+    if (DATA_KEYS.has(k)) {
+      // enum / const 的值是数据；必须深拷贝，否则 applyNullable 往 enum 里 push null 会污染源文档
+      out[k] = structuredClone(v);
+      continue;
+    }
+    if (SCHEMA_MAP_KEYS.has(k) && isPlainObject(v)) {
+      // 字典的键是属性名等业务名字（可能叫 default / example / x-foo…），只归一化各个值
+      out[k] = mapSchemaDict(v, (s) => walk(s, false, depth + 1, baseCfg));
       continue;
     }
     out[k] = walk(v, false, depth + 1, baseCfg);
@@ -634,13 +764,14 @@ function pickFirstExample(examples: any): unknown {
   return undefined;
 }
 
+/** 把 example / default 值转成注释里的文本：字符串原样，其余 JSON 化，序列化失败给占位 */
 function formatLiteral(v: unknown): string {
   if (typeof v === "string") return v;
   if (v === null || v === undefined) return String(v);
   try {
     return JSON.stringify(v);
   } catch {
-    return String(v);
+    return "[unserializable]"; // 循环引用、BigInt 等序列化不了的值
   }
 }
 
@@ -708,6 +839,144 @@ function applyStrictObjects(node: Record<string, any>, baseCfg: BaseConfig): voi
 }
 
 // ============================================================================
+// allOf 拍平
+// ============================================================================
+//
+// strictObjects 下每个带 properties 的对象都被标成 additionalProperties:false，
+// quicktype 对多个这样的对象做 allOf 交集时会求出空对象（`interface B {}`）。
+// 所以在归一化之后、交给 quicktype 之前，先把「全是对象」的 allOf 手工合并成单个对象。
+
+/**
+ * 归一化之后的 schema 树里，把成员全是对象型的 `allOf` 合并成单个对象（返回新树，不改入参）。
+ *
+ * 合并规则：properties 合并（同名且内容不同的属性合成 `allOf: [...]` 保留交集约束）、required 取并集、
+ * 节点自身的 properties/required 与其它兄弟键（description 等）保留；单成员 allOf 别名包装会被解开后再合并。
+ * additionalProperties：strictObjects 下为 false，若有成员显式给了非 false 的值则沿用它；
+ * strictObjects=false 时任一方显式写了 false 就是 false，否则沿用成员给的值（没有就不设）。
+ * 以下情况原样保留 allOf，交给 quicktype：
+ *   - 任一成员不是纯对象型（含 oneOf/anyOf/enum/嵌套未能拍平的 allOf、可空类型、非本地引用等）
+ *   - 引用成环
+ *   - 只有一个成员且节点自身没有 properties（本来就没有交集问题，保留 `$ref` 能让 quicktype 复用已有类型）
+ *
+ * @param schema 已归一化的 schema（`$ref` 已改写为 `#/definitions/X`）
+ * @param definitions 已归一化的 definitions，用来解析 `#/definitions/X` 成员
+ * @param baseCfg 基础配置，只读 strictObjects
+ * @param visiting 正在展开的 definition 名字集合（防环），调用方可传入自身名字
+ * @returns 拍平后的新 schema
+ */
+function flattenAllOf(schema: Schema, definitions: Record<string, Schema>, baseCfg: BaseConfig, visiting: Set<string> = new Set()): Schema {
+  if (schema === null || typeof schema !== "object") return schema;
+  if (Array.isArray(schema)) return schema.map((s) => flattenAllOf(s, definitions, baseCfg, visiting));
+
+  // 先递归子节点；字典键与 enum/const 数据不能当关键字处理
+  const out: Record<string, any> = {};
+  for (const [k, v] of Object.entries(schema)) {
+    if (DATA_KEYS.has(k)) out[k] = v;
+    else if (SCHEMA_MAP_KEYS.has(k) && isPlainObject(v)) out[k] = mapSchemaDict(v, (s) => flattenAllOf(s, definitions, baseCfg, visiting));
+    else out[k] = flattenAllOf(v, definitions, baseCfg, visiting);
+  }
+
+  if (!Array.isArray(out.allOf)) return out;
+  return mergeAllOf(out, definitions, baseCfg, visiting) ?? out;
+}
+
+/** 判断一个（已拍平的）成员是否是可合并的纯对象型：有 properties 或 type 含 object，且没有联合/枚举/嵌套 allOf */
+function isMergeableObject(m: any): boolean {
+  if (!isPlainObject(m)) return false;
+  if (m.$ref !== undefined || m.oneOf || m.anyOf || m.allOf || Array.isArray(m.enum)) return false;
+  const t = m.type;
+  if (Array.isArray(t)) return t.includes("object") && !t.includes("null"); // 可空对象合并会丢掉 null，放弃
+  if (t !== undefined && t !== "object") return false;
+  return t === "object" || isPlainObject(m.properties);
+}
+
+/**
+ * 解析一个 allOf 成员：`#/definitions/X` 引用先拍平后取出，
+ * 遇到「只有单个成员、自身没有 properties」的 allOf 包装就继续解开（成员是 `$ref` 接着解析，是内联对象直接用）。
+ * 解析过程中经过的 definition 名都会临时登记到 visiting 防环；非本地引用、成环、找不到时返回 null。
+ */
+function resolveAllOfMember(m: any, definitions: Record<string, Schema>, baseCfg: BaseConfig, visiting: Set<string>): any {
+  const entered: string[] = [];
+  try {
+    let cur = m;
+    for (;;) {
+      if (isPlainObject(cur) && typeof cur.$ref === "string") {
+        const name = /^#\/definitions\/(.+)$/.exec(cur.$ref)?.[1];
+        if (name === undefined || visiting.has(name) || !Object.hasOwn(definitions, name)) return null;
+        visiting.add(name);
+        entered.push(name);
+        cur = flattenAllOf(definitions[name], definitions, baseCfg, visiting);
+      } else if (isPlainObject(cur) && Array.isArray(cur.allOf) && cur.allOf.length === 1 && !isPlainObject(cur.properties)) {
+        cur = cur.allOf[0];
+      } else {
+        return cur;
+      }
+    }
+  } finally {
+    for (const name of entered) visiting.delete(name);
+  }
+}
+
+/**
+ * 把同名属性并入 properties：已存在且内容不同时合成 `{ allOf: [已有, 新的] }`，保留两边约束且不依赖成员顺序；
+ * 已有值本身就是冲突合成的 allOf（synthesized 里登记过）则把新的追加进去，内容相同不重复添加。
+ */
+function mergeProperty(properties: Record<string, any>, synthesized: Set<string>, key: string, next: any): void {
+  if (!Object.hasOwn(properties, key)) {
+    properties[key] = next;
+    return;
+  }
+  const nextJson = JSON.stringify(next);
+  if (synthesized.has(key)) {
+    const list: any[] = properties[key].allOf;
+    if (!list.some((s) => JSON.stringify(s) === nextJson)) list.push(next);
+  } else if (JSON.stringify(properties[key]) !== nextJson) {
+    properties[key] = { allOf: [properties[key], next] };
+    synthesized.add(key);
+  }
+}
+
+/** 尝试合并 node.allOf；不满足条件（见 {@link flattenAllOf}）返回 null */
+function mergeAllOf(node: Record<string, any>, definitions: Record<string, Schema>, baseCfg: BaseConfig, visiting: Set<string>): Schema {
+  const hasOwnProps = isPlainObject(node.properties);
+  if (node.allOf.length === 0 || (node.allOf.length === 1 && !hasOwnProps)) return null;
+
+  const members: any[] = [];
+  for (const m of node.allOf) {
+    const resolved = resolveAllOfMember(m, definitions, baseCfg, visiting);
+    if (!isMergeableObject(resolved)) return null;
+    members.push(resolved);
+  }
+
+  const { allOf: _allOf, properties: ownProps, required: ownRequired, additionalProperties: ownAp, ...rest } = node;
+  const properties: Record<string, any> = {};
+  const synthesized = new Set<string>();
+  const required = new Set<string>();
+  let additional: any;
+  let explicitClosed = false; // 有成员或节点自身显式写了 additionalProperties:false
+  // 成员依次合并，节点自身的字段最后并入
+  for (const m of [...members, { properties: ownProps, required: ownRequired, additionalProperties: ownAp }]) {
+    if (isPlainObject(m.properties)) for (const [k, v] of Object.entries(m.properties)) mergeProperty(properties, synthesized, k, v);
+    if (Array.isArray(m.required)) for (const r of m.required) required.add(r);
+    if (m.additionalProperties === false) explicitClosed = true;
+    else if (m.additionalProperties !== undefined) additional = m.additionalProperties;
+  }
+
+  const merged: Record<string, any> = { ...rest, type: rest.type ?? "object", properties };
+  if (required.size) merged.required = [...required];
+  // strictObjects=false 时 false 一定是用户显式写的，任一方关闭就关闭；strictObjects=true 时 false 是归一化注入的，分不清来源，沿用旧逻辑
+  if (!baseCfg.strictObjects && explicitClosed) merged.additionalProperties = false;
+  else if (additional !== undefined) merged.additionalProperties = additional;
+  else if (baseCfg.strictObjects) merged.additionalProperties = false;
+  return merged;
+}
+
+/** 归一化后立刻拍平 allOf——所有进入 quicktype 的 schema 都应走这个入口。 */
+function normalizeAndFlatten(schema: Schema, stripTopTitle: boolean, definitions: Record<string, Schema>, baseCfg: BaseConfig): Schema {
+  return flattenAllOf(normalizeSchema(schema, stripTopTitle, baseCfg), definitions, baseCfg);
+}
+
+// ============================================================================
 // mega-schema 合成
 // ============================================================================
 //
@@ -736,10 +1005,21 @@ export function buildMegaSchema(doc: OpenAPIDoc, baseCfg: BaseConfig): MegaSchem
     componentNames.push(name);
   }
 
+  // 2.4 allOf 拍平：成员全是对象的 allOf 合并成单个对象（见 flattenAllOf），
+  //     否则 strictObjects 下 quicktype 会把它们求成空交集。
+  //     先全部拍平再赋值，保证成员引用解析到的都是归一化后、尚未改动的定义。
+  const flattened: Record<string, Schema> = {};
+  for (const name of componentNames) {
+    flattened[name] = flattenAllOf(definitions[name], definitions, baseCfg, new Set([name]));
+  }
+  Object.assign(definitions, flattened);
+
   // 2.5 内联 enum 提升：扫描所有 schema，把嵌套 enum 提到 definitions 顶层并替换为 $ref，
   //     让 quicktype 自然 dedupe + 命名，emitter 也无需额外的 enum 缓存池。
+  //     本身就是 enum 的组件跳过——它已经是顶层定义，再 lift 会被改写成指向自己的 $ref。
   const enumLifter = new EnumLifter(definitions, usedNames, baseCfg);
   for (const name of componentNames) {
+    if (Array.isArray(definitions[name]?.enum)) continue;
     definitions[name] = enumLifter.lift(definitions[name], name);
   }
 
@@ -753,7 +1033,7 @@ export function buildMegaSchema(doc: OpenAPIDoc, baseCfg: BaseConfig): MegaSchem
 
   for (const op of ops) {
     const k = opKey(op.path, op.method);
-    const synth = synthesizeRequestSchema(op, baseCfg);
+    const synth = synthesizeRequestSchema(op, definitions, baseCfg);
     if (synth.kind === "ref-alias") {
       const reqName = uniqueName(opTypeName(op), usedNames, baseCfg);
       reqInfoOf.set(k, { name: reqName, kind: "ref-alias", refName: synth.refName });
@@ -785,7 +1065,7 @@ export function buildMegaSchema(doc: OpenAPIDoc, baseCfg: BaseConfig): MegaSchem
       definitions[reqName] = enumLifter.lift(synth.schema, reqName);
       reqInfoOf.set(k, { name: reqName, kind: "normal" });
     }
-    responseRefOf.set(k, classifyResponse(op, usedNames, definitions, baseCfg));
+    responseRefOf.set(k, classifyResponse(op, usedNames, definitions, baseCfg, enumLifter));
   }
 
   return {
@@ -883,29 +1163,30 @@ class EnumLifter {
   }
 }
 
-/** 把 enum 字面量数组标准化为查询 key（顺序无关、类型敏感） */
+/**
+ * 把 enum 字面量数组标准化为查询 key（顺序无关、类型敏感）。
+ * 带类型标记的元素排序后整体 JSON.stringify，字面量里即使含分隔符也不会和别的集合撞 key。
+ */
 function enumKey(values: readonly unknown[]): string {
-  return values
-    .map((v) => {
-      if (v === null) return "x:null";
-      if (typeof v === "string") return `s:${v}`;
-      if (typeof v === "number") return `n:${v}`;
-      if (typeof v === "boolean") return `b:${v}`;
-      return `j:${JSON.stringify(v)}`;
-    })
-    .slice()
-    .sort()
-    .join("|");
+  const tagged = values.map((v) => {
+    if (v === null) return "x:null";
+    if (typeof v === "string") return `s:${v}`;
+    if (typeof v === "number") return `n:${v}`;
+    if (typeof v === "boolean") return `b:${v}`;
+    return `j:${JSON.stringify(v)}`;
+  });
+  return JSON.stringify(tagged.sort());
 }
 
-function synthesizeRequestSchema(op: OperationData, baseCfg: BaseConfig): SynthesizedReq {
+/** 为一个 op 合成请求类型：把 path/query/header 参数与 body 拍成一个 req schema，或判定为各种别名形态 */
+function synthesizeRequestSchema(op: OperationData, definitions: Record<string, Schema>, baseCfg: BaseConfig): SynthesizedReq {
   // path 参数永远 required；query/header 按 spec；body 按 op.body.required
   const properties: Record<string, Schema> = {};
   const required: string[] = [];
 
   for (const p of op.params) {
     if (p.in === "cookie") continue; // 不暴露 cookie（通常 server 注入）
-    properties[p.name] = withParamMeta(normalizeSchema(p.schema, /*stripTopTitle*/ true, baseCfg), p.description, p.deprecated);
+    properties[p.name] = withParamMeta(normalizeAndFlatten(p.schema, /*stripTopTitle*/ true, definitions, baseCfg), p.description, p.deprecated);
     if (p.required) required.push(p.name);
   }
 
@@ -927,7 +1208,7 @@ function synthesizeRequestSchema(op: OperationData, baseCfg: BaseConfig): Synthe
       return { kind: "ref-alias-extends", refName, extraProps };
     }
 
-    const normalizedBody = normalizeSchema(op.body.schema, /*stripTopTitle*/ true, baseCfg);
+    const normalizedBody = normalizeAndFlatten(op.body.schema, /*stripTopTitle*/ true, definitions, baseCfg);
     const inlinedProps = inlineableObjectProps(normalizedBody);
     if (inlinedProps) {
       for (const [k, v] of Object.entries(inlinedProps.properties)) properties[k] = v;
@@ -1008,11 +1289,17 @@ function pickPrimaryType(t: any): string | undefined {
 // 响应分类（决定 paths 里 response 槽如何写）
 // ============================================================================
 
-function classifyResponse(op: OperationData, usedNames: Set<string>, definitions: Record<string, Schema>, baseCfg: BaseConfig): ResponseRef {
+/**
+ * 把 op 的成功响应 schema 分类成 paths 里 response 槽的写法。
+ * 归一化、拍平 allOf 之后先过一遍 enum 提升：顶层 enum 变成 `$ref`（走 ref 分支），
+ * 数组元素是 enum 时变成 array-of-ref，不会被误判成 string 原始类型。
+ */
+function classifyResponse(op: OperationData, usedNames: Set<string>, definitions: Record<string, Schema>, baseCfg: BaseConfig, enumLifter: EnumLifter): ResponseRef {
   const raw = op.responseSchema;
   if (raw == null) return { kind: "none" };
 
-  const norm = normalizeSchema(raw, /*stripTopTitle*/ true, baseCfg);
+  const normalized = normalizeAndFlatten(raw, /*stripTopTitle*/ true, definitions, baseCfg);
+  const norm = enumLifter.lift(normalized, opTypeName(op) + "Response");
 
   const ref = pureRefName(norm);
   if (ref) return { kind: "ref", name: ref };
@@ -1092,7 +1379,8 @@ export interface OperationData {
   deprecated?: boolean;
   params: ParamData[];
   body: BodyData | null;
-  responseSchema: Schema | null;
+  /** 成功响应的 schema；没有可用响应内容时为 null */
+  responseSchema: Schema;
 }
 
 export interface MegaSchemaResult {
@@ -1114,7 +1402,11 @@ export interface ReqInfo {
   /**
    *  - 'normal'             : 有合成 schema，quicktype 会产出对应类型
    *  - 'ref-alias'          : body 是纯 ref + 无其它参数，TS 端手写 `interface X extends model.Y {}`
+   *                           （目标不是对象型时退化为 `type X = model.Y`）
    *  - 'ref-alias-extends'  : body 是纯 ref + 有额外参数，TS 端手写 `interface X extends model.Y { p1: T; ... }`
+   *                           （目标不是对象型时退化为 `type X = model.Y & { p1: T; ... }`）
+   *  - 'body-alias'         : 无额外参数 + body 是数组/联合等无法拍平的复杂结构，
+   *                           TS 端手写 `type X = <body 类型>`；不写入 mega-schema
    *  - 'empty'              : 无任何参数与 body，quicktype 会跳过；paths 单独渲染
    */
   kind: "normal" | "ref-alias" | "ref-alias-extends" | "body-alias" | "empty";

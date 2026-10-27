@@ -2,7 +2,7 @@
 // 来源：packages/quicktype-core/src/language/Haskell/language.ts
 // 注意：源码声明的 fileExtension 是 'haskell' 而非 'hs'；这里默认仍用 .hs（更常规）。
 
-import type { CommonBase, LangConfig } from "./shared";
+import type { BaseInput, CommonBase, LangConfig } from "./shared";
 import { DEFAULT_INFERENCE_FLAGS, type InferenceFlags } from "./shared";
 
 export function configureHaskell(input: ConfigureHaskellInput = {}): HaskellLangConfig {
@@ -27,7 +27,7 @@ const DEFAULT_PRIMARY: HaskellPrimaryOptions = {
 };
 
 export interface ConfigureHaskellInput {
-  base?: Partial<HaskellBase>;
+  base?: BaseInput<HaskellBase>;
   primary?: Partial<HaskellPrimaryOptions>;
 }
 
