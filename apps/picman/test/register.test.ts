@@ -28,8 +28,15 @@ describe("registerImgprogressSW", () => {
     _setServiceWorkerContainer(sw as unknown as ServiceWorkerContainer);
 
     const p = registerImgprogressSW("/imgprogress-sw.js");
-    await vi.advanceTimersByTimeAsync(10000);
+    // 推进到超时之前,Promise 必须仍 pending
+    let settled = false;
+    void p.then(() => (settled = true));
+    await vi.advanceTimersByTimeAsync(9999);
+    expect(settled).toBe(false);
+    await vi.advanceTimersByTimeAsync(1);
     const r = await p;
+    expect(sw.register).toHaveBeenCalledTimes(1);
+    expect(sw.register).toHaveBeenCalledWith("/imgprogress-sw.js", { type: "module" });
     expect(r.controlled).toBe(false);
     expect(typeof r.stop).toBe("function");
     r.stop();
@@ -46,6 +53,8 @@ describe("registerImgprogressSW", () => {
     _setServiceWorkerContainer(sw as unknown as ServiceWorkerContainer);
 
     const r = await registerImgprogressSW("/imgprogress-sw.js");
+    expect(sw.register).toHaveBeenCalledTimes(1);
+    expect(sw.register).toHaveBeenCalledWith("/imgprogress-sw.js", { type: "module" });
     expect(r.controlled).toBe(true);
     r.stop();
   });

@@ -55,6 +55,26 @@ describe("<img-progress>", () => {
     await new Promise((r) => setTimeout(r, 0));
     expect(img.src).toBe(withStageParam(URL1, "1"));
   });
+  it("src 被移除:旧加载回调失效且内部 img 清空 src", async () => {
+    const sw = fakeSW();
+    _setServiceWorkerContainer(sw as unknown as ServiceWorkerContainer);
+    defineImgProgress();
+    const el = document.createElement("img-progress");
+    el.setAttribute("src", URL1);
+    document.body.append(el);
+    await new Promise((r) => setTimeout(r, 0));
+    const img = el.shadowRoot!.querySelector("img")!;
+    el.removeAttribute("src");
+    expect(img.hasAttribute("src")).toBe(false);
+    sw.emit({ imgprogress: 1, type: "complete", url: URL1 });
+    await new Promise((r) => setTimeout(r, 0));
+    expect(img.hasAttribute("src")).toBe(false);
+  });
+  it("默认标签注册后可再注册另一个标签名而不抛错", () => {
+    defineImgProgress();
+    expect(() => defineImgProgress("img-progress-alt")).not.toThrow();
+    expect(customElements.get("img-progress-alt")).toBeDefined();
+  });
   it("重复 defineImgProgress 幂等", () => {
     defineImgProgress();
     expect(() => defineImgProgress()).not.toThrow();

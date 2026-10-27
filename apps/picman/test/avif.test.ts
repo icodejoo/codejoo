@@ -3,6 +3,37 @@ import { avifFirstFrame, scanAvif } from "../src/shared/walkers/avif";
 import { makeAvif } from "./fixtures";
 import { asciiEquals, readBE32 } from "../src/shared/bytes";
 
+/**
+ * 按路径在 ISOBMFF box 树里定位 box(meta 是 FullBox,孩子起点多 4 字节)。
+ * @param buf - 字节
+ * @param start - 搜索区间起点
+ * @param end - 搜索区间终点
+ * @param path - 从外到内的 fourcc 路径
+ * @returns box 的 [起点, 终点),找不到为 null
+ */
+function findBox(buf: Uint8Array, start: number, end: number, path: string[]): [number, number] | null {
+  let p = start;
+  while (p + 8 <= end) {
+    const size = readBE32(buf, p);
+    if (size < 8) return null;
+    if (asciiEquals(buf, p + 4, path[0]!)) {
+      if (path.length === 1) return [p, p + size];
+      return findBox(buf, p + 8 + (path[0] === "meta" ? 4 : 0), p + size, path.slice(1));
+    }
+    p += size;
+  }
+  return null;
+}
+
+/** 把 ftyp 的 major 与所有 compatible brands 改写成给定品牌(循环使用) */
+function rewriteBrands(buf: Uint8Array, brands: string[]): void {
+  const ftypSize = readBE32(buf, 0);
+  // major(8) + minor(12,保留)+ compatible(16..)
+  const slots = [8];
+  for (let i = 16; i + 4 <= ftypSize; i += 4) slots.push(i);
+  slots.forEach((off, i) => buf.set(Uint8Array.from(brands[i % brands.length]!.split("").map((c) => c.charCodeAt(0))), off));
+}
+
 describe("scanAvif / avifFirstFrame", () => {
   it("ftyp brand 判定:avis→animated,avif→static", () => {
     expect(scanAvif(makeAvif({ animated: true })).status).toBe("animated");
@@ -58,12 +89,33 @@ describe("scanAvif / avifFirstFrame", () => {
     expect(asciiEquals(ff, p + 4, "mdat")).toBe(true);
     const mdatPayload = ff.subarray(p + 8, ff.length);
     expect(mdatPayload).toEqual(sampleBytes);
+
+    // ispe 宽高 = 12x9(FullBox:payload 起于 +12)
+    const ispe = findBox(ff, 0, ff.length, ["meta", "iprp", "ipco", "ispe"])!;
+    expect(ispe).not.toBeNull();
+    expect(readBE32(ff, ispe[0] + 12)).toBe(12);
+    expect(readBE32(ff, ispe[0] + 16)).toBe(9);
+
+    // iloc 的 extent offset/length 指向 mdat 负载,与 sampleBytes 一致
+    const iloc = findBox(ff, 0, ff.length, ["meta", "iloc"])!;
+    expect(iloc).not.toBeNull();
+    const extentOffset = readBE32(ff, iloc[0] + 22);
+    const extentLength = readBE32(ff, iloc[0] + 26);
+    expect(extentOffset).toBe(p + 8);
+    expect(extentLength).toBe(sampleBytes.length);
+    expect(ff.subarray(extentOffset, extentOffset + extentLength)).toEqual(sampleBytes);
   });
 
   it("非 AVIF/HEIF 系族的 ftyp brand 判 static", () => {
-    // major_brand 既非 avif 也非 avis(如 mp4 的 'isom')— 判 static
-    const notAvif = makeAvif({ animated: false });
-    notAvif.set(Uint8Array.from("isom".split("").map((c) => c.charCodeAt(0))), 8);
+    // 用 animated fixture(默认会判 animated),把 major 与全部 compatible brands 换成非 avif 系,才有区分度
+    const notAvif = makeAvif({ animated: true });
+    rewriteBrands(notAvif, ["isom", "mp41"]);
     expect(scanAvif(notAvif).status).toBe("static");
+  });
+
+  it("major 为 isom、仅 compatible 含 avis → animated", () => {
+    const a = makeAvif({ animated: true });
+    rewriteBrands(a, ["isom", "mp41", "mp41", "avis", "mp41", "mp41"]);
+    expect(scanAvif(a).status).toBe("animated");
   });
 });

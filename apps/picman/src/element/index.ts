@@ -15,6 +15,7 @@ import { load } from "../page/load";
  * <img-progress src="/big.gif" alt="demo"></img-progress>
  */
 export class ImgProgressElement extends HTMLElement {
+  /** 需要监听变更的属性:src 触发重新加载,alt 同步到内部 img */
   static observedAttributes = ["src", "alt"];
 
   /** Internal shadow <img> — 内部 shadow <img> */
@@ -22,6 +23,7 @@ export class ImgProgressElement extends HTMLElement {
   /** Bumped on each (re)connect/attribute change to discard stale async callbacks — 每次(重新)连接/属性变更时自增,用于丢弃过期异步回调 */
   private generation = 0;
 
+  /** 挂载到 DOM 时:首次创建 shadow 内的 img,并按当前 src 发起加载 */
   connectedCallback(): void {
     if (!this.shadowRoot) {
       const root = this.attachShadow({ mode: "open" });
@@ -35,10 +37,15 @@ export class ImgProgressElement extends HTMLElement {
     this.startLoad();
   }
 
+  /** 从 DOM 卸载时:自增 generation,让进行中的加载回调失效 */
   disconnectedCallback(): void {
     this.generation++;
   }
 
+  /**
+   * 属性变更时:src 重新加载,alt 同步到内部 img;未挂载时忽略。
+   * @param name - 变更的属性名
+   */
   attributeChangedCallback(name: string): void {
     if (!this.isConnected) return;
     if (name === "src") this.startLoad();
@@ -54,11 +61,16 @@ export class ImgProgressElement extends HTMLElement {
   private startLoad(): void {
     const src = this.getAttribute("src");
     const img = this.img;
-    if (!src || !img) return;
+    // 先自增使旧回调失效,即使 src 被移除也不能让旧加载把图写回
+    const myGeneration = ++this.generation;
+    if (!img) return;
+    if (!src) {
+      img.removeAttribute("src");
+      return;
+    }
 
     img.alt = this.getAttribute("alt") ?? "";
 
-    const myGeneration = ++this.generation;
     load(src).onStage((_stage, displayUrl) => {
       if (this.generation !== myGeneration) return;
       img.src = displayUrl;
@@ -77,5 +89,6 @@ export class ImgProgressElement extends HTMLElement {
  */
 export function defineImgProgress(tag = "img-progress"): void {
   if (customElements.get(tag)) return;
-  customElements.define(tag, ImgProgressElement);
+  // 同一构造函数不能注册到多个标签名,故每次用匿名子类
+  customElements.define(tag, class extends ImgProgressElement {});
 }

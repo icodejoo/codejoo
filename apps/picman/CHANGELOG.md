@@ -54,3 +54,14 @@
 - 修复(构建/发布):`sideEffects` 改为列出 element 入口(此前 `false` 会让打包器摇掉 `<img-progress>` 注册),`./sw`/`./element`/`./shared` 补 `default` 条件,`prepublishOnly` 改为 `check && build`(原 `vp pack` 不会重建 `dist/imgprogress-sw.js`);examples 里的 `picman` 旧名同步为 `imgprogress`(`setupImgprogress`/`registerImgprogressSW`/`imgprogress-sw.js`/`__imgprogress_full__`),`serve.ts` 加路径穿越防护(非法编码回 400,越出根目录回 403)
 - 重构:`inViewport` 抽到 `src/page/viewport.ts`(auto 与 video 共用);`pipeline.ts` 抽出 `completeDownload`/`failDownload`/`placeholderResponse`/`passthroughResponse`/`responseInitOf`/`reportError` 消除重复;`auto.ts` 抽出 `removeFromUrlSet` 与 `untrackElement` 共用;`request.destination` 直接使用 lib.dom 类型;`offViewport: 'placeholder'` 文档改为与实现一致(页面端按元素尺寸生成的色块 data URI,而非回退原始 URL)
 - 新增(测试):messages 幂等退订、register 超时、`normalizeHexColor`、GIF 截断在第 2 帧中间、APNG 单巨型 IDAT、缓存并发写入/配额重试、pipeline 的 ff 写失败/onError 优先/无效 PARAM_FULL/非法骨架色/g 标志正则、load 的 complete 去重与规范化、auto 的重试与换 URL、video 的非 206 与首帧超时等用例
+- 修复(第二轮 code review):load() 阶段回调抛错不再阻断其余回调与 done,异常异步重抛;first-frame 晚于 complete 发出的竞态(scheduleIdle 非先进先出)用"complete 已发出"标志拦截
+- 修复:`<img-progress>` src 被移除时让旧加载回调失效并清空内部图;defineImgProgress 对每个标签名用匿名子类注册,默认标签注册后再注册其他标签名不再抛 NotSupportedError
+- 修复:auto() 回声判定的 URL 状态回退只对本来就跟踪该 URL 的元素生效(换成另一个已跟踪 URL 会正确转入新跟踪);img src(按属性判空,`src=""` 视为无 src)/ data-imgprogress-bg 被移除或清空时主动释放元素;换 URL 时清掉旧期望值避免回声误判;不在 root 内的元素属性变更记录先释放再跳过;untrackElement 守卫改为 root.contains(el);idle 回调在 stop 后或 URL 未被跟踪时不再回写 stageOf
+- 修复:inViewport 补横向判定(横向轮播的屏外项不再被当作可见)
+- 修复(视频):videoAutoplay:false 时悬停/聚焦不再恢复 autoplay 属性;after-lcp 在无 IntersectionObserver 且不在视口时直接放行;还原时以接管期间应用改写过的 src 与当前 <source> 节点(含新增/替换)为准;还原/stop 时清理意图监听并还原 play 补丁
+- 修复:isImgprogressMessage 校验 url 为字符串、type 合法,error 消息还需 message 为字符串且 stage 为 download/first-frame
+- 修复(缓存):putStage 对任意阶段(含 ff)登记 LRU 索引,下载失败遗留的 ff 条目也受上限与淘汰约束;ff 不刷新已有时间戳(避免过期全图复活);索引登记失败不影响 putStage 返回 true
+- 修复(管线):源站 Cache-Control 含 no-store 时原样透传,不进渐进管线不写缓存;无 Content-Length 时累计到 threshold 才交接,小动图不再误出占位;兜底回落用去标记 URL
+- 修复(嗅探):隔行 PNG 的可显示门槛按 Adam7 第 1 遍原始字节数(随宽高/位深/颜色类型)增长,小图仍为 4096;非整画布首帧的动画 WebP 不再单独当首帧重打包
+- 测试:fixtures APNG 补有效 fcTL;avif 品牌用例改用 animated fixture 并补 ispe/iloc 断言;cache mock 贴近真实 Cache 语义;渐进 JPEG 用例断言 ff 早于下载完成;register 补调用与 pending 断言;video 用例 mock 原生 play 并恢复全局改写;新增 viewport 测试
+- 示例:serve.ts 支持后缀 Range、非法 URL 回 400、统一异常处理与限速背压(drain/close 用 AbortController 清理监听)/断连清理;index.html 展示层 img 放入 shadow root 避免被 auto() 接管,并改正 D 节缩略图来源说明

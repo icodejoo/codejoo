@@ -53,7 +53,12 @@ export type ImgprogressMessage =
  * navigator.serviceWorker.addEventListener('message', e => { if (isImgprogressMessage(e.data)) ... })
  */
 export function isImgprogressMessage(data: unknown): data is ImgprogressMessage {
-  return typeof data === "object" && data !== null && (data as { imgprogress?: unknown }).imgprogress === 1;
+  if (typeof data !== "object" || data === null) return false;
+  const d = data as { imgprogress?: unknown; url?: unknown; type?: unknown; message?: unknown; stage?: unknown };
+  if (d.imgprogress !== 1 || typeof d.url !== "string") return false;
+  if (d.type === "first-frame" || d.type === "complete") return true;
+  // error 消息必须带 message 与合法 stage
+  return d.type === "error" && typeof d.message === "string" && (d.stage === "download" || d.stage === "first-frame");
 }
 
 /** 全部会被剥掉的标记参数 */

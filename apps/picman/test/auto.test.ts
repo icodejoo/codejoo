@@ -134,6 +134,171 @@ describe("auto", () => {
       setter.mockRestore();
     }
   });
+  it("A 的 src 改成另一个已被跟踪且阶段未知的 B:A 转入 B 的跟踪,X 的通知不再改写 A", async () => {
+    const URL_B = "https://a.com/y.gif";
+    const sw = fakeSW();
+    _setServiceWorkerContainer(sw as unknown as ServiceWorkerContainer);
+    const a = document.createElement("img");
+    a.src = URL1;
+    const b = document.createElement("img");
+    b.src = URL_B;
+    document.body.append(a, b);
+    stop = auto();
+    await flush();
+    a.src = URL_B;
+    await flush();
+    sw.emit({ imgprogress: 1, type: "complete", url: URL1 });
+    await flush();
+    expect(a.src).toBe(URL_B);
+    sw.emit({ imgprogress: 1, type: "complete", url: URL_B });
+    await flush();
+    expect(a.src).toBe(withStageParam(URL_B, "1"));
+    expect(b.src).toBe(withStageParam(URL_B, "1"));
+  });
+  it("img 的 src 被移除后,旧 URL 的 complete 通知不会把 src 写回", async () => {
+    const sw = fakeSW();
+    _setServiceWorkerContainer(sw as unknown as ServiceWorkerContainer);
+    const img = document.createElement("img");
+    img.src = URL1;
+    document.body.append(img);
+    stop = auto();
+    await flush();
+    img.removeAttribute("src");
+    await flush();
+    sw.emit({ imgprogress: 1, type: "complete", url: URL1 });
+    await flush();
+    expect(img.hasAttribute("src")).toBe(false);
+  });
+  it("背景元素的 data-imgprogress-bg 被移除后不再被改写", async () => {
+    const sw = fakeSW();
+    _setServiceWorkerContainer(sw as unknown as ServiceWorkerContainer);
+    const div = document.createElement("div");
+    div.setAttribute("data-imgprogress-bg", URL1);
+    document.body.append(div);
+    stop = auto();
+    await flush();
+    div.removeAttribute("data-imgprogress-bg");
+    await flush();
+    sw.emit({ imgprogress: 1, type: "complete", url: URL1 });
+    await flush();
+    expect(div.style.backgroundImage).toBe("");
+  });
+  it("自定义 root:元素移出 root 但仍在文档中时也会被清理", async () => {
+    const sw = fakeSW();
+    _setServiceWorkerContainer(sw as unknown as ServiceWorkerContainer);
+    const rootEl = document.createElement("div");
+    const img = document.createElement("img");
+    img.src = URL1;
+    rootEl.append(img);
+    document.body.append(rootEl);
+    stop = auto({ root: rootEl as unknown as Document });
+    await flush();
+    document.body.append(img); // 移出 root,但仍 isConnected
+    await flush();
+    sw.emit({ imgprogress: 1, type: "complete", url: URL1 });
+    await flush();
+    expect(img.src).toBe(URL1);
+  });
+  it("未被跟踪的 URL 的通知不写 stageOf:之后才出现的元素不会被立即切换", async () => {
+    const sw = fakeSW();
+    _setServiceWorkerContainer(sw as unknown as ServiceWorkerContainer);
+    stop = auto();
+    sw.emit({ imgprogress: 1, type: "complete", url: URL1 });
+    await flush();
+    const img = document.createElement("img");
+    img.src = URL1;
+    document.body.append(img);
+    await flush();
+    expect(img.src).toBe(URL1);
+  });
+  it("通知已排入 idle 后 stop():回调不再回写元素", async () => {
+    const sw = fakeSW();
+    _setServiceWorkerContainer(sw as unknown as ServiceWorkerContainer);
+    const img = document.createElement("img");
+    img.src = URL1;
+    document.body.append(img);
+    stop = auto();
+    sw.emit({ imgprogress: 1, type: "complete", url: URL1 });
+    stop();
+    stop = undefined;
+    await flush();
+    expect(img.src).toBe(URL1);
+  });
+  it('src=""(属性为空)视为无 src:初始不跟踪,运行中置空则释放', async () => {
+    const sw = fakeSW();
+    _setServiceWorkerContainer(sw as unknown as ServiceWorkerContainer);
+    const empty = document.createElement("img");
+    empty.setAttribute("src", "");
+    const live = document.createElement("img");
+    live.src = URL1;
+    document.body.append(empty, live);
+    stop = auto();
+    await flush();
+    live.setAttribute("src", "");
+    await flush();
+    // 空 src 解析成页面 URL:若被当作有效 src 跟踪,这些通知会把 src 写进去
+    sw.emit({ imgprogress: 1, type: "complete", url: URL1 });
+    sw.emit({ imgprogress: 1, type: "complete", url: new URL("", location.href).href });
+    await flush();
+    expect(empty.getAttribute("src")).toBe("");
+    expect(live.getAttribute("src")).toBe("");
+  });
+  it("A 从 X 换到 B 后,把 src 改回 X 的旧阶段 URL:应重新跟踪 X,而不是被判回声", async () => {
+    const URL_B = "https://a.com/y.gif";
+    const sw = fakeSW();
+    _setServiceWorkerContainer(sw as unknown as ServiceWorkerContainer);
+    const img = document.createElement("img");
+    img.src = URL1;
+    document.body.append(img);
+    stop = auto({ onError: () => {} });
+    sw.emit({ imgprogress: 1, type: "complete", url: URL1 });
+    await flush();
+    const staleStage = withStageParam(URL1, "1");
+    expect(img.src).toBe(staleStage); // 我们写入过的期望值
+    img.src = URL_B;
+    await flush();
+    img.src = staleStage;
+    await flush();
+    // 重新跟踪了 X:X 的 error 会让元素走 bypass 重试
+    sw.emit({ imgprogress: 1, type: "error", url: URL1, stage: "download", message: "net" });
+    await flush();
+    expect(img.src).toContain(PARAM_BYPASS);
+  });
+  it("同批先移出 root 再改属性的 transient 记录:不重新跟踪", async () => {
+    const URL_B = "https://a.com/y.gif";
+    const sw = fakeSW();
+    _setServiceWorkerContainer(sw as unknown as ServiceWorkerContainer);
+    const rootEl = document.createElement("div");
+    const img = document.createElement("img");
+    img.src = URL1;
+    rootEl.append(img);
+    document.body.append(rootEl);
+    stop = auto({ root: rootEl as unknown as Document });
+    await flush();
+    document.body.append(img); // 移出 root(仍在文档中)
+    img.setAttribute("src", URL_B); // 同一批里再改属性
+    await flush();
+    sw.emit({ imgprogress: 1, type: "complete", url: URL_B });
+    await flush();
+    expect(img.src).toBe(URL_B);
+  });
+  it("背景元素同批移出自定义 root 并删掉属性:释放跟踪,complete 不改写 backgroundImage", async () => {
+    const sw = fakeSW();
+    _setServiceWorkerContainer(sw as unknown as ServiceWorkerContainer);
+    const rootEl = document.createElement("div");
+    const div = document.createElement("div");
+    div.setAttribute("data-imgprogress-bg", URL1);
+    rootEl.append(div);
+    document.body.append(rootEl);
+    stop = auto({ root: rootEl as unknown as Document });
+    await flush();
+    document.body.append(div); // 移出 root(仍在文档中)
+    div.removeAttribute("data-imgprogress-bg"); // 同一同步块里删属性
+    await flush();
+    sw.emit({ imgprogress: 1, type: "complete", url: URL1 });
+    await flush();
+    expect(div.style.backgroundImage).toBe("");
+  });
   it("stop() 后不再接管", async () => {
     const sw = fakeSW();
     _setServiceWorkerContainer(sw as unknown as ServiceWorkerContainer);

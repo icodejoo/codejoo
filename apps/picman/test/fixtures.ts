@@ -135,16 +135,24 @@ export function makeApng(opts: { animated: boolean }): Uint8Array {
 
   parts.push(plte);
 
-  if (animated) {
-    const fctlData = new Uint8Array(26);
-    parts.push(pngChunk("fcTL", fctlData));
-  }
+  /** 造一个 fcTL:序号 + 帧宽高(= IHDR 宽高 2x2),其余字段为 0 */
+  const fctl = (seq: number): Uint8Array => {
+    const d = new Uint8Array(26);
+    const v = new DataView(d.buffer);
+    v.setUint32(0, seq, false); // sequence_number
+    v.setUint32(4, 2, false); // width
+    v.setUint32(8, 2, false); // height
+    return pngChunk("fcTL", d);
+  };
+
+  if (animated) parts.push(fctl(0));
 
   parts.push(pngChunk("IDAT", new Uint8Array([1, 2, 3, 4])));
 
   if (animated) {
+    parts.push(fctl(1)); // 第二帧的 fcTL
     const fdatData = new Uint8Array(4 + 4);
-    new DataView(fdatData.buffer).setUint32(0, 1, false); // sequence number
+    new DataView(fdatData.buffer).setUint32(0, 2, false); // sequence number
     parts.push(pngChunk("fdAT", fdatData));
   }
 
@@ -167,8 +175,8 @@ export function makeApng(opts: { animated: boolean }): Uint8Array {
  * @param opts - animated: include VP8X+ANIM+ANMF; alpha: prefix ALPH inside ANMF
  * @returns WebP bytes — WebP 字节
  */
-export function makeWebp(opts: { animated: boolean; alpha?: boolean }): Uint8Array {
-  const { animated, alpha = false } = opts;
+export function makeWebp(opts: { animated: boolean; alpha?: boolean; frameOffsetX?: number; frameWidth?: number }): Uint8Array {
+  const { animated, alpha = false, frameOffsetX = 0, frameWidth = 2 } = opts;
 
   const chunk = (fourcc: string, data: Uint8Array): Uint8Array => {
     const fourccBytes = Uint8Array.from(fourcc.split("").map((c) => c.charCodeAt(0)));
@@ -196,7 +204,8 @@ export function makeWebp(opts: { animated: boolean; alpha?: boolean }): Uint8Arr
     chunks.push(chunk("ANIM", new Uint8Array(6)));
 
     const frameHeader = new Uint8Array(16);
-    frameHeader[6] = 1; // frame width-1
+    frameHeader[0] = frameOffsetX; // frame X(原始值,实际偏移 = 2x)
+    frameHeader[6] = frameWidth - 1; // frame width-1
     frameHeader[9] = 1; // frame height-1
     let sub: Uint8Array;
     if (alpha) {
@@ -335,8 +344,8 @@ export function makeAvif(opts: { animated: boolean; sampleBytes?: Uint8Array; wi
  * @param opts - progressive: use SOF2; scanBytes: entropy byte count; endFirstScan: append a second SOS after the entropy run (progressive first-scan-complete signal)
  * @returns JPEG bytes — JPEG 字节
  */
-export function makeJpeg(opts: { progressive?: boolean; scanBytes?: number; endFirstScan?: boolean; width?: number; height?: number }): Uint8Array {
-  const { progressive = false, scanBytes = 8192, endFirstScan = false, width = 100, height = 100 } = opts;
+export function makeJpeg(opts: { progressive?: boolean; scanBytes?: number; endFirstScan?: boolean; tailBytes?: number; width?: number; height?: number }): Uint8Array {
+  const { progressive = false, scanBytes = 8192, endFirstScan = false, tailBytes = 64, width = 100, height = 100 } = opts;
   const parts: number[] = [];
   parts.push(0xff, 0xd8); // SOI
 
@@ -361,7 +370,8 @@ export function makeJpeg(opts: { progressive?: boolean; scanBytes?: number; endF
     parts.push(0xff, 0xda);
     parts.push(0x00, 0x08);
     parts.push(1, 0x01, 0x10, 0x00, 0x3f, 0x00);
-    for (let i = 0; i < 64; i++) parts.push(i % 200);
+    // tailBytes:首 scan 结束之后的后续字节数,用来证明 ff 早于下载完成
+    for (let i = 0; i < tailBytes; i++) parts.push(i % 200);
   }
 
   parts.push(0xff, 0xd9); // EOI
@@ -377,14 +387,14 @@ export function makeJpeg(opts: { progressive?: boolean; scanBytes?: number; endF
  * @param opts - idatBytes: total IDAT payload bytes; chunkSize: per-IDAT payload size; interlaced: set the IHDR Adam7 interlace flag
  * @returns PNG bytes — PNG 字节
  */
-export function makeBigPng(opts: { idatBytes: number; chunkSize?: number; interlaced?: boolean }): Uint8Array {
-  const { idatBytes, chunkSize = 4096, interlaced = false } = opts;
+export function makeBigPng(opts: { idatBytes: number; chunkSize?: number; interlaced?: boolean; width?: number; height?: number }): Uint8Array {
+  const { idatBytes, chunkSize = 4096, interlaced = false, width = 100, height = 100 } = opts;
   const sig = new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
 
   const ihdrData = new Uint8Array(13);
   const ihdrView = new DataView(ihdrData.buffer);
-  ihdrView.setUint32(0, 100, false); // width
-  ihdrView.setUint32(4, 100, false); // height
+  ihdrView.setUint32(0, width, false); // width
+  ihdrView.setUint32(4, height, false); // height
   ihdrData[8] = 8; // bit depth
   ihdrData[9] = 2; // color type: truecolor
   ihdrData[12] = interlaced ? 1 : 0; // interlace method: Adam7 or none

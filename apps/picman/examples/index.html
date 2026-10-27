@@ -81,8 +81,8 @@
     <section>
       <h2>D. 静态大图渐进(staticProgressive)—— sample PNG(2MB) + sample JPEG(768KB)</h2>
       <p class="note">
-        两张真实样本静态图:2MB 非隔行 PNG 与 768KB baseline JPEG。picman 对静态大图走"色块占位 → 部分字节缩略图 → 高清"三段:缩略图在已到字节跨过该图自己的结构性"可显示"信号时触发(动态门槛,非固定字节数),
-        缓存的是已到达的原始前缀字节,由 &lt;img&gt; 宽容解码渲染;高清则要等元素真正进入视口。同样延迟 3 秒才展示高清,便于观察。
+        两张真实样本静态图:2MB 非隔行 PNG 与 768KB baseline JPEG。静态大图走"色块占位 → 缩略图 → 高清"三段,但缩略图怎么来取决于编码方式: 这两张都不是"整幅交织"的编码,所以要等整张图下载完,再在 SW
+        里光栅化出一张降采样缩略图,而不是边下边出; 只有隔行 PNG 和渐进式 JPEG 才会在已到字节够解出全图预览时,直接缓存原始前缀字节,交给 &lt;img&gt; 宽容解码。 高清则要等元素真正进入视口。同样延迟 3 秒才展示高清,便于观察。
       </p>
       <img id="png-img" src="/sample_1280×853.png" alt="样本 PNG(真实接管,隐藏)" style="display: none" />
       <img id="png-img-display" alt="样本 PNG(演示展示层)" />
@@ -160,10 +160,22 @@
        * a separate "display" <img>: placeholder/first-frame sync immediately,
        * the full animation is held back for DEMO_COMPLETE_DELAY_MS.
        * @param realImg - 被 auto() 接管的真实(隐藏)img — the real, auto()-managed (hidden) img
-       * @param displayImg - 仅用于演示展示的 img — display-only img for the demo
+       * @param displayNode - 仅用于演示展示的占位 img,会被换成 shadow root 里的 img — display-only placeholder img, swapped for an img inside a shadow root
        * @param log - 该组的日志函数 — this group's logger
        */
-      function wireDelayedDisplay(realImg, displayImg, log) {
+      function wireDelayedDisplay(realImg, displayNode, log) {
+        // 展示层 img 一旦被设置 src,会被 document 级 auto() 当成普通图接管、绕过 3 秒延迟。
+        // 所以把它放进 shadow root:document 级 MutationObserver 看不到 shadow 内部。
+        const host = document.createElement("span");
+        host.id = displayNode.id;
+        const displayImg = document.createElement("img");
+        displayImg.alt = displayNode.alt;
+        const shadow = host.attachShadow({ mode: "open" });
+        const style = document.createElement("style");
+        style.textContent = "img { max-width: 320px; border: 1px solid #ddd; }";
+        shadow.append(style, displayImg);
+        displayNode.replaceWith(host);
+
         displayImg.src = realImg.getAttribute("src");
         log(`初始 src: ${realImg.getAttribute("src")}`);
         new MutationObserver((muts) => {

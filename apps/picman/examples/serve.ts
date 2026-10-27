@@ -13,6 +13,7 @@
  */
 
 import { createReadStream, existsSync, statSync } from "node:fs";
+import { once } from "node:events";
 import { type IncomingMessage, type ServerResponse, createServer } from "node:http";
 import { extname, join, resolve, sep } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -79,9 +80,16 @@ async function streamThrottled(filePath: string, req: IncomingMessage, res: Serv
   const range = req.headers.range;
   const m = range ? /^bytes=(\d*)-(\d*)$/.exec(range) : null;
   if (m) {
-    if (m[1]) start = Number(m[1]);
-    if (m[2]) end = Number(m[2]);
-    end = Math.min(end, size - 1);
+    if (!m[1] && m[2]) {
+      // 后缀 Range bytes=-N:取最后 N 字节;N=0 不可满足
+      const n = Number(m[2]);
+      start = n === 0 ? size : Math.max(0, size - n); // start=size 会触发下面的 416
+      end = size - 1;
+    } else {
+      if (m[1]) start = Number(m[1]);
+      if (m[2]) end = Number(m[2]);
+      end = Math.min(end, size - 1);
+    }
     if (start > end || start >= size) {
       res.writeHead(416, { "Content-Range": `bytes */${size}` }).end();
       return;
@@ -98,27 +106,68 @@ async function streamThrottled(filePath: string, req: IncomingMessage, res: Serv
 
   // 不限速:直接 pipe,不做分块 sleep — unthrottled: pipe straight through, no chunked sleep
   if (throttleBytesPerSec === null) {
-    createReadStream(filePath, { start, end }).pipe(res);
+    const stream = createReadStream(filePath, { start, end });
+    stream.on("error", () => res.destroy());
+    stream.pipe(res);
     return;
   }
 
   const chunkSize = Math.max(1024, Math.floor(throttleBytesPerSec / 10)); // ~10 writes/sec — 每秒约写 10 次
-  const delayMs = 1000 / 10;
 
   const stream = createReadStream(filePath, { start, end, highWaterMark: chunkSize });
+  // 客户端中途断开:销毁文件流,下面的循环随之结束
+  let closed = false;
+  res.on("close", () => {
+    closed = true;
+    stream.destroy();
+  });
   for await (const chunk of stream) {
-    res.write(chunk);
-    await new Promise((r) => setTimeout(r, delayMs));
+    if (closed) break;
+    // 背压:写缓冲满了就等 drain(连接断开则不再等)
+    if (!res.write(chunk) && !closed) await waitDrainOrClose(res);
+    if (closed) break;
+    // 按实际 chunk 字节数算等待时长,chunk 下限 1024 时低速限速也不会失效
+    await new Promise((r) => setTimeout(r, (chunk.length / throttleBytesPerSec) * 1000));
   }
-  res.end();
+  if (!closed) res.end();
+}
+
+/**
+ * 等待响应 drain 或 close(先到者为准);结算后 abort 掉另一个监听,避免每轮遗留监听器。
+ * @param res - HTTP 响应
+ */
+async function waitDrainOrClose(res: ServerResponse): Promise<void> {
+  const ac = new AbortController();
+  const { signal } = ac;
+  try {
+    await Promise.race([once(res, "drain", { signal }), once(res, "close", { signal })]);
+  } catch (err) {
+    // 另一侧被 abort 引发的 AbortError 属于预期,其余错误照常抛出
+    if ((err as { name?: string }).name !== "AbortError") throw err;
+  } finally {
+    ac.abort();
+  }
+}
+
+/**
+ * 统一启动一次文件响应:任何异常按"未发头回 500、已发头直接销毁连接"处理。
+ * @param filePath - 文件绝对路径
+ * @param req - 请求
+ * @param res - 响应
+ */
+function serveFile(filePath: string, req: IncomingMessage, res: ServerResponse): void {
+  streamThrottled(filePath, req, res).catch(() => {
+    if (!res.headersSent) res.writeHead(500).end("internal error");
+    else res.destroy();
+  });
 }
 
 createServer((req: IncomingMessage, res: ServerResponse) => {
-  const url = new URL(req.url ?? "/", `http://localhost:${port}`);
   // decode percent-encoding so non-ASCII filenames (e.g. sample_1280×853.png) resolve on disk
   // 解码 percent-encoding,使非 ASCII 文件名(如 sample_1280×853.png)能在磁盘上找到
   let pathname: string;
   try {
+    const url = new URL(req.url ?? "/", `http://localhost:${port}`);
     pathname = decodeURIComponent(url.pathname === "/" ? "/index.html" : url.pathname);
   } catch {
     res.writeHead(400).end("bad request");
@@ -137,7 +186,7 @@ createServer((req: IncomingMessage, res: ServerResponse) => {
       res.writeHead(404).end("not found");
       return;
     }
-    void streamThrottled(filePath, req, res);
+    serveFile(filePath, req, res);
     return;
   }
 
@@ -148,7 +197,7 @@ createServer((req: IncomingMessage, res: ServerResponse) => {
       res.writeHead(404).end("dist/imgprogress-sw.js not found — run `pnpm build` first");
       return;
     }
-    void streamThrottled(filePath, req, res);
+    serveFile(filePath, req, res);
     return;
   }
 
@@ -161,7 +210,7 @@ createServer((req: IncomingMessage, res: ServerResponse) => {
     res.writeHead(404).end("not found");
     return;
   }
-  void streamThrottled(filePath, req, res);
+  serveFile(filePath, req, res);
 }).listen(port, () => {
   console.log(`picman demo: http://localhost:${port} (${throttleBytesPerSec === null ? "unthrottled" : `throttle: ${throttleBytesPerSec} B/s`})`);
 });

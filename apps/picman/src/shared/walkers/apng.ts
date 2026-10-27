@@ -41,6 +41,10 @@ export interface PngScan {
    * 非隔行只解出顶部若干行,不值得展示。
    */
   interlaced?: boolean;
+  /** IHDR 位深(1/2/4/8/16) */
+  bitDepth?: number;
+  /** IHDR 颜色类型(0 灰度 / 2 真彩 / 3 调色板 / 4 灰度+Alpha / 6 真彩+Alpha) */
+  colorType?: number;
 }
 
 /** Standalone IEND chunk bytes (len=0, CRC precomputed) — 独立 IEND chunk 字节(长度 0,CRC 预算好) */
@@ -64,6 +68,8 @@ export function scanPng(buf: Uint8Array): PngScan {
   let firstFrameReady = false;
   let idatBytes = 0;
   let interlaced: boolean | undefined;
+  let bitDepth: number | undefined;
+  let colorType: number | undefined;
 
   let p = 8;
   while (p + 8 <= buf.length) {
@@ -89,6 +95,8 @@ export function scanPng(buf: Uint8Array): PngScan {
       width = readBE32(buf, dataStart);
       height = readBE32(buf, dataStart + 4);
       // IHDR: width(4)+height(4)+depth(1)+colorType(1)+compression(1)+filter(1)+interlace(1)
+      bitDepth = buf[dataStart + 8];
+      colorType = buf[dataStart + 9];
       interlaced = buf[dataStart + 12] === 1;
     } else if (type === "PLTE") {
       palette = [];
@@ -110,7 +118,7 @@ export function scanPng(buf: Uint8Array): PngScan {
     p += total;
   }
 
-  return { status, width, height, palette, firstFrameReady, idatBytes, interlaced };
+  return { status, width, height, palette, firstFrameReady, idatBytes, interlaced, bitDepth, colorType };
 }
 
 /**

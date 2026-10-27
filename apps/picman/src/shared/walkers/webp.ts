@@ -110,7 +110,7 @@ export function scanWebp(buf: Uint8Array): WebpScan {
  * Repack the first ANMF frame into a standalone WebP (simple format, or
  * VP8X+ALPH+VP8 when the frame carries alpha); null when structure is invalid.
  *
- * 将首个 ANMF 帧重打包为独立 WebP(简单格式,或含 alpha 时 VP8X+ALPH+VP8);结构不符返回 null。
+ * 将首个 ANMF 帧重打包为独立 WebP(简单格式,或含 alpha 时 VP8X+ALPH+VP8);结构不符或首帧不是整画布返回 null。
  * @param buf - Full WebP bytes — 完整 WebP 字节
  * @param anmf - [start, end) from {@link scanWebp} — {@link scanWebp} 给出的区间
  * @returns Standalone WebP bytes, or null — 独立 WebP 字节,或 null
@@ -146,6 +146,14 @@ export function webpFirstFrame(buf: Uint8Array, anmf: [number, number]): Uint8Ar
 
   const frameWidth = 1 + readLE24(frameHeader, 6);
   const frameHeight = 1 + readLE24(frameHeader, 9);
+
+  // 非整画布首帧(帧有偏移或尺寸小于画布)不能单独当首帧:丢掉画布上下文会显示错位/残缺
+  const frameX = readLE24(frameHeader, 0) * 2;
+  const frameY = readLE24(frameHeader, 3) * 2;
+  // VP8X 数据起于 buf 偏移 20,画布宽高 LE24 在 24/27
+  const canvasWidth = 1 + readLE24(buf, 24);
+  const canvasHeight = 1 + readLE24(buf, 27);
+  if (frameX !== 0 || frameY !== 0 || frameWidth !== canvasWidth || frameHeight !== canvasHeight) return null;
 
   const chunks: Uint8Array[] = [];
   if (alpha) {
