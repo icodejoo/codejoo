@@ -649,5 +649,201 @@ describe("@codejoo/layerman", () => {
       await vi.advanceTimersByTimeAsync(1);
       expect(ids(m)).toEqual([]); // 剩余时间耗尽后移除
     });
+
+    it("replace 顶掉带 cooldown 的弹窗：顶替者移除后原弹窗应能重新展示（豁免自身冷却）", async () => {
+      const m = make();
+      m.open({ id: "a", cooldown: { session: 1 } });
+      await flush();
+      m.open({ id: "b", replace: true });
+      await flush();
+      expect(ids(m)).toEqual(["b"]);
+      m.remove("b");
+      await flush();
+      expect(ids(m)).toEqual(["a"]);
+    });
+
+    it("resolve 被 abort 后重新激活：旧请求晚到的结果不应污染新一轮", async () => {
+      const m = make();
+      const resolvers: Array<(v: string | null) => void> = [];
+      m.open({ id: "a", resolve: () => new Promise<string | null>((r) => resolvers.push(r)) });
+      await flush();
+      m.open({ id: "b", replace: true }); // 顶掉正在 resolving 的 a（abort R1）
+      await flush();
+      m.remove("b"); // a 重新排队并再次激活 → R2
+      await flush();
+      expect(resolvers.length).toBe(2);
+      resolvers[0]("first"); // R1 无视 abort 晚到
+      await flush();
+      expect(ids(m)).toEqual([]); // 仍在等 R2
+      resolvers[1]("second");
+      await flush();
+      expect(ids(m)).toEqual(["a"]);
+      expect(m.get("a")?.data).toBe("second");
+    });
+
+    it("resolve 落地前条件已变：不展示，退回队列，条件恢复后重新 resolve 并显示", async () => {
+      const m = make();
+      m.setContext({ auth: true });
+      const resolvers: Array<(v: string | null) => void> = [];
+      m.open({ id: "a", requiresAuth: true, resolve: () => new Promise<string | null>((r) => resolvers.push(r)) });
+      await flush();
+      m.setContext({ auth: false }); // resolving 期间条件失效
+      resolvers[0]("d1");
+      await flush();
+      expect(ids(m)).toEqual([]);
+      expect(m.getSnapshot().queued).toEqual(["a"]);
+      m.setContext({ auth: true });
+      await flush();
+      expect(resolvers.length).toBe(2);
+      resolvers[1]("d2");
+      await flush();
+      expect(ids(m)).toEqual(["a"]);
+      expect(m.get("a")?.data).toBe("d2");
+    });
+
+    it("replace 遇到 closing 态的弹窗：直接丢弃不复活，result 兑现 dismissed", async () => {
+      const m = make();
+      const h = m.open({ id: "a" });
+      await flush();
+      m.close("a"); // → closing
+      m.open({ id: "b", replace: true });
+      await flush();
+      m.remove("b");
+      await flush();
+      expect(ids(m)).toEqual([]);
+      expect(m.getSnapshot().queued).toEqual([]);
+      await expect(h.result).resolves.toEqual({ dismissed: true });
+    });
+
+    it("pauseAll 期间 close：autoRemove 不计时，resumeAll 后才开始倒计时", async () => {
+      const m = make();
+      m.open({ id: "a" });
+      await flush();
+      m.pauseAll();
+      m.close("a");
+      await vi.advanceTimersByTimeAsync(1000);
+      expect(m.getSnapshot().active.map((o) => o.phase)).toEqual(["closing"]);
+      m.resumeAll();
+      await vi.advanceTimersByTimeAsync(299);
+      expect(ids(m)).toEqual(["a"]);
+      await vi.advanceTimersByTimeAsync(1);
+      expect(ids(m)).toEqual([]);
+    });
+
+    it("onClose 里 remove 并重开同 id：旧实例的定时器不应删掉新实例", async () => {
+      const m = make();
+      m.open({
+        id: "a",
+        onClose: () => {
+          m.remove("a");
+          m.open({ id: "a" });
+        },
+      });
+      await flush();
+      m.close("a");
+      await vi.advanceTimersByTimeAsync(300);
+      expect(ids(m)).toEqual(["a"]);
+      expect(m.getSnapshot().active[0].phase).toBe("open");
+    });
+
+    it("订阅者抛错不应中断状态推进（autoRemove 与队列推进照常）", async () => {
+      const m = make();
+      const ok = vi.fn();
+      m.subscribe(() => {
+        throw new Error("boom");
+      });
+      m.subscribe(ok);
+      m.open({ id: "a" });
+      m.open({ id: "b" });
+      await flush();
+      ok.mockClear();
+      m.close("a");
+      expect(ok).toHaveBeenCalled();
+      await vi.advanceTimersByTimeAsync(300);
+      expect(ids(m)).toEqual(["b"]);
+    });
+
+    it("route 用带 g 标志的正则：连续重评结果不应交替", async () => {
+      const m = make();
+      m.open({ id: "a", route: /home/g });
+      for (let i = 0; i < 4; i++) {
+        m.setContext({ route: "/home" });
+        await flush();
+        expect(ids(m)).toEqual(["a"]);
+      }
+    });
+
+    it("显式 id 恰好等于自动 id 前缀：自动生成的 id 应避开，不覆盖已有条目", async () => {
+      const m = make();
+      let settled = false;
+      void m.open({ id: "__layerman_auto_1" }).result.then(() => {
+        settled = true;
+      });
+      const h = m.open({});
+      await flush();
+      expect(h.id).not.toBe("__layerman_auto_1");
+      expect(ids(m)).toEqual(["__layerman_auto_1"]);
+      expect(m.getSnapshot().queued).toEqual([h.id]);
+      expect(settled).toBe(false);
+    });
+
+    it("emit：订阅者重入 remove 触发嵌套 emit 后，后面的订阅者不会收到过期快照", () => {
+      const m = make();
+      let last: ReturnType<Layerman["getSnapshot"]> | undefined;
+      m.subscribe((st) => {
+        if (st.active.some((o) => o.id === "a")) m.remove("a");
+      });
+      m.subscribe((st) => {
+        last = st;
+      });
+      m.open({ id: "a" });
+      expect(last?.active).toEqual([]);
+      expect(last).toBe(m.getSnapshot());
+    });
+
+    it("displace：带未消费豁免重新 resolving 时再次被 replace，豁免不丢", async () => {
+      const m = make();
+      m.open({ id: "a", cooldown: { session: 1 }, resolve: async () => ({}) });
+      await flush();
+      expect(ids(m)).toEqual(["a"]);
+      m.open({ id: "b", replace: true });
+      expect(ids(m)).toEqual(["b"]);
+      m.remove("b"); // a 重新 resolving（尚未 flush）
+      m.open({ id: "c", replace: true }); // 再次顶掉 resolving 中的 a
+      m.remove("c");
+      await flush();
+      expect(ids(m)).toEqual(["a"]);
+    });
+
+    it("finishResolve：dismissWhenUnmet:false 的项，resolve 期间条件变化后仍展示", async () => {
+      const m = make();
+      m.setContext({ auth: true });
+      m.open({
+        id: "a",
+        requiresAuth: true,
+        dismissWhenUnmet: false,
+        resolve: () => new Promise<unknown>((r) => setTimeout(() => r({ ok: 1 }), 100)),
+      });
+      m.setContext({ auth: false });
+      await vi.advanceTimersByTimeAsync(100);
+      expect(ids(m)).toEqual(["a"]);
+    });
+
+    it("armDuration：onShow 里 remove 后重开同 id，旧定时器不得关掉新实例", async () => {
+      const m = make();
+      let first = true;
+      m.open({
+        id: "a",
+        duration: 1000,
+        onShow: () => {
+          if (!first) return;
+          first = false;
+          m.remove("a");
+          m.open({ id: "a" });
+        },
+      });
+      await vi.advanceTimersByTimeAsync(1000);
+      expect(m.getSnapshot().active.map((o) => o.phase)).toEqual(["open"]); // 旧定时器误关会变 closing
+    });
   });
 });

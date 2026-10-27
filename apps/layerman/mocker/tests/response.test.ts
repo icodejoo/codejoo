@@ -13,6 +13,12 @@ describe('createResponse', () => {
     expect(r.status).toBe(201)
   })
 
+  it('resolve with 204 returns an empty-body response instead of throwing', async () => {
+    const r = createResponse().resolve(null, 204)
+    expect(r.status).toBe(204)
+    expect(await r.text()).toBe('')
+  })
+
   it('reject returns 500 JSON by default', async () => {
     const r = createResponse().reject('Something broke')
     expect(r.status).toBe(500)

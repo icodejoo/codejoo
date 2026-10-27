@@ -1,4 +1,4 @@
-import { resolve, normalize } from 'path'
+import { resolve, normalize, relative, isAbsolute } from 'path'
 import { existsSync } from 'fs'
 import type { Plugin } from 'vite'
 import { defaultConfig, mergeConfig, loadConfigFile } from './config'
@@ -22,7 +22,9 @@ export function mock(options?: MockOptions): Plugin {
   }
 
   async function reloadFile(file: string) {
-    if (!file.startsWith(absDir) || !file.endsWith('.ts')) return
+    // 用 relative 判断是否在 mock 目录内，避免 /project/mocks-extra 这类同前缀目录误过
+    const rel = relative(absDir, normalize(file))
+    if (!rel || rel.startsWith('..') || isAbsolute(rel) || !file.endsWith('.ts')) return
     if (existsSync(file)) {
       const routes = await loadMockFile(file)
       // on parse error routes === [] but file still exists — preserve previous routes
