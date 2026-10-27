@@ -1,8 +1,9 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { GT, use } from "./core";
-import countdown, { tick as countdownTick } from "./count-down/count-down";
+import countdown, { clear as countdownClear, pause as countdownPause, tick as countdownTick } from "./count-down/count-down";
 import countup, { tick as countupTick } from "./count-up/count-up";
 import { buildDateParser, buildHighPerfFormatter } from "./count-down/helper";
+import { createLazyObserver } from "./helper";
 
 describe("buildHighPerfFormatter", () => {
   it("formats HH:mm:ss with total hours by default", () => {
@@ -56,6 +57,10 @@ describe("buildDateParser", () => {
     expect(() => buildDateParser("ms")("not a date")).toThrow("[GT]");
     expect(() => buildDateParser("ms")(NaN)).toThrow("[GT]");
   });
+
+  it("throws on an Invalid Date instead of returning NaN (task would never finish)", () => {
+    expect(() => buildDateParser("ms")(new Date("bad"))).toThrow("[GT]");
+  });
 });
 
 describe("core scheduler", () => {
@@ -101,6 +106,36 @@ describe("core scheduler", () => {
     pump(10);
     expect(spy).toHaveBeenCalledTimes(1);
   });
+
+  it("a subscriber calling stop() / stop()+start() mid-frame is respected (no re-queue, no double loop)", () => {
+    let id = 0;
+    vi.stubGlobal("requestAnimationFrame", (cb: FrameRequestCallback) => {
+      frames.push(cb);
+      return ++id; // 每次返回新 id，才能区分"回调里重启过"
+    });
+    let mode: "stop" | "restart" | "off" = "stop";
+    use({
+      name: "inside-cb",
+      install: () => {
+        if (mode === "off") return false;
+        GT.stop();
+        if (mode === "restart") GT.start();
+        return true; // 仍报忙：修复前会据此再排一帧
+      },
+    });
+    GT.start();
+    pump(10);
+    expect(frames.length).toBe(0); // stop 生效，不再续排
+
+    mode = "restart";
+    GT.start();
+    pump(20);
+    expect(frames.length).toBe(1); // 只有重启排出的那一帧，没有第二条循环
+
+    mode = "off";
+    pump(30);
+    expect(frames.length).toBe(0);
+  });
 });
 
 describe("countdown", () => {
@@ -112,6 +147,7 @@ describe("countdown", () => {
   });
   afterEach(() => {
     countdown.clear();
+    countdownClear("grp");
     vi.unstubAllGlobals();
     vi.useRealTimers();
   });
@@ -280,6 +316,61 @@ describe("countdown", () => {
     countdown.clear();
     expect(onDestroy).toHaveBeenCalledWith(3000, expect.anything()); // 第二参为 ctx
     expect(countdownTick()).toBe(false);
+  });
+
+  it("re-adding on the same element in the same non-default label keeps the new task ticking (group not orphaned)", () => {
+    const el = document.createElement("div");
+    countdown(5000, el, { label: "grp" });
+    countdown(8000, el, { label: "grp" }); // 旧任务移除会清空并删掉 grp 分组，新任务须重新挂回
+    expect(countdownTick()).toBe(true);
+    expect(el.textContent).toBe("00:00:08");
+    vi.setSystemTime(Date.now() + 1000);
+    countdownTick();
+    expect(el.textContent).toBe("00:00:07");
+  });
+
+  it("renderer.destroy() re-entering the same label during replacement: the new group is kept, not overwritten", () => {
+    const el1 = document.createElement("div");
+    const el2 = document.createElement("div");
+    let reentered = false;
+    const render = Object.assign(vi.fn(), {
+      destroy: () => {
+        if (reentered) return;
+        reentered = true;
+        countdown(6000, el2, { label: "grp" }); // 旧任务被移除、grp 分组已删时，在 destroy 里重入新建同名分组
+      },
+    });
+    countdown(5000, el1, { label: "grp", render });
+    countdown(8000, el1, { label: "grp" }); // 同元素再 add → 移除旧任务 → 触发上面的重入
+    countdownTick();
+    expect(el1.textContent).toBe("00:00:08");
+    expect(el2.textContent).toBe("00:00:06"); // 重入任务不能因挂回逻辑被顶成孤儿
+  });
+
+  it("clear() on a paused task reports the frozen remaining, not the time elapsed during the pause", () => {
+    const el = document.createElement("div");
+    const onDestroy = vi.fn();
+    const id = countdown(10000, el, { onDestroy });
+    countdownTick();
+    countdownPause(id);
+    vi.setSystemTime(Date.now() + 3000); // 暂停期间流逝 3s
+    countdownClear();
+    expect(onDestroy).toHaveBeenCalledWith(10000, expect.anything());
+  });
+
+  it("lifecycle mount sees ctx.value already parsed from the current remaining (not all zeros)", () => {
+    const el = document.createElement("div");
+    const seen: number[][] = [];
+    const render = {
+      mount: (_el: Element, ctx: { value: ArrayLike<number> }) => {
+        seen.push(Array.from(ctx.value));
+        return {};
+      },
+      update: () => {},
+      destroy: () => {},
+    };
+    countdown(65000, el, { render });
+    expect(seen).toEqual([[0, 0, 1, 5, 0]]); // [d,h,m,s,ms]
   });
 });
 
@@ -521,6 +612,42 @@ describe("countup", () => {
     countup.clear("b"); // b 组本就没有该任务
     countupTick(600, 100);
     expect(el.textContent).toBe("50"); // 仍从当前值续接，未被清掉、未从 0 起
+  });
+
+  it("retargeting from inside onDone keeps the task alive and the ticker busy", () => {
+    const el = document.createElement("div");
+    let again = false;
+    const onDone = vi.fn(() => {
+      if (again) return;
+      again = true;
+      countup({ to: 200, el, ...linear }); // 完成回调里对同元素再次 countup：原地重定
+    });
+    countup({ to: 100, el, onDone, ...linear });
+    countupTick(0, 0);
+    expect(countupTick(1000, 1000)).toBe(true); // 本帧仍忙碌，ticker 不能停摆
+    expect(onDone).toHaveBeenCalledTimes(1);
+    countupTick(1100, 100); // 重定后首帧：从 100 起
+    expect(el.textContent).toBe("100");
+    countupTick(1600, 500); // 100 + (200-100)*0.5 = 150
+    expect(el.textContent).toBe("150");
+    expect(countupTick(2100, 500)).toBe(false);
+    expect(el.textContent).toBe("200");
+  });
+
+  it("retargeting a lazy-pending lifecycle task to lazy:false mounts the renderer immediately", () => {
+    class FakeIO {
+      observe() {}
+      unobserve() {}
+    }
+    vi.stubGlobal("IntersectionObserver", FakeIO); // 永不触发 → 首个任务停在待激活
+    const el = document.createElement("div");
+    const ob = createLazyObserver();
+    const mount = vi.fn(() => ({}));
+    const render = { mount, update: vi.fn(), destroy: vi.fn() };
+    countup({ to: 10, el, lazy: true, observer: ob, render, ...linear });
+    expect(mount).not.toHaveBeenCalled();
+    countup({ to: 20, el, lazy: false, render, ...linear }); // 重定为立即激活
+    expect(mount).toHaveBeenCalledTimes(1);
   });
 
   it("different elements stay independent (no retarget across elements)", () => {

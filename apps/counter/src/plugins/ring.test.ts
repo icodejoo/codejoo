@@ -268,6 +268,15 @@ describe("createRingRender 客制化（分组 + CSS 变量 + 回调）", () => {
     expect(colorOf(fills(host).find((f) => colorOf(f)) as Element)).toBe(norm("#777777"));
   });
 
+  it("最内圈恰为整圆（≤3s 倒计时首帧，红区 0→total）时拆成两段弧，避免 SVG 起终点重合退化", () => {
+    const host = document.createElement("div");
+    makeRingInvoker(createRingRender())(host, 3000, val, makeCtx("00:03"));
+    const red = fills(host).find((f) => zoneOf(f) === "red")!;
+    const d = red.getAttribute("d")!;
+    expect(d.match(/A/g)!.length).toBe(2);
+    expect(d).not.toMatch(/NaN/);
+  });
+
   it('digit.mode:"text" 用文字节点', () => {
     const host = document.createElement("div");
     makeRingInvoker(createRingRender({ digit: { mode: "text" } }))(host, 125000, val, makeCtx("02:05"));

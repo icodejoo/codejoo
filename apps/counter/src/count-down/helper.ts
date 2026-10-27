@@ -146,7 +146,10 @@ export function buildDateParser(unit: TDateUnit): TDateParser {
   }[unit];
   return function (value: TCountdownDeadline, timeOffset = 0) {
     // 绝对时间（服务器时钟）统一减去 timeOffset 换算到客户端时钟；相对时长锚定客户端 Date.now()，与 offset 无关
-    if (value instanceof Date) return value.getTime() - timeOffset;
+    if (value instanceof Date) {
+      const t = value.getTime();
+      return Number.isNaN(t) ? invalid(value) : t - timeOffset; // Invalid Date 同字符串分支：直接报错，避免任务永不结束
+    }
     if (typeof value === "number") return resolveNumber(value, scale, timeOffset);
     if (!value || typeof value !== "string") return invalid(value);
     const match = REGEX_PARSE.exec(value);
@@ -154,7 +157,7 @@ export function buildDateParser(unit: TDateUnit): TDateParser {
       const ts = Date.parse(value);
       return Number.isNaN(ts) ? invalid(value) : ts - timeOffset;
     }
-    const ts = new Date(+match[1], +(match[2] || 1) - 1, +(match[3] || 1), +(match[4] || 0), +(match[5] || 0), +(match[6] || 0), +(match[7] || "0").padEnd(3, "0").slice(0, 3)).getTime();
+    const ts = new Date(+match[1], +(match[2] || 1) - 1, +(match[3] || 1), +(match[4] || 0), +(match[5] || 0), +(match[6] || 0), +((match[7] || "") + "000").slice(0, 3)).getTime(); // 毫秒位右补零到 3 位（等价 padEnd，避开 ES2017 API）
     return Number.isNaN(ts) ? invalid(value) : ts - timeOffset;
   };
 }

@@ -230,13 +230,16 @@ const setHref = (n: SVGElement, id: string) => {
 let SID = 0; // 外圈弧复用源 id 自增，避免同页多实例/多元素的 id 冲突
 
 // 渲染元素上挂的「上次写入值」缓存：未变化则跳过 DOM 写入（省样式重算 + 重光栅）
-type TCacheEl = SVGElement & { style: CSSStyleDeclaration; __z?: TRingZone; __on?: boolean; __d?: string; __t?: string; __hi?: number };
+type TCacheEl = SVGElement & { style: CSSStyleDeclaration; __z?: TRingZone; __on?: boolean; __t?: string; __hi?: number };
 
-/** 以 (cx,cy) 为圆心、半径 r，画 a0→a1（弧度）的圆弧 path d */
+const TAU = Math.PI * 2;
+
+/** 以 (cx,cy) 为圆心、半径 r，画 a0→a1（弧度）的圆弧 path d；恰为整圆时起终点重合，SVG 会退化不绘制，故在中点拆成两段半圆 */
 function arcPath(cx: number, cy: number, r: number, a0: number, a1: number): string {
   const pt = (a: number) => `${(cx + r * Math.cos(a)).toFixed(2)},${(cy + r * Math.sin(a)).toFixed(2)}`;
   const large = Math.abs(a1 - a0) > Math.PI ? 1 : 0;
   const sweep = a1 >= a0 ? 1 : 0;
+  if (Math.abs(a1 - a0) >= TAU - 1e-6) return `M${pt(a0)}A${r} ${r} 0 0 ${sweep} ${pt((a0 + a1) / 2)}A${r} ${r} 0 0 ${sweep} ${pt(a1)}`;
   return `M${pt(a0)}A${r} ${r} 0 ${large} ${sweep} ${pt(a1)}`;
 }
 
@@ -259,7 +262,6 @@ function segPoints(): string[] {
 const BASE_PTS = segPoints();
 
 const MINUTE = 60000;
-const TAU = Math.PI * 2;
 const TOP = -Math.PI / 2;
 
 /** false/null/display:false → null（隐藏）；否则与默认合并 */
@@ -581,7 +583,6 @@ export function createRingRender(options: IRingRenderOptions = {}): IRingRender 
           path.__hi = hi;
           const d = hi <= t0 ? "" : arcPath(50, 50, innerCfg.radius, angleAt(t0), angleAt(hi));
           path.setAttribute("d", d);
-          path.__d = d;
         };
         for (let i = 0; i < state.minutes.length; i++) drawSeg(state.minutes[i].el, state.minutes[i].from, state.minutes[i].to);
         drawSeg(state.zones.red, 0, redAt * 1000);

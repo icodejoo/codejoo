@@ -172,6 +172,34 @@ for (const strip of MODES) {
       expect(ss[0].style.transform).toBe(""); // transform 清零
     });
 
+    it("落定数字取自 formatter 文本：不受浮点除法误差影响（0.29 不落成 0.28）", () => {
+      const host = document.createElement("div");
+      const nf2 = new Intl.NumberFormat(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+      const fmt2 = (n: number) => nf2.format(n);
+      make()(host, fmt2(0.29), ctx(0.29, 0, 0.29, fmt2));
+      expect(strips(host).map((s) => s.textContent).join("")).toBe("029");
+    });
+
+    it("落定数字遵守 formatter 的舍入（1.9999 按 Intl 显示为 2，而非截断成 1）", () => {
+      const host = document.createElement("div");
+      make()(host, NF.format(1.9999), ctx(1.9999, 0, 1.9999));
+      expect(strips(host).map((s) => s.textContent).join("")).toBe("2");
+    });
+
+    it("落定时 formatter 进位（9.9999 → \"10\"）：可见位数按文本算，十位不会被当成前导零隐藏", () => {
+      const host = document.createElement("div");
+      make()(host, NF.format(9.9999), ctx(9.9999, 0, 9.9999));
+      expect(visibleStrips(host).map((s) => s.textContent).join("")).toBe("10");
+    });
+
+    it("符号位显隐只归 updateSign：from 为负、当前值为正时 reflow 不会把符号重新显示", () => {
+      const host = document.createElement("div");
+      make()(host, NF.format(40), ctx(40, -500, 100)); // 掩码取自 "-500"，含符号位
+      const signEl = items(host).find((node) => node.classList.contains("cd-sep") && node.textContent === "-")!;
+      expect(signEl).toBeTruthy();
+      expect(signEl.classList.contains("cd-hidden")).toBe(true);
+    });
+
     it("塌缩后开启新动画会重建长条", () => {
       const host = document.createElement("div");
       const r = make();
