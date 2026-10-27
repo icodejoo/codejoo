@@ -1,4 +1,4 @@
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect } from 'vitest';
 import axios from 'axios';
 import { Axp, axpKey as key, axpShare as share, axpCache as cache, axpRetry as retry, axpLoading as loading, axpMock as mock } from '../src';
 import { makeNetwork } from './helpers/network';
@@ -45,7 +45,7 @@ describe('集成 — race 乱序 + 夹杂错误', () => {
     );
     const out = await Promise.all(reqs);
     expect(net.calls('GET', '/race')).toBe(3);          // race：每个 caller 各发一次
-    expect(out.every((r) => r === 'winner')).toBe(true); // 第一个成功的赢家分发给所有
+    expect(out.every((r: unknown) => r === 'winner')).toBe(true); // 第一个成功的赢家分发给所有
   });
 });
 

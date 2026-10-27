@@ -1,6 +1,6 @@
 
 import type { Plugin } from '../types';
-import { pluginLog, pluginWarn, resolveAdapter } from '../helper';
+import { pluginLog, pluginWarn, wrapAdapter } from '../helper';
 import type { AxiosRequestConfig, AxiosResponse } from 'axios';
 
 
@@ -40,13 +40,12 @@ export default function axpMock(
   const defaults: IMockOptions = { mock: mockGlobal, mockUrl, fallbackWhen };
   return {
     name,
+    /** 包装 adapter 路由 mock，保留配置供 retry/auth 重放解析。 */
     install(axios) {
       pluginLog(axios.defaults, `[${name}] enabled:${enable} mockUrl:${mockUrl ?? '<none>'}`);
       if (!enable) return;
-      const prev = resolveAdapter(axios);
-      axios.defaults.adapter = (config) => {
+      return wrapAdapter(axios, (prev) => (config) => {
         const opt = $resolveMock(config, defaults);
-        delete config.mock;
         if (!opt) return prev(config);
         if (!opt.mockUrl) {
           pluginWarn(config, `[${name}] skipped: no mockUrl`);
@@ -77,8 +76,7 @@ export default function axpMock(
             return Promise.reject(error);
           },
         );
-      };
-      return () => { axios.defaults.adapter = prev; };
+      });
     },
   };
 }

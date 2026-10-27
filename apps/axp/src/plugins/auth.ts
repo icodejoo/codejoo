@@ -5,9 +5,10 @@ import type {
   InternalAxiosRequestConfig,
 } from 'axios';
 import type { MaybeFun, Plugin } from '../types';
-import { pluginLog, pluginError } from '../helper';
+import { pluginLog, pluginError, captureRawRequest, registerAttemptHook, runAttempt } from '../helper';
 import AxpResponse from '../objects/Response';
 import type { ITokenManager } from '../objects/TokenManager';
+import { CanceledError } from 'axios';
 
 export const name = 'axp:auth';
 
@@ -27,6 +28,8 @@ const PROTECTED = `${name}:protected`;
 const REFRESHED = `${name}:refreshed`;
 /** 请求阶段已判定 deny，响应侧跳过重复触发 / denial already decided at request stage, response side skips re-triggering. */
 const DENIED = `${name}:denied`;
+/** 保存会被 share adapter 消费的请求选项，供鉴权重放恢复。 */
+const SHARE = `${name}:share`;
 
 /** 默认越权业务码，用于 `$synthDenied` 合成的响应 / default access-denied business code, used by `$synthDenied`'s synthesized response. */
 export const ACCESS_DENIED_CODE = 'ACCESS_DENIED';
@@ -57,19 +60,23 @@ const refreshStates = new WeakMap<AxiosInstance, { current: Promise<boolean> | n
  *   - `Deny`    → 调 onAccessDenied，原样传播 / calls onAccessDenied, propagates unchanged
  *   - `Expired` → tm.clear() + onAccessExpired，原样传播 / tm.clear() + onAccessExpired, propagates unchanged
  *   - `Others`  → 与插件无关，原样传播；null/undefined/void 同此值 / unrelated to plugin, propagates unchanged; null/undefined/void treated the same
+ * @example const action: AuthFailureAction = AuthFailureAction.Refresh;
  */
-export enum AuthFailureAction {
+export const AuthFailureAction = {
   /** 需要刷新——token 与 tm 当前一致（真过期） / needs refresh — carried token matches tm's current one (genuinely expired). */
-  Refresh = 'refresh',
+  Refresh: 'refresh',
   /** 无需刷新直接重发——已被并发刷新或 token 不一致（stale） / no refresh needed, re-sends directly — already refreshed concurrently or token is stale. */
-  Replay = 'replay',
+  Replay: 'replay',
   /** 越权拒绝——调用 onAccessDenied / access denied — calls onAccessDenied. */
-  Deny = 'deny',
+  Deny: 'deny',
   /** 会话过期——tm.clear() 后调用 onAccessExpired / session expired — calls onAccessExpired after tm.clear(). */
-  Expired = 'expired',
+  Expired: 'expired',
   /** 与插件无关，原样传播 / unrelated to this plugin, propagates unchanged. */
-  Others = 'others',
-}
+  Others: 'others',
+} as const;
+
+/** 鉴权失败动作类型，与同名常量对象配合保留原有调用方式。 */
+export type AuthFailureAction = typeof AuthFailureAction[keyof typeof AuthFailureAction];
 
 
 /**
@@ -144,6 +151,7 @@ export default function axpAuth(options: IAuthOptions): Plugin {
   const cfg = $normalize(options);
   return {
     name,
+    /** 注册鉴权请求准备与响应路由，重放只经过鉴权阶段。 */
     install(axios) {
       pluginLog(axios.defaults, `[${name}] enabled:${cfg.enable}`);
       if (!cfg.enable) return;
@@ -174,6 +182,7 @@ export default function axpAuth(options: IAuthOptions): Plugin {
        */
       const startRefresh = (resp: AxiosResponse): Promise<boolean> => {
         if (refreshState.current) return refreshState.current;
+        if (!tm.canRefresh) return Promise.resolve(false);
         const p: Promise<boolean> = (async () => {
           try { return (await cfg.onRefresh(tm, resp)) !== false; }
           catch (e) { pluginError(axios.defaults, `[${name}] onRefresh threw`, e); return false; }
@@ -185,6 +194,7 @@ export default function axpAuth(options: IAuthOptions): Plugin {
 
       /** 判定过期：tm.clear() 后调用 onAccessExpired / handles expiry: tm.clear() then calls onAccessExpired. */
       const expire = async (resp: AxiosResponse): Promise<void> => {
+        tm.canRefresh = false;
         tm.clear();
         await safe('onAccessExpired', () => cfg.onAccessExpired(tm, resp));
       };
@@ -219,16 +229,22 @@ export default function axpAuth(options: IAuthOptions): Plugin {
       };
 
       // ─── 请求侧 ───
-      const reqId = axios.interceptors.request.use(async (config: InternalAxiosRequestConfig) => {
+      /** 首发和重放共用鉴权请求准备，刷新窗口内等待，随后注入最新凭证。 */
+      const onRequest = async (config: InternalAxiosRequestConfig): Promise<InternalAxiosRequestConfig> => {
+        $throwIfCanceled(config);
         const bag = config as unknown as Record<string, unknown>;
+        if (!(SHARE in bag)) bag[SHARE] = config.share;
         const prot = isProtected(config);
         bag[DECISION] = prot;
         if (!prot) { delete config.protected; return config; }
         bag[PROTECTED] = true;
         delete config.protected;
+        captureRawRequest(config);
 
         if (refreshState.current) {
-          if (!(await refreshState.current)) {
+          const refreshed = await refreshState.current;
+          $throwIfCanceled(config);
+          if (!refreshed) {
             bag[DENIED] = true;
             // 附 .config：cancel 插件靠 error.config 释放它的 AbortController，没有会永久泄漏
             //
@@ -243,7 +259,19 @@ export default function axpAuth(options: IAuthOptions): Plugin {
         }
         await safe('ready', () => cfg.ready(tm, config));
         return config;
-      });
+      };
+      const reqId = axios.interceptors.request.use(onRequest);
+
+      /** 刷新后重放：经共享的单次尝试阶段（还原原始请求体、注入新凭证、走鉴权路由），沿用原 signal。 */
+      const replay = async (config: AxiosRequestConfig): Promise<AxiosResponse> => {
+        const bag = config as Record<string, unknown>;
+        bag[REFRESHED] = true;
+        try {
+          return await runAttempt(axios, { ...config, share: bag[SHARE] as AxiosRequestConfig['share'] });
+        } finally {
+          $clearFlags(bag);
+        }
+      };
 
       /**
        * 失败路由，onFulfilled/onRejected 共用；originalError 存在（onRejected 路径）时终态
@@ -264,7 +292,11 @@ export default function axpAuth(options: IAuthOptions): Plugin {
         originalError?: unknown,
       ): Promise<AxiosResponse> => {
         const bag = config as Record<string, unknown>;
-        const propagate = () => originalError !== undefined ? Promise.reject(originalError) : response;
+        /** 已取消时优先返回取消错误，其余终态沿用原结果。 */
+        const propagate = () => {
+          $throwIfCanceled(config);
+          return originalError !== undefined ? Promise.reject(originalError) : response;
+        };
 
         const action = (await safe('onFailure', () => cfg.onFailure(tm, response))) ?? AuthFailureAction.Others;
 
@@ -280,18 +312,16 @@ export default function axpAuth(options: IAuthOptions): Plugin {
         switch (action) {
           case AuthFailureAction.Refresh: {
             if (await startRefresh(response)) {
-              bag[REFRESHED] = true;
               pluginLog(config, `[${name}] refresh ok, retrying`);
-              return axios.request(config);
+              return replay(config);
             }
             await expire(response);
             $clearFlags(bag);
             return propagate();
           }
           case AuthFailureAction.Replay: {
-            bag[REFRESHED] = true;
             pluginLog(config, `[${name}] replay (stale)`);
-            return axios.request(config);
+            return replay(config);
           }
           case AuthFailureAction.Deny: {
             await safe('onAccessDenied', () => cfg.onAccessDenied(tm, response));
@@ -311,16 +341,17 @@ export default function axpAuth(options: IAuthOptions): Plugin {
       };
 
       // ─── 响应侧（双路径） ───
-      const resId = axios.interceptors.response.use(
-        async (response: AxiosResponse) => {
+      /** 处理首发与鉴权重放的成功响应；重放不重复经过其他响应插件。 */
+      const onResponse = async (response: AxiosResponse): Promise<AxiosResponse> => {
           const config = response.config as AxiosRequestConfig | undefined;
           const bag = config as Record<string, unknown> | undefined;
           if (!bag?.[PROTECTED]) return response;
           if (bag[DENIED]) { $clearFlags(bag); return response; }
           if (AxpResponse.fromResponse(response).successful) { $clearFlags(bag); return response; }
           return handleFailure(response, config!);
-        },
-        async (error: unknown) => {
+        };
+      /** 处理首发与鉴权重放的错误，保留原始错误及取消状态。 */
+      const onError = async (error: unknown): Promise<AxiosResponse> => {
           const config = (error as { config?: AxiosRequestConfig })?.config;
           const bag = config as Record<string, unknown> | undefined;
           if (!bag?.[PROTECTED]) return Promise.reject(error);
@@ -329,12 +360,15 @@ export default function axpAuth(options: IAuthOptions): Plugin {
           // 网络错误，无从路由 / network error, nothing to route on
           if (!response) return Promise.reject(error);
           return handleFailure(response, config!, error);
-        },
-      );
+        };
+      const resId = axios.interceptors.response.use(onResponse, onError);
+      // 登记单次尝试钩子，让 retry 的每次重发也经过凭证注入与 401 路由。
+      const offHook = registerAttemptHook(axios, { onRequest, onResponse, onError });
 
       return () => {
         axios.interceptors.request.eject(reqId);
         axios.interceptors.response.eject(resId);
+        offHook();
         // 有在途刷新时保留状态，handle 重排后新装的闭包才能接上，不会并发跑出第二个 onRefresh
         if (!refreshState.current && refreshStates.get(axios) === refreshState) refreshStates.delete(axios);
       };
@@ -391,6 +425,12 @@ function $clearFlags(bag: Record<string, unknown>): void {
   delete bag[PROTECTED];
   delete bag[REFRESHED];
   delete bag[DENIED];
+  delete bag[SHARE];
+}
+
+/** 等待刷新后仍尊重逻辑请求的取消状态，并附上配置供最终清理。 */
+function $throwIfCanceled(config: AxiosRequestConfig): void {
+  if (config.signal?.aborted) throw Object.assign(new CanceledError(), { config });
 }
 
 

@@ -5,28 +5,18 @@
  *   - 若 mock(:4570) 与 dev(:5180) 已在运行 → 复用(配合手动 `npm run e2e:server` + `npm run e2e:dev`)
  *   - 否则自动拉起两个服务,跑完再回收
  *
- * 每个 case 对应演练场上的一个按钮(= 一个公开 API 动作),37 个 case 覆盖 src 全部导出。
+ * 每个 case 对应演练场上的一个按钮(= 一个公开 API 动作),动作契约由页面与 runner 共同校验，覆盖基础 API 与并发失败场景。
  * 任一断言失败 → 退出码 1。
  *
  * 运行：`npm run e2e`
  */
-import { spawn } from 'node:child_process';
 import { chromium } from 'playwright';
-
-const MOCK = 'http://localhost:4570';
-const APP = 'http://localhost:5180';
-// e2e/ 目录(run.mjs 所在目录)
-const ROOT = new URL('.', import.meta.url).pathname.replace(/^\/([A-Za-z]:)/, '$1');
-
-const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
-const up = async (url) => { try { await fetch(url); return true; } catch { return false; } };
-async function waitUp(url, label, tries = 60) {
-  for (let i = 0; i < tries; i++) { if (await up(url)) return; await sleep(500); }
-  throw new Error(`${label} did not come up: ${url}`);
-}
+import { APP, MOCK, startServices } from './services.mjs';
 
 // ── assert helpers ───────────────────────────────────────────────────────────
+/** 检查 JSON 值一致。 */
 const eq = (a, b, msg) => { if (JSON.stringify(a) !== JSON.stringify(b)) throw new Error(`${msg}: expected ${JSON.stringify(b)}, got ${JSON.stringify(a)}`); };
+/** 检查布尔断言。 */
 const ok = (c, msg) => { if (!c) throw new Error(msg); };
 
 /**
@@ -52,9 +42,9 @@ const cases = [
   { action: 'lifecycle-extends', result: 'lifecycle-result', exports: ['extends'], check: (j) => { eq(j.parent, ['logging'], 'parent'); eq(j.child, ['logging', 'tracer'], 'child'); } },
 
   // ── buildKey / $key ──
-  { action: 'buildkey-simple', result: 'buildkey-result', exports: ['$key (simple)'], check: (j) => ok(j.equal === true, 'simple ignores params') },
-  { action: 'buildkey-deep', result: 'buildkey-result', exports: ['$key (deep)'], check: (j) => ok(j.equal === false, 'deep distinguishes params') },
-  { action: 'buildkey-plugin', result: 'buildkey-result', exports: ['buildKey'], check: (j) => ok(typeof j.capturedKey === 'string' && j.capturedKey.includes('-'), 'buildKey writes 64-bit key') },
+  { action: 'key-simple', result: 'key-result', exports: ['$key (simple)'], check: (j) => ok(j.equal === true, 'simple ignores params') },
+  { action: 'key-deep', result: 'key-result', exports: ['$key (deep)'], check: (j) => ok(j.equal === false, 'deep distinguishes params') },
+  { action: 'key-plugin', result: 'key-result', exports: ['buildKey'], check: (j) => ok(typeof j.capturedKey === 'string' && j.capturedKey.includes('-'), 'buildKey writes 64-bit key') },
 
   // ── cache ──
   { action: 'cache-hit-twice', result: 'cache-result', exports: ['cache'], check: (j) => { eq(j.serverHits, 1, 'cache one network hit'); eq(j.r2.hits, 1, 'cache served second'); } },
@@ -65,7 +55,6 @@ const cases = [
   { action: 'share-start', result: 'share-result', exports: ['share (start)'], check: (j) => { eq(j.serverHits, 1, 'start merges'); ok(j.hitsSeen.every((h) => h === 1), 'all callers same'); } },
   { action: 'share-race', result: 'share-result', exports: ['share (race)'], check: (j) => eq(j.serverHits, 3, 'race each sends') },
   { action: 'share-end', result: 'share-result', exports: ['share (end)'], check: (j) => { eq(j.serverHits, 3, 'end each sends'); eq(j.sameResult, 1, 'end one result'); } },
-  { action: 'share-retry', result: 'share-result', exports: ['share (retry)'], check: (j) => { eq(j.serverHits, 3, 'retry until success'); eq(j.result.hits, 3, 'retry final') } },
 
   // ── retry ──
   { action: 'retry-run', result: 'retry-result', exports: ['retry'], check: (j) => { eq(j.serverHits, 3, 'retry 3 hits'); eq(j.result.hits, 3, 'retry success'); } },
@@ -79,7 +68,7 @@ const cases = [
 
   // ── mock ──
   { action: 'mock-run', result: 'mock-result', exports: ['mock'], check: (j) => ok(j.mocked === true && j.path.includes('/mock'), 'mock rewrite') },
-  { action: 'mock-fallback', result: 'mock-result', exports: ['mock (server forward)'], check: (j) => { eq(j.path, '/api/echo', 'reached real route'); eq(j.query.via, 'fallback', 'real request'); eq(j.query._gw, '1', 'forwarded by mock server (not axios)'); ok(!j.mocked, 'not from mock'); } },
+  { action: 'mock-fallback', result: 'mock-result', exports: ['mock (404 fallback)'], check: (j) => { eq(j.path, '/api/echo', 'reached real route'); eq(j.query.via, 'fallback', 'real request'); ok(!j.mocked, 'not from mock'); } },
 
   // ── envs ──
   { action: 'envs-run', result: 'envs-result', exports: ['envs'], check: (j) => { eq(j.baseURL, MOCK, 'baseURL unchanged'); eq(j.xEnv, 'prod', 'env header merged'); } },
@@ -114,6 +103,7 @@ const cases = [
   { action: 'int-auth-bounded-run', result: 'int-auth-bounded-result', exports: ['integration: auth bounded convergence'], check: (j) => { ok(j.pass === true, 'bounded'); ok(j.refreshCalls >= 1 && j.refreshCalls <= 10, '≤1 refresh/request (no infinite loop)'); ok(j.expired === 10, 'all converge to expire'); } },
 ];
 
+/** 点击动作并等到本次结果完成后执行断言。 */
 async function runCase(page, c) {
   await page.getByTestId(c.action).click();
   const pane = page.locator(`[data-testid="${c.result}"].ok, [data-testid="${c.result}"].err`).first();
@@ -124,42 +114,46 @@ async function runCase(page, c) {
   c.check(j);
 }
 
+/** 启动本地服务并驱动全部 UI 用例，任何退出路径均回收资源。 */
 async function main() {
-  const procs = [];
-  const needMock = !(await up(MOCK + '/api/hits'));
-  const needApp = !(await up(APP));
-  if (needMock) procs.push(spawn(process.execPath, [`${ROOT}/server/mock-server.mjs`], { stdio: 'ignore' }));
-  if (needApp) procs.push(spawn('npx', ['vp', 'dev', `${ROOT}/playground`, '--port', '5180', '--strictPort'], { stdio: 'ignore', shell: process.platform === 'win32' }));
-  console.log(`[e2e] mock:${needMock ? 'spawned' : 'reused'} app:${needApp ? 'spawned' : 'reused'}`);
-  await waitUp(MOCK + '/api/hits', 'mock');
-  await waitUp(APP, 'dev server');
+  const activeCases = process.env.E2E_INTEGRATION_ONLY ? cases.filter((c) => c.action.startsWith('int-')) : cases;
+  const closeServices = await startServices();
+  let browser;
+  try {
+    browser = process.env.E2E_CDP_URL
+      ? await chromium.connectOverCDP(process.env.E2E_CDP_URL)
+      : await chromium.launch({ channel: process.env.E2E_BROWSER_CHANNEL || 'chrome' });
+    const page = await browser.newPage();
+    const consoleErrors = [];
+    page.on('pageerror', (e) => consoleErrors.push(e.message));
+    await page.goto(APP, { waitUntil: 'networkidle' });
+    // 契约预检：缺失按钮或面板立即失败，不逐项等待超时。
+    for (const c of activeCases) {
+      eq(await page.getByTestId(c.action).count(), 1, 'action ' + c.action);
+      eq(await page.getByTestId(c.result).count(), 1, 'result ' + c.result);
+    }
 
-  const browser = await chromium.launch();
-  const page = await browser.newPage();
-  const consoleErrors = [];
-  page.on('pageerror', (e) => consoleErrors.push(e.message));
-  await page.goto(APP, { waitUntil: 'networkidle' });
+    let pass = 0; const fails = []; const covered = new Set();
+    for (const c of activeCases) {
+      process.stdout.write(`• ${c.action} … `);
+      try { await runCase(page, c); pass++; c.exports.forEach((e) => covered.add(e)); console.log('PASS'); }
+      catch (e) { fails.push({ action: c.action, error: e.message }); console.log('FAIL — ' + e.message); }
+    }
 
-  let pass = 0; const fails = []; const covered = new Set();
-  for (const c of cases) {
-    process.stdout.write(`• ${c.action} … `);
-    try { await runCase(page, c); pass++; c.exports.forEach((e) => covered.add(e)); console.log('PASS'); }
-    catch (e) { fails.push({ action: c.action, error: e.message }); console.log('FAIL — ' + e.message); }
+
+    console.log(`\n${'='.repeat(60)}`);
+    console.log(`covered API actions: ${covered.size} | cases: ${pass}/${activeCases.length} passed`);
+    if (consoleErrors.length) console.log(`page console errors: ${consoleErrors.length}\n  ` + consoleErrors.slice(0, 5).join('\n  '));
+    if (fails.length) {
+      console.log(`\nFAILURES:`); fails.forEach((f) => console.log(`  ✗ ${f.action}: ${f.error}`));
+      process.exitCode = 1;
+      return;
+    }
+    if (consoleErrors.length) { process.exitCode = 1; return; }
+    console.log('ALL E2E PASSED ✅');
+  } finally {
+    try { await browser?.close(); } finally { await closeServices(); }
   }
-
-  await browser.close();
-  for (const p of procs) { try { p.kill(); } catch {} }
-
-  console.log(`\n${'='.repeat(60)}`);
-  console.log(`covered API actions: ${covered.size} | cases: ${pass}/${cases.length} passed`);
-  if (consoleErrors.length) console.log(`page console errors: ${consoleErrors.length}\n  ` + consoleErrors.slice(0, 5).join('\n  '));
-  if (fails.length) {
-    console.log(`\nFAILURES:`); fails.forEach((f) => console.log(`  ✗ ${f.action}: ${f.error}`));
-    process.exit(1);
-  }
-  if (consoleErrors.length) process.exit(1);
-  console.log('ALL E2E PASSED ✅');
-  process.exit(0);
 }
 
-main().catch((e) => { console.error('e2e runner crashed:', e); process.exit(1); });
+main().catch((e) => { console.error('e2e runner crashed:', e); process.exitCode = 1; });

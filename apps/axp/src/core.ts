@@ -4,7 +4,7 @@ import type {
   AxiosRequestConfig,
   AxiosResponse,
 } from 'axios';
-import { cloneAxiosDefaults, resolveAdapter } from './helper';
+import { cloneAxiosDefaults, getBaseAdapter, resolveAdapter } from './helper';
 import AxpResponse from './objects/Response';
 import type {
   CoreOptions,
@@ -25,6 +25,9 @@ export default interface Core<T = unknown> extends HttpPrototype<T> {}
  * A strongly-typed dispatch layer around a single axios instance: the constructor normalizes `defaults` (adapter compatibility, `transitional`), then prototype methods mix in `get/post/put/...`; every call collapses the `AxiosResponse` into one of the three shapes `dispatch` declares (see `shapeResponse`). `Core` neither knows nor cares which plugins are installed — that's `Axp.install`'s job.
  */
 export default class Core<T = unknown> {
+  /** 底层 axios 实例（公开引用） / the underlying axios instance */
+  axios: AxiosInstance;
+
   /**
    * 归一化 axios 实例的 `adapter`/`transitional` 设置后立即调用 `#build()` 装配原型方法；不会自动安装任何插件。
    *
@@ -33,7 +36,9 @@ export default class Core<T = unknown> {
    * @param axios 底层 axios 实例，作为公开属性挂在实例上 / underlying axios instance, exposed as a public property
    * @param _options 构造选项（当前预留未使用） / construction options (currently reserved, unused)
    */
-  constructor(public axios: AxiosInstance, _options: CoreOptions = {}) {
+  constructor(axios: AxiosInstance, _options: CoreOptions = {}) {
+    // 显式字段赋值（不用参数属性，满足 erasableSyntaxOnly）
+    this.axios = axios;
     // 归一化 adapter：axios 1.x 允许 defaults.adapter 是 string / string[] / function / undefined，这里统一解析成函数，插件读取时不用各自处理兼容。
     //
     // Normalize the adapter: axios 1.x allows `defaults.adapter` to be string / string[] / function / undefined; resolve it to a function once so plugins don't each need their own compat handling.
@@ -50,11 +55,11 @@ export default class Core<T = unknown> {
   /**
    * 派生一个新的 `Core<T>`：克隆当前 axios defaults 后再应用 `overrides`。**不会**重放插件——记账在 `Axp.install` 返回的 `AxpHandle` 里，派生实例需要同一插件集时请自行重新调用 `Axp.install(child, sameConfig)`。
    *
-   * 克隆策略是"结构性浅拷贝 + 针对性深拷贝"（字段理由见 README "Extends" 一节）：`headers`/`params`/`transformRequest`/`transformResponse`/`transitional` 深拷贝（否则修改会泄漏到父实例）；`adapter` 及其余原始类型 default 按引用共享。
+   * 克隆策略是"结构性浅拷贝 + 针对性深拷贝"（字段理由见 README "Extends" 一节）：`headers`/`params`/`transformRequest`/`transformResponse`/`transitional` 深拷贝（否则修改会泄漏到父实例）；`adapter` 取父实例**未被插件包装**的底层 adapter（不带走 cache/loading 等插件闭包状态）；其余原始类型 default 按引用共享。
    *
    * Derive a new `Core<T>` that clones this instance's axios defaults, then applies `overrides`. Does NOT replay any plugins — that bookkeeping lives in the `AxpHandle` `Axp.install` returned; re-run `Axp.install(child, sameConfig)` yourself if the derived instance needs the same plugin set.
    *
-   * Cloning strategy is **structural shallow + targeted deep** (see README "Extends" for field-by-field rationale): `headers`/`params`/`transformRequest`/`transformResponse`/`transitional` are deep-cloned (mutation would otherwise leak to the parent); `adapter` and other primitive defaults are shared by reference.
+   * Cloning strategy is **structural shallow + targeted deep** (see README "Extends" for field-by-field rationale): `headers`/`params`/`transformRequest`/`transformResponse`/`transitional` are deep-cloned (mutation would otherwise leak to the parent); `adapter` is the parent's **unwrapped base** adapter (plugin closure state such as cache/loading is not carried over); other primitive defaults are shared by reference.
    *
    * @param overrides axios 配置覆盖项，浅合并到克隆后的 defaults 上 / axios config overrides, shallow-merged onto the cloned defaults
    * @returns 全新、独立的 `Core<T>` 实例 / a brand-new, independent `Core<T>` instance
@@ -63,6 +68,8 @@ export default class Core<T = unknown> {
     const childAxios = axiosLib.create(
       cloneAxiosDefaults(this.axios.defaults as AxiosRequestConfig),
     );
+    // 用未被插件包装的底层 adapter，避免子实例命中父实例的 cache/loading 等闭包状态
+    childAxios.defaults.adapter = getBaseAdapter(this.axios);
     Object.assign(childAxios.defaults, overrides);
     return new Core<T>(childAxios);
   }

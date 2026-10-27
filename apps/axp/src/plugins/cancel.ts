@@ -2,7 +2,7 @@
 import type { Plugin } from '../types';
 import { pluginLog } from '../helper';
 import { setInternal, getInternal, delInternal } from '../bag';
-import type { AxiosInstance } from 'axios';
+import type { AxiosInstance, GenericAbortSignal } from 'axios';
 
 
 const name = 'axp:cancel'
@@ -13,29 +13,8 @@ const CANCEL_CTRL = `${name}:ctrl`;
 /** 每个 axios 实例对应的活跃 AbortController 集合 / the set of active AbortControllers per axios instance. */
 const instances = new WeakMap<AxiosInstance, Set<AbortController>>();
 
-/**
- * 标记"这个 signal 是本插件签发的"。retry 等插件用同一 config 重发时，config.signal
- * （可枚举字段）会熬过 mergeConfig，但 Symbol bag 里的 controller 不会（已被上次响应阶段
- * release）；仅凭 config.signal 是否存在无法区分"用户自带"还是"本插件发过、已释放"，会让
- * 重发请求永远拿不到新 controller、脱离 cancelAll 追踪。用身份而非存在性区分：命中这个
- * WeakSet → 本插件签发过，可放心换发新的。
- *
- * Marks "this signal was issued by this plugin". When retry etc. re-send with
- * the same config, config.signal (enumerable) survives mergeConfig but the
- * controller in the Symbol bag doesn't (already released after the prior
- * response). Presence alone can't tell "user-supplied" from "issued by us,
- * already released", which would leave re-sends stuck without a new
- * controller and untracked by cancelAll. Identity (this WeakSet), not
- * presence, is what distinguishes them — a hit means it's safe to reissue.
- *
- * 同时记录 signal → controller 的映射：retry 经 bare 实例重发后，最终响应的 config 是
- * mergeConfig 出来的新对象，Symbol bag 丢了，但可枚举的 `signal` 还在，释放时据此回查。
- *
- * Also maps signal → controller: after retry resends through a bare instance, the final
- * response's config is a freshly merged object whose Symbol bag is gone, but the enumerable
- * `signal` survives — release falls back to looking the controller up by it.
- */
-const selfIssued = new WeakMap<AbortSignal, AbortController>();
+/** 插件签发的 signal 到 controller 的映射；重放沿用在途或已取消的信号，最终按信号释放。 */
+const selfIssued = new WeakMap<GenericAbortSignal, AbortController>();
 
 
 /**
@@ -59,6 +38,7 @@ const selfIssued = new WeakMap<AbortSignal, AbortController>();
 export default function axpCancel({ enable = true }: ICancelOptions = {}): Plugin {
     return {
         name,
+        /** 注册取消信号的签发和最终释放，维护当前实例的控制器集合。 */
         install(axios) {
             pluginLog(axios.defaults, `[${name}] enabled:${enable}`);
             if (!enable) return;
@@ -66,13 +46,15 @@ export default function axpCancel({ enable = true }: ICancelOptions = {}): Plugi
             instances.set(axios, set);
 
             const reqId = axios.interceptors.request.use(
+                /** 为新逻辑请求签发 controller，重放保留原取消状态。 */
                 function $cancel(config) {
                     if (config.cancelToken) return config;  // 用户自带，尊重 / user-supplied, respected
-                    // 有 signal 但非本插件签发 → 用户自带，尊重；是本插件签发（含上一轮发过已释放的）→ 换发新的重新纳入追踪
-                    //
-                    // has a signal but not issued by us → user-supplied, respected; issued by us (incl. a
-                    // prior, already-released one) → reissue a new one and re-track it
-                    if (config.signal && !selfIssued.has(config.signal)) return config;
+                    const existing = config.signal ? selfIssued.get(config.signal) : undefined;
+                    if (config.signal && !existing) return config;
+                    if (existing && (set.has(existing) || existing.signal.aborted)) {
+                        setInternal(config, CANCEL_CTRL, existing);
+                        return config;
+                    }
                     const ctrl = new AbortController();
                     config.signal = ctrl.signal;
                     selfIssued.set(ctrl.signal, ctrl);
@@ -85,6 +67,7 @@ export default function axpCancel({ enable = true }: ICancelOptions = {}): Plugi
                 },
             );
 
+            /** 按 bag 或重放保留的 signal 释放 controller；重复释放无副作用。 */
             const release = (config: any) => {
                 if (!config) return;
                 // 优先读 bag；bag 没有（重发后的 merged config）就按 signal 身份回查
@@ -116,6 +99,10 @@ export default function axpCancel({ enable = true }: ICancelOptions = {}): Plugi
  *   - 仅作用于 cancel() 插件注入的 controller，用户自带 signal 的请求不受影响
  *     only affects controllers injected by the cancel() plugin; requests with a user-supplied signal are unaffected
  *   - 调用后 set 清空，新请求会重新加入 / after calling, the set is cleared; new requests re-join it
+ * @param ax 已安装取消插件的 axios 实例。
+ * @param reason 取消原因。
+ * @returns 本次中止的逻辑请求数量。
+ * @example cancelAll(ax, '离开页面');
  */
 export function cancelAll(ax: AxiosInstance, reason?: string): number {
     const set = instances.get(ax);

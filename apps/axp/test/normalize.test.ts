@@ -1,6 +1,38 @@
 import { describe, it, expect } from 'vitest';
 import normalize from '../src/plugins/normalize';
 import AxpResponse, { AxpError } from '../src/objects/Response';
+import axios from 'axios';
+import { Axp } from '../src/install';
+import { makeNetwork } from './helpers/network';
+
+describe('review #24/#26 — 请求级归一化与原始响应包装', () => {
+    const path = '/review';
+    it.each([false, { enable: false }, () => false])('normalize=%s 放行业务失败', async (option) => {
+        const body = { code: 1, message: 'bad', data: null };
+        const net = makeNetwork().fallback(() => ({ data: body }));
+        const api = Axp.create(axios.create({ adapter: net.adapter }));
+        Axp.install(api.axios, { normalize: normalize() });
+        await expect(api.get(path)(undefined, { normalize: option, raw: true })).resolves.toEqual(body);
+        await expect(api.get(path)()).rejects.toBeInstanceOf(AxpError);
+    });
+
+    it('normalize:false 的 HTTP 错误原样拒绝且不附加 api', async () => {
+        const net = makeNetwork().fallback(() => ({ status: 500 }));
+        const ax = axios.create({ adapter: net.adapter });
+        Axp.install(ax, { normalize: normalize() });
+        const error = await ax.get(path, { normalize: false }).catch((err) => err);
+        expect(error.status).toBe(500);
+        expect(error).not.toHaveProperty('api');
+    });
+
+    it.each([[1, 2], { name: 'plain' }, { data: [3, 4] }, 'text', 0, false, null].map((body) => ({ body })))('wrap 保留非信封 body：$body', async ({ body }) => {
+        const net = makeNetwork().fallback(() => ({ data: body }));
+        const api = Axp.create(axios.create({ adapter: net.adapter }));
+        const wrapped = await api.get(path)(undefined, { wrap: true });
+        expect(wrapped).toBeInstanceOf(AxpResponse);
+        expect(wrapped.data).toEqual(body);
+    });
+});
 
 
 function makeMockAxios() {

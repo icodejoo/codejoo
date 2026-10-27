@@ -22,3 +22,6 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+
+# testkit 验收执行器的报告产物
+accept/.report

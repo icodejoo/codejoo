@@ -24,6 +24,7 @@ function makeTM(token?: string): ITokenManager {
   };
 }
 
+/** 模拟插件注册；可选 adapter 由首发配置携带，使裸实例重放仍可观测。 */
 function makeMockCtx(axiosRequest?: any) {
   const reqHandlers: Array<(c: any) => any> = [];
   const resHandlers: Array<{ f?: (r: any) => any; r?: (e: any) => any }> = [];
@@ -32,7 +33,13 @@ function makeMockCtx(axiosRequest?: any) {
     defaults: {},
     interceptors: {
       request: {
-        use: (f: any) => { reqHandlers.push(f); return reqHandlers.length - 1; },
+                use: (f: any) => {
+                  reqHandlers.push((config) => {
+                    if (axiosRequest) config.adapter = axiosRequest;
+                    return f(config);
+                  });
+                  return reqHandlers.length - 1;
+                },
         eject: () => { },
       },
       response: {
@@ -227,6 +234,10 @@ describe('auth 集成 — 响应侧路由', () => {
 
 
 describe('auth — enable / 元信息', () => {
+  it('公开动作同时可作为值和类型使用', () => {
+    const action: AuthFailureAction = AuthFailureAction.Refresh;
+    expect(action).toBe('refresh');
+  });
   it('enable:false → 不安装拦截器', () => {
     const { ax, reqHandlers, resHandlers } = makeMockCtx();
     auth({ tokenManager: makeTM(), onRefresh: () => true, onAccessExpired: () => { }, enable: false }).install(ax);
@@ -290,6 +301,17 @@ describe('auth — cleanup 保留在途刷新状态', () => {
 
 
 describe('TokenManager — 存储不可用环境', () => {
+  it('set/clear 不重置刷新许可，登录方必须显式恢复', async () => {
+    const { default: TM } = await import('../src/objects/TokenManager');
+    const tm = new TM();
+    tm.canRefresh = false;
+    tm.set('login');
+    expect(tm.canRefresh).toBe(false);
+    tm.clear();
+    expect(tm.canRefresh).toBe(false);
+    tm.canRefresh = true;
+    expect(tm.canRefresh).toBe(true);
+  });
   const realDesc = Object.getOwnPropertyDescriptor(globalThis, 'localStorage');
   const restore = () => {
     if (realDesc) Object.defineProperty(globalThis, 'localStorage', realDesc);

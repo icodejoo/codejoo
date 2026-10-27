@@ -10,6 +10,12 @@
 npm i @codejoo/axp   # peer dep: axios
 ```
 
+入口：
+- `@codejoo/axp`：不打包的 ESM，和各插件子路径 `@codejoo/axp/cache`、`/cancel`、`/auth` 等共用同一份模块状态，混着导入没问题。
+- `@codejoo/axp/min`：单文件压缩版，**自带一份独立的模块**，不要和根入口或子路径混用。
+
+类型推断需要 TypeScript ≥ 5.4。
+
 ## 快速开始
 
 ```ts
@@ -44,8 +50,9 @@ await api.post('/pet')({ name: 'lassie', photoUrls: [] });
 
 `Axp.create<T = unknown>(axiosInstance = axios.create(), options?): Core<T>`。
 `T` 可以是**任意**形如 `MethodSchema`（见 `src/types.ts`）的类型——手写、你
-自己的 codegen、`@codejoo/openapi2lang` 生成的类型都行；axp 只检查结构形状，
-不要求任何全局命名空间。不传 `T`（或者干脆不用 `Axp.create` 这层包装）就是
+自己的 codegen、`@codejoo/openapi2lang` 生成的类型都行；axp 只按 schema 的实际键检查结构形状（没有索引签名的 `interface` 也能用），
+不要求任何全局命名空间。codegen 还没覆盖到的接口，可以复制
+`types/local/example.d.ts.template`：它在 `MethodRefs` 基础上扩展出 `LocalMethodRefs`，作为 `T` 传进来即可。不传 `T`（或者干脆不用 `Axp.create` 这层包装）就是
 未类型化客户端——所有路径退化为 `string`。
 
 每个 HTTP 动词（`get` `post` `put` `patch` `delete` `head` `options`）调用形式为
@@ -56,11 +63,12 @@ await api.post('/pet')({ name: 'lassie', photoUrls: [] });
 | --- | --- |
 | `verb(path)(payload)` | 已拆包的业务数据（`{ code, data, message }` 信封的 `data`；非信封响应原样返回） |
 | `verb(path)(payload, { raw: true })` | 完整信封 `{ code, data, message }` |
-| `verb(path)(payload, { wrap: true })` | `AxpResponse<R>` 实例 |
+| `verb(path)(payload, { wrap: true })` | `AxpResponse<R>` 实例（非信封响应原样放进它的 `data`） |
 
 `api.axios` 是底层的 `AxiosInstance`——传给 `Axp.install` 用。
 `api.extends(overrides?)` 派生一个子 `Core`：克隆 `axios.defaults` 后合并
-`overrides`。不会带走插件——派生实例需要插件的话，自己对 `child.axios` 再调
+`overrides`。不会带走插件：子实例拿到的是父实例未经插件包装的底层 adapter，
+cache、loading、mock 的状态都不会带过去。派生实例需要插件的话，自己对 `child.axios` 再调
 一次 `Axp.install`。
 
 ## `Axp.install` —— 插件编排
@@ -100,6 +108,9 @@ handle.dispose();                     // 卸载这个 handle 追踪的每一个�
 `AxpPlugins` 插槽：`logger` `envs` `key` `filter` `repath` `auth` `cancel`
 `retry` `notify` `normalize` `cache` `share` `mock` `loading`。留空（或传假值）即跳过该插件。
 
+adapter 层的插件（`cache` `share` `mock` `loading`）各自占 adapter 链上的一层，各层可以按任意顺序卸载：
+卸载一个 handle，不会误摘别的 handle 的层，也不会把已经卸载的层装回来。
+
 ---
 
 ## 插件
@@ -128,6 +139,10 @@ axpLogger({ debug: true })
 | `ignores` | `any[]` | — （豁免空值过滤的键名或值，对齐 dioman 的 `DiomanKey.ignores`） |
 | `sample` | `boolean` | `false`（超 64 字符的字符串采样而非全量） |
 | `before` / `after` | `(config) => any` | — |
+| `scope` | `string \| number \| (config) => string \| number \| null \| undefined` | — （并入每个 key，缓存和共享不会跨账号、跨租户串数据） |
+
+`Date`、`URLSearchParams` 按内容参与哈希。无法可靠区分内容的值（`FormData`、`Blob`、`Map`、`Set`、
+没有可枚举字段的类实例）**不生成 key**，这样的请求既不缓存也不共享。宁可没命中，也不能命中错的。
 
 请求字段 `key`：`true` \| `'deep'` \| `number` \| `string` \| `IKeyObject` \| `(config) => …`。
 
@@ -144,9 +159,16 @@ TTL 响应缓存，adapter 层短路（命中不打 HTTP）。
 | `expires` | `number`（ms） | `60_000` |
 | `key` | `(config) => string \| undefined` | 回退到 `config.key` |
 | `clone` | `'shallow' \| 'deep' \| (data) => any` | — （共享引用） |
+| `max` | `number` | `500`，超出后淘汰最久未用的条目；每次写入时顺带清理过期项（传 `Infinity` 表示不限） |
+| `shouldCache` | `(response) => boolean` | 非 2xx 和业务失败的信封不缓存（判定规则和 `axpNormalize` 一致） |
 
-请求字段 `cache`：`false` \| `true` \| `{ expires?, key?, clone? }`。另导出
+请求字段 `cache`：`false` \| `true` \| `{ expires?, key?, clone?, shouldCache? }`。另导出
 `removeCache(ax, key)`、`clearCache(ax)`。
+
+- **快照**：缓存存的是 adapter 返回的原始响应，每次命中都给一个新外壳，所以 `transformResponse` 每次命中只执行一次。
+- **新旧顺序**：发起较早、返回较慢的响应不会覆盖较新的结果。
+- **clearCache**：会让已经在途的请求返回后不再写回缓存。登出或切换账号时调用它，或者给 `axpKey` 配上 `scope`。
+- **刷新 token 时不清缓存**：用户没变，缓存仍然有效。
 
 ```ts
 axpCache({ expires: 30_000 })
@@ -164,13 +186,19 @@ clearCache(api.axios)
 
 请求字段 `share`：`false` \| `true` \| 策略字符串 \| `{ policy? }` \| `(config) => …`。
 
+每个调用方都各自保留自己的 `signal`、`cancelToken`、`timeout`：取消某个跟随者，只有它自己立即被拒，共享的那个请求照常进行。
+请求失败时，每个调用方拿到的都是独立的 error 对象，`config` 也是自己的。
+
 ```ts
 axpShare({ policy: 'start' })
 api.get('/list')(undefined, { key: true, share: true })
 ```
 
 ### `axpRetry(options?)`
-失败（或响应被判定为业务异常）后按 `delay` 等待、重发，最多 `max` 次。重发走一个裸的、不带任何拦截器的独立 axios 实例，永远不会重新进入本插件链，下游插件（notify/normalize）不会为同一个逻辑请求触发两次。
+失败（或响应被判定为业务异常）后按 `delay` 等待、重发，最多 `max` 次。每次重发都是一次独立的**尝试**：
+- 用 `transformRequest` 之前的原始请求体，自定义转换每次尝试只执行一次，不会层层叠加；
+- 经过 `axpAuth` 的尝试钩子：注入最新 token，重试途中遇到 401 会先刷新再重放；
+- 不会重新进入插件链的其余部分：notify、normalize 对一个逻辑请求只触发一次，auth 重放也不会让重试次数翻倍。
 
 | 选项 | 类型 | 默认 |
 | --- | --- | --- |
@@ -222,6 +250,9 @@ axpNotify({
 | `delay` | `number` | `0`——0→1 后延迟显示，期间计数回落到 0 则直接取消（快请求从不显示） |
 | `delayClose` | `number` | `0`——1→0 后延迟隐藏，期间新请求把计数顶回 1 则取消隐藏（连续请求不闪一下） |
 
+按**逻辑请求**计数：同一个请求的多次重试和 auth 重放，只算一对显示、隐藏，两次尝试之间不会闪烁。
+`loading` 回调抛错会被隔离，请求和计数都不受影响。卸载插件时会取消还没触发的延迟回调。
+
 请求字段 `loading`：`false`（跳过） \| `true` \| `(visible) => any` \| `{ enable?, loading?, delay?, delayClose? }`（按字段覆盖，`enable: false` 等价于顶层 `false`）。
 
 ```ts
@@ -245,8 +276,13 @@ api.get('/quiet')(undefined, { loading: { delay: 0 } }) // 这次调用跳过防
 | `ready` | `(tm, config) => void` | 注入 `Authorization` 头 |
 | `accessDeniedCode` | `string` | `'ACCESS_DENIED'` |
 
-请求字段 `protected`：`boolean` \| `(config) => boolean \| void`。另导出
-`AuthFailureAction`、`authFailureFactory(headerName?)`、
+请求字段 `protected`：`boolean` \| `(config) => boolean \| void`。
+
+- **取消**：刷新后重放沿用原请求的取消状态，刷新期间调用 `cancelAll()`，重放也会一并取消。
+- **重放范围**：重放只重新走鉴权这一步，retry、notify、normalize 仍然只执行一次。
+- **`canRefresh`**：`tokenManager.canRefresh` 为 `false` 时不刷新。会话过期时插件会把它置为 `false`，登录流程负责改回 `true`。
+
+另导出 `AuthFailureAction`（const 对象，同时有同名类型）、`authFailureFactory(headerName?)`、
 `DEFAULT_ON_AUTH_FAILURE`、`ACCESS_DENIED_CODE`、`TokenManager`。
 
 ```ts
@@ -267,7 +303,7 @@ axpAuth({
 | `mockUrl` | `string` | — |
 | `fallbackWhen` | `(info) => boolean` | 404 / 不可达 |
 
-请求字段 `mock`：`false` \| `true` \| `{ mock?, mockUrl?, fallbackWhen? }`。
+请求字段 `mock`：`false` \| `true` \| `{ mock?, mockUrl?, fallbackWhen? }`。按请求设置的值，重试时会保留。
 
 ```ts
 axpMock({ enable: import.meta.env.DEV, mockUrl: 'http://localhost:4000' })
@@ -296,12 +332,17 @@ api.get('/search')(undefined, { filter: true, params: { q: 'x', page: '' } })
 | --- | --- | --- |
 | `nullable` | `boolean` | — |
 
+请求字段 `normalize`：`false` \| `true` \| `{ enable? }` \| `(config) => …`，可以只对某一次调用关闭。
+
 ```ts
 axpNormalize()
 ```
 
 ### `axpRepath(options?)`
 从 `params`（再 `data`）替换路径占位符 `{id}` / `:id` / `[id]`。
+- 只处理 pathname，查询串、hash 和 `host:port` 都不动；
+- 同一个占位符出现两次，两处都会替换；
+- 值按路径段做 `encodeURIComponent` 编码。
 
 | 选项 | 类型 | 默认 |
 | --- | --- | --- |
@@ -371,5 +412,6 @@ const logging: Plugin = {
 ## 构建与测试
 
 - `npm test` / `npx vitest run` —— 单元 + 集成测试（`test/**`）。
-- `npm run build` —— 产出 `dist/index.mjs`、`dist/index.min.js`、`dist/index.d.mts`。
-- `npm run e2e` —— Playwright 真浏览器端到端测试（`e2e/`）。
+- `npm run build` —— 产出 `dist/esm/**`（不打包的 ESM 及 `.d.mts`，含根入口和各插件子路径）和 `dist/index.min.js`（对应 `./min`）。
+- `npm run e2e` —— Playwright 真浏览器端到端测试（`e2e/`），对接本地 mock 服务器。
+- `npm run accept` —— 黑盒验收，对接 [api-ws-demo testkit](https://github.com/icodejoo/api-ws-demo/tree/main/testkit)：真实 HTTP 服务器加网络条件代理，按 场景 × 网络 × 响应风格 × adapter 组合跑。

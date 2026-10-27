@@ -1,6 +1,6 @@
 import type { Plugin } from "../types";
-import { pluginLog } from "../helper";
-import axiosLib, { AxiosError } from "axios";
+import { pluginLog, captureRawRequest, runAttempt } from "../helper";
+import { AxiosError } from "axios";
 import type {
   AxiosRequestConfig,
   AxiosResponse,
@@ -9,6 +9,8 @@ import type {
 } from "axios";
 
 const name = "axp:retry";
+/** 保存 share adapter 会消费的请求选项，避免重试退回全局共享策略。 */
+const SHARE = `${name}:share`;
 
 /**
  * 失败重试插件：请求失败（或被判定为业务异常）后按 `delay` 等待、重发，最多 `max` 次。
@@ -16,7 +18,7 @@ const name = "axp:retry";
  * Retry-on-failure plugin: waits `delay`, then resends — up to `max` times — on
  * failure or a response judged a business exception.
  *
- *   - 重发走一个**裸的、不带任何拦截器**的独立 axios 实例（`retrier`）——永远不会
+ *   - 重发走一个**裸的、不带任何拦截器**的独立 axios 实例（共享裸实例，经 `runAttempt`）——永远不会
  *     重新进入本插件链，下游插件（notify/normalize 等）不会为同一个逻辑请求触发
  *     两次；整个重试循环活在一次拦截器调用里，不需要靠 config 字段跨 mergeConfig
  *     存活来记计数（对齐 dioman `DiomanRetry` 用裸 `Dio()` 重发的设计）。
@@ -36,7 +38,7 @@ const name = "axp:retry";
  *     封顶（默认不封顶），`respectRetryAfter:false` 可整体关掉这条（都对齐 ky）。
  *
  * The resend goes through a **bare, interceptor-less** standalone axios
- * instance (`retrier`) — it never re-enters this plugin chain, so downstream
+ * instance (via `runAttempt`) — it never re-enters this plugin chain, so downstream
  * plugins (notify/normalize, etc.) never fire twice for one logical request;
  * the whole retry loop lives inside a single interceptor invocation, so no
  * count needs to survive `mergeConfig` via a config field (mirrors dioman's
@@ -64,6 +66,8 @@ const name = "axp:retry";
  * disable the whole feature (all mirror ky).
  *
  * @param options 插件配置：`max`/`methods`/`shouldRetry`/`statusCodes`/`delay`/`jitter`/`delayMax`/`respectRetryAfter`/`afterStatusCodes`/`retryAfterMax` / plugin config: `max`/`methods`/`shouldRetry`/`statusCodes`/`delay`/`jitter`/`delayMax`/`respectRetryAfter`/`afterStatusCodes`/`retryAfterMax`
+ * @returns 可安装并卸载的重试插件。
+ * @example axpRetry({ max: 2, delay: 100 });
  */
 export default function axpRetry({
   enable = true,
@@ -92,20 +96,21 @@ export default function axpRetry({
   };
   return {
     name,
+    /** 保存请求级共享选项，并在最终响应路径内执行一次重试循环。 */
     install(axios) {
       pluginLog(axios.defaults, `[${name}] enabled:${enable} max:${max}`);
       if (!enable) return;
 
-      // 裸实例：不带任何拦截器，重发永远不会重新进入本链。config 是本次请求已经解析
-      // 完成的完整配置（baseURL/adapter/headers 等已由 axios 自身 mergeConfig 并入），
-      // 裸实例本身不需要克隆 defaults 也能正确重放。
-      //
-      // Bare instance with no interceptors — a resend never re-enters this chain.
-      // `config` is already the fully-resolved config for this request (baseURL/
-      // adapter/headers, etc. already merged in by axios's own mergeConfig), so the
-      // bare instance doesn't need cloned defaults to replay it correctly.
-      const retrier = axiosLib.create();
+      const reqId = axios.interceptors.request.use(
+        /** 在 adapter 消费 share 前保存原始请求开关。 */
+        (config) => {
+          (config as unknown as Record<string, unknown>)[SHARE] = config.share;
+          captureRawRequest(config);
+          return config;
+        },
+      );
 
+      /** 在原逻辑请求的响应链内消耗一次重试预算，并恢复每次尝试的请求开关。 */
       const loop = async (
         config: InternalAxiosRequestConfig,
         initialErr?: any,
@@ -157,7 +162,8 @@ export default function axpRetry({
             `[${name}] retry ${i}/${m} ${(config.method ?? "").toUpperCase()} ${config.url}`,
           );
           try {
-            resp = await retrier.request(config);
+            const share = (config as unknown as Record<string, unknown>)[SHARE] as AxiosRequestConfig['share'];
+            resp = await runAttempt(axios, { ...config, share });
             err = undefined;
             if (!$shouldRetry(config, defaults, resp, undefined)) return resp;
           } catch (e) {
@@ -195,6 +201,7 @@ export default function axpRetry({
         },
       );
       return () => {
+        axios.interceptors.request.eject(reqId);
         axios.interceptors.response.eject(id);
       };
     },

@@ -2,6 +2,146 @@ import { describe, it, expect, vi } from 'vitest';
 import axios from 'axios';
 import type { AxiosAdapter, AxiosRequestConfig } from 'axios';
 import loading, { $resolveLoading, $resolveDelay, $resolveDelayClose, $wrap, type ILoadingOptions, type TLoadingFunc } from '../src/plugins/loading';
+import { Axp } from '../src/install';
+import retry from '../src/plugins/retry';
+import auth from '../src/plugins/auth';
+import normalize from '../src/plugins/normalize';
+import cancel, { cancelAll } from '../src/plugins/cancel';
+import TokenManager from '../src/objects/TokenManager';
+import mock from '../src/plugins/mock';
+import { makeNetwork } from './helpers/network';
+
+describe('review — loading 逻辑请求与清理', () => {
+    const path = '/review-loading';
+
+    it('mock 先卸载时 loading 保持生效，两者全卸载后不复活 mock', async () => {
+        const net = makeNetwork();
+        const ax = axios.create({ adapter: net.adapter });
+        const fn = vi.fn();
+        const mockHandle = Axp.install(ax, { mock: mock({ enable: true, mock: true, mockUrl: 'http://mock' }) });
+        const loadingHandle = Axp.install(ax, { loading: loading({ loading: fn }) });
+        mockHandle.dispose();
+        await ax.get(path);
+        expect(fn.mock.calls.map(([value]) => value)).toEqual([true, false]);
+        loadingHandle.dispose();
+        await ax.get(path);
+        expect(net.log.map((record) => record.url)).toEqual([path, path]);
+        expect(ax.defaults.adapter).toBe(net.adapter);
+    });
+
+    it('Core.extends 派生请求不继承父 loading adapter', async () => {
+        const net = makeNetwork();
+        const parent = Axp.create(axios.create({ adapter: net.adapter }));
+        const fn = vi.fn();
+        Axp.install(parent.axios, { loading: loading({ loading: fn }) });
+        await parent.extends().axios.get(path);
+        expect(fn).not.toHaveBeenCalled();
+    });
+
+    it.each([200, 500])('retry 最终 %i：等待期间保持显示，最终只有一对回调', async (status) => {
+        const net = makeNetwork().on('GET', path, (_config, hit) => ({ status: hit === 1 ? 500 : status }));
+        const values: boolean[] = [];
+        const ax = axios.create({ adapter: net.adapter });
+        Axp.install(ax, {
+            retry: retry({ max: 1, delay: () => { expect(values).toEqual([true]); return 1; } }),
+            loading: loading({ loading: (value) => values.push(value) }),
+        });
+        await ax.get(path).catch(() => undefined);
+        expect(values).toEqual([true, false]);
+    });
+
+    it('auth 刷新和 replay 后 retry 期间始终显示', async () => {
+        const net = makeNetwork().on('GET', path, (_config, hit) => ({ status: hit === 1 ? 401 : hit === 2 ? 500 : 200 }));
+        const values: boolean[] = [];
+        const tm = new TokenManager();
+        tm.set('old');
+        const ax = axios.create({ adapter: net.adapter });
+        Axp.install(ax, {
+            auth: auth({ tokenManager: tm, onRefresh: () => { expect(values).toEqual([true]); tm.set('fresh'); return true; }, onAccessExpired: vi.fn() }),
+            retry: retry({ max: 1, delay: 1 }),
+            loading: loading({ loading: (value) => values.push(value) }),
+        });
+        await ax.get(path);
+        expect(values).toEqual([true, false]);
+        expect(net.totalStarted).toBe(3);
+    });
+
+    it('loading:false 在 retry 后仍不参与计数', async () => {
+        const net = makeNetwork().on('GET', path, (_config, hit) => ({ status: hit === 1 ? 500 : 200 }));
+        const fn = vi.fn();
+        const ax = axios.create({ adapter: net.adapter });
+        Axp.install(ax, { retry: retry({ max: 1, delay: 0 }), loading: loading({ loading: fn }) });
+        await ax.get(path, { loading: false });
+        expect(fn).not.toHaveBeenCalled();
+    });
+
+    it.each([401, 500])('首发 %i 后重发抛出无 config 的错误也释放 loading', async (status) => {
+        const failure = new Error('adapter failed');
+        const net = makeNetwork().on('GET', path, (_config, hit) => {
+            if (hit === 1) return { status };
+            throw failure;
+        });
+        const tm = new TokenManager();
+        tm.set('old');
+        const fn = vi.fn();
+        const ax = axios.create({ adapter: net.adapter });
+        Axp.install(ax, {
+            auth: auth({ tokenManager: tm, onRefresh: () => { tm.set('fresh'); return true; }, onAccessExpired: vi.fn() }),
+            retry: retry({ max: 1, delay: 0 }), loading: loading({ loading: fn }),
+        });
+        await expect(ax.get(path)).rejects.toBe(failure);
+        expect(fn.mock.calls.map(([value]) => value)).toEqual([true, false]);
+    });
+
+    it('业务错误与 retry 等待期间取消均正确关闭 loading', async () => {
+        const net = makeNetwork().on('GET', path, () => ({ data: { code: 1 } }));
+        const values: boolean[] = [];
+        const ax = axios.create({ adapter: net.adapter });
+        const handle = Axp.install(ax, { normalize: normalize(), loading: loading({ loading: (value) => values.push(value) }) });
+        await expect(ax.get(path)).rejects.toThrow();
+        expect(values).toEqual([true, false]);
+        handle.dispose();
+        values.length = 0;
+        net.on('GET', path, () => ({ status: 500 }));
+        Axp.install(ax, { cancel: cancel(), retry: retry({ max: 1, delay: () => { cancelAll(ax); return 1; } }), loading: loading({ loading: (value) => values.push(value) }) });
+        await expect(ax.get(path)).rejects.toMatchObject({ code: 'ERR_CANCELED' });
+        expect(values).toEqual([true, false]);
+    });
+
+    it.each([0, 1])('回调抛错与拒绝不影响请求和后续计数（delay=%i）', async (delay) => {
+        const net = makeNetwork();
+        const fn = vi.fn((visible: boolean) => { if (visible) throw new Error('UI failed'); return Promise.reject(new Error('UI rejected')); });
+        const ax = axios.create({ adapter: net.adapter });
+        Axp.install(ax, { loading: loading({ loading: fn, delay }) });
+        await ax.get(path, { latency: 10 } as any);
+        await ax.get(path, { latency: 10 } as any);
+        expect(fn.mock.calls.map(([value]) => value)).toEqual([true, false, true, false]);
+    });
+
+    it.each(['show', 'hide'])('dispose 清除 %s 定时器，旧请求完成也不再回调', async (phase) => {
+        vi.useFakeTimers();
+        try {
+            const { adp, pending } = deferredAdapter();
+            const fn = vi.fn();
+            const ax = axios.create({ adapter: adp });
+            const handle = Axp.install(ax, { loading: loading({ loading: fn, delay: phase === 'show' ? 10 : 0, delayClose: 10 }) });
+            const request = ax.get(path);
+            if (phase === 'hide') {
+                pending[0].resolve({ config: pending[0].config, status: 200, data: null });
+                await request;
+            }
+            handle.dispose();
+            const before = fn.mock.calls.length;
+            await vi.advanceTimersByTimeAsync(20);
+            if (phase === 'show') {
+                pending[0].resolve({ config: pending[0].config, status: 200, data: null });
+                await request;
+                await vi.advanceTimersByTimeAsync(20);
+            }
+            expect(fn).toHaveBeenCalledTimes(before);
+        } finally { vi.useRealTimers(); }
+    });
+});
 
 
 // ───────────────────────────────────────────────────────────────────────────
@@ -158,13 +298,13 @@ describe('$wrap — 单请求生命周期', () => {
         await p;
     });
 
-    it('包装后会 delete config.loading（避免污染下游）', async () => {
+    it('包装后保留 config.loading，供 retry 和 auth 重放复用', async () => {
         const fn: TLoadingFunc = vi.fn();
         const { adp, pending } = deferredAdapter();
         const wrapped = $wrap(adp, { loading: fn });
         const config: any = { url: '/x', loading: true };
         const p = wrapped(config);
-        expect(config.loading).toBeUndefined();
+        expect(config.loading).toBe(true);
         pending[0].resolve({});
         await p;
     });
@@ -436,5 +576,33 @@ describe('loading — adapter 同步抛错 / 非函数 adapter', () => {
         const r = await ax.get('/x');
         expect(r.data).toBe('ok');
         expect(fn.mock.calls).toEqual([[true], [false]]);
+    });
+});
+
+describe('review — loading 泄漏修复', () => {
+    const path = '/leak';
+
+    it('transformResponse 抛无 config 的 Error 仍释放计数', async () => {
+        const net = makeNetwork();
+        const ax = axios.create({
+            adapter: net.adapter,
+            transformResponse: [() => { throw new Error('boom'); }],
+        });
+        const fn = vi.fn();
+        Axp.install(ax, { loading: loading({ loading: fn }) });
+        await expect(ax.get(path)).rejects.toThrow('boom');
+        expect(fn.mock.calls.map(([v]) => v)).toEqual([true, false]);
+    });
+
+    it('同实例两个独立 handle 各装 loading，各自计数都能归零', async () => {
+        const net = makeNetwork();
+        const ax = axios.create({ adapter: net.adapter });
+        const outer = vi.fn();
+        const inner = vi.fn();
+        Axp.install(ax, { loading: loading({ loading: outer }) });
+        Axp.install(ax, { loading: loading({ loading: inner }) });
+        await ax.get(path);
+        expect(inner.mock.calls.map(([v]) => v)).toEqual([true, false]);
+        expect(outer.mock.calls.map(([v]) => v)).toEqual([true, false]);
     });
 });

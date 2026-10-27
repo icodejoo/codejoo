@@ -11,11 +11,11 @@ const name = 'axp:key'
  *
  * Generates a stable unique key per request (written to `config.key`) for downstream plugins (cache/share) to use as a dedup/cache id.
  *
- * @param options 插件级默认（`fastMode`/`ignores`/`sample`），可被请求级 `config.key` 覆盖；`before`/`after` 在 key 计算前后调用 / plugin-level defaults, overridable per-request via `config.key`; `before`/`after` hooks fire around key computation
+ * @param options 插件级默认（`fastMode`/`ignores`/`sample`/`scope`），可被请求级 `config.key` 覆盖；`before`/`after` 在 key 计算前后调用 / plugin-level defaults (`fastMode`/`ignores`/`sample`/`scope`), overridable per-request via `config.key`; `before`/`after` hooks fire around key computation
  */
-export default function axpKey({ after, before, enable = true, fastMode, ignores, sample }: IKeyOptions = {}): Plugin {
+export default function axpKey({ after, before, enable = true, fastMode, ignores, sample, scope }: IKeyOptions = {}): Plugin {
     // 插件级默认（请求级未指定时回退到此）
-    const defaults: IKeyObject = { fastMode, ignores, sample };
+    const defaults: IKeyObject = { fastMode, ignores, sample, scope };
     return {
         name: name,
         install(axios) {
@@ -56,10 +56,39 @@ function isEnabled(k: unknown): boolean {
  *
  * Resolves `config.key` into the final key string (`null` = don't generate). Priority: explicit request field > plugin `defaults` > built-in default.
  *
+ * 结果会并入 `scope`（请求级 key 对象的 `scope` 优先于插件级），不同会话/租户得到不同 key；
+ * deep 哈希遇到无法可靠序列化的值（FormData/Blob/Map/Set 等）时返回 `null`（宁可不命中缓存/共享）。
+ *
  * @internal exported for unit tests
  * @param defaults 插件级默认配置 / plugin-level defaults
  */
 export function $parse(config: AxiosRequestConfig, defaults?: IKeyObject): string | null {
+    let k: string | null;
+    try {
+        k = $parseBase(config, defaults);
+    } catch (e) {
+        if (e === KEY_UNSUPPORTED) return null;
+        throw e;
+    }
+    if (k === null) return null;
+    const build = config.key;
+    const reqScope = build && typeof build === 'object' ? (build as IKeyObject).scope : undefined;
+    const s = $resolveScope(reqScope ?? defaults?.scope, config);
+    return s === null ? k : k + SCOPE_SEP + s;
+}
+
+/** scope 与 key 的分隔符 / separator between key and scope */
+const SCOPE_SEP = '#';
+
+/** 把 scope（常量或函数）解析成字符串；空值（null/undefined/''/NaN）返回 null / resolves a scope to a string, `null` for empty values */
+function $resolveScope(scope: IKeyObject['scope'], config: AxiosRequestConfig): string | null {
+    const v = typeof scope === 'function' ? scope(config) : scope;
+    if (v === null || v === undefined || v === '' || (typeof v === 'number' && Number.isNaN(v))) return null;
+    return String(v);
+}
+
+/** 不带 scope 的 key 解析（原 `$parse` 逻辑） / key resolution without scope (the original `$parse` logic) */
+function $parseBase(config: AxiosRequestConfig, defaults?: IKeyObject): string | null {
     const build = config.key
     if (!build && build !== 0) return null
     // key:true → 默认 simple，插件级 fastMode 可覆盖；插件级 ignore 列表透传
@@ -102,6 +131,21 @@ const CC_ARR = 0x61;    // 'a'
 const CC_OBJ = 0x6f;    // 'o'
 const SAMPLE_THRESHOLD = 64;
 const SAMPLE_WINDOW = 8;
+/** deep 哈希遇到无法可靠序列化的值时抛出的哨兵，由 $parse 捕获并放弃生成 key / sentinel thrown by deep hashing on values that can't be serialized reliably; caught by $parse, which then yields no key */
+const KEY_UNSUPPORTED = Symbol('axp:key:unsupported');
+const TAG_DATE = '[object Date]';
+const TAG_URL_SEARCH_PARAMS = '[object URLSearchParams]';
+const toTag = Object.prototype.toString;
+
+/**
+ * 非普通对象且没有可枚举字段（Date/Map/Set/Blob/FormData 等）：靠字段无法区分内容，不能当空值处理。
+ *
+ * Non-plain object without enumerable fields (Date/Map/Set/Blob/FormData, ...): fields can't tell contents apart, so it must not be treated as empty.
+ */
+function isOpaque(v: any): boolean {
+    const proto = Object.getPrototypeOf(v);
+    return proto !== Object.prototype && proto !== null && Object.keys(v).length === 0;
+}
 
 
 /**
@@ -174,6 +218,7 @@ function isShallowEmpty(v: any): boolean {
         }
         return true;
     }
+    if (isOpaque(v)) return false;
     for (const k in v) {
         if (!isDirectEmpty(v[k])) return false;
     }
@@ -187,7 +232,7 @@ function isDirectEmpty(v: any): boolean {
     if (typeof v !== 'object') return false;
     if (Array.isArray(v)) return v.length === 0;
     for (const _ in v) return false;
-    return true;
+    return !isOpaque(v);
 }
 
 
@@ -243,6 +288,10 @@ function deepHash(target: any, h: number, opts?: KeyOpts, sample = false): numbe
     if (typeof target.byteLength === 'number') {
         return target.byteLength === 0 ? undefined : hash('bin' + target.byteLength, h);
     }
+    const tag = toTag.call(target);
+    if (tag === TAG_DATE) return hash('D' + target.getTime(), h);
+    if (tag === TAG_URL_SEARCH_PARAMS) return hash('U' + target.toString(), h);
+    if (!Array.isArray(target) && isOpaque(target)) throw KEY_UNSUPPORTED;
     if (Array.isArray(target)) {
         // 数组：顺序有语义，保持顺序串行哈希（[1,2] ≠ [2,1]）
         let any = false;
@@ -266,7 +315,14 @@ function deepHash(target: any, h: number, opts?: KeyOpts, sample = false): numbe
         if (!Object.prototype.hasOwnProperty.call(target, key)) continue;
         // key 先混入长度前缀再哈希内容（长度分帧），避免 {'a:b':'c'} 与 {a:'b:c'} 这类分隔符碰撞
         const baseH = hashByte(CC_COLON, hash(key, hash(key.length + '"', hashByte(CC_OBJ, h))));
-        let r = deepHash(target[key], baseH, opts, sample);
+        let r: number | undefined;
+        try {
+            r = deepHash(target[key], baseH, opts, sample);
+        } catch (e) {
+            // 键名被 ignores 豁免时，其下无法序列化的值按“被忽略”处理
+            if (e === KEY_UNSUPPORTED && hasIgnores && ignores!.includes(key)) r = undefined;
+            else throw e;
+        }
         // ignores 命中键名且 value 判空：注入占位符 '!E'，保证该 key 仍参与最终 hash
         if (r === undefined && hasIgnores && ignores!.includes(key)) {
             r = hash('!E', baseH);
@@ -337,6 +393,17 @@ export interface IKeyObject {
      * @default false
      */
     sample?: boolean
+    /**
+     * 会话/租户标识：并入最终 key，使不同账号/租户的缓存与共享互不串用。
+     * 常量或函数（每次请求调用）；返回 null/undefined/'' 表示不并入。请求级 `key: { scope }` 优先于插件级。
+     * 切换账号时建议同时调用 `clearCache(axios)` 清掉旧缓存。
+     *
+     * Session/tenant id mixed into the final key so caches/shares never leak across accounts. Constant or per-request function; empty values are not mixed in.
+     *
+     * @example
+     * key({ scope: () => store.userId })
+     */
+    scope?: string | number | ((config: AxiosRequestConfig) => string | number | null | undefined | void)
 }
 
 

@@ -10,6 +10,12 @@ on top — the type system is entirely yours to opt into, never required.
 npm i @codejoo/axp   # peer dep: axios
 ```
 
+Entry points: `@codejoo/axp` (unbundled ESM, shares module state with the
+per-plugin subpaths `@codejoo/axp/cache`, `/cancel`, `/auth`, … — mixing the
+root import and subpaths is safe) and `@codejoo/axp/min` (a single minified
+bundle with its **own** module copy — don't mix it with the root or subpaths).
+Typed inference needs TypeScript ≥ 5.4.
+
 ## Quick start
 
 ```ts
@@ -45,8 +51,11 @@ await api.post('/pet')({ name: 'lassie', photoUrls: [] });
 `Axp.create<T = unknown>(axiosInstance = axios.create(), options?): Core<T>`.
 `T` can be **any** type shaped like `MethodSchema` (see `src/types.ts`) —
 hand-written, your own codegen, `@codejoo/openapi2lang`'s emitted type,
-whatever you want; axp only checks the structural shape, there's no required
-global namespace. Omit `T` (or the whole `Axp.create` wrapper) for an untyped
+whatever you want; axp only checks the structural shape against the schema's
+actual keys (an `interface` without an index signature works), there's no
+required global namespace. To add paths codegen hasn't caught up with, copy
+`types/local/example.d.ts.template` — it extends `MethodRefs` into a
+`LocalMethodRefs` you pass as `T`. Omit `T` (or the whole `Axp.create` wrapper) for an untyped
 client — every path is then just `string`.
 
 Each HTTP verb (`get` `post` `put` `patch` `delete` `head` `options`) is called
@@ -57,12 +66,13 @@ as `api.<verb>(path, methodConfig?)(payload?, callConfig?)`. Body verbs send
 | --- | --- |
 | `verb(path)(payload)` | unwrapped business data (the `data` of a `{ code, data, message }` envelope; non-envelope bodies pass through as-is) |
 | `verb(path)(payload, { raw: true })` | the whole envelope `{ code, data, message }` |
-| `verb(path)(payload, { wrap: true })` | an `AxpResponse<R>` instance |
+| `verb(path)(payload, { wrap: true })` | an `AxpResponse<R>` instance (a non-envelope body lands in its `data` as-is) |
 
 `api.axios` is the underlying `AxiosInstance` — pass it to `Axp.install`.
 `api.extends(overrides?)` derives a child `Core` with cloned `axios.defaults` +
-`overrides` merged on top; it does not carry over plugins — call `Axp.install`
-again on `child.axios` if the derived instance needs them.
+`overrides` merged on top; it does not carry over plugins (the child gets the
+parent's unwrapped base adapter, so no cache/loading/mock state leaks across) —
+call `Axp.install` again on `child.axios` if the derived instance needs them.
 
 ## `Axp.install` — plugin orchestration
 
@@ -102,6 +112,10 @@ handle.dispose();                     // ejects every plugin this handle tracks
 `retry` `notify` `normalize` `cache` `share` `mock` `loading`. Omit a slot (or
 pass a falsy value) to skip that plugin.
 
+Adapter-level plugins (`cache` `share` `mock` `loading`) each occupy one layer
+of an adapter chain; layers can be removed in any order — disposing one handle
+never strips or resurrects another handle's layers.
+
 ---
 
 ## Plugins
@@ -130,6 +144,12 @@ Computes a dedup/cache key onto `config.key`. Feeds `axpCache`/`axpShare`.
 | `ignores` | `any[]` | — (exempt these key names or values from empty-value filtering; mirrors dioman's `DiomanKey.ignores`) |
 | `sample` | `boolean` | `false` (sample strings > 64 chars) |
 | `before` / `after` | `(config) => any` | — |
+| `scope` | `string \| number \| (config) => string \| number \| null \| undefined` | — (mixed into every key so caches/shares never cross accounts/tenants) |
+
+`Date` and `URLSearchParams` hash by content. Values that can't be fingerprinted
+reliably (`FormData`, `Blob`, `Map`, `Set`, class instances without enumerable
+fields) yield **no key** — the request is then neither cached nor shared, a miss
+beats a false hit.
 
 Request field `key`: `true` \| `'deep'` \| `number` \| `string` \| `IKeyObject` \| `(config) => …`.
 
@@ -146,9 +166,17 @@ TTL response cache, adapter-level short-circuit (no HTTP on hit).
 | `expires` | `number` (ms) | `60_000` |
 | `key` | `(config) => string \| undefined` | falls back to `config.key` |
 | `clone` | `'shallow' \| 'deep' \| (data) => any` | — (shared reference) |
+| `max` | `number` | `500` — LRU-evicted beyond this; expired entries are swept on every write (`Infinity` = unbounded) |
+| `shouldCache` | `(response) => boolean` | skips non-2xx and business-failure envelopes (same success rule as `axpNormalize`) |
 
-Request field `cache`: `false` \| `true` \| `{ expires?, key?, clone? }`. Also
+Request field `cache`: `false` \| `true` \| `{ expires?, key?, clone?, shouldCache? }`. Also
 exports `removeCache(ax, key)`, `clearCache(ax)`.
+
+The cache stores the adapter's raw response and hands every hit a fresh shell,
+so `transformResponse` runs exactly once per hit. A slower, older response never
+overwrites a newer one. `clearCache` also stops requests already in flight from
+writing back — call it on logout/account switch (or set `axpKey({ scope })`).
+The plugin does **not** clear on token refresh: same user, cache still valid.
 
 ```ts
 axpCache({ expires: 30_000 })
@@ -166,13 +194,17 @@ Dedup/debounce/merge concurrent requests with the same `config.key`.
 
 Request field `share`: `false` \| `true` \| a policy string \| `{ policy? }` \| `(config) => …`.
 
+Every caller keeps its own `signal`/`cancelToken`/`timeout`: canceling a follower
+rejects just that follower immediately, the shared request keeps going. On
+failure each caller gets its own error object whose `config` is its own.
+
 ```ts
 axpShare({ policy: 'start' })
 api.get('/list')(undefined, { key: true, share: true })
 ```
 
 ### `axpRetry(options?)`
-Waits `delay`, then resends — up to `max` times — on failure or a response judged a business exception. The resend goes through a bare, interceptor-less standalone axios instance, so it never re-enters the plugin chain and downstream plugins (notify/normalize) never fire twice for one logical request.
+Waits `delay`, then resends — up to `max` times — on failure or a response judged a business exception. Each resend is a single **attempt**: it reuses the original pre-`transformRequest` body (custom transforms run once per attempt, never stacked), passes through `axpAuth`'s attempt hook (fresh token injected; a 401 mid-retry refreshes and replays), and never re-enters the rest of the plugin chain — notify/normalize fire once per logical request, and an auth replay doesn't double the retry budget.
 
 | option | type | default |
 | --- | --- | --- |
@@ -224,6 +256,11 @@ Global request-count loading toggle.
 | `delay` | `number` | `0` — defers showing past a 0→1 edge; canceled outright if the count falls back to 0 first (a fast request never shows loading at all) |
 | `delayClose` | `number` | `0` — defers hiding past a 1→0 edge; canceled if a new request bumps the count back to 1 first (back-to-back requests don't flicker) |
 
+Counts **logical** requests: retries and auth replays of one request share a
+single show/hide pair, so the spinner doesn't flicker between attempts. A
+throwing `loading` callback is isolated (the request and the counter are
+unaffected); disposing the plugin cancels pending delayed callbacks.
+
 Request field `loading`: `false` (skip) \| `true` \| `(visible) => any` \| `{ enable?, loading?, delay?, delayClose? }` (per-field override; `enable: false` is equivalent to the top-level `false`).
 
 ```ts
@@ -247,8 +284,15 @@ Token guard + single-flight refresh-and-replay on 401/403.
 | `ready` | `(tm, config) => void` | injects `Authorization` header |
 | `accessDeniedCode` | `string` | `'ACCESS_DENIED'` |
 
-Request field `protected`: `boolean` \| `(config) => boolean \| void`. Also
-exports `AuthFailureAction`, `authFailureFactory(headerName?)`,
+Request field `protected`: `boolean` \| `(config) => boolean \| void`.
+
+Refresh-and-replay keeps the original request's cancellation: `cancelAll()`
+during a refresh cancels the pending replay too. A replay only re-runs the auth
+step — retry/notify/normalize still run once. Refresh is skipped while
+`tokenManager.canRefresh` is `false`; the plugin sets it to `false` when the
+session expires, and your login flow sets it back to `true`.
+
+Also exports `AuthFailureAction` (a const object + same-name type), `authFailureFactory(headerName?)`,
 `DEFAULT_ON_AUTH_FAILURE`, `ACCESS_DENIED_CODE`, `TokenManager`.
 
 ```ts
@@ -269,7 +313,7 @@ Routes to a mock server; falls back to the real one when the mock misses.
 | `mockUrl` | `string` | — |
 | `fallbackWhen` | `(info) => boolean` | 404 / unreachable |
 
-Request field `mock`: `false` \| `true` \| `{ mock?, mockUrl?, fallbackWhen? }`.
+Request field `mock`: `false` \| `true` \| `{ mock?, mockUrl?, fallbackWhen? }`. A per-request value survives retries.
 
 ```ts
 axpMock({ enable: import.meta.env.DEV, mockUrl: 'http://localhost:4000' })
@@ -298,12 +342,17 @@ Rejects with `ApiError` when `AxpResponse.fromResponse(res).successful === false
 | --- | --- | --- |
 | `nullable` | `boolean` | — |
 
+Request field `normalize`: `false` \| `true` \| `{ enable? }` \| `(config) => …` — turn it off for one call.
+
 ```ts
 axpNormalize()
 ```
 
 ### `axpRepath(options?)`
 Substitutes `{id}` / `:id` / `[id]` path placeholders from `params` (then `data`).
+Only the pathname is touched (query string, hash and `host:port` are left alone);
+a placeholder used twice is filled twice; values are `encodeURIComponent`-encoded
+per path segment.
 
 | option | type | default |
 | --- | --- | --- |
@@ -372,5 +421,6 @@ interceptors run FIFO (first-registered runs first) — plain `axios` semantics.
 ## Build & test
 
 - `npm test` / `npx vitest run` — unit + integration suites (`test/**`).
-- `npm run build` — `dist/index.mjs`, `dist/index.min.js`, `dist/index.d.mts`.
-- `npm run e2e` — Playwright-driven real-browser suite (`e2e/`).
+- `npm run build` — `dist/esm/**` (unbundled ESM + `.d.mts`, root and per-plugin subpaths) and `dist/index.min.js` (`./min`).
+- `npm run e2e` — Playwright-driven real-browser suite (`e2e/`) against the local mock server.
+- `npm run accept` — black-box acceptance against [api-ws-demo testkit](https://github.com/icodejoo/api-ws-demo/tree/main/testkit): real HTTP server + network-condition proxy, scenario × network × response style × adapter.

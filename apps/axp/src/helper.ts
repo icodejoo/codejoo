@@ -184,3 +184,194 @@ export function cloneAxiosHeaders(h: AxiosRequestConfig['headers']): AxiosReques
     return out as AxiosRequestConfig['headers'];
 }
 
+
+
+/** adapter 链上的一层：`wrap` 只调用一次，`next` 会随链重建而重新指向下一层 / one layer of the adapter chain */
+interface AdapterLayer {
+    /** 下一层（更靠近底层）；重建链时更新 */
+    next: AxiosAdapter;
+    /** 已被移除后变为直通 */
+    removed: boolean;
+    /** 本层对外暴露的 adapter */
+    fn: AxiosAdapter;
+}
+
+/** 某个 axios 实例上的 adapter 层状态 */
+interface AdapterChain {
+    /** 最底层（未被任何插件包装）的 adapter */
+    base: AxiosAdapter;
+    /** 按安装顺序排列，后装的在外层 */
+    layers: AdapterLayer[];
+    /** 当前链顶，用于探测 `defaults.adapter` 是否被外部替换 */
+    top: AxiosAdapter;
+}
+
+/** 每个 axios 实例当前的 adapter 链 */
+const adapterChains = new WeakMap<AxiosInstance, AdapterChain>();
+
+/** 按当前层列表重连各层的 next，并返回链顶 */
+function relinkChain(chain: AdapterChain): AxiosAdapter {
+    let below = chain.base;
+    for (const layer of chain.layers) {
+        layer.next = below;
+        below = layer.fn;
+    }
+    chain.top = below;
+    return below;
+}
+
+/**
+ * 在 axios 实例的 adapter 上叠加一层包装，返回只移除“这一层”的函数。各层可按任意顺序移除，
+ * 其余层保持生效，也不会把已移除的层复活。
+ *
+ * @param axios 目标实例
+ * @param wrap 层工厂，只会被调用一次；`prev` 始终指向当前下一层，须通过它转调而不是缓存旧引用
+ * @returns 移除本层的函数（可重复调用）
+ * @example
+ * const off = wrapAdapter(ax, (prev) => (config) => prev(config));
+ * off();
+ */
+export function wrapAdapter(axios: AxiosInstance, wrap: (prev: AxiosAdapter) => AxiosAdapter): () => void {
+    let chain = adapterChains.get(axios);
+    // defaults.adapter 被外部替换过：以当前值作为新的底层，旧链自成一体不再干预
+    if (!chain || axios.defaults.adapter !== chain.top) {
+        const base = resolveAdapter(axios);
+        chain = { base, layers: [], top: base };
+        adapterChains.set(axios, chain);
+    }
+    const own = chain;
+    const layer = { removed: false } as AdapterLayer;
+    layer.next = own.top;
+    const inner = wrap((config) => layer.next(config));
+    layer.fn = (config) => (layer.removed ? layer.next(config) : inner(config));
+    own.layers.push(layer);
+    axios.defaults.adapter = relinkChain(own);
+
+    return () => {
+        if (layer.removed) return;
+        layer.removed = true;
+        const wasTop = axios.defaults.adapter === own.top;
+        own.layers.splice(own.layers.indexOf(layer), 1);
+        const top = relinkChain(own);
+        if (!wasTop) return;
+        axios.defaults.adapter = top;
+        if (!own.layers.length && adapterChains.get(axios) === own) adapterChains.delete(axios);
+    };
+}
+
+/**
+ * 取实例未被插件包装的底层 adapter；没有任何包装层时等同于 `resolveAdapter`。
+ *
+ * @param axios 目标实例
+ * @returns 底层 adapter
+ */
+export function getBaseAdapter(axios: AxiosInstance): AxiosAdapter {
+    const chain = adapterChains.get(axios);
+    if (chain && axios.defaults.adapter === chain.top) return chain.base;
+    return resolveAdapter(axios);
+}
+
+// ───────────── 单次尝试：原始请求体 + 尝试钩子 ─────────────
+
+/** 保存逻辑请求原始 data 的 config 键（可枚举字符串键，能熬过 mergeConfig）。 */
+const RAW_KEY = 'axp:rawRequest';
+
+/**
+ * 是否为普通对象或数组（可安全结构化克隆的纯数据）。
+ * FormData/Blob/ArrayBuffer/URLSearchParams/字符串等不算：它们要么不可变，要么克隆会丢信息或开销大，保持引用。
+ */
+function isPlainData(data: unknown): data is object {
+    if (Array.isArray(data)) return true;
+    if (data === null || typeof data !== 'object') return false;
+    const proto = Object.getPrototypeOf(data);
+    return proto === Object.prototype || proto === null;
+}
+
+/** 深拷贝纯数据；非纯数据、环境不支持或拷贝失败时退回原引用。 */
+function cloneData<T>(data: T): T {
+    if (!isPlainData(data) || typeof structuredClone !== 'function') return data;
+    try { return structuredClone(data); } catch { return data; }
+}
+
+/** 记录原始 data 的 transformRequest 首项；纯对象/数组存独立快照，防止后续 transform 原地改写。 */
+function captureRaw(this: object, data: unknown): unknown {
+    (this as Record<string, unknown>)[RAW_KEY] = { data: cloneData(data) };
+    return data;
+}
+
+/**
+ * 让 config 在 transformRequest 执行前记下原始 data（已含 filter/repath 等前置改写），
+ * 供重发/重放还原；幂等，可被多个插件重复调用。
+ *
+ * @param config 请求拦截器阶段的 config
+ */
+export function captureRawRequest(config: AxiosRequestConfig): void {
+    const list = asArray(config.transformRequest as unknown as AxiosRequestConfig['transformRequest'] & object);
+    if (list.includes(captureRaw as never)) return;
+    config.transformRequest = [captureRaw as never, ...list];
+}
+
+/**
+ * 还原原始请求体：返回浅拷贝，data 换回 transformRequest 之前的值；没捕获过则原样拷贝。
+ *
+ * @param config 上一次尝试用过的 config
+ * @returns 可再次发送的 config 副本
+ */
+export function withRawRequest<C extends AxiosRequestConfig>(config: C): C {
+    const raw = (config as Record<string, unknown>)[RAW_KEY] as { data: unknown } | undefined;
+    return raw ? { ...config, data: cloneData(raw.data) } : { ...config };
+}
+
+/** 单次尝试钩子：请求准备 + 响应路由，由 auth 这类插件登记。 */
+export interface AttemptHook {
+    /** 请求侧准备（注入凭证、等待刷新）；抛错表示这次尝试被拒。 */
+    onRequest(config: InternalAxiosRequestConfig): Promise<InternalAxiosRequestConfig>;
+    /** 响应侧路由（成功分支）。 */
+    onResponse(response: AxiosResponse): Promise<AxiosResponse>;
+    /** 响应侧路由（失败分支）。 */
+    onError(error: unknown): Promise<AxiosResponse>;
+}
+
+/** 按实例登记的尝试钩子。 */
+const attemptHooks = new WeakMap<AxiosInstance, AttemptHook[]>();
+
+/** 不带任何拦截器的裸实例，所有单次尝试共用。 */
+const bareRunner = axiosLib.create();
+
+/**
+ * 登记单次尝试钩子。
+ *
+ * @param axios 目标实例
+ * @param hook 钩子
+ * @returns 注销函数
+ */
+export function registerAttemptHook(axios: AxiosInstance, hook: AttemptHook): () => void {
+    const list = attemptHooks.get(axios) ?? [];
+    list.push(hook);
+    attemptHooks.set(axios, list);
+    return () => {
+        const i = list.indexOf(hook);
+        if (i >= 0) list.splice(i, 1);
+        if (!list.length && attemptHooks.get(axios) === list) attemptHooks.delete(axios);
+    };
+}
+
+/**
+ * 以裸实例执行一次网络尝试：还原原始请求体 → 依次跑已登记钩子的请求准备 → 发送 →
+ * 依次走钩子的响应路由。不经过 notify/normalize 等最终处理，也不消耗 retry 预算。
+ *
+ * @param axios 登记过钩子的实例
+ * @param config 上一次尝试用过的 config（可附带需恢复的请求级开关）
+ * @returns 本次尝试的响应；失败时 reject
+ */
+export function runAttempt(axios: AxiosInstance, config: AxiosRequestConfig): Promise<AxiosResponse> {
+    const hooks = (attemptHooks.get(axios) ?? []).slice();
+    const next = withRawRequest(config);
+    let p: Promise<AxiosResponse> = (async () => {
+        let cfg = next as InternalAxiosRequestConfig;
+        for (const h of hooks) cfg = await h.onRequest(cfg);
+        return bareRunner.request(cfg);
+    })();
+    for (const h of hooks) p = p.then(h.onResponse, h.onError);
+    return p;
+}

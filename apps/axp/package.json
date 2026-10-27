@@ -29,18 +29,17 @@
   "description": "Typed, plugin-based HTTP client built on axios — cache, retry, request dedup/share, auth token-refresh, cancel, loading, mock, path-var substitution, and more, with end-to-end OpenAPI type inference.",
   "license": "MIT",
   "author": "Carlos Joo",
-  "main": "./dist/index.mjs",
-  "module": "./dist/index.mjs",
-  "types": "./dist/index.d.mts",
+  "main": "./dist/esm/index.mjs",
+  "module": "./dist/esm/index.mjs",
+  "types": "./dist/esm/index.d.mts",
   "exports": {
     ".": {
-      "types": "./dist/index.d.mts",
-      "production": "./dist/index.min.js",
-      "import": "./dist/index.mjs",
-      "default": "./dist/index.mjs"
+      "types": "./dist/esm/index.d.mts",
+      "import": "./dist/esm/index.mjs",
+      "default": "./dist/esm/index.mjs"
     },
     "./min": {
-      "types": "./dist/index.d.mts",
+      "types": "./dist/esm/index.d.mts",
       "default": "./dist/index.min.js"
     },
     "./auth": {
@@ -133,7 +132,9 @@
     "e2e:server": "node e2e/server/mock-server.mjs",
     "e2e:playground": "vp dev e2e/playground --port 5180 --strictPort",
     "e2e": "node e2e/run.mjs",
-    "e2e:int": "node e2e/integration.mjs"
+    "e2e:int": "node e2e/integration.mjs",
+    "accept": "vp pack && node --no-warnings accept/cli.ts",
+    "accept:dry": "node --no-warnings accept/cli.ts --dry"
   },
   "devDependencies": {
     "@codejoo/openapi2lang": "^1.0.6",

@@ -233,7 +233,7 @@ describe('key', () => {
     expect(calls).toBe(2);
   });
 
-  it('a class instance with no own enumerable properties contributes nothing to the key (unlike Dio\'s JSON-encode-fails-toString-fallback — JS object keys are always strings, so there\'s no encode-failure branch; an "empty" object is just treated as absent)', async () => {
+  it('a class instance with no own enumerable properties cannot be fingerprinted: no key is generated and nothing is cached (review #16: a miss beats a false hit; Date/Map/Blob take the same path)', async () => {
     class Unencodable { toString() { return 'unencodable'; } }
     const { net, api } = mkApi();
     let calls = 0;
@@ -242,7 +242,7 @@ describe('key', () => {
 
     await api.axios.get('/data', { params: { x: new Unencodable() }, key: true, cache: true } as any);
     await api.axios.get('/data', { params: { x: new Unencodable() }, key: true, cache: true } as any);
-    expect(calls).toBe(1);
+    expect(calls).toBe(2);
   });
 });
 

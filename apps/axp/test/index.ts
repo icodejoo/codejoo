@@ -5,7 +5,6 @@ import { use } from './helpers/install';
 
 
 const githubApi = Axp.create<model.MethodRefs>(axios.create({ baseURL: "https://api.github.com", adapter: 'fetch' }));
-const internalApi = Axp.create<model.MethodRefs>(axios.create({ baseURL: "https://api.internal.example.com", adapter: 'fetch' }));
 
 
 use(githubApi, filter())
@@ -17,6 +16,7 @@ class TestApi {
 
 
 
+// @ts-expect-error 演示生成 schema 会拒绝错误的状态参数。
 await TestApi.query({ status: 1 }, {
     key:1,
 })

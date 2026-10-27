@@ -1,6 +1,7 @@
 
 import type { Plugin, MaybeFun } from '../types';
-import { callAdapter, pluginLog, resolveAdapter } from '../helper';
+import { callAdapter, pluginLog, wrapAdapter } from '../helper';
+import { AxiosError, CanceledError } from 'axios';
 import type { AxiosAdapter, AxiosRequestConfig, AxiosResponse, InternalAxiosRequestConfig } from 'axios';
 
 
@@ -40,21 +41,102 @@ export default function axpShare({ enable = true, policy = 'start' }: ISharedOpt
             pluginLog(axios.defaults, `[${name}] enabled:${enable} policy:${policy}`);
             if (!enable) return;
             const map = new Map<string, IShareEntry>();
-            const prev = resolveAdapter(axios);
-            axios.defaults.adapter = (config) => {
+            // 作为独立一层叠在 adapter 链上，可按任意顺序卸载
+            return wrapAdapter(axios, (prev) => (config) => {
                 const key = config.key;
                 if (!key) return prev(config);
                 const p = $resolvePolicy(config, defaults);
                 delete config.share;
                 if (p === 'none') return prev(config);
                 const run = p === 'end' ? $end : p === 'race' ? $race : $start;
-                // 共享响应对所有 caller 是同一个对象，这里按调用方换上各自的 config，
-                // 否则下游（如 cancel）按 response.config 释放资源会漏
-                return run(prev, map, key, config).then((r) => (r.config === config ? r : { ...r, config }));
-            };
-            return () => { axios.defaults.adapter = prev; };
+                // 共享结果对所有 caller 是同一个 promise：每个订阅者各自监听自己的取消/超时，
+                // 并拿到重绑了自己 config 的响应/错误，否则下游（如 cancel/retry）按 config 释放资源会漏、用错配置
+                return $follow(run(prev, map, key, config), config);
+            });
         },
     };
+}
+
+
+// ───────────────────────────────────────────────────────────────────────────
+//  订阅者视图（每个 caller 独立的取消 / 超时 / 响应与错误重绑）
+//  Per-subscriber view (own cancel / timeout / rebound response & error)
+// ───────────────────────────────────────────────────────────────────────────
+
+/** axios 运行时的 CanceledError 签名为 (message, config, request)，其类型声明偏窄，这里放宽 */
+const CanceledError_ = CanceledError as unknown as new (message?: string, config?: InternalAxiosRequestConfig) => Error;
+
+/** 超时错误文案前缀，与 axios 的 clarifyTimeoutError 文案保持一致 */
+const TIMEOUT_MSG = (ms: number) => `timeout of ${ms}ms exceeded`;
+
+/**
+ * 把共享响应换成属于该订阅者的响应外壳（`config` 重绑为本次请求的 config）。
+ *
+ * @param r 共享响应
+ * @param config 订阅者自己的 config
+ * @returns `config` 已是本次请求的响应（原对象或浅拷贝）
+ */
+export function $rebindResponse(r: AxiosResponse, config: AxiosRequestConfig): AxiosResponse {
+    return r.config === config ? r : { ...r, config: config as InternalAxiosRequestConfig };
+}
+
+/**
+ * 给订阅者一个独立的 error：保留原型与全部自有属性（AxiosError / CanceledError 等不丢类型），
+ * 并把 `config`、`response.config` 重绑为自己的 config。非对象错误原样返回。
+ *
+ * @param err 共享错误
+ * @param config 订阅者自己的 config
+ * @returns 属于该订阅者的错误；已经指向自己 config 时返回原对象
+ */
+export function $rebindError(err: unknown, config: AxiosRequestConfig): unknown {
+    if (!err || typeof err !== 'object') return err;
+    const e = err as { config?: unknown; response?: { config?: unknown } };
+    if (e.config === config && (!e.response || e.response.config === config)) return err;
+    const copy = Object.create(Object.getPrototypeOf(err));
+    for (const k of Object.getOwnPropertyNames(err)) {
+        Object.defineProperty(copy, k, Object.getOwnPropertyDescriptor(err, k)!);
+    }
+    copy.config = config;
+    if (e.response && typeof e.response === 'object') copy.response = { ...e.response, config };
+    return copy;
+}
+
+/**
+ * 为一个订阅者包一层“自己的”视图：监听该请求自己的 signal / cancelToken / timeout，触发时立即以
+ * CanceledError / ETIMEDOUT 退出（解除订阅，不影响首发请求与其他订阅者）；共享结果落定时
+ * 返回重绑了自己 config 的响应或独立错误。
+ *
+ * @param shared 共享 promise
+ * @param config 订阅者自己的 config
+ * @returns 订阅者专属 promise
+ */
+export function $follow(shared: Promise<AxiosResponse>, config: InternalAxiosRequestConfig): Promise<AxiosResponse> {
+    return new Promise<AxiosResponse>((resolve, reject) => {
+        let timer: ReturnType<typeof setTimeout> | undefined;
+        const signal = config.signal as (AbortSignal | undefined);
+        const token = config.cancelToken as ({ subscribe?: (fn: () => void) => void; unsubscribe?: (fn: () => void) => void } | undefined);
+        const settle = (fn: () => void) => { cleanup(); fn(); };
+        const onAbort = () => settle(() => reject(new CanceledError_(undefined, config)));
+        function cleanup() {
+            if (timer !== undefined) clearTimeout(timer);
+            signal?.removeEventListener?.('abort', onAbort);
+            token?.unsubscribe?.(onAbort);
+        }
+        if (signal?.aborted) return onAbort();
+        signal?.addEventListener?.('abort', onAbort);
+        token?.subscribe?.(onAbort);
+        const ms = Number(config.timeout);
+        if (ms > 0) {
+            timer = setTimeout(
+                () => settle(() => reject(new AxiosError(TIMEOUT_MSG(ms), AxiosError.ETIMEDOUT, config))),
+                ms,
+            );
+        }
+        shared.then(
+            (r) => settle(() => resolve($rebindResponse(r, config))),
+            (err) => settle(() => reject($rebindError(err, config))),
+        );
+    });
 }
 
 

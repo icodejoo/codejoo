@@ -1,14 +1,26 @@
 
 import type { Plugin } from '../types';
-import { callAdapter, pluginLog, resolveAdapter } from '../helper';
+import { callAdapter, pluginLog, wrapAdapter } from '../helper';
 import type { AxiosAdapter, AxiosRequestConfig } from 'axios';
 
 
 const name = 'axp:loading'
+/** 可跨 axios.mergeConfig 保留的完成回调键前缀，覆盖 retry 和 auth 重放；每个 $wrap 层追加唯一后缀。 */
+const COMPLETE_PREFIX = `${name}:complete`;
+/** 安装层序号，用于给每层生成互不相同的完成键。 */
+let layerSeq = 0;
+
+/** 带逻辑请求释放和卸载能力的内部 adapter。 */
+interface LoadingAdapter extends AxiosAdapter {
+    /** 释放指定配置对应的逻辑请求，重复调用无副作用。 */
+    finish(config?: AxiosRequestConfig): void;
+    /** 清除定时器并使所有旧请求的回调失效。 */
+    dispose(): void;
+}
 
 /**
  * 在请求生命周期内自动调用 `loading(true)` / `loading(false)` 控制加载提示。
- *   - **适配器模式**：包装 `ctx.axios.defaults.adapter`（PluginManager 构造时已归一化为函数）
+ *   - **逻辑请求计数**：adapter 开始计数，最终响应拦截器释放；retry 和 auth 重放共用完成回调。
  *   - **全局单计数器**：所有参与请求共用一个 `count`：`++count===1` 触发显示，
  *     `--count===0` 触发隐藏；中间并发请求只贡献计数，不重复 show/hide
  *   - **`delay`/`delayClose` 防闪烁**：`delay`——0→1 后不立刻显示，等 `delay` ms，
@@ -40,13 +52,24 @@ export default function axpLoading({ enable = true, loading, delay = 0, delayClo
     const defaults: ILoadingOptions = { loading, delay, delayClose };
     return {
         name,
+        /** 包装发送阶段并注册最终释放，卸载时清理所有延迟回调。 */
         install(axios) {
             pluginLog(axios.defaults, `[${name}] enabled:${enable} hasDefault:${!!loading} delay:${delay} delayClose:${delayClose}`);
             if (!enable) return;
-            // defaults.adapter 可能是数组（裸 axios.create()），统一归一化为函数
-            const prev = resolveAdapter(axios);
-            axios.defaults.adapter = $wrap(prev, defaults);
-            return () => { axios.defaults.adapter = prev; };
+            let wrapped!: LoadingAdapter;
+            const remove = wrapAdapter(axios, (prev) => {
+                wrapped = $wrap(prev, defaults, true);
+                return wrapped;
+            });
+            const id = axios.interceptors.response.use(
+                (response) => { wrapped.finish(response.config); return response; },
+                (error) => { wrapped.finish(error?.config ?? error?.response?.config); return Promise.reject(error); },
+            );
+            return () => {
+                wrapped.dispose();
+                axios.interceptors.response.eject(id);
+                remove();
+            };
         },
     };
 }
@@ -110,7 +133,7 @@ export function $resolveDelayClose(config: AxiosRequestConfig, defaults: ILoadin
 
 /**
  * 构造包装后的 adapter：闭包内维护一个 `count`，按计数边界触发 true/false；中间过程仅
- * 加减计数器，失败也经 finally 减计数器，loading 不会卡住。
+ * 加减计数器；插件安装时由最终响应链释放，独立使用时在 adapter 的 finally 释放。
  *
  * `delay`/`delayClose` 用两个可取消的 timer 实现：0→1 时若 `delay>0` 不立刻显示，
  * 排一个 timer；期间计数回落到 0（`showTimer` 还没触发）就直接清掉 timer，从不显示，
@@ -125,7 +148,8 @@ export function $resolveDelayClose(config: AxiosRequestConfig, defaults: ILoadin
  *
  * Builds the wrapped adapter: a closure-scoped `count` triggers true/false only
  * at the 0→1/1→0 boundaries; decrements even on failure (via `finally`) so
- * loading never gets stuck.
+ * loading never gets stuck. Installed plugins release at the final response;
+ * standalone wrappers release in the adapter's finally.
  *
  * `delay`/`delayClose` are implemented via two cancelable timers: on a 0→1
  * edge, if `delay>0` the show is deferred behind a timer instead of firing
@@ -145,31 +169,104 @@ export function $resolveDelayClose(config: AxiosRequestConfig, defaults: ILoadin
  * @internal exported for unit tests
  * @param prev 原始 adapter / the original adapter
  * @param defaults 插件级默认配置 / plugin-wide defaults
+ * @param logical 为 true 时由最终响应拦截器释放，默认在本次 adapter 结束时释放。
  * @returns 包装后的 adapter / the wrapped adapter
+ * @example const wrapped = $wrap(adapter, { loading: visible => console.log(visible) });
  */
-export function $wrap(prev: AxiosAdapter, defaults: ILoadingOptions): AxiosAdapter {
+export function $wrap(prev: AxiosAdapter, defaults: ILoadingOptions, logical = false): LoadingAdapter {
+    /** 本层独有的完成键：同实例多层 loading 互不覆盖。 */
+    const COMPLETE = `${COMPLETE_PREFIX}:${++layerSeq}`;
+    /** 本层已包装过的 transformResponse 函数，避免重发时重复包装。 */
+    const guards = new WeakSet<object>();
     let count = 0;
     let shown = false;
+    let active = true;
+    const operations = new Set<() => void>();
     let showTimer: ReturnType<typeof setTimeout> | undefined;
     let hideTimer: ReturnType<typeof setTimeout> | undefined;
 
+    /** 清除尚未显示的定时器。 */
     function clearShowTimer() {
         if (showTimer == null) return;
         clearTimeout(showTimer);
         showTimer = undefined;
     }
+    /** 清除延迟隐藏的定时器。 */
     function clearHideTimer() {
         if (hideTimer == null) return;
         clearTimeout(hideTimer);
         hideTimer = undefined;
     }
 
-    return (config) => {
+    /** 隔离 UI 回调同步异常和异步拒绝，计数状态不依赖回调结果。 */
+    function invoke(fn: TLoadingFunc, visible: boolean): void {
+        if (!active) return;
+        try { void Promise.resolve(fn(visible)).catch(() => {}); }
+        catch { /* UI 回调失败不影响请求。 */ }
+    }
+
+    /**
+     * 把本次 config.transformResponse 的每个函数包一层：抛出不带 config 的异常时挂上当前 config 后原样重抛，
+     * 让最终响应拦截器能按 config 释放计数。只替换本次 config 上的引用，不改 defaults 上的原数组。
+     */
+    function guardTransform(config: AxiosRequestConfig): void {
+        const raw = config.transformResponse;
+        if (!raw) return;
+        const list = Array.isArray(raw) ? raw : [raw];
+        config.transformResponse = list.map((fn) => {
+            if (typeof fn !== 'function' || guards.has(fn)) return fn;
+            const guard = function (this: unknown, ...args: unknown[]) {
+                try { return (fn as (...a: unknown[]) => unknown).apply(this, args); }
+                catch (error) {
+                    if (error && typeof error === 'object' && !(error as { config?: unknown }).config) {
+                        try { (error as { config?: unknown }).config = config; } catch { /* 只读异常对象无法挂载 */ }
+                    }
+                    throw error;
+                }
+            };
+            guards.add(guard);
+            return guard;
+        }) as AxiosRequestConfig['transformResponse'];
+    }
+
+    /** 开始一次逻辑请求；重发通过完成回调身份复用计数。 */
+    const wrapped = ((config) => {
+        if (!active) return callAdapter(prev, config);
+        const bag = config as unknown as Record<string, unknown>;
+        const existing = bag[COMPLETE];
+        if (typeof existing === 'function' && operations.has(existing as () => void)) {
+            guardTransform(config);
+            return callAdapter(prev, config).catch((error) => {
+                if (!error?.config) existing();
+                return Promise.reject(error);
+            });
+        }
         const fn = $resolveLoading(config, defaults);
         const delay = $resolveDelay(config, defaults);
         const delayClose = $resolveDelayClose(config, defaults);
-        delete config.loading;
-        if (!fn) return prev(config);
+        if (!fn) return callAdapter(prev, config);
+        /** 最终完成时释放一次计数；卸载后不再安排定时器或更新 UI。 */
+        const finish = () => {
+            if (!operations.delete(finish) || !active) return;
+            if (--count !== 0) return;
+            if (showTimer != null) {
+                clearShowTimer();
+                return;
+            }
+            if (!shown) return;
+            if (delayClose > 0) {
+                hideTimer = setTimeout(() => {
+                    hideTimer = undefined;
+                    shown = false;
+                    invoke(fn, false);
+                }, delayClose);
+            } else {
+                shown = false;
+                invoke(fn, false);
+            }
+        };
+        operations.add(finish);
+        if (logical) bag[COMPLETE] = finish;
         if (++count === 1) {
             // 被 delayClose 打断的隐藏窗口——保持之前的显示状态，不用重新走一遍 delay。
             clearHideTimer();
@@ -178,36 +275,41 @@ export function $wrap(prev: AxiosAdapter, defaults: ILoadingOptions): AxiosAdapt
                     showTimer = setTimeout(() => {
                         showTimer = undefined;
                         shown = true;
-                        fn(true);
+                        invoke(fn, true);
                     }, delay);
                 } else {
                     shown = true;
-                    fn(true);
+                    invoke(fn, true);
                 }
             }
         }
-        // 经 callAdapter 调用：prev 同步抛错也走 finally，计数不会泄漏
-        return callAdapter(prev, config).finally(() => {
-            if (--count === 0) {
-                if (showTimer) {
-                    // 还没到显示的点请求就已经全部结束了，直接取消，从不显示。
-                    clearShowTimer();
-                    return;
-                }
-                if (!shown) return;
-                if (delayClose > 0) {
-                    hideTimer = setTimeout(() => {
-                        hideTimer = undefined;
-                        shown = false;
-                        fn(false);
-                    }, delayClose);
-                } else {
-                    shown = false;
-                    fn(false);
-                }
-            }
+        guardTransform(config);
+        return callAdapter(prev, config).catch((error) => {
+            // 无 config 的异常不能进入 retry 路由，在这里立即释放并保留错误身份。
+            if (!error?.config) finish();
+            return Promise.reject(error);
+        }).finally(() => {
+            if (!logical) finish();
         });
+    }) as LoadingAdapter;
+
+    /** 由最终响应链释放计数，配置可能来自重发后的 axios 合并对象。 */
+    wrapped.finish = (config) => {
+        const complete = (config as unknown as Record<string, unknown> | undefined)?.[COMPLETE];
+        if (typeof complete === 'function') {
+            complete();
+        }
     };
+    /** 卸载后清除所有延迟回调，旧请求完成不会触发 UI。 */
+    wrapped.dispose = () => {
+        active = false;
+        clearShowTimer();
+        clearHideTimer();
+        operations.clear();
+        count = 0;
+        shown = false;
+    };
+    return wrapped;
 }
 
 

@@ -10,7 +10,7 @@ export default class AxpResponse<T extends any = any> {
   declare code: number | string;
   /** 业务信封中的 message，缺失为 null / the business message, null when absent. */
   declare message: string | null;
-  /** 业务信封中的 data 载荷，缺失为 null / the business data payload, null when absent. */
+  /** 信封中的 data 或非信封响应的原始 body，缺失时为 null。 */
   declare data: T | null;
   /** 由 isSuccessful(status, code) 在构造时算出的判定结果 / the verdict computed at construction via isSuccessful(status, code). */
   declare successful: boolean;
@@ -55,8 +55,7 @@ export default class AxpResponse<T extends any = any> {
   }
 
   /**
-   * 从 axios 响应安全地构造 ApiResponse；对 data 为 null/非对象/缺失做防御 —— 旧实现
-   * `data: { code } = {}` 的默认值只在 undefined 时生效，遇到 null（204/网络错误占位）会解构抛错。
+   * 从 axios 响应构造包装对象；带 code 的非数组对象视为业务信封，其余 body 原样放入 data。
    *
    * Safely constructs an ApiResponse from an axios response; guards against `data`
    * being null/non-object/missing — the old `data: { code } = {}` default only
@@ -64,12 +63,14 @@ export default class AxpResponse<T extends any = any> {
    *
    * @param response 原始 axios 响应对象（或相似形状的对象） / the raw axios response (or similarly shaped object)
    * @returns 归一化后的 AxpResponse 实例 / the normalized AxpResponse instance
+   * @example AxpResponse.fromResponse({ status: 200, data: [1, 2] }).data; // [1, 2]
    */
   static fromResponse(response: any): AxpResponse {
     const status: number = response?.status ?? 0;
     const body = response?.data;
-    const envelope = body && typeof body === "object" ? body : {};
-    return new AxpResponse(status, envelope.code, envelope.message ?? null, envelope.data ?? null);
+    const isEnvelope = body && typeof body === "object" && !Array.isArray(body) && 'code' in body;
+    if (isEnvelope) return new AxpResponse(status, body.code, body.message ?? null, body.data ?? null);
+    return new AxpResponse(status, undefined, null, body ?? null);
   }
 }
 

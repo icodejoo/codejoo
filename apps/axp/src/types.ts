@@ -84,8 +84,7 @@ export interface IBaseOptions extends AxiosRequestConfig {
 
 /** 单次方法调用（`get`/`post`/...）可接受的选项。 / Options accepted by a single method call (`get`/`post`/...). */
 export interface IMethodOptions extends IBaseOptions {
-  /** 是否触发 loading 插件的显示/隐藏。 Whether this call triggers the loading plugin's show/hide. */
-  loading?: boolean;
+  // loading 等插件选项继承 AxiosRequestConfig 的增强，保留对象与函数写法。
   /** 是否静默处理（如跳过 notify 提示）。 Whether to handle silently (e.g. skip the notify toast). */
   silent?: boolean;
   // `retry` 继承自 AxiosRequestConfig（由 plugins/retry.ts 的 `declare module 'axios'` 扩展），不在此重复声明。
@@ -171,7 +170,7 @@ export interface HttpInternalRequestConfig extends InternalAxiosRequestConfig {
  *  first.
  * ═══════════════════════════════════════════════════════════════════════════ */
 
-/** 方法优先 schema 要启用路径/请求体/响应推断必须匹配的结构性形状——纯形状检查，不引用具名/全局类型。不匹配时（包括默认值 `unknown`）回退成 `string` 路径与原样传递类型。
+/** 方法优先 schema 的结构示意；内部按 schema 的实际键验证，不要求接口具有索引签名。不匹配时（包括默认值 `unknown`）回退成 `string` 路径与原样传递类型。
  *
  *  Structural shape a method-major schema must match to enable inference — a plain shape check, no named/global type reference. Falls back to `string` paths and passthrough types when it doesn't match (including the default `unknown`). */
 export type MethodSchema = {
@@ -194,14 +193,25 @@ export type HttpPrototype<T> = {
 
 /* ─── private helpers (not exported) ──────────────────────────────────────── */
 
-/* `T` 是匹配 `MethodSchema` 的方法优先 schema；构建者已做过路径优先→方法优先的反转，故每次查找都是直接字面量键访问 `T[Mt][P]`，类型检查阶段不做 mapped/conditional 扇出。
+/** 按实际方法与路径键校验元组，不要求 interface 声明字符串索引签名。 */
+type SchemaShape<T> = {
+  [Mt in keyof T]: {
+    [P in keyof T[Mt]]: readonly [response: unknown, request: readonly [] | readonly [unknown]];
+  };
+};
+
+/** 默认 unknown/any 保持宽松，其余对象按实际键验证方法优先结构。 */
+type IsMethodSchema<T> = unknown extends T ? false
+  : [T] extends [object & SchemaShape<T>] ? true : false;
+
+/* `T` 是匹配 `SchemaShape<T>` 的方法优先 schema；按已有键检查结构后，每次查找均使用 `T[Mt][P]`，无需反转路径与方法。
  *
  * `T` is a method-major schema matching `MethodSchema`; whoever built it already did the path-major→method-major inversion, so every lookup here is a direct literal-key access `T[Mt][P]` — no mapped/conditional fan-out at type-check time. */
 
-/** 严格路径：只允许该方法下真实存在的 key。未列出的 URL 是编译错误——需要扩展时用本地 `.d.ts` 声明合并；`T` 不匹配 `MethodSchema` 时放宽为 `string`。
+/** 严格路径：只允许该方法下真实存在的 key。未列出的 URL 是编译错误；本地扩展可继承方法优先 schema，不匹配时放宽为 `string`。
  *
  *  Strict path: only keys present under that method. Unlisted URLs are a compile error — extend via a local `.d.ts` declaration merge; relaxes to `string` when `T` doesn't match `MethodSchema`. */
-type LoosePath<T, Mt extends HttpMethodLower> = [T] extends [MethodSchema]
+type LoosePath<T, Mt extends HttpMethodLower> = IsMethodSchema<T> extends true
   ? Mt extends keyof T
     ? keyof T[Mt]
     : never
@@ -210,7 +220,7 @@ type LoosePath<T, Mt extends HttpMethodLower> = [T] extends [MethodSchema]
 /** 某 path/method 对应的 `[response, request]` 元组，或 `never`；O(1) 字面量查找。
  *
  *  `[response, request]` tuple for a path/method, or `never`; O(1) literal lookup. */
-type EntryFor<T, Mt extends HttpMethodLower, P> = [T] extends [MethodSchema]
+type EntryFor<T, Mt extends HttpMethodLower, P> = IsMethodSchema<T> extends true
   ? Mt extends keyof T
     ? P extends keyof T[Mt]
       ? T[Mt][P]
@@ -268,7 +278,7 @@ type Payload<Q, Rest extends unknown[]> = 0 extends 1 & Q
 interface HttpDispatch<T, Mt extends HttpMethodLower, P> {
   <R = unknown, Q = unknown>(
     ...args: Payload<
-      ResolvePayload<T, Mt, P, Q>,
+      ResolvePayload<T, Mt, P, NoInfer<Q>>,
       [config: IHttpOptions & { raw: true }]
     >
   ): Promise<{
@@ -278,13 +288,13 @@ interface HttpDispatch<T, Mt extends HttpMethodLower, P> {
   }>;
   <R = unknown, Q = unknown>(
     ...args: Payload<
-      ResolvePayload<T, Mt, P, Q>,
+      ResolvePayload<T, Mt, P, NoInfer<Q>>,
       [config: IHttpOptions & { wrap: true }]
     >
   ): Promise<AxpResponse<ResolveResponse<T, Mt, P, R>>>;
   <R = unknown, Q = unknown>(
     ...args: Payload<
-      ResolvePayload<T, Mt, P, Q>,
+      ResolvePayload<T, Mt, P, NoInfer<Q>>,
       [config?: IHttpOptions]
     >
   ): Promise<ResolveResponse<T, Mt, P, R>>;

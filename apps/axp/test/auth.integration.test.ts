@@ -6,9 +6,92 @@ import auth from '../src/plugins/auth';
 import type { ITokenManager } from '../src/objects/TokenManager';
 import { makeNetwork } from './helpers/network';
 import { use } from './helpers/install';
+import cancel, { cancelAll } from '../src/plugins/cancel';
+import retry from '../src/plugins/retry';
+import notify from '../src/plugins/notify';
+import mock from '../src/plugins/mock';
+import share from '../src/plugins/share';
 
-const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+import { sleep } from './helpers/sleep';
 const lat = (ms: number) => ({ latency: ms } as any);
+
+describe('review — auth 重放的逻辑请求边界', () => {
+  const path = '/review-auth';
+  const initialToken = 'old';
+  const refreshedToken = 'fresh';
+
+  it.each([true, false])('刷新期间 cancelAll 后不再重放，刷新结果 %s 均以 CanceledError 结束', async (refreshed) => {
+    const net = makeNetwork().on('GET', path, () => ({ status: 401 }));
+    const ax = axios.create({ adapter: net.adapter });
+    let finish!: () => void;
+    let entered!: () => void;
+    const started = new Promise<void>((resolve) => { entered = resolve; });
+    const tm = makeTM(initialToken);
+    Axp.install(ax, {
+      auth: auth({ tokenManager: tm, onAccessExpired: vi.fn(), onRefresh: async () => {
+        entered();
+        await new Promise<void>((resolve) => { finish = resolve; });
+        tm.set(refreshedToken);
+        return refreshed;
+      } }),
+      cancel: cancel(),
+    });
+    const result = ax.get(path).catch((error) => error);
+    await started;
+    expect(cancelAll(ax)).toBe(1);
+    finish();
+    expect(await result).toMatchObject({ name: 'CanceledError', code: 'ERR_CANCELED' });
+    expect(net.totalStarted).toBe(1);
+    expect(cancelAll(ax)).toBe(0);
+  });
+
+  it.each([200, 500])('重放返回 %i 时只通知一次、预算只用一次，controller 全部释放', async (status) => {
+    const net = makeNetwork().on('GET', path, (_config, hit) => ({ status: hit === 1 ? 401 : status }));
+    const ax = axios.create({ adapter: net.adapter });
+    const tm = makeTM(initialToken);
+    const showNotice = vi.fn();
+    Axp.install(ax, {
+      auth: auth({ tokenManager: tm, onRefresh: () => { tm.set(refreshedToken); return true; }, onAccessExpired: vi.fn() }),
+      retry: retry({ max: 1, delay: 0 }), cancel: cancel(),
+      notify: notify({ notify: showNotice, stringify: () => 'done' }),
+    });
+    await ax.get(path).catch(() => undefined);
+    expect(net.totalStarted).toBe(status === 200 ? 2 : 3);
+    expect(showNotice).toHaveBeenCalledTimes(1);
+    expect(cancelAll(ax)).toBe(0);
+  });
+
+  it('auth 重放保留 mock:false 与 share:false', async () => {
+    const net = makeNetwork().on('GET', path, (_config, hit) => ({ status: hit <= 2 ? 401 : 200 }));
+    const ax = axios.create({ adapter: net.adapter });
+    const tm = makeTM(initialToken);
+    Axp.install(ax, {
+      auth: auth({ tokenManager: tm, onRefresh: async () => { await sleep(5); tm.set(refreshedToken); return true; }, onAccessExpired: vi.fn() }),
+      mock: mock({ enable: true, mock: true, mockUrl: 'http://mock' }), share: share(),
+    });
+    await Promise.all(Array.from({ length: 2 }, () => ax.get(path, { key: 'review', mock: false, share: false })));
+    expect(net.log.map((record) => record.url)).toEqual([path, path, path, path]);
+  });
+
+  it('canRefresh=false 时不刷新；失败后保持禁止，登录方显式重置后才恢复', async () => {
+    const net = makeNetwork().on('GET', path, () => ({ status: 401 }));
+    const tm = makeTM(initialToken);
+    tm.canRefresh = false;
+    const onRefresh = vi.fn(() => false);
+    const onAccessExpired = vi.fn();
+    const ax = axios.create({ adapter: net.adapter });
+    Axp.install(ax, { auth: auth({ tokenManager: tm, onRefresh, onAccessExpired }) });
+    await expect(ax.get(path)).rejects.toMatchObject({ status: 401 });
+    expect(onRefresh).not.toHaveBeenCalled();
+    expect(onAccessExpired).toHaveBeenCalledOnce();
+    tm.set('login');
+    expect(tm.canRefresh).toBe(false);
+    tm.canRefresh = true;
+    await expect(ax.get(path)).rejects.toMatchObject({ status: 401 });
+    expect(onRefresh).toHaveBeenCalledOnce();
+    expect(tm.canRefresh).toBe(false);
+  });
+});
 
 /** 读 Authorization（AxiosHeaders 用 .get） */
 function authHeader(c: InternalAxiosRequestConfig): string | undefined {

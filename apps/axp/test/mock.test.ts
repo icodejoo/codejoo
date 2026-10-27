@@ -1,6 +1,32 @@
 import { describe, it, expect, vi } from 'vitest';
 import axios from 'axios';
 import mock, { $shouldMock, $resolveMock, $rewriteUrl, $shouldFallback, type IMockOptions } from '../src/plugins/mock';
+import { Axp } from '../src/install';
+import retry from '../src/plugins/retry';
+import { makeNetwork } from './helpers/network';
+import loading from '../src/plugins/loading';
+
+it('loading 先卸载时外层 mock 保持生效，两者全卸载后还原原 adapter', async () => {
+    const path = '/review-mock';
+    const net = makeNetwork();
+    const ax = axios.create({ adapter: net.adapter });
+    const loadingHandle = Axp.install(ax, { loading: loading({ loading: vi.fn() }) });
+    const mockHandle = Axp.install(ax, { mock: mock({ enable: true, mock: true, mockUrl: 'http://mock' }) });
+    loadingHandle.dispose();
+    await ax.get(path);
+    expect(net.log[0].url).toBe(`http://mock${path}`);
+    mockHandle.dispose();
+    expect(ax.defaults.adapter).toBe(net.adapter);
+});
+
+it('review #2 — retry 保留请求级 mock:false', async () => {
+    const path = '/review-mock';
+    const net = makeNetwork().on('GET', path, (_config, hit) => ({ status: hit === 1 ? 500 : 200 }));
+    const ax = axios.create({ adapter: net.adapter });
+    Axp.install(ax, { retry: retry({ max: 1, delay: 0 }), mock: mock({ enable: true, mock: true, mockUrl: 'http://mock' }) });
+    await ax.get(path, { mock: false });
+    expect(net.log.map((record) => record.url)).toEqual([path, path]);
+});
 
 
 describe('$shouldMock — runWhen 守卫', () => {

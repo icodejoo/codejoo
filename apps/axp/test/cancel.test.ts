@@ -1,3 +1,4 @@
+import { sleep } from './helpers/sleep';
 import { describe, it, expect, vi } from 'vitest';
 import axios from 'axios';
 import { Axp, axpKey, axpCache, axpShare, axpRetry } from '../src';
@@ -28,6 +29,31 @@ function makeMockCtx() {
 
 
 describe('cancel — request interceptor 注入 AbortController', () => {
+    it('同一在途请求重进请求链时沿用 signal，仅追踪一个 controller', () => {
+        const { ax, reqHandlers } = makeMockCtx();
+        cancel().install(ax);
+        const original: any = { url: '/review-cancel' };
+        reqHandlers[0](original);
+        const replay = { ...original };
+        reqHandlers[0](replay);
+        expect(replay.signal).toBe(original.signal);
+        expect(cancelAll(ax)).toBe(1);
+        expect(replay.signal.aborted).toBe(true);
+    });
+
+    it('cancelAll 后重进请求链保留 aborted 状态且不新增 controller', () => {
+        const { ax, reqHandlers } = makeMockCtx();
+        cancel().install(ax);
+        const original: any = { url: '/review-cancel' };
+        reqHandlers[0](original);
+        expect(cancelAll(ax)).toBe(1);
+        const replay = { ...original };
+        reqHandlers[0](replay);
+        expect(replay.signal).toBe(original.signal);
+        expect(replay.signal.aborted).toBe(true);
+        expect(cancelAll(ax)).toBe(0);
+    });
+
     it('未自带 signal → 注入 ctrl，绑到 config.signal 上', () => {
         const { ax, reqHandlers } = makeMockCtx();
         cancel().install(ax);
@@ -129,7 +155,6 @@ describe('cancel — enable:false', () => {
 
 
 describe('cancel — 与 cache / share / retry 组合（Axp.install 规范顺序）', () => {
-    const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
     it('cancel + cache：命中缓存后 controller 不残留，cancelAll 返回 0', async () => {
         const net = makeNetwork();

@@ -1,6 +1,6 @@
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach } from 'vitest';
 import axios from 'axios';
-import type { AxiosAdapter, AxiosRequestConfig, AxiosResponse } from 'axios';
+import type { AxiosAdapter, AxiosResponse } from 'axios';
 import cache, { $resolveCache, $resolveKey, $resolveCloneFn, $shallowClone, clearCache, removeCache } from '../src/plugins/cache';
 
 

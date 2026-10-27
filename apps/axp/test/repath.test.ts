@@ -131,3 +131,47 @@ describe('repath — enable 开关', () => {
         expect(config.url).toBe('/u/8');
     });
 });
+
+describe('repath — review #22 路径边界', () => {
+    /** 重复占位符的输入路径。 */
+    const repeatedPath = '/u/{id}/again/{id}';
+    /** 两次替换完成后的路径。 */
+    const repeatedResult = '/u/5/again/5';
+    it('只替换 pathname，完整保留 query 与 hash', () => {
+        const { run } = install();
+        const config = { url: '/u/:id?view=1&other={id}#tab/:id', params: { id: 5 } };
+        run(config);
+        expect(config.url).toBe('/u/5?view=1&other={id}#tab/:id');
+        expect(config.params).toEqual({});
+    });
+
+    it.each(['params', 'data'])('重复占位符从 %s 读取后统一删除', (source) => {
+        const { run } = install();
+        const config = { url: repeatedPath, [source]: { id: 5, keep: true } };
+        run(config);
+        expect(config.url).toBe(repeatedResult);
+        expect(config[source]).toEqual({ keep: true });
+    });
+
+    it('原始 data 可用于重复占位符，替换后统一删除', () => {
+        const { run } = install();
+        const config = { url: repeatedPath, data: 5 };
+        run(config);
+        expect(config.url).toBe(repeatedResult);
+        expect(config.data).toBeUndefined();
+    });
+
+    it('值按路径段编码，不能注入斜杠、query 或 hash', () => {
+        const { run } = install();
+        const config = { url: '/u/[id]?view=1#tab', params: { id: 'a/b?admin=1#中文 %' } };
+        run(config);
+        expect(config.url).toBe('/u/a%2Fb%3Fadmin%3D1%23%E4%B8%AD%E6%96%87%20%25?view=1#tab');
+    });
+
+    it('绝对 URL 的协议和端口保持原样', () => {
+        const { run } = install();
+        const config = { url: 'http://localhost:4570/u/:id?view=1', params: { id: 5 } };
+        run(config);
+        expect(config.url).toBe('http://localhost:4570/u/5?view=1');
+    });
+});
