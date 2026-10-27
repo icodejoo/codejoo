@@ -11,8 +11,9 @@ import { DOCS_BASE_URL, SKZ_ATTRIBUTES } from "../src/attributes.ts";
 /** 包根目录 */
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 
-/** 两个生成物的文件名（相对包根） */
+/** Web-Types 生成物的文件名（相对包根） */
 export const WEB_TYPES_FILE = "web-types.json";
+/** VS Code HTML Custom Data 生成物的文件名（相对包根） */
 export const CUSTOM_DATA_FILE = "html-custom-data.json";
 
 /**
@@ -25,7 +26,7 @@ function docUrl(attr) {
 }
 
 /**
- * 拼出带适用范围的说明（完整版专用的在末尾补注，范围在开头标明）
+ * 拼出带适用范围的说明：开头标明 Root attribute（根属性）或 Element mark（元素标记），后面接属性自己的描述
  * @param {import("../src/attributes.ts").SkzAttributeDef} attr 属性描述
  * @returns {string} 说明文本
  */

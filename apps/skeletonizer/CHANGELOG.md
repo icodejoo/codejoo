@@ -1,5 +1,15 @@
 # Changelog
 
+## Unreleased
+
+- **修复：过期的关闭函数会拆掉新一轮骨架**。`const off = enable(el); off(); enable(el); off();` 里第二次调用旧 `off` 以前会把重新开启的骨架一起关掉，现在只有当前这一轮的 `off` 有效。
+- **修复：`<skz-box>` 在 HTML 解析完之前注册时接管不到子根**。比如 head 里的同步脚本先调了 `defineSkzBox()`，宿主连接时子节点还没解析出来；现在会等 `DOMContentLoaded` 再同步一次。
+- **修复：React / Vue 的 `<SkzBox>` 改了 `as` 之后新元素不出骨架**。换元素时会先撤掉旧元素上的骨架，再给新元素挂上（Solid 版原本就是这样）。
+- **修复：`Bone.text` / `Bone.cjk` / `Bone.lines` 传 `Infinity` 会死循环**，现在和非正数一样返回空串。
+- **样式**：`--skz-fade-min` 不再在根上声明默认值（默认 0.55 仍在 `var()` 兜底里），写在祖先上的覆盖也能生效了；删掉减少动态效果里早已没有目标的 `[skz]::after` 规则。
+- 继承防火墙的根表改为 `WeakMap`，根被移除但没调 `off()` 时不再强引用。
+- 体积（gzip -9，1 KB = 1024 字节）：完整版 3.91 + 2.32 = 6.23 KB，lite 2.27 + 1.98 = 4.26 KB，element 0.82 KB，vue 0.83 / react 0.59 KB。
+
 ## 0.3.0 - 2026-10-13
 
 - **新增 skz-\* 属性的编辑器代码提示**：单一数据源 `src/attributes.ts`（属性名、英文说明、取值、是否裸属性、是否仅完整版、README 锚点），`scripts/gen-editor-data.mjs` 生成 `web-types.json`（WebStorm / JetBrains，`package.json` 新增 `web-types` 字段）与 `html-custom-data.json`（VS Code，`html.customData` 配置一行），`pnpm build` 先跑生成、生成物提交入库并加入 `files`；新增类型 `SkzHtmlAttributes` / `SkzHtmlAttributesFor` / `SkzTextModeMap` / `SkzBareAttr`（`skeletonizer/lite` 导出，零运行时，完整版增强补 underline / leaf 与 `skz-shimmer-mode` / `skz-cv`）；react / solid / svelte / vue 适配层用模块增强把它并入各自的 `HTMLAttributes`，导入适配层即有补全与取值检查（裸属性只收 `""`，Solid / Svelte 另收 `true`）。README 属性表补上之前遗漏的 `skz-shimmer-mode`。

@@ -2,7 +2,7 @@ import type { SkzExtension } from "../core/extension.js";
 import { viewportMarker } from "./viewport.js";
 
 /** 根在视口外时打上的属性（懒渲染）：CSS 据此停掉动画 */
-export const PAUSED_ATTR = "skz-paused";
+const PAUSED_ATTR = "skz-paused";
 
 /** 视口外预留的缓冲距离：快滚进来之前就恢复动画 */
 const VIEWPORT_MARGIN = "100px";
@@ -16,9 +16,11 @@ const viewport = viewportMarker(PAUSED_ATTR, VIEWPORT_MARGIN);
  */
 export const lazyExtension: SkzExtension = {
   name: "lazy",
+  /** 开始观察根的可见性 */
   sync(el) {
     viewport.get()?.observe(el);
   },
+  /** 停止观察并清掉 skz-paused */
   release(el) {
     viewport.unobserve(el);
     el.removeAttribute(PAUSED_ATTR);

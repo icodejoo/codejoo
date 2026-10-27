@@ -25,7 +25,9 @@ export interface SkzParams extends EnableOptions {
 export function skeleton(node: HTMLElement, params: SkzParams) {
   toggle(node, params.loading, params);
   return {
+    /** 参数变化时按新值重新开关 */
     update: (next: SkzParams): void => toggle(node, next.loading, next),
+    /** 元素销毁时撤掉骨架 */
     destroy: (): void => disable(node),
   };
 }

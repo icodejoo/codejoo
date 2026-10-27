@@ -10,9 +10,11 @@ const SHIMMER_MODE_ATTR = "skz-shimmer-mode";
  */
 export const shimmerModeExtension: SkzExtension = {
   name: "shimmerMode",
+  /** 按 shimmerMode 选项写入 / 清掉 skz-shimmer-mode */
   sync(el, opts) {
     syncAttr(el, SHIMMER_MODE_ATTR, opts.shimmerMode);
   },
+  /** 关闭骨架时清掉 skz-shimmer-mode */
   release(el) {
     el.removeAttribute(SHIMMER_MODE_ATTR);
   },

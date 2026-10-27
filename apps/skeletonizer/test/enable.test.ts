@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { disable, enable, toggle } from "../src/core/enable.ts";
+import { disable, enable } from "../src/core/enable.ts";
 import type { EnableOptions } from "../src/core/types.ts";
 // 完整版入口：注册 text / engine / lazy 扩展，再注册两个方案（等同于用户导入 skeletonizer）
 import "../src/full/index.ts";
@@ -83,13 +83,25 @@ it("enable 重入：返回同一个 off，不传的选项会被清掉", () => {
   expect(f.getAttribute("skz-text-mode")).toBeNull();
 });
 
-it("toggle：按 loading 开关；disable 对未开启元素无副作用", () => {
+it("disable：对未开启元素无副作用，开启后能关掉", () => {
   const f = new FakeEl();
   disable(asEl(f));
   expect(f.attrs.size).toBe(0);
-  toggle(asEl(f), true, { text: "underline" });
+  enable(asEl(f), { text: "underline" });
   expect(f.getAttribute("skz")).toBe("");
-  toggle(asEl(f), false);
+  disable(asEl(f));
+  expect(f.attrs.size).toBe(0);
+});
+
+it("过期的 off 不会拆掉新一轮状态：关掉再开启后，旧 off 调用无效，新 off 才清干净", () => {
+  const f = new FakeEl();
+  const off1 = enable(asEl(f));
+  off1();
+  const off2 = enable(asEl(f));
+  off1();
+  expect(f.getAttribute("skz")).toBe("");
+  expect(f.getAttribute("aria-busy")).toBe("true");
+  off2();
   expect(f.attrs.size).toBe(0);
 });
 

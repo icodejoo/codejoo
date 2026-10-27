@@ -1,4 +1,5 @@
 @use "sass:list";
+@use "sass:map";
 @use "sass:math";
 
 /// 骨头的公共绘制声明：背景色 + 可选流光背景图（按骨头自身盒子铺，各骨头同步）。
@@ -114,7 +115,7 @@ $shimmer-duration: var(--skz-duration, var(--skz-tier-dur, #{$default-duration})
 
 /// 光带 / pulse 的降频时间函数：用户写的 --skz-shimmer-timing 优先，其次内部档位变量 --skz-tier-steps，最后 steps(38)（小档，约 24 次/秒）。
 /// 默认值只能写在 var() 兜底里：写成根上的 --skz-shimmer-timing 声明会盖掉用户写在祖先上的覆盖。
-$shimmer-timing: var(--skz-shimmer-timing, var(--skz-tier-steps, steps(38)));
+$shimmer-timing: var(--skz-shimmer-timing, var(--skz-tier-steps, #{sk-shimmer-steps(map.get($shimmer-tiers, s))}));
 
 /// 根驱动（pulse / shimmer）的 @supports 门槛：浏览器认 @property。@property 没法直接用 @supports 检测，只能找同期或更早落地的特性当代理，两个条件满足任一即可：
 /// - 相对颜色语法 rgb(from ...)：Chrome 119 / Safari 16.4 / Firefox 128 落地，三家都晚于各自的 @property；
@@ -123,6 +124,17 @@ $shimmer-timing: var(--skz-shimmer-timing, var(--skz-tier-steps, steps(38)));
 /// 用法：`@supports #{$prop-gate} { ... }`；取反必须写 `@supports not (#{$prop-gate}) { ... }`（整体再包一层括号，or 才在 not 之内）。
 /// JS 侧 full/variants/global.ts 的 supportsRootDriven 用同样两个条件，改这里要同步改那边。
 $prop-gate: "(color: rgb(from red r g b)) or (content-visibility: auto)";
+
+/// 浏览器认 box-decoration-break 的 @supports 条件（Chrome 130 前、Safari 只认 -webkit- 前缀，所以两种写法都查）。
+/// 用法：`@supports #{$bdb-gate} { ... }`；取反必须写 `@supports not (#{$bdb-gate}) { ... }`（整体再包一层括号，or 才在 not 之内）。
+$bdb-gate: "(box-decoration-break: clone) or (-webkit-box-decoration-break: clone)";
+
+/// 浏览器认 background-clip: text 的 @supports 条件（带前缀与不带前缀都查）。
+/// 用法同 $bdb-gate：正向写 `@supports #{$bgclip-gate} { ... }`，取反写 `@supports not (#{$bgclip-gate}) { ... }`；和 `and` 连用时整体再包一层括号：`@supports (#{$bgclip-gate}) and selector(:has(*))`。
+$bgclip-gate: "(-webkit-background-clip: text) or (background-clip: text)";
+
+/// 浅色主题的骨头底色。@property 的 initial-value 只能写字面量（不能用 var()），所以抽成 SCSS 变量，保证 _theme.scss 与 _driver.scss 同一份。
+$light-color: #d9dde3;
 
 /// 光带半边的缓动色标（位置 透明度），按 smoothstep 取点：两端和峰值斜率为 0，看不出转折。
 /// 另一半镜像生成；svg 引擎的光带用同一组数（src/full/svg.ts 的 SHIMMER_EASE），改这里要同步改那边。

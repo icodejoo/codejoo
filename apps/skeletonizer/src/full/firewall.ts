@@ -16,7 +16,7 @@ const FW_MARGIN = "200px";
 const firewall = viewportMarker(FW_ATTR, FW_MARGIN);
 
 /** 每个根当前被观察的列表项 */
-const watched = new Map<HTMLElement, Element[]>();
+const watched = new WeakMap<HTMLElement, Element[]>();
 
 /**
  * 对根启用（或刷新）防火墙：先给所有项预打防火墙，再交给观察器按是否在视口内撤掉。

@@ -5,7 +5,6 @@
  * 不支持 @property / 相对颜色的浏览器里，pulse / shimmer 退回根级 fade。 */
 [skz] {
   --skz-bg-img: none;
-  --skz-fade-min: 0.55;
 }
 
 /* fade：根整体 opacity 脉冲，跑在合成器线程，几乎零成本。没写 skz-effect 时的默认；显式写 fade 则强制开启。
@@ -45,9 +44,6 @@
 @media (prefers-reduced-motion: reduce) {
   [skz] {
     --skz-bg-img: none !important;
-    animation: none !important;
-  }
-  [skz]::after {
     animation: none !important;
   }
 }

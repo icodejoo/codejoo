@@ -2,7 +2,7 @@
 import { afterEach, describe, expect, it } from "vitest";
 // 引入 core 入口：它执行时把 API 挂到私有全局键，适配层靠这个键取 enable / disable
 import "../src/core/index.ts";
-import { createApp, h, nextTick, reactive } from "vue";
+import { createApp, h, nextTick, reactive, ref } from "vue";
 import { registerExtension } from "../src/core/extension.ts";
 import type { SkzEffect } from "../src/core/types.ts";
 import type { SkzTextMode } from "../src/full/types.ts";
@@ -79,5 +79,23 @@ describe("vue SkzBox", () => {
     await nextTick();
     expect(root.textContent).toBe("b");
     expect(seen.length).toBe(before);
+  });
+
+  it("as 变化换了元素：旧元素的骨架被撤掉，新元素带上 skz", async () => {
+    const tag = ref("div");
+    host = document.createElement("div");
+    document.body.appendChild(host);
+    createApp({ render: () => h(SkzBox, { loading: true, as: tag.value }, () => "x") }).mount(host);
+    const oldEl = host.firstElementChild!;
+    expect(oldEl.hasAttribute("skz")).toBe(true);
+
+    tag.value = "section";
+    await nextTick();
+    await nextTick();
+    const newEl = host.firstElementChild!;
+    expect(newEl).not.toBe(oldEl);
+    expect(newEl.tagName).toBe("SECTION");
+    expect(newEl.hasAttribute("skz")).toBe(true);
+    expect(oldEl.hasAttribute("skz")).toBe(false);
   });
 });

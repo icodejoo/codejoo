@@ -52,12 +52,12 @@ export const Bone = {
    * 生成 n 个字符的「方块词」文本，词与词之间用空格，长文本可以自然换行。
    * @param n 总字符数（含空格）
    * @param opts seed：改变词长分布，默认 0
-   * @returns 恰好 n 个字符的占位文本；n<=0 返回空串
+   * @returns 恰好 n 个字符的占位文本；n<=0 或不是有限数（NaN、Infinity）返回空串
    * @example Bone.text(12) // "███ ████ ███"（词长为示意）
    */
   text(n: number, opts: { seed?: number } = {}): string {
     const seed = opts.seed ?? 0;
-    if (!(n > 0)) return "";
+    if (!(n > 0) || !Number.isFinite(n)) return "";
     let out = "";
     for (let i = 0; out.length < n; i++) {
       const wordLen = pick(i, seed, 2, 6);
@@ -83,10 +83,11 @@ export const Bone = {
    * 生成中日韩文本的占位串：纯方块，每隔 3~6 个字符放一个零宽空格用于断行。
    * @param n 方块字符数（不含零宽空格）
    * @param opts seed：改变断点分布
-   * @returns 占位文本
+   * @returns 占位文本；n<=0 或不是有限数（NaN、Infinity）返回空串
    * @example Bone.cjk(20)
    */
   cjk(n: number, opts: { seed?: number } = {}): string {
+    if (!(n > 0) || !Number.isFinite(n)) return "";
     const seed = opts.seed ?? 0;
     let out = "";
     let count = 0;

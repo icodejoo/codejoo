@@ -9,6 +9,12 @@ export const ROOT_ATTR = "skz";
 /** 根上记录效果的属性名 */
 const EFFECT_ATTR = "skz-effect";
 
+/** 加载中标记给辅助技术的属性名 */
+const ARIA_BUSY_ATTR = "aria-busy";
+
+/** 无原生 inert 时用来拦焦点的事件名 */
+const FOCUS_EVENT = "focusin";
+
 /** 已启用根元素的运行时状态 */
 interface ActiveState {
   /** 关闭骨架的函数 */
@@ -56,8 +62,8 @@ function inertTargets(el: Element, hasIgnore: boolean = !!el.querySelector(IGNOR
  */
 function lock(el: HTMLElement, hasIgnore: boolean): () => void {
   if (!supportsInert()) {
-    el.addEventListener("focusin", blockFocus, true);
-    return () => el.removeEventListener("focusin", blockFocus, true);
+    el.addEventListener(FOCUS_EVENT, blockFocus, true);
+    return () => el.removeEventListener(FOCUS_EVENT, blockFocus, true);
   }
   // 原本就 inert 的不动，解锁时也不碰
   const targets = inertTargets(el, hasIgnore).filter((t) => !t.inert);
@@ -103,7 +109,7 @@ export function enable(el: HTMLElement, opts: EnableOptions = {}): () => void {
   const prev = active.get(el);
   if (!prev) {
     el.setAttribute(ROOT_ATTR, "");
-    el.setAttribute("aria-busy", "true");
+    el.setAttribute(ARIA_BUSY_ATTR, "true");
   }
   syncExtensions(el, opts);
   if (opts.fit) enableFit(el);
@@ -117,11 +123,13 @@ export function enable(el: HTMLElement, opts: EnableOptions = {}): () => void {
   }
 
   const off = (): void => {
+    // 过期的 off（元素已被关掉又重新开启）不能拆掉新一轮的状态
+    if (active.get(el)?.off !== off) return;
     for (const ext of listExtensions()) ext.release(el);
     disableFit(el);
     active.get(el)?.unlock();
     el.removeAttribute(ROOT_ATTR);
-    el.removeAttribute("aria-busy");
+    el.removeAttribute(ARIA_BUSY_ATTR);
     el.removeAttribute(EFFECT_ATTR);
     active.delete(el);
   };
@@ -136,16 +144,4 @@ export function enable(el: HTMLElement, opts: EnableOptions = {}): () => void {
  */
 export function disable(el: HTMLElement): void {
   active.get(el)?.off();
-}
-
-/**
- * 按 loading 开关骨架态：真则 enable，假则 disable。各框架适配层共用的入口。
- * @param el 骨架根元素
- * @param loading 是否加载中
- * @param opts 骨架选项
- * @example toggle(el, loading, { effect: 'pulse' });
- */
-export function toggle(el: HTMLElement, loading: boolean, opts: EnableOptions = {}): void {
-  if (loading) enable(el, opts);
-  else disable(el);
 }

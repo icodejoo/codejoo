@@ -16,7 +16,7 @@ skz-box {
 
 /* 主题变量 */
 [skz] {
-  --skz-color: #d9dde3;
+  --skz-color: #{$light-color};
   --skz-highlight: #eceff3;
   --skz-radius: 4px;
 }

@@ -10,9 +10,11 @@ const TEXT_ATTR = "skz-text-mode";
  */
 export const textExtension: SkzExtension = {
   name: "text",
+  /** 按 text 选项写入 / 清掉 skz-text-mode */
   sync(el, opts) {
     syncAttr(el, TEXT_ATTR, opts.text);
   },
+  /** 关闭骨架时清掉 skz-text-mode */
   release(el) {
     el.removeAttribute(TEXT_ATTR);
   },

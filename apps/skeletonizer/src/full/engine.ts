@@ -67,6 +67,7 @@ function warnUnregistered(engine: SkzEngine): void {
  */
 export const engineExtension: SkzExtension = {
   name: "engine",
+  /** 选出本次生效的方案：只同步选中的，其余方案撤掉 */
   sync(el, opts) {
     const engine = resolveEngine(opts);
     if (opts.engine) warnUnregistered(opts.engine);
@@ -78,6 +79,7 @@ export const engineExtension: SkzExtension = {
     }
     for (const impl of selected) impl.sync(el, opts);
   },
+  /** 关闭骨架时让所有方案都撤掉 */
   release(el) {
     for (const impl of engines.values()) impl.release(el);
   },

@@ -29,6 +29,7 @@ function apply(el: HTMLElement, value: SkzBinding): void {
  * <div v-skeleton="loading"><UserCard :user="user" /></div>
  */
 export const vSkeleton: Directive<HTMLElement, SkzBinding> = {
+  // 挂载、更新时按绑定值开关；卸载时一定撤掉
   mounted: (el, { value }) => apply(el, value),
   updated: (el, { value }) => apply(el, value),
   unmounted: (el) => disable(el),
@@ -44,6 +45,7 @@ export const vSkeleton: Directive<HTMLElement, SkzBinding> = {
  * useSkeleton(el, loading, { effect: 'pulse' });
  */
 export function useSkeleton(target: Ref<HTMLElement | null | undefined>, loading: Ref<boolean>, opts: EnableOptions = {}): void {
+  // 按当前 loading 把目标元素的骨架态对齐
   const sync = (): void => {
     if (target.value) toggle(target.value, loading.value, opts);
   };
@@ -61,7 +63,7 @@ export interface SkzBoxProps extends EnableOptions {
 }
 
 /**
- * 组件版：`<SkzBox :loading="loading" effect="pulse">...</SkzBox>`，渲染一个包裹元素。
+ * 组件版：`<SkzBox :loading="loading" effect="pulse">...</SkzBox>`，渲染一个包裹元素；as 变化换了元素时，旧元素的骨架会撤掉，新元素重新挂上。
  * 注意：模板里写 `<SkzBox>`；写成 `<skz>` 会解析成原生自定义元素而不是这个组件。
  * 类型显式标成 DefineComponent<SkzBoxProps>：props 类型跟着 EnableOptions 走，不会在构建时被固化。
  * @example
@@ -89,12 +91,26 @@ export const SkzBox = defineComponent({
   },
   setup(props, { slots }) {
     const root = ref<HTMLElement>();
+    // 上一次对齐过的元素：as 变化换了 DOM 元素时，靠它撤掉旧元素（不依赖 watch 的 old 值，多次变化合并触发时也不会漏）
+    let current: HTMLElement | undefined;
     // 只在 props 变化时同步（getter 里整体拷贝 props 以追踪全部字段（不用对象展开：es2015 目标下会多带 helper），含自定义扩展的），插槽内容重渲染不会触发
     const sync = (): void => {
-      if (root.value) toggle(root.value, props.loading, props as EnableOptions);
+      const el = root.value;
+      if (current && current !== el) disable(current);
+      current = el;
+      if (el) toggle(el, props.loading, props as EnableOptions);
     };
     onMounted(sync);
-    watch(() => Object.assign({}, props), sync);
+    // flush: post：等 patch 完成再同步，as 变了时 root.value 才已经是新元素
+    watch(() => Object.assign({}, props), sync, { flush: "post" });
+    // 元素被换掉（as 变化）：撤旧挂新；首次挂载已由 onMounted 对齐过（el === current），不重复同步
+    watch(
+      root,
+      (el) => {
+        if (el !== current) sync();
+      },
+      { flush: "post" },
+    );
     onBeforeUnmount(() => root.value && disable(root.value));
     return () => h(props.as, { ref: root }, slots.default?.());
   },
@@ -102,6 +118,7 @@ export const SkzBox = defineComponent({
 
 /**
  * 插件安装：全局注册 `v-skeleton` 指令与 `<SkzBox>` 组件。
+ * @param app Vue 应用实例（`app.use(SkzPlugin)` 时由 Vue 传入）
  * @example app.use(SkzPlugin)
  */
 export const SkzPlugin = {

@@ -17,7 +17,7 @@
 @property --skz-pulse-c {
   syntax: "<color>";
   inherits: true;
-  initial-value: #d9dde3;
+  initial-value: #{$light-color};
 }
 /* 进度 0 → 1，位置换算见 _mixins.scss 的 $band-pos（骨头左边界外 → 右边界外）。
  * 每轮末尾停顿固定 $shimmer-pause（0.4s），其余时间都用来扫；关键帧百分比不能用变量，所以按档位各一组（占比由 _mixins.scss 的 sk-shimmer-share 算：
