@@ -1,6 +1,7 @@
 import { describe, it, expect, vi } from 'vitest';
+import axios from 'axios';
 import type { AxiosAdapter, AxiosRequestConfig } from 'axios';
-import { $resolveLoading, $resolveDelay, $resolveDelayClose, $wrap, type ILoadingOptions, type TLoadingFunc } from '../src/plugins/loading';
+import loading, { $resolveLoading, $resolveDelay, $resolveDelayClose, $wrap, type ILoadingOptions, type TLoadingFunc } from '../src/plugins/loading';
 
 
 // ───────────────────────────────────────────────────────────────────────────
@@ -411,5 +412,29 @@ describe('$wrap — 请求级对象覆盖 delay/delayClose/loading/enable', () =
         pending[0].resolve({});
         await p;
         expect(fn).not.toHaveBeenCalled();
+    });
+});
+
+
+describe('loading — adapter 同步抛错 / 非函数 adapter', () => {
+    it('prev 同步抛错 → 请求 reject，且回调 true/false 成对（计数不泄漏）', async () => {
+        const fn = vi.fn();
+        const thrower: AxiosAdapter = (() => { throw new Error('sync boom'); }) as any;
+        const wrapped = $wrap(thrower, { loading: fn });
+        await expect(wrapped({} as any)).rejects.toThrow('sync boom');
+        expect(fn.mock.calls).toEqual([[true], [false]]);
+        // 计数已回落：下一次请求仍能重新触发 true
+        await expect(wrapped({} as any)).rejects.toThrow('sync boom');
+        expect(fn.mock.calls).toEqual([[true], [false], [true], [false]]);
+    });
+
+    it('裸 axios.create()（adapter 为数组）安装 loading 后请求正常', async () => {
+        const net = vi.fn(async (config: any) => ({ status: 200, statusText: 'OK', headers: {}, config, data: 'ok' }) as any);
+        const ax = axios.create({ adapter: [net as any] });
+        const fn = vi.fn();
+        loading({ loading: fn }).install(ax);
+        const r = await ax.get('/x');
+        expect(r.data).toBe('ok');
+        expect(fn.mock.calls).toEqual([[true], [false]]);
     });
 });

@@ -3,6 +3,7 @@ import auth, {
   $normalize,
   $compileMethods,
   $compileUrlPatterns,
+  $pathnameOf,
   $patternToRegex,
   authFailureFactory,
   AuthFailureAction,
@@ -234,5 +235,100 @@ describe('auth — enable / 元信息', () => {
   });
   it("工厂 .name === 'axp:auth'", () => {
     expect(auth.name).toBe('axp:auth');
+  });
+});
+
+
+describe('$pathnameOf — 取 URL 的 pathname', () => {
+  it('相对路径原样；去掉查询串与 hash', () => {
+    expect($pathnameOf('/me')).toBe('/me');
+    expect($pathnameOf('/me?x=1')).toBe('/me');
+    expect($pathnameOf('/me#top')).toBe('/me');
+    expect($pathnameOf('/a/b?x=/y#z')).toBe('/a/b');
+  });
+  it('绝对 URL 去掉 scheme://host(:port)；协议相对 URL 同理', () => {
+    expect($pathnameOf('https://x.com/me')).toBe('/me');
+    expect($pathnameOf('http://x.com:8080/a/b?q=1')).toBe('/a/b');
+    expect($pathnameOf('//cdn.x.com/f.js')).toBe('/f.js');
+  });
+  it('结果为空 → "/"', () => {
+    expect($pathnameOf('')).toBe('/');
+    expect($pathnameOf('https://x.com')).toBe('/');
+    expect($pathnameOf('https://x.com?x=1')).toBe('/');
+    expect($pathnameOf('?x=1')).toBe('/');
+  });
+});
+
+
+describe('auth — cleanup 保留在途刷新状态', () => {
+  it('有在途刷新时 cleanup 不删状态：重装后的新闭包复用同一次刷新', async () => {
+    const tm = makeTM('x');
+    let resolveRefresh!: (v: boolean) => void;
+    const onRefresh = vi.fn(() => new Promise<boolean>((res) => { resolveRefresh = res; }));
+    const { ax, reqHandlers, resHandlers } = makeMockCtx(vi.fn().mockResolvedValue({ status: 200, data: { code: 0 } }));
+    const cleanup = auth({ tokenManager: tm, onRefresh, onAccessExpired: () => { } }).install(ax) as () => void;
+
+    const c1: any = { url: '/api', method: 'get', headers: {} };
+    await reqHandlers[0](c1);
+    const err = { config: c1, response: { status: 401, config: { headers: { Authorization: 'Bearer x' } } } };
+    const p1 = resHandlers[0].r!(err);               // 触发刷新，保持 pending
+    await new Promise((r) => setTimeout(r, 0));
+
+    cleanup();                                        // 模拟 handle 重排：先拆
+    auth({ tokenManager: tm, onRefresh, onAccessExpired: () => { } }).install(ax);   // 再装，应接上在途刷新
+    const c2: any = { url: '/api', method: 'get', headers: {} };
+    let waited = true;
+    const p2 = reqHandlers[1](c2).then(() => { waited = false; });   // 新请求拦截器应等待同一刷新
+    await new Promise((r) => setTimeout(r, 0));
+    expect(waited).toBe(true);                        // 刷新未结束前，新请求仍被挂起
+    resolveRefresh(true);
+    await Promise.all([p1, p2]);
+    expect(waited).toBe(false);
+    expect(onRefresh).toHaveBeenCalledTimes(1);
+  });
+});
+
+
+describe('TokenManager — 存储不可用环境', () => {
+  const realDesc = Object.getOwnPropertyDescriptor(globalThis, 'localStorage');
+  const restore = () => {
+    if (realDesc) Object.defineProperty(globalThis, 'localStorage', realDesc);
+    else delete (globalThis as any).localStorage;
+    vi.resetModules();
+  };
+
+  it('访问 localStorage 抛 SecurityError：模块导入不崩，内存态照常工作', async () => {
+    Object.defineProperty(globalThis, 'localStorage', {
+      configurable: true,
+      get() { throw new DOMException('denied', 'SecurityError'); },
+    });
+    vi.resetModules();
+    try {
+      const { default: TM } = await import('../src/objects/TokenManager');
+      const tm = new TM();
+      expect(tm.accessToken).toBeUndefined();
+      tm.set('a', 'r');
+      expect(tm.accessToken).toBe('Bearer a');
+      expect(tm.refreshToken).toBe('r');
+      tm.clear();
+      expect(tm.accessToken).toBeUndefined();
+    } finally { restore(); }
+  });
+
+  it('getItem/setItem/removeItem 抛错（配额/隐私模式）：构造、写入、清除都不抛，内存态照常更新', async () => {
+    const boom = () => { throw new Error('QuotaExceeded'); };
+    Object.defineProperty(globalThis, 'localStorage', {
+      configurable: true,
+      value: { getItem: boom, setItem: boom, removeItem: boom },
+    });
+    vi.resetModules();
+    try {
+      const { default: TM } = await import('../src/objects/TokenManager');
+      const tm = new TM();
+      expect(() => tm.set('a', 'r')).not.toThrow();
+      expect(tm.accessToken).toBe('Bearer a');
+      expect(() => tm.clear()).not.toThrow();
+      expect(tm.accessToken).toBeUndefined();
+    } finally { restore(); }
   });
 });

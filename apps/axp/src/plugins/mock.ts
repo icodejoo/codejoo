@@ -1,7 +1,7 @@
 
 import type { Plugin } from '../types';
-import { pluginLog, pluginWarn } from '../helper';
-import type { AxiosAdapter, AxiosRequestConfig, AxiosResponse } from 'axios';
+import { pluginLog, pluginWarn, resolveAdapter } from '../helper';
+import type { AxiosRequestConfig, AxiosResponse } from 'axios';
 
 
 const name = 'axp:mock'
@@ -43,7 +43,7 @@ export default function axpMock(
     install(axios) {
       pluginLog(axios.defaults, `[${name}] enabled:${enable} mockUrl:${mockUrl ?? '<none>'}`);
       if (!enable) return;
-      const prev = axios.defaults.adapter as AxiosAdapter;
+      const prev = resolveAdapter(axios);
       axios.defaults.adapter = (config) => {
         const opt = $resolveMock(config, defaults);
         delete config.mock;
@@ -141,9 +141,11 @@ function pick(v: IMockObject | undefined, defaults: IMockOptions): IResolvedMock
 }
 
 
-/** 默认"mock 不存在"判定：HTTP 404，或不可达的网络错误（排除主动取消） / default "mock doesn't exist" check: HTTP 404, or unreachable network error (excludes cancellation) @internal */
+/** 默认"mock 不存在"判定：带响应（含 axios 抛出的 HTTP 错误）只认 404，无响应的网络不可达才回落（排除主动取消） / default "mock doesn't exist" check: with a response (incl. an axios HTTP error) only 404 counts; a response-less network error falls back (cancellation excluded) @internal */
 export function $shouldFallback(info: { response?: AxiosResponse; error?: any }): boolean {
-  if (info.response) return info.response.status === 404;
+  // 默认 validateStatus 下非 2xx 走 error 路径，响应挂在 error.response 上，不能当"不可达"
+  const res = info.response ?? info.error?.response;
+  if (res) return res.status === 404;
   const e = info.error;
   if (e && (e.code === 'ERR_CANCELED' || e.name === 'CanceledError')) return false; // 用户取消，不回落
   return !!e; // 网络层错误（连接被拒/超时等）= mock 不可达

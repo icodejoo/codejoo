@@ -1,7 +1,6 @@
 import type { Plugin } from "../types";
-import { pluginLog } from "../helper";
+import { pluginLog, resolveAdapter } from "../helper";
 import type {
-  AxiosAdapter,
   AxiosInstance,
   AxiosRequestConfig,
   AxiosResponse,
@@ -61,7 +60,7 @@ export default function axpCache({
       const store = new Map<string, ICacheEntry>();
       stores.set(axios, store);
 
-      const prev = axios.defaults.adapter as AxiosAdapter;
+      const prev = resolveAdapter(axios);
       axios.defaults.adapter = (config) => {
         const opt = $resolveCache(config, defaults);
         delete config.cache;
@@ -77,7 +76,8 @@ export default function axpCache({
         const hit = store.get(k);
         if (hit && hit.expiresAt > Date.now()) {
           pluginLog(config, `[${name}] hit: ${k}`);
-          return Promise.resolve($applyClone(hit.response, cloneFn));
+          // 响应壳的 config 换成本次请求的，否则下游（如 cancel）按旧 config 释放资源会漏
+          return Promise.resolve({ ...$applyClone(hit.response, cloneFn), config });
         }
         if (hit) store.delete(k); // 过期，清掉
 

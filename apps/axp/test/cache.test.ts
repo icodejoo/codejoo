@@ -1,4 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import axios from 'axios';
 import type { AxiosAdapter, AxiosRequestConfig, AxiosResponse } from 'axios';
 import cache, { $resolveCache, $resolveKey, $resolveCloneFn, $shallowClone, clearCache, removeCache } from '../src/plugins/cache';
 
@@ -253,5 +254,36 @@ describe('removeCache / clearCache', () => {
         const fakeAx = {} as any;
         expect(removeCache(fakeAx, 'x')).toBe(false);
         expect(clearCache(fakeAx)).toBe(0);
+    });
+});
+
+
+describe('cache — 裸 axios.create()（非函数 adapter）', () => {
+    it('defaults.adapter 是数组时安装不崩，二次同 key 命中缓存', async () => {
+        const net = vi.fn(async (config: any) => mockResp({ n: 1 }, config));
+        // 数组形式的 adapter：与 axios.create() 默认的 ['xhr','http','fetch'] 同属“非函数”分支
+        const ax = axios.create({ adapter: [net as any] });
+        expect(typeof ax.defaults.adapter).not.toBe('function');
+        cache().install(ax);
+        await ax.get('/a', { cache: true, key: 'k' } as any);
+        const r2 = await ax.get('/a', { cache: true, key: 'k' } as any);
+        expect(r2.data).toEqual({ n: 1 });
+        expect(net).toHaveBeenCalledTimes(1);
+    });
+});
+
+
+describe('cache — 命中响应的 config 是本次请求的', () => {
+    it('命中时 response.config 换成本次 config，data 仍共享引用', async () => {
+        const ax = makeMockAxios();
+        const data = { v: 1 };
+        ax.defaults.adapter = vi.fn().mockResolvedValue(mockResp(data, { first: true }));
+        cache().install(ax);
+        const wrapped = ax.defaults.adapter as AxiosAdapter;
+        await wrapped({ cache: true, key: 'k' } as any);
+        const cfg2: any = { cache: true, key: 'k', second: true };
+        const hit = await wrapped(cfg2);
+        expect(hit.config).toBe(cfg2);
+        expect(hit.data).toBe(data);
     });
 });

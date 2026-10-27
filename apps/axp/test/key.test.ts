@@ -282,6 +282,28 @@ describe('$key — 边界字符串碰撞防护', () => {
         const b = k({ url: '/u', method: 'POST', data: { a: 'b1' } });
         expect(a).not.toBe(b);
     });
+
+    it('字符串内容含分隔符：["ab,c"] ≠ ["ab","c"]（长度分帧）', () => {
+        const a = k({ url: '/u', method: 'POST', params: ['ab,c'] });
+        const b = k({ url: '/u', method: 'POST', params: ['ab', 'c'] });
+        expect(a).not.toBe(b);
+    });
+
+    it('对象键含分隔符：{"a:b":"c"} ≠ {a:"b:c"}（长度分帧）', () => {
+        const a = k({ url: '/u', method: 'POST', data: { 'a:b': 'c' } });
+        const b = k({ url: '/u', method: 'POST', data: { a: 'b:c' } });
+        expect(a).not.toBe(b);
+    });
+
+    it('长度分帧不破坏等价性：键序无关、同内容同 key、采样模式同样防碰撞', () => {
+        const x = k({ url: '/u', method: 'POST', data: { a: 'x', b: 'y' } });
+        const y = k({ url: '/u', method: 'POST', data: { b: 'y', a: 'x' } });
+        expect(x).toBe(y);
+        const long = 'z'.repeat(100);
+        const s1 = $key({ url: '/u', method: 'POST', params: [long + ',q'] } as IHttpOptions, false, undefined, true);
+        const s2 = $key({ url: '/u', method: 'POST', params: [long, 'q'] } as IHttpOptions, false, undefined, true);
+        expect(s1).not.toBe(s2);
+    });
 });
 
 

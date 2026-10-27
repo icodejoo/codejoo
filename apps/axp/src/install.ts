@@ -8,8 +8,8 @@ import { create } from './core';
  * 顺序仍是硬性约束：axios 把 request/response 拦截器分成 LIFO/FIFO（见 README "顺序语义"），所以 `install()` 调用顺序不是简单地"按想要的执行顺序列出"——有些插件必须按与预期执行顺序*相反*的顺序安装。`Axp.install` 把数组硬编码好，调用方无需自己推理：
  *
  *   - **`logger` 永远最先**——它没有拦截器，只在安装时同步设置 `axios.defaults.debug`/`.logger`，让其他插件安装期的日志已能读到这个开关。
- *   - **Request**（LIFO）：安装 `[auth, cancel, key, filter, repath]` 执行顺序为 `repath → filter → key → cancel → auth`。`repath` 先替换路径变量；`filter` 要在 `key` 哈希前剔除空字段（顺序装反是最容易犯的错，详见 key.ts/filter.ts）；`auth` 最后注入 token。
- *   - **Response**（FIFO）：安装 `[auth, cancel, retry, notify, normalize]` 即按此顺序执行。`auth` 早于 `retry` 看到 401，刷新+重放先于 `retry` 消耗次数；`notify` 在 `normalize` 前运行，汇报原始 HTTP 结果而非已 reject 的 `ApiError`；`normalize` 最后评判最终响应。
+ *   - **Request**（LIFO）：安装 `[auth, key, filter, repath, cancel]` 执行顺序为 `cancel → repath → filter → key → auth`。`repath` 先替换路径变量；`filter` 要在 `key` 哈希前剔除空字段（顺序装反是最容易犯的错，详见 key.ts/filter.ts）；`auth` 最后注入 token。
+ *   - **Response**（FIFO）：安装 `[auth, retry, cancel, notify, normalize]` 即按此顺序执行。`auth` 早于 `retry` 看到 401，刷新+重放先于 `retry` 消耗次数；`cancel` 排在 `retry` 之后：retry 等待/重发期间 controller 仍在追踪中，`cancelAll` 能中止它，等重试最终落定才释放；`notify` 在 `normalize` 前运行，汇报原始 HTTP 结果而非已 reject 的 `ApiError`；`normalize` 最后评判最终响应。
  *   - **Adapter 组合**（后装的包在最外层）：`[cache, share, mock, loading]`——`mock` 包住 `cache`/`share`，让自己的探测与 fallback dispatch 仍经过它们；`loading` 包住一切，每个逻辑操作只触发一对 show/hide。
  *
  * `envs` 同样没有拦截器，位置除了要在 `logger` 之后都无关紧要。
@@ -19,8 +19,8 @@ import { create } from './core';
  * Order is still a hard constraint: axios splits request/response interceptors into LIFO/FIFO (see README "顺序语义"), so the `install()` call order isn't just "list them in the order you want them to run" — some pairs must be installed *backwards* from their intended execution order. `Axp.install` hard-codes the array so callers never have to reason about this:
  *
  *   - **`logger` always first** — no interceptors, just sets `axios.defaults.debug`/`.logger` synchronously so other plugins' install-time logs can already see it.
- *   - **Request** (LIFO): installing `[auth, cancel, key, filter, repath]` executes as `repath → filter → key → cancel → auth`. `repath` substitutes path vars first; `filter` strips empty fields before `key` hashes them (getting this pair backwards is the easiest mistake, see key.ts/filter.ts); `auth` injects the token last.
- *   - **Response** (FIFO): installing `[auth, cancel, retry, notify, normalize]` executes in that order. `auth` sees a 401 before `retry`, so refresh+replay happens before `retry` burns attempts; `notify` runs before `normalize` so it reports the raw HTTP outcome, not `normalize`'s already-rejected `ApiError`; `normalize` judges the truly final response last.
+ *   - **Request** (LIFO): installing `[auth, key, filter, repath, cancel]` executes as `cancel → repath → filter → key → auth`. `repath` substitutes path vars first; `filter` strips empty fields before `key` hashes them (getting this pair backwards is the easiest mistake, see key.ts/filter.ts); `auth` injects the token last.
+ *   - **Response** (FIFO): installing `[auth, retry, cancel, notify, normalize]` executes in that order. `auth` sees a 401 before `retry`, so refresh+replay happens before `retry` burns attempts; `cancel` sits after `retry` so the controller stays tracked while retry waits/resends — `cancelAll` can still abort it, and it is only released once the retry settles; `notify` runs before `normalize` so it reports the raw HTTP outcome, not `normalize`'s already-rejected `ApiError`; `normalize` judges the truly final response last.
  *   - **Adapter composition** (last-installed wraps outermost): `[cache, share, mock, loading]` — `mock` wraps `cache`/`share` so its own probe/fallback dispatches still pass through them; `loading` wraps everything so each logical operation fires exactly one show/hide pair.
  *
  * `envs` also has no interceptors; its position is irrelevant besides being after `logger`.
@@ -58,11 +58,11 @@ export const Axp = {
       plugins.logger,
       plugins.envs,
       plugins.auth,
-      plugins.cancel,
       plugins.key,
       plugins.filter,
       plugins.repath,
       plugins.retry,
+      plugins.cancel,
       plugins.notify,
       plugins.normalize,
       plugins.cache,
@@ -71,18 +71,27 @@ export const Axp = {
       plugins.loading,
     ];
     const list: Plugin[] = ordered.filter((p): p is Plugin => !!p);
-    const cleanups = new Map<Plugin, PluginCleanup | undefined>();
-
-    const installAll = (): void => {
-      for (const p of list) cleanups.set(p, p.install(axios) ?? undefined);
-    };
-    // 按倒序拆卸，使包装 adapter 的插件在恢复时正好还原到前一个插件保存的状态，与安装顺序对称。
+    // 与 `list` 下标对齐的 cleanup 表：同一插件对象出现多次也互不覆盖。
     //
-    // Reverse order so an adapter-wrapping plugin's restore unwinds onto whatever its predecessor saved, mirroring install order symmetrically.
+    // Cleanups aligned by index with `list`, so the same plugin object appearing more than once never overwrites itself.
+    const cleanups: Array<PluginCleanup | void> = [];
+
+    // 按倒序拆卸已装的插件，使包装 adapter 的插件在恢复时正好还原到前一个插件保存的状态，与安装顺序对称。
+    //
+    // Tears down installed plugins in reverse so an adapter-wrapping plugin's restore unwinds onto whatever its predecessor saved, mirroring install order symmetrically.
     const teardownAll = (): void => {
-      for (const p of [...list].reverse()) {
-        cleanups.get(p)?.();
-        cleanups.delete(p);
+      for (let i = cleanups.length - 1; i >= 0; i--) cleanups[i]?.();
+      cleanups.length = 0;
+    };
+    // 按 `list` 顺序逐个安装；任一抛错则先倒序拆掉已装的再 rethrow，不留半装状态。
+    //
+    // Installs in `list` order; if any throws, tears down what's already installed (reversed) before rethrowing, leaving no half-installed state.
+    const installAll = (): void => {
+      try {
+        for (const p of list) cleanups.push(p.install(axios));
+      } catch (e) {
+        teardownAll();
+        throw e;
       }
     };
     const checkAnchor = (anchor: Plugin): number => {
@@ -92,12 +101,19 @@ export const Axp = {
       }
       return idx;
     };
-    // 整体拆卸后按新的 `list` 顺序重装，直接操作各插件自己的 install()/cleanup()（不经过 Core.use()/eject()）；原因见文件头部文档。
+    // 整体拆卸后按新的 `list` 顺序重装，直接操作各插件自己的 install()/cleanup()（不经过 Core.use()/eject()）；原因见文件头部文档。新插件装不上时把它移出 `list`、恢复原集合再 rethrow。
     //
-    // Full teardown + reinstall in the new `list` order, operating directly on each plugin's own install()/cleanup() (not via Core.use()/eject()); see the file doc for why.
-    const reinstall = (): void => {
+    // Full teardown + reinstall in the new `list` order, operating directly on each plugin's own install()/cleanup() (not via Core.use()/eject()); see the file doc for why. If the new plugin fails to install, it's removed from `list`, the original set is restored, then the error is rethrown.
+    const insertAt = (idx: number, p: Plugin): void => {
       teardownAll();
-      installAll();
+      list.splice(idx, 0, p);
+      try {
+        installAll();
+      } catch (e) {
+        list.splice(idx, 1);
+        installAll();
+        throw e;
+      }
     };
 
     installAll();
@@ -113,25 +129,25 @@ export const Axp = {
         list.length = 0;
       },
       prepend(p: Plugin): void {
-        list.unshift(p);
-        reinstall();
+        insertAt(0, p);
       },
       append(p: Plugin): void {
-        // 纯追加不需要重排——普通的 install() 调用，就像 axios 原生只能追加的拦截器注册。
+        // 纯追加不需要重排——普通的 install() 调用，就像 axios 原生只能追加的拦截器注册；装不上则撤销入列再 rethrow。
         //
-        // Pure append needs no reordering — a plain install() call, same as axios's own append-only interceptor registration.
+        // Pure append needs no reordering — a plain install() call, same as axios's own append-only interceptor registration; on failure the plugin is un-listed and the error rethrown.
         list.push(p);
-        cleanups.set(p, p.install(axios) ?? undefined);
+        try {
+          cleanups.push(p.install(axios));
+        } catch (e) {
+          list.pop();
+          throw e;
+        }
       },
       insertBefore(anchor: Plugin, p: Plugin): void {
-        const idx = checkAnchor(anchor);
-        list.splice(idx, 0, p);
-        reinstall();
+        insertAt(checkAnchor(anchor), p);
       },
       insertAfter(anchor: Plugin, p: Plugin): void {
-        const idx = checkAnchor(anchor);
-        list.splice(idx + 1, 0, p);
-        reinstall();
+        insertAt(checkAnchor(anchor) + 1, p);
       },
     };
   },

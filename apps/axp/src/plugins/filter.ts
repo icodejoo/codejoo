@@ -22,6 +22,11 @@ export default function axpFilter({ enable = true, predicate, ignoreKeys, ignore
                 /** 解析过滤选项并过滤 params/data，记录丢弃日志 / resolves filter options, filters params/data, logs drops */
                 function $normalize(config) {
                     const opts = $resolveOptions(config, defaults);
+                    // 函数形式解出 falsy / enable:false：本请求跳过过滤（仍清掉 config.filter）
+                    if (!opts) {
+                        delete config.filter;
+                        return config;
+                    }
                     const droppedParams: TDroppedKV[] = [];
                     const droppedData: TDroppedKV[] = [];
                     if (isObject(config.params)) config.params = $filter(config.params, opts, droppedParams);
@@ -53,16 +58,20 @@ function isEnabled(f: unknown): boolean {
 /**
  * 解析请求级 config.filter（支持 MaybeFun + 对象/布尔），与插件级 defaults 合并。优先级：请求级显式字段 > 插件级 defaults > 内置默认。
  *
- * Resolves the request-level `config.filter` (supports `MaybeFun` + object/boolean) and merges with plugin-level `defaults`. Priority: explicit request field > plugin `defaults` > built-in default.
+ * Resolves the request-level `config.filter` (supports `MaybeFun` + object/boolean) and merges with plugin-level `defaults`. Priority: explicit request field > plugin `defaults` > built-in default. Returns `null` when the (function-resolved) value is falsy or an object with `enable: false`, meaning this request skips filtering.
  *
  * @internal exported for unit tests
+ * @param config 请求配置 / the request config
+ * @param defaults 插件级默认配置 / plugin-wide defaults
+ * @returns 生效的过滤选项，或 null 表示本请求跳过过滤 / the effective options, or null meaning filtering is skipped
  */
 export function $resolveOptions(
     config: AxiosRequestConfig,
     defaults: IFilterOptions,
-): Required<Pick<IFilterOptions, 'predicate'>> & Pick<IFilterOptions, 'ignoreKeys' | 'ignoreValues'> {
+): (Required<Pick<IFilterOptions, 'predicate'>> & Pick<IFilterOptions, 'ignoreKeys' | 'ignoreValues'>) | null {
     let f = config.filter;
     if (typeof f === 'function') f = f(config);
+    if (!f || (typeof f === 'object' && f.enable === false)) return null;
     const override: IFilterOptions = (f && typeof f === 'object') ? f : {};
     return {
         predicate: override.predicate ?? defaults.predicate ?? defaultPredicate,
@@ -92,7 +101,7 @@ export function $filter(
         if (!Object.prototype.hasOwnProperty.call(obj, key)) continue;
         const val = obj[key];
         if (hasKeys && ignoreKeys!.includes(key)) { out[key] = val; continue; }
-        if (hasVals && matchesValue(val, ignoreValues!)) { out[key] = val; continue; }
+        if (hasVals && ignoreValues!.includes(val)) { out[key] = val; continue; }
         if (predicate([key, val])) {
             dropped?.push([key, val]);
             continue;
@@ -112,18 +121,6 @@ export function defaultPredicate(kv: [key: string, value: any]): boolean {
     const v = kv[1];
     if (v == null || Number.isNaN(v)) return true;
     if (typeof v === 'string' && v.trim() === '') return true;
-    return false;
-}
-
-
-/** ignoreValues 命中检测（=== 比较 + NaN 特例）/ ignoreValues match check (`===` comparison, NaN special case) */
-function matchesValue(target: any, list: any[]): boolean {
-    const targetIsNaN = Number.isNaN(target);
-    for (let i = 0; i < list.length; i++) {
-        const v = list[i];
-        if (v === target) return true;
-        if (targetIsNaN && Number.isNaN(v)) return true;
-    }
     return false;
 }
 

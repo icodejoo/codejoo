@@ -1,7 +1,10 @@
 import { describe, it, expect, vi } from 'vitest';
+import axios from 'axios';
 import type { AxiosAdapter, AxiosRequestConfig, AxiosResponse, InternalAxiosRequestConfig } from 'axios';
-import {
+import cache from '../src/plugins/cache';
+import share, {
     $resolvePolicy,
+    $createEntry,
     $end,
     $race,
     $start,
@@ -292,5 +295,87 @@ describe('$race', () => {
         const p = $race(adp, map, 'k1', cfg());
         pending[0].resolve(mockResp('alone'));
         await expect(p).resolves.toMatchObject({ data: 'alone' });
+    });
+});
+
+
+// ───────────────────────────────────────────────────────────────────────────
+//  兼容性 / 异常 / config 归属
+// ───────────────────────────────────────────────────────────────────────────
+
+describe('share — 不依赖 Promise.withResolvers（ES2024）', () => {
+    it('环境缺少 Promise.withResolvers 时 $createEntry 照常工作', async () => {
+        const orig = (Promise as any).withResolvers;
+        (Promise as any).withResolvers = undefined;
+        try {
+            const map = new Map();
+            const e = $createEntry(map, 'k');
+            expect(map.get('k')).toBe(e);
+            e.resolve(mockResp('ok'));
+            await expect(e.promise).resolves.toMatchObject({ data: 'ok' });
+            await Promise.resolve();
+            expect(map.has('k')).toBe(false); // settle 后自动清理
+        } finally {
+            (Promise as any).withResolvers = orig;
+        }
+    });
+});
+
+
+describe('share — prev 同步抛错不会让条目永久挂起', () => {
+    const syncThrowOnce = () => {
+        let first = true;
+        return vi.fn((_config: any) => {
+            if (first) { first = false; throw new Error('sync boom'); }
+            return Promise.resolve(mockResp('ok'));
+        }) as unknown as AxiosAdapter;
+    };
+
+    it.each([
+        ['start', $start],
+        ['end', $end],
+        ['race', $race],
+    ] as const)('%s：首次同步抛错 → reject；同 key 第二次请求拿到结果', async (_name, run) => {
+        const map = new Map();
+        const adp = syncThrowOnce();
+        await expect(run(adp, map, 'k', cfg())).rejects.toThrow('sync boom');
+        const r = await run(adp, map, 'k', cfg());
+        expect(r.data).toBe('ok');
+    });
+
+    it('install 级：内层 cache 的 key 函数同步抛错后，同 key 后续请求不挂起（同时覆盖裸 axios.create()）', async () => {
+        const net = vi.fn(async (config: any) => ({ status: 200, statusText: 'OK', headers: {}, config, data: 'real' }) as any);
+        const ax = axios.create({ adapter: [net as any] });
+        let first = true;
+        cache({ key: () => { if (first) { first = false; throw new Error('key boom'); } return 'ck'; } }).install(ax);
+        share().install(ax);
+        const opt = { key: 'same', share: true, cache: true } as any;
+        await expect(ax.get('/x', { ...opt })).rejects.toThrow('key boom');
+        const r = await Promise.race([
+            ax.get('/x', { ...opt }),
+            new Promise((_, rej) => setTimeout(() => rej(new Error('hung')), 500)),
+        ]) as any;
+        expect(r.data).toBe('real');
+    });
+});
+
+
+describe('share — 共享响应按调用方换上各自的 config', () => {
+    it('并发同 key 的每个 caller 拿到的 response.config 就是自己的 config，data 共享', async () => {
+        const data = { v: 1 };
+        const ax: any = {
+            defaults: {
+                adapter: vi.fn(async () => ({ status: 200, statusText: 'OK', headers: {}, config: { first: true }, data })),
+            },
+        };
+        share().install(ax);
+        const wrapped = ax.defaults.adapter as AxiosAdapter;
+        const c1: any = { key: 'k' };
+        const c2: any = { key: 'k' };
+        const [r1, r2] = await Promise.all([wrapped(c1), wrapped(c2)]);
+        expect(r1.config).toBe(c1);
+        expect(r2.config).toBe(c2);
+        expect(r1.data).toBe(data);
+        expect(r2.data).toBe(data);
     });
 });

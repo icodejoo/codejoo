@@ -75,7 +75,7 @@ describe('$filter — 条目级过滤', () => {
 describe('$resolveOptions — 请求级/插件级合并', () => {
     it('请求级函数被调用解包', () => {
         const fnReq = (_c: any) => ({ predicate: ([, v]: any) => v === 'drop' });
-        const out = $resolveOptions({ filter: fnReq } as any, {});
+        const out = $resolveOptions({ filter: fnReq } as any, {})!;
         expect(out.predicate(['k', 'drop'])).toBe(true);
         expect(out.predicate(['k', 'keep'])).toBe(false);
     });
@@ -83,18 +83,18 @@ describe('$resolveOptions — 请求级/插件级合并', () => {
     it('请求级对象覆盖插件级', () => {
         const pluginPred = () => false;
         const reqPred = () => true;
-        const out = $resolveOptions({ filter: { predicate: reqPred } } as any, { predicate: pluginPred });
+        const out = $resolveOptions({ filter: { predicate: reqPred } } as any, { predicate: pluginPred })!;
         expect(out.predicate).toBe(reqPred);
     });
 
     it('请求级缺失 → 用插件级；都缺 → defaultPredicate', () => {
         const pluginPred = () => true;
-        expect($resolveOptions({ filter: true } as any, { predicate: pluginPred }).predicate).toBe(pluginPred);
-        expect($resolveOptions({ filter: true } as any, {}).predicate).toBe(defaultPredicate);
+        expect($resolveOptions({ filter: true } as any, { predicate: pluginPred })!.predicate).toBe(pluginPred);
+        expect($resolveOptions({ filter: true } as any, {})!.predicate).toBe(defaultPredicate);
     });
 
     it('ignoreKeys / ignoreValues 请求级优先回退插件级', () => {
-        const out = $resolveOptions({ filter: { ignoreKeys: ['x'] } } as any, { ignoreValues: [0] });
+        const out = $resolveOptions({ filter: { ignoreKeys: ['x'] } } as any, { ignoreValues: [0] })!;
         expect(out.ignoreKeys).toEqual(['x']);
         expect(out.ignoreValues).toEqual([0]);
     });
@@ -125,5 +125,35 @@ describe('filter — 集成（拦截器 + runWhen）', () => {
         expect(runWhens[0]({ filter: '' })).toBe(false);
         expect(runWhens[0]({ filter: true })).toBe(true);
         expect(runWhens[0]({ filter: { predicate: () => true } })).toBe(true);
+    });
+});
+
+
+describe('filter — 函数形式解出 falsy / enable:false → 跳过过滤', () => {
+    it('$resolveOptions：函数返回 false / undefined / enable:false 对象 → null；其余照常解析', () => {
+        expect($resolveOptions({ filter: () => false } as any, {})).toBeNull();
+        expect($resolveOptions({ filter: () => undefined } as any, {})).toBeNull();
+        expect($resolveOptions({ filter: () => ({ enable: false }) } as any, {})).toBeNull();
+        expect($resolveOptions({ filter: { enable: false } } as any, {})).toBeNull();
+        expect($resolveOptions({ filter: () => true } as any, {})!.predicate).toBe(defaultPredicate);
+        expect($resolveOptions({ filter: () => ({}) } as any, {})!.predicate).toBe(defaultPredicate);
+    });
+
+    it('config.filter = () => false：不过滤 params/data，仍 delete config.filter', () => {
+        const { axios, reqHandlers } = makeMockAxios();
+        filter().install(axios);
+        const config: any = { url: '/x', filter: () => false, params: { a: 1, b: '' }, data: { c: null } };
+        reqHandlers[0](config);
+        expect(config.params).toEqual({ a: 1, b: '' });
+        expect(config.data).toEqual({ c: null });
+        expect(config.filter).toBeUndefined();
+    });
+
+    it('config.filter = () => ({ enable:false })：同样跳过', () => {
+        const { axios, reqHandlers } = makeMockAxios();
+        filter().install(axios);
+        const config: any = { url: '/x', filter: () => ({ enable: false }), params: { b: '' } };
+        reqHandlers[0](config);
+        expect(config.params).toEqual({ b: '' });
     });
 });
