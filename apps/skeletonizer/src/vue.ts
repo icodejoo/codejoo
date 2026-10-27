@@ -37,24 +37,35 @@ export const vSkeleton: Directive<HTMLElement, SkzBinding> = {
 
 /**
  * 组合式 API：随 loading 开关目标元素的骨架态，卸载时自动关闭。
+ * 目标元素晚挂载（v-if）或被替换时会自动跟随：旧元素的骨架撤掉，新元素按当前 loading 对齐。
  * @param target 目标元素的模板引用
  * @param loading 是否加载中
- * @param opts 骨架选项
+ * @param opts 骨架选项（含自定义扩展的额外选项）
  * @example
  * const el = ref<HTMLElement>();
  * useSkeleton(el, loading, { effect: 'pulse' });
  */
 export function useSkeleton(target: Ref<HTMLElement | null | undefined>, loading: Ref<boolean>, opts: EnableOptions = {}): void {
+  // 上一次对齐过的元素：目标被替换或置空时靠它撤掉旧元素
+  let current: HTMLElement | null | undefined;
   // 按当前 loading 把目标元素的骨架态对齐
   const sync = (): void => {
-    if (target.value) toggle(target.value, loading.value, opts);
+    const el = target.value;
+    if (current && current !== el) disable(current);
+    current = el;
+    if (el) toggle(el, loading.value, opts);
   };
-  onMounted(sync);
-  watch(loading, sync);
-  onBeforeUnmount(() => target.value && disable(target.value));
+  // flush: post：等 DOM 更新后再对齐，v-if 挂载出的目标此时 ref 已经有值；
+  // immediate：setup 时先跑一次（目标还没挂上就什么也不做，非模板 ref 已有元素则直接对齐），
+  // 模板 ref 在挂载中被赋值会再触发一次 post watcher，所以不再另挂 onMounted，避免挂载时同步两次
+  watch([target, loading], sync, { flush: "post", immediate: true });
+  onBeforeUnmount(() => current && disable(current));
 }
 
-/** SkzBox 组件的 props：选项部分继承 EnableOptions，导入完整版后自动多出 text / shimmerMode / engine / fallback */
+/**
+ * SkzBox 组件的 props：选项部分继承 EnableOptions，导入完整版后自动多出 text / shimmerMode / engine / fallback。
+ * 注意：Vue 只透传下面声明过的 props，自定义扩展的额外选项不会传给 enable，请改用 useSkeleton 或 v-skeleton。
+ */
 export interface SkzBoxProps extends EnableOptions {
   /** 是否加载中 */
   loading?: boolean;
@@ -66,6 +77,7 @@ export interface SkzBoxProps extends EnableOptions {
  * 组件版：`<SkzBox :loading="loading" effect="pulse">...</SkzBox>`，渲染一个包裹元素；as 变化换了元素时，旧元素的骨架会撤掉，新元素重新挂上。
  * 注意：模板里写 `<SkzBox>`；写成 `<skz>` 会解析成原生自定义元素而不是这个组件。
  * 类型显式标成 DefineComponent<SkzBoxProps>：props 类型跟着 EnableOptions 走，不会在构建时被固化。
+ * 自定义扩展的额外选项在 SkzBox 上不会透传（未声明的属性进的是 attrs），请用 useSkeleton 或 v-skeleton 传。
  * @example
  * <SkzBox :loading="loading"><UserCard :user="user" /></SkzBox>
  */
@@ -93,7 +105,7 @@ export const SkzBox = defineComponent({
     const root = ref<HTMLElement>();
     // 上一次对齐过的元素：as 变化换了 DOM 元素时，靠它撤掉旧元素（不依赖 watch 的 old 值，多次变化合并触发时也不会漏）
     let current: HTMLElement | undefined;
-    // 只在 props 变化时同步（getter 里整体拷贝 props 以追踪全部字段（不用对象展开：es2015 目标下会多带 helper），含自定义扩展的），插槽内容重渲染不会触发
+    // 只在 props 变化时同步（getter 里整体拷贝 props 以追踪全部已声明字段（不用对象展开：es2015 目标下会多带 helper）；自定义扩展的选项不在 props 里，不会透传），插槽内容重渲染不会触发
     const sync = (): void => {
       const el = root.value;
       if (current && current !== el) disable(current);

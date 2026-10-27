@@ -68,6 +68,25 @@ beforeAll(() => {
   defineSkzBox();
 });
 
+describe("defineSkzBox 多标签名", () => {
+  it("用不同标签名多次调用不抛（同一构造函数只能注册一次，之后用子类），同名重复调用也安全；各标签都可用", () => {
+    expect(() => {
+      defineSkzBox("skz-a");
+      defineSkzBox("skz-b");
+      defineSkzBox("skz-b");
+    }).not.toThrow();
+    for (const tag of ["skz-a", "skz-b"]) {
+      const host = document.createElement(tag);
+      host.setAttribute(ATTR_LOADING, "");
+      const child = document.createElement(TAG_DIV);
+      host.appendChild(child);
+      document.body.appendChild(host);
+      expect(child.hasAttribute(ROOT_ATTR)).toBe(true);
+      host.remove();
+    }
+  });
+});
+
 describe("SkzBox", () => {
   beforeEach(() => {
     document.body.innerHTML = "";

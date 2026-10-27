@@ -47,6 +47,14 @@ it("number：固定位数", () => {
   expect(Bone.number()).toBe("█".repeat(3));
 });
 
+it("number：非有限数与非正数返回空串，Infinity 不抛 RangeError", () => {
+  expect(Bone.number(Infinity)).toBe("");
+  expect(Bone.number(-Infinity)).toBe("");
+  expect(Bone.number(NaN)).toBe("");
+  expect(Bone.number(0)).toBe("");
+  expect(Bone.number(-2)).toBe("");
+});
+
 it("image：无参返回 1px base64 gif", () => {
   expect(Bone.image()).toBe(Bone.GIF_1PX);
   expect(Bone.GIF_1PX.startsWith("data:image/gif;base64,")).toBe(true);
@@ -60,6 +68,14 @@ it("image：传宽高返回带尺寸的 svg；非法参数退回 gif", () => {
   expect(svg).toMatch(/height="80"/);
   expect(Bone.image(0, 80)).toBe(Bone.GIF_1PX);
   expect(Bone.image(-1)).toBe(Bone.GIF_1PX);
+});
+
+it("image：宽高含 Infinity / NaN 时退回 gif，不生成含 Infinity 的 svg", () => {
+  expect(Bone.image(Infinity)).toBe(Bone.GIF_1PX);
+  expect(Bone.image(48, Infinity)).toBe(Bone.GIF_1PX);
+  expect(Bone.image(Infinity, 48)).toBe(Bone.GIF_1PX);
+  expect(Bone.image(NaN, 48)).toBe(Bone.GIF_1PX);
+  expect(Bone.image(48, NaN)).toBe(Bone.GIF_1PX);
 });
 
 it("image：只传 w 时 h 默认等于 w，得到方图", () => {

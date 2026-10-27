@@ -27,6 +27,10 @@ interface FitState {
   ro: ResizeObserver | null;
   /** 视口 resize 监听（边界是视口时） */
   onResize: (() => void) | null;
+  /** 开启前根上原有的内联 max-height 值，空串表示没有；关闭时还原 */
+  origMaxHeight: string;
+  /** 原有内联 max-height 的优先级（"important" 或空串） */
+  origPriority: string;
 }
 
 /** 已开启 fit 的根 -> 运行状态 */
@@ -184,7 +188,15 @@ export function enableFit(root: HTMLElement): void {
   let state = active.get(root);
   if (state) stopWatching(state);
   else {
-    state = { boundary: null, hidden: [], raf: 0, ro: null, onResize: null };
+    state = {
+      boundary: null,
+      hidden: [],
+      raf: 0,
+      ro: null,
+      onResize: null,
+      origMaxHeight: root.style.getPropertyValue(MAX_HEIGHT_PROP),
+      origPriority: root.style.getPropertyPriority(MAX_HEIGHT_PROP),
+    };
     active.set(root, state);
   }
   const s = state;
@@ -211,7 +223,7 @@ export function enableFit(root: HTMLElement): void {
 }
 
 /**
- * 关闭 fit：清内联 max-height（style 空了就删掉 style 属性）、移除全部隐藏标记和 skz-fit 属性、断开监听。没开启过也安全。
+ * 关闭 fit：还原开启前根上原有的内联 max-height（原本没有则清掉，style 空了就删掉 style 属性）、移除全部隐藏标记和 skz-fit 属性、断开监听。没开启过也安全。
  * @param root 骨架根元素
  * @example
  * disableFit(document.querySelector('#list'));
@@ -222,8 +234,11 @@ export function disableFit(root: HTMLElement): void {
     stopWatching(state);
     clearHidden(state);
     active.delete(root);
-    root.style.removeProperty(MAX_HEIGHT_PROP);
-    dropEmptyStyle(root);
+    if (state.origMaxHeight) root.style.setProperty(MAX_HEIGHT_PROP, state.origMaxHeight, state.origPriority);
+    else {
+      root.style.removeProperty(MAX_HEIGHT_PROP);
+      dropEmptyStyle(root);
+    }
     root.removeAttribute(FIT_ATTR);
   }
 }

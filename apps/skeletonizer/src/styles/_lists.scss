@@ -87,6 +87,11 @@ $mark-text: "[skz-text]:where(:not([skz-ignore], #{sk-join($text-skip-items)}))"
 /// 排除条件同 $mark-text 的口径，包在 :where() 里不抬优先级；前面接根选择器 + 空格，天然排除根自身。
 $mark-parent: ":where(:not([skz-ignore], #{sk-join($text-skip-items)})):has(> #{$mark-text})";
 
+/// 排除忽略区自身及其子树的限定，接在目标选择器后面（元素本身不是 skz-ignore、也不在 skz-ignore 里面）。
+/// 优先级与 :not([skz-ignore]) 相同（:not() 取括号里最高的一项，[skz-ignore] * 的优先级是 (0,1,0)）。
+/// 需要 :not() 接受复杂选择器：Chrome 88+ / Safari 9+ / Firefox 84+，与 tier0 的 :is() 底线一致。
+$not-ignored: ":not([skz-ignore], [skz-ignore] *)";
+
 /// 用 :is 收拢标签清单，返回单个选择器：#{$prefix} :is(#{$items}):not([skz-ignore])
 @function sk-is-sel($prefix, $items) {
   @return "#{$prefix} :is(#{sk-join($items)}):not([skz-ignore])";

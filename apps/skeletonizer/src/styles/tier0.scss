@@ -11,26 +11,25 @@
   -webkit-text-fill-color: transparent !important;
 }
 
-/* 媒体与控件 -> 背景色骨头（图片靠透明 mock 图让背景透出来） */
-#{sk-is-sel($auto, $media-tags)} {
+/* 媒体与控件 -> 背景色骨头（图片靠透明 mock 图让背景透出来）。
+ * 忽略区自身及其子树都不处理：忽略区的撤销规则只撤背景和文字色，撤不了 object-*，真实图片会被推出盒外看不见 */
+#{$auto} :is(#{sk-join($media-tags)})#{$not-ignored} {
   @include sk-bone;
   -webkit-text-fill-color: transparent !important;
   /* 把真实图片/视频/canvas 的内容推出盒子外（替换元素内容会被裁在盒内），背景色才露得出来 */
   object-fit: none !important;
   object-position: 99999px 0 !important;
 }
-/* svg 内部藏起来，背景由 svg 自己画 */
-#{$auto} svg:not([skz-ignore]) * {
+/* svg 内部藏起来，背景由 svg 自己画；忽略区里的 svg 保持原样（优先级高于忽略区的 visible 规则，所以要在这里排除） */
+#{$auto} svg#{$not-ignored} * {
   visibility: hidden !important;
 }
 
 /* button 是控件，整块当一块骨头（见 $media-tags）：内部的 span / 图标一并藏起来，不在按钮块上再叠小骨头。
- * 忽略区里的 button 自己不当骨头，后代恢复可见（同优先级，写在后面） */
-#{$auto} button:not([skz-ignore]) * {
+ * 两端都排除忽略区：忽略区里的 button 不当骨头，按钮里的忽略区子树（如 <span skz-ignore>）保持可见；
+ * 因为本规则压根不命中它们，所以不需要再写"恢复可见"的规则 */
+#{$auto} button#{$not-ignored} *#{$not-ignored} {
   visibility: hidden !important;
-}
-#{$auto} [skz-ignore] button * {
-  visibility: visible !important;
 }
 
 /* 骨头圆角：用 :where() 把优先级降到 0，元素自己写了 border-radius（如圆形头像）就保留它的形状 */

@@ -59,6 +59,12 @@ const auto = (mod = ""): string => `:is([skz]${mod}:where([skz-auto]), [skz]${mo
 /** 无限定的推导区域前缀 */
 const AUTO = auto();
 
+/** 排除忽略区自身及其子树的限定（接在目标选择器后面） */
+const NOT_IGNORED = ":not([skz-ignore], [skz-ignore] *)";
+
+/** 媒体与控件标签清单（整块骨头规则的 :is() 内容） */
+const MEDIA_TAGS = "img, video, canvas, picture, iframe, svg, input, textarea, select, button";
+
 /** 非 leaf 根的限定（完整版） */
 const NONLEAF_MOD = ":not([skz-text-mode=leaf])";
 
@@ -380,13 +386,13 @@ describe("base 的推导规则", () => {
   it("button 是控件：走整块骨头规则，不在文字类（clip / 圆角）里，后代藏起来且不画下划线", () => {
     const out = css("base");
     // 整块骨头规则（media 那条）的选择器里有 button，文字类的 :is() 清单里没有
-    const media = out.indexOf(`${AUTO} :is(img, video, canvas, picture, iframe, svg, input, textarea, select, button):not([skz-ignore]) {`);
+    const media = out.indexOf(`${AUTO} :is(${MEDIA_TAGS})${NOT_IGNORED} {`);
     expect(media).toBeGreaterThanOrEqual(0);
     expect(out.slice(media, out.indexOf("}", media))).toContain("object-fit: none");
     expect(out).not.toMatch(/:is\(p, span[^)]*button/);
-    // 后代藏起来；忽略区里的按钮后代恢复可见
-    expect(out).toContain(`${AUTO} button:not([skz-ignore]) * {\n  visibility: hidden !important`);
-    expect(out).toContain(`${AUTO} [skz-ignore] button * {\n  visibility: visible !important`);
+    // 后代藏起来；选择器两端都排除忽略区（忽略区里的按钮、按钮里的忽略区子树都不命中），所以不再需要恢复可见的规则
+    expect(out).toContain(`${AUTO} button${NOT_IGNORED} *${NOT_IGNORED} {\n  visibility: hidden !important`);
+    expect(out).not.toContain("[skz-ignore] button *");
     // 圆角：媒体与控件共用一条 :where 规则（含 button / canvas；元素自己写了 border-radius 就保留）
     expect(out).toContain(`:where(${AUTO} :is(img, video, canvas, picture, iframe, svg, input, textarea, select, button):not([skz-ignore])) {\n  border-radius: var(--skz-radius)`);
     expect(out).not.toContain(`:where(${AUTO} button:not([skz-ignore]))`);
@@ -824,9 +830,62 @@ const decls = (body: string): Map<string, string> => {
   return m;
 };
 
+describe("忽略区保持原样：推导规则只命中忽略区之外的元素，可见规则盖过骨头 / 叶子的后代隐藏", () => {
+  it("媒体与控件整块骨头（含 object-position 推出盒外）：排除忽略区自身及子树，忽略区里的图片不被推走", () => {
+    for (const name of ["core", "base", "all"]) {
+      const out = css(name);
+      const media = out.indexOf(`${AUTO} :is(${MEDIA_TAGS})${NOT_IGNORED} {`);
+      expect(media, name).toBeGreaterThanOrEqual(0);
+      expect(out.slice(media, out.indexOf("}", media)), name).toContain("object-position: 99999px 0 !important");
+      // 旧写法（只排除忽略区自身）不应再出现于这条规则；圆角的 :where 规则不在此列
+      expect(out, name).not.toContain(`${AUTO} :is(${MEDIA_TAGS}):not([skz-ignore]) {`);
+    }
+  });
+
+  it("svg 内部藏起来的规则：忽略区里的 svg 保持原样", () => {
+    for (const name of ["core", "base", "all"]) {
+      const out = css(name);
+      expect(out, name).toContain(`${AUTO} svg${NOT_IGNORED} * {\n  visibility: hidden !important`);
+      expect(out, name).not.toContain(`${AUTO} svg:not([skz-ignore]) *`);
+    }
+  });
+
+  it("图标字体字形（::before）藏起来的规则：忽略区里的图标保持原样", () => {
+    for (const name of ["core", "base", "all"]) {
+      const out = css(name);
+      expect(out, name).toContain(`${AUTO} i:empty${NOT_IGNORED}::before,\n  ${AUTO} [class*=icon]:empty${NOT_IGNORED}::before {`);
+      expect(out, name).not.toMatch(/i:empty::before/);
+    }
+  });
+
+  it("忽略区可见规则写在 skz-leaf / skz-bone 的后代隐藏规则之后（同优先级，后写的赢）", () => {
+    for (const name of ["core", "base", "all"]) {
+      const out = css(name);
+      const visible = out.indexOf("[skz] [skz-ignore],\n[skz] [skz-ignore] * {\n  visibility: visible !important");
+      expect(visible, name).toBeGreaterThanOrEqual(0);
+      expect(count(out, "[skz] [skz-ignore] * {\n  visibility: visible"), name).toBe(1);
+      expect(visible, name).toBeGreaterThan(out.indexOf("[skz] [skz-leaf] * {\n  visibility: hidden !important"));
+      expect(visible, name).toBeGreaterThan(out.indexOf("[skz] [skz-bone] * {\n  visibility: hidden !important"));
+    }
+  });
+});
+
+describe("减少动态效果：pulse 根的基色继续跟主题走", () => {
+  it("prefers-reduced-motion 块的 [skz] 规则把 --skz-pulse-c 固定成 --skz-color（lite 与 full 都带）", () => {
+    for (const name of ["core", "base", "all"]) {
+      const out = css(name);
+      const media = out.indexOf("@media (prefers-reduced-motion: reduce) {");
+      expect(media, name).toBeGreaterThanOrEqual(0);
+      const block = out.slice(media, out.indexOf("}", media));
+      expect(block, name).toContain("--skz-pulse-c: var(--skz-color) !important;");
+      expect(block, name).toContain("animation: none !important;");
+    }
+  });
+});
+
 describe("skz-host：Web Component 宿主标记与 sk-bone 不漂移", () => {
-  /** 宿主规则的选择器（排除忽略区自身） */
-  const HOST_SEL = "[skz] [skz-host]:not([skz-ignore])";
+  /** 宿主规则的选择器（排除忽略区自身及其子树） */
+  const HOST_SEL = `[skz] [skz-host]${NOT_IGNORED}`;
 
   /**
    * 找出 sk-bone 里有、宿主 ::before 里没有（或值不同）的声明
@@ -871,7 +930,7 @@ describe("skz-host：Web Component 宿主标记与 sk-bone 不漂移", () => {
     }
   });
 
-  it("忽略区排除：选择器带 :not([skz-ignore])，且只在 [skz] 根内生效；global / svg 拼装件不重复带它", () => {
+  it("忽略区排除：选择器排除忽略区自身及其子树，且只在 [skz] 根内生效；global / svg 拼装件不重复带它", () => {
     for (const name of ["core", "all", "base"]) {
       expect(css(name), name).toContain(`${HOST_SEL} {`);
     }

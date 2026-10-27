@@ -55,7 +55,17 @@ function inertTargets(el: Element, hasIgnore: boolean = !!el.querySelector(IGNOR
 }
 
 /**
- * 锁定交互：优先原生 inert（避开忽略区），不支持时靠 CSS pointer-events + 焦点拦截。
+ * 让根内已聚焦的元素失焦（忽略区内的除外）：无原生 inert 时 focusin 拦截管不到"启用前就已聚焦"的元素。
+ * @param el 骨架根元素
+ */
+function blurFocused(el: HTMLElement): void {
+  if (typeof document === "undefined") return;
+  const a = document.activeElement;
+  if (a instanceof HTMLElement && el.contains(a) && !a.closest(IGNORE_SEL)) a.blur();
+}
+
+/**
+ * 锁定交互：优先原生 inert（避开忽略区），不支持时靠 CSS pointer-events + 焦点拦截（并让已聚焦的元素失焦）。
  * @param el 骨架根元素
  * @param hasIgnore 根里是否含忽略区（调用方已查过）
  * @returns 解锁函数
@@ -63,6 +73,7 @@ function inertTargets(el: Element, hasIgnore: boolean = !!el.querySelector(IGNOR
 function lock(el: HTMLElement, hasIgnore: boolean): () => void {
   if (!supportsInert()) {
     el.addEventListener(FOCUS_EVENT, blockFocus, true);
+    blurFocused(el);
     return () => el.removeEventListener(FOCUS_EVENT, blockFocus, true);
   }
   // 原本就 inert 的不动，解锁时也不碰

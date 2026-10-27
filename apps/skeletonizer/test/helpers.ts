@@ -17,9 +17,13 @@ export interface FakeElOptions {
 /** 假的内联样式对象 */
 export interface FakeStyle {
   /** 写一个内联变量 / 属性 */
-  setProperty(name: string, value: string): void;
+  setProperty(name: string, value: string, priority?: string): void;
   /** 删一个内联变量 / 属性 */
   removeProperty(name: string): void;
+  /** 读一个内联变量 / 属性，没有为空串 */
+  getPropertyValue(name: string): string;
+  /** 读一个内联变量 / 属性的优先级，没有为空串 */
+  getPropertyPriority(name: string): string;
 }
 
 /** 默认的主题变量：svg 方案生成 blob 时要读的高光色 */
@@ -35,6 +39,8 @@ export class FakeEl {
   attrs = new Map<string, string>();
   /** 内联样式 / 自定义属性表（style.setProperty 写到这里） */
   props = new Map<string, string>();
+  /** 内联样式的优先级表（setProperty 时记录） */
+  priorities = new Map<string, string>();
   /** 原生 inert 状态 */
   inert = false;
   /** 标签名 */
@@ -47,8 +53,16 @@ export class FakeEl {
   listeners = new Map<string, (e: { timeStamp: number }) => void>();
   /** 内联样式 */
   style: FakeStyle = {
-    setProperty: (k, v): void => void this.props.set(k, v),
-    removeProperty: (k): void => void this.props.delete(k),
+    setProperty: (k, v, p = ""): void => {
+      this.props.set(k, v);
+      this.priorities.set(k, p);
+    },
+    removeProperty: (k): void => {
+      this.props.delete(k);
+      this.priorities.delete(k);
+    },
+    getPropertyValue: (k): string => this.props.get(k) ?? "",
+    getPropertyPriority: (k): string => this.priorities.get(k) ?? "",
   };
 
   /** @param opts 构造选项 */
