@@ -1,30 +1,6 @@
-import { AxiosHeaders } from 'axios';
-import type { AxiosRequestConfig } from 'axios';
+import axiosLib, { AxiosHeaders } from 'axios';
+import type { AxiosAdapter, AxiosInstance, AxiosRequestConfig, AxiosResponse, InternalAxiosRequestConfig } from 'axios';
 import type { PluginLogger, Primitive } from './types';
-
-/**
- * 编译期常量：生产构建中 bundler 把 `process.env.NODE_ENV` 替换成字面量，
- * 本常量折叠成 `false`，`if (__DEV__) {...}` 整块被 DCE 掉；`typeof` 守卫防止
- * 浏览器未注入 `process` 时抛 ReferenceError。
- *
- * Compile-time constant: bundlers replace `process.env.NODE_ENV` with a literal
- * in production, folding this to `false` so `if (__DEV__) {...}` gets DCE'd;
- * the `typeof` guard avoids a ReferenceError when `process` isn't injected (browser).
- */
-export const __DEV__: boolean =
-    typeof process !== 'undefined' &&
-    !!process.env &&
-    process.env.NODE_ENV !== 'production';
-
-/** 全项目日志命名空间标签 / Project-wide log namespace tag. */
-export const NS = '[http-plugins]';
-
-/** 空操作 logger，`debug` 关闭时使用 / No-op logger, used when `debug` is off. */
-export const NOOP_LOGGER: PluginLogger = {
-    log: () => { },
-    warn: () => { },
-    error: () => { },
-};
 
 /** 默认 logger，包装 `console.*` / Default logger, wraps `console.*`. */
 export const CONSOLE_LOGGER: PluginLogger = {
@@ -32,47 +8,6 @@ export const CONSOLE_LOGGER: PluginLogger = {
     warn: console.warn.bind(console),
     error: console.error.bind(console),
 };
-
-/* Browser DevTools support `%c` CSS substitution; Node terminals support ANSI
- * SGR codes. Detect once at module load and pick the right path. */
-const IS_BROWSER =
-    typeof globalThis !== 'undefined' &&
-    typeof (globalThis as { document?: unknown }).document !== 'undefined';
-
-const BROWSER_TAG_STYLE =
-    'background:#2563eb;color:#fff;padding:1px 6px;border-radius:3px;font-weight:600';
-const BROWSER_RESET_STYLE = '';
-
-const ANSI_TAG = '\x1b[44;97m'; // bg blue, fg bright white
-const ANSI_RESET = '\x1b[0m';
-
-/**
- * 装饰一个 logger，使每行输出带上蓝底白字的 `tag` 前缀；遇到不支持 `%c`/ANSI 的
- * 输出目标会优雅降级，标签依然可读。
- *
- * Decorates a logger so every line is prefixed with `tag` in blue-bg/white-fg;
- * degrades gracefully on sinks that don't understand `%c`/ANSI.
- *
- * @param base 被装饰的原始 logger / the underlying logger
- * @param tag 前缀标签文本 / the tag text to prefix
- * @returns 新的 `PluginLogger`，其方法均带 `tag` 前缀 / a new tagged `PluginLogger`
- */
-export function tagged(base: PluginLogger, tag: string): PluginLogger {
-    if (IS_BROWSER) {
-        const fmt = `%c${tag}%c`;
-        return {
-            log: (...a) => base.log(fmt, BROWSER_TAG_STYLE, BROWSER_RESET_STYLE, ...a),
-            warn: (...a) => base.warn(fmt, BROWSER_TAG_STYLE, BROWSER_RESET_STYLE, ...a),
-            error: (...a) => base.error(fmt, BROWSER_TAG_STYLE, BROWSER_RESET_STYLE, ...a),
-        };
-    }
-    const colored = `${ANSI_TAG}${tag}${ANSI_RESET}`;
-    return {
-        log: (...a) => base.log(colored, ...a),
-        warn: (...a) => base.warn(colored, ...a),
-        error: (...a) => base.error(colored, ...a),
-    };
-}
 
 /**
  * 将 `value | value[] | undefined` 统一转换为新的 `value[]`。
@@ -146,17 +81,6 @@ export function pluginError(source: LoggableSource | undefined, ...args: unknown
 }
 
 
-/*
- * 类型守卫改为独立具名函数 —— 静态方法类是单一打包单元，bundler 无法摇掉未用方法；
- * 拆成独立 `export function` 后未引用者会被 tree-shaking 干净移除。
- * 仅 `isObject` / `isPrimitive` 当前被使用，其余按需保留供插件作者使用。
- *
- * Type guards are standalone named functions rather than static methods on a
- * class — a class is a single bundling unit bundlers can't shake; split into
- * `export function`s, unreferenced ones tree-shake away cleanly. Only
- * `isObject`/`isPrimitive` are used internally; the rest are kept for plugin authors.
- */
-
 /** `Object.prototype.toString` 的缓存引用 / cached ref to `Object.prototype.toString`. */
 const _toString = Object.prototype.toString;
 /** 返回值的内部 `[[Class]]` 标签（小写） / the value's internal `[[Class]]` tag (lowercased). */
@@ -169,51 +93,6 @@ export function isObject(val: unknown): val is Record<string, any> {
     return _stringify(val) === 'object';
 }
 
-/** 是否为数组 / whether `val` is an array. */
-export function isArray(val: unknown): val is any[] {
-    return Array.isArray(val);
-}
-
-/** 是否为字符串 / whether `val` is a string. */
-export function isString(val: unknown): val is string {
-    return typeof val === 'string';
-}
-
-/** 是否为数字（含 NaN） / whether `val` is a number (including NaN). */
-export function isNumber(val: unknown): val is number {
-    return typeof val === 'number';
-}
-
-/** 是否为函数 / whether `val` is a function. */
-export function isFunction(val: unknown): val is Function {
-    return typeof val === 'function';
-}
-
-/** 是否为 Date 实例 / whether `val` is a Date instance. */
-export function isDate(val: unknown): val is Date {
-    return val instanceof Date;
-}
-
-/** 是否为 null / whether `val` is null. */
-export function isNull(val: unknown): val is null {
-    return val === null;
-}
-
-/** 是否为 undefined / whether `val` is undefined. */
-export function isUndefined(val: unknown): val is undefined {
-    return val === undefined;
-}
-
-/** 是否为 Map 实例 / whether `val` is a Map instance. */
-export function isMap(val: unknown): val is Map<any, any> {
-    return val instanceof Map;
-}
-
-/** 是否为 Set 实例 / whether `val` is a Set instance. */
-export function isSet(val: unknown): val is Set<any> {
-    return val instanceof Set;
-}
-
 /** 是否为原始值（null，或 typeof 非 object/function） / whether `val` is a primitive (null, or typeof isn't object/function). */
 export function isPrimitive(val: unknown): val is Primitive {
     if (val === null) return true;
@@ -221,32 +100,44 @@ export function isPrimitive(val: unknown): val is Primitive {
     return type !== 'object' && type !== 'function';
 }
 
+/** 解析 adapter 时的默认候选列表 / default adapter candidates used when resolving. */
+const DEFAULT_ADAPTERS = ['xhr', 'http', 'fetch'];
+
 /**
- * 判断是否为本工具定义的“空值”：undefined、null 或 NaN；注意不同于 JS 的
- * truthy/falsy —— 不把 0/''/false 计入。
+ * 取得 axios 实例当前生效的 adapter 函数。`axios.create()` 出来的实例其
+ * `defaults.adapter` 是 `['xhr','http','fetch']` 这类数组/字符串而非函数，adapter
+ * 类插件直接当函数调会崩，统一经此归一化。
  *
- * Whether `val` counts as "empty" here: undefined, null, or NaN — note this
- * differs from JS truthy/falsy (does NOT treat 0/''/false as empty).
+ * Returns the adapter function currently in effect for an axios instance. A bare
+ * `axios.create()` instance has an array/string `defaults.adapter` rather than a
+ * function; adapter plugins must go through this instead of calling it directly.
  *
- * @param val 待判断的值 / the value to check
+ * @param axios 目标 axios 实例 / the target axios instance
+ * @returns 可直接调用的 adapter 函数 / a directly callable adapter function
+ * @example
+ * const prev = resolveAdapter(axios); // 之后 prev(config) 即可
  */
-export function falsy(val: unknown): boolean {
-    return val === void 0 || val === null || Number.isNaN(val);
+export function resolveAdapter(axios: AxiosInstance): AxiosAdapter {
+    const a = axios.defaults.adapter;
+    if (typeof a === 'function') return a;
+    return axiosLib.getAdapter(a ?? DEFAULT_ADAPTERS);
 }
 
 /**
- * 返回新对象，过滤掉所有值为 null/undefined 的字段；不修改原对象。
+ * 调用 adapter，并把同步抛出的异常转成 rejection，保证调用方总能走 `.then/.catch`
+ * 链路（否则 share 的条目会永不 settle、loading 计数会泄漏）。
  *
- * Returns a new object with all null/undefined-valued fields removed; does not mutate the original.
+ * Calls an adapter, turning a synchronous throw into a rejection so callers can
+ * always rely on the promise chain (otherwise share entries never settle and
+ * loading counters leak).
  *
- * @param obj 源对象 / the source object
- * @returns 过滤后的新对象（浅拷贝） / a new, shallow-copied object with empty fields removed
+ * @param adapter 要调用的 adapter / the adapter to call
+ * @param config 本次请求配置 / this request's config
+ * @returns adapter 结果的 promise，同步异常表现为 rejection / the adapter's promise; a sync throw becomes a rejection
  */
-export function filterObjectEmpty<T extends object>(obj: T): Partial<T> {
-    return Object.fromEntries(
-        Object.entries(obj).filter(([_, v]) => v != null) // v != null 同时过滤了 null 和 undefined
-    ) as Partial<T>;
-};
+export function callAdapter(adapter: AxiosAdapter, config: InternalAxiosRequestConfig): Promise<AxiosResponse> {
+    return new Promise<AxiosResponse>((resolve) => resolve(adapter(config)));
+}
 
 
 /**

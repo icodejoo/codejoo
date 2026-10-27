@@ -1,6 +1,6 @@
 
 import type { Plugin, MaybeFun } from '../types';
-import { pluginLog } from '../helper';
+import { callAdapter, pluginLog, resolveAdapter } from '../helper';
 import type { AxiosAdapter, AxiosRequestConfig, AxiosResponse, InternalAxiosRequestConfig } from 'axios';
 
 
@@ -14,7 +14,7 @@ const name = 'axp:share'
  *   - **race**：多个 caller 各自发 HTTP，第一个成功的赢家分发给所有 caller（`Promise.any`）
  *   - **none**：不参与，等同于关闭；没有 key 也走 none
  *
- * **核心实现**：每个 (key, 一轮请求) 共享一个 `Promise.withResolvers()` 的 promise，
+ * **核心实现**：每个 (key, 一轮请求) 共享一个手写 `new Promise` 取出 resolve/reject 的 promise，
  * 不同策略只是决定"哪个 HTTP 有资格 settle 它"。一经 settle，其他重复 resolve/reject
  * 自动 no-op，无需 callers 列表或显式去重。
  *
@@ -23,7 +23,7 @@ const name = 'axp:share'
  *
  * A single plugin unifying debounce/throttle/merge strategies via `policy`. All
  * strategies dedupe on `config.key`. Each (key, round of requests) shares one
- * `Promise.withResolvers()` promise; strategies only decide *which* HTTP call
+ * hand-rolled `new Promise` (resolve/reject captured; no ES2024 `Promise.withResolvers`); strategies only decide *which* HTTP call
  * may settle it — once settled, extra resolve/reject calls are automatic
  * no-ops. Failure retries belong in the standalone `retry` plugin: this plugin
  * has no internal retry loop anymore, so a `retry` resend cleanly re-enters
@@ -40,16 +40,17 @@ export default function axpShare({ enable = true, policy = 'start' }: ISharedOpt
             pluginLog(axios.defaults, `[${name}] enabled:${enable} policy:${policy}`);
             if (!enable) return;
             const map = new Map<string, IShareEntry>();
-            const prev = axios.defaults.adapter as AxiosAdapter;
+            const prev = resolveAdapter(axios);
             axios.defaults.adapter = (config) => {
                 const key = config.key;
                 if (!key) return prev(config);
                 const p = $resolvePolicy(config, defaults);
                 delete config.share;
                 if (p === 'none') return prev(config);
-                if (p === 'end') return $end(prev, map, key, config);
-                if (p === 'race') return $race(prev, map, key, config);
-                return $start(prev, map, key, config);
+                const run = p === 'end' ? $end : p === 'race' ? $race : $start;
+                // 共享响应对所有 caller 是同一个对象，这里按调用方换上各自的 config，
+                // 否则下游（如 cancel）按 response.config 释放资源会漏
+                return run(prev, map, key, config).then((r) => (r.config === config ? r : { ...r, config }));
             };
             return () => { axios.defaults.adapter = prev; };
         },
@@ -101,10 +102,11 @@ function $isValidPolicy(v: any): v is SharePolicy {
 // ───────────────────────────────────────────────────────────────────────────
 
 /**
- * 创建共享 entry：用 `Promise.withResolvers` 拿到 promise + resolve/reject，配
- * cleanup 在 settle 后自动从 map 清理（避免下一轮命中陈旧条目）。
+ * 创建共享 entry：手写 `new Promise` 取出 resolve/reject（不用 ES2024 的
+ * `Promise.withResolvers`），配 cleanup 在 settle 后自动从 map 清理（避免下一轮命中陈旧条目）。
  *
- * Creates a shared entry via `Promise.withResolvers`, with cleanup that removes
+ * Creates a shared entry by capturing resolve/reject from a hand-written
+ * `new Promise` (no ES2024 `Promise.withResolvers`), with cleanup that removes
  * it from the map once settled (so the next round never hits a stale entry).
  *
  * @internal
@@ -113,7 +115,9 @@ function $isValidPolicy(v: any): v is SharePolicy {
  * @returns 新建的共享 entry（已写入 map） / the newly created entry (already in the map)
  */
 export function $createEntry(map: Map<string, IShareEntry>, key: string): IShareEntry {
-    const { promise, resolve, reject } = Promise.withResolvers<AxiosResponse>();
+    let resolve!: (v: AxiosResponse) => void;
+    let reject!: (e: any) => void;
+    const promise = new Promise<AxiosResponse>((res, rej) => { resolve = res; reject = rej; });
     const entry: IShareEntry = { promise, resolve, reject };
     map.set(key, entry);
     // 两个分支都跑 cleanup（语义同 finally，但 .then 不会把 rejection 传到派生 promise，
@@ -140,7 +144,7 @@ export function $createEntry(map: Map<string, IShareEntry>, key: string): IShare
 export function $end(prev: AxiosAdapter, map: Map<string, IShareEntry>, key: string, config: InternalAxiosRequestConfig): Promise<AxiosResponse> {
     const e = map.get(key) ?? Object.assign($createEntry(map, key), { seq: 0 });
     const my = ++e.seq!;
-    prev(config).then(
+    callAdapter(prev, config).then(
         (v) => { if (my === e.seq) e.resolve(v); },
         (err) => { if (my === e.seq) e.reject(err); },
     );
@@ -166,7 +170,7 @@ export function $end(prev: AxiosAdapter, map: Map<string, IShareEntry>, key: str
 export function $race(prev: AxiosAdapter, map: Map<string, IShareEntry>, key: string, config: InternalAxiosRequestConfig): Promise<AxiosResponse> {
     const e = map.get(key) ?? Object.assign($createEntry(map, key), { inFlight: 0 });
     e.inFlight!++;
-    prev(config).then(
+    callAdapter(prev, config).then(
         (resp) => { e.inFlight!--; e.resolve(resp); },
         (err) => { e.inFlight!--; if (e.inFlight === 0) e.reject(err); },
     );
@@ -196,7 +200,7 @@ export function $start(
     let entry = map.get(key);
     if (!entry) {
         entry = $createEntry(map, key);
-        prev(config).then(entry.resolve, entry.reject);
+        callAdapter(prev, config).then(entry.resolve, entry.reject);
     }
     return entry.promise;
 }

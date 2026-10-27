@@ -459,3 +459,23 @@ describe('retry 集成 — 单请求 retry 字段的 number/false/true/对象 �
         expect(net.calls('GET', '/x')).toBe(2);
     });
 });
+
+
+describe('retry — max=0（默认）时不改写初始结果', () => {
+    it('shouldRetry 恒真 + 200 响应 → 原样 resolve，不被改成 "exhausted retries"', async () => {
+        const { net, api } = mkApi();
+        net.fallback(() => ({ data: { code: 0, data: 'fine' } }));
+        use(api, axpRetry({ shouldRetry: () => true }));
+        const r = await api.axios.get('/ok');
+        expect(r.status).toBe(200);
+        expect(net.calls('GET', '/ok')).toBe(1);
+    });
+
+    it('shouldRetry 恒真 + 500 → 原错误 reject（不是 exhausted），且不重发', async () => {
+        const { net, api } = mkApi();
+        net.fallback(() => ({ status: 500 }));
+        use(api, axpRetry({ shouldRetry: () => true }));
+        await expect(api.axios.get('/bad')).rejects.toMatchObject({ response: { status: 500 } });
+        expect(net.calls('GET', '/bad')).toBe(1);
+    });
+});

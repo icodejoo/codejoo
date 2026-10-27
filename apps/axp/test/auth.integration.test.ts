@@ -239,3 +239,128 @@ describe('auth 集成 — 重放后仍失败防回环', () => {
     expect(onAccessExpired).toHaveBeenCalledTimes(1);
   });
 });
+
+
+describe('auth 集成 — onRefresh 同步抛错不会永久锁死', () => {
+  it('onRefresh 同步 throw → 本次过期；换上有效 token 后的下一次受保护请求正常发出', async () => {
+    const net = authBackend('srv-1');
+    const tm = makeTM('stale');
+    const api = Axp.create(axios.create({ adapter: net.adapter }));
+    const onRefresh = vi.fn((): boolean => { throw new Error('refresh boom'); });  // 非 async，同步抛
+    const onAccessExpired = vi.fn();
+    use(api, auth({ tokenManager: tm, urlPattern: ['/me'], onRefresh, onAccessExpired }));
+
+    await expect(api.get('/me')(undefined, lat(5))).rejects.toBeTruthy();
+    expect(onAccessExpired).toHaveBeenCalledTimes(1);
+    expect(tm.accessToken).toBeUndefined();
+
+    tm.set('srv-1');   // 用户重新登录
+    const r: any = await api.get('/me')(undefined, lat(5));
+    expect(r.user).toBe('u');
+    expect(onRefresh).toHaveBeenCalledTimes(1);   // 没有被"已 resolve(false) 的旧 promise"拦下
+  });
+});
+
+
+describe('auth 集成 — 刷新后重放遇到无关错误不登出', () => {
+  it('刷新成功后重放得到 500 → tm 不清、onAccessExpired 不调，500 原样传播', async () => {
+    const net = makeNetwork();
+    net.on('GET', '/me', (c) => authHeader(c) === 'Bearer fresh' ? { status: 500, data: { code: 'BOOM' } } : { status: 401 });
+    const tm = makeTM('stale');
+    const api = Axp.create(axios.create({ adapter: net.adapter }));
+    const onRefresh = vi.fn(async (TM: ITokenManager) => { TM.set('fresh'); return true; });
+    const onAccessExpired = vi.fn();
+    use(api, auth({ tokenManager: tm, urlPattern: ['/me'], onRefresh, onAccessExpired }));
+
+    await expect(api.get('/me')(undefined, lat(5))).rejects.toMatchObject({ response: { status: 500 } });
+    expect(onRefresh).toHaveBeenCalledTimes(1);
+    expect(net.calls('GET', '/me')).toBe(2);           // 首发 401 + 重放 500
+    expect(onAccessExpired).not.toHaveBeenCalled();
+    expect(tm.accessToken).toBe('Bearer fresh');       // token 没被清掉
+  });
+
+  it('刷新后重放仍 401 → 仍判过期（兜底不变）', async () => {
+    const net = makeNetwork();
+    net.on('GET', '/me', () => ({ status: 401 }));
+    const tm = makeTM('stale');
+    const api = Axp.create(axios.create({ adapter: net.adapter }));
+    const onRefresh = vi.fn(async (TM: ITokenManager) => { TM.set('fresh'); return true; });
+    const onAccessExpired = vi.fn();
+    use(api, auth({ tokenManager: tm, urlPattern: ['/me'], onRefresh, onAccessExpired }));
+
+    await expect(api.get('/me')(undefined, lat(5))).rejects.toBeTruthy();
+    expect(onAccessExpired).toHaveBeenCalledTimes(1);
+    expect(tm.accessToken).toBeUndefined();
+  });
+});
+
+
+describe('auth 集成 — handle 重排不丢在途刷新', () => {
+  it('刷新进行中 prepend 触发整体重装 → 窗口内新请求仍复用同一次刷新，onRefresh 只调一次', async () => {
+    const net = authBackend('srv-1');
+    const tm = makeTM('stale');
+    const ax = axios.create({ adapter: net.adapter });
+    const onRefresh = vi.fn(async (TM: ITokenManager) => { await sleep(60); TM.set('srv-1'); return true; });
+    const handle = Axp.install(ax, { auth: auth({ tokenManager: tm, urlPattern: ['/me'], onRefresh, onAccessExpired: () => { } }) });
+
+    const p1 = ax.get('/me', lat(5));          // 401 → 触发刷新
+    await sleep(30);                           // 刷新进行中
+    handle.prepend({ name: 'noop', install: () => undefined });   // 整体拆卸 + 重装 auth
+    const p2 = ax.get('/me', lat(5));          // 重装后到达的请求应加入同一刷新窗口
+    const [r1, r2] = await Promise.all([p1, p2]);
+
+    expect(r1.status).toBe(200);
+    expect(r2.status).toBe(200);
+    expect(onRefresh).toHaveBeenCalledTimes(1);
+  });
+
+  it('刷新进行中 dispose 后换另一个 tokenManager 重装 → 新请求不等旧刷新，旧刷新失败也不影响', async () => {
+    const net = authBackend('srv-1');
+    const ax = axios.create({ adapter: net.adapter });
+    const oldTm = makeTM('stale');
+    let resolveOld!: (v: boolean) => void;
+    const oldRefresh = vi.fn(() => new Promise<boolean>((r) => { resolveOld = r; }));
+    const h1 = Axp.install(ax, { auth: auth({ tokenManager: oldTm, urlPattern: ['/me'], onRefresh: oldRefresh, onAccessExpired: () => { } }) });
+
+    const p1 = ax.get('/me', lat(5)).catch((e) => e);   // 401 → 旧会话刷新挂起
+    await sleep(30);
+    expect(oldRefresh).toHaveBeenCalledTimes(1);
+    h1.dispose();
+
+    const newTm = makeTM('srv-1');                       // 新会话持有有效 token
+    const newRefresh = vi.fn(async () => true);
+    Axp.install(ax, { auth: auth({ tokenManager: newTm, urlPattern: ['/me'], onRefresh: newRefresh, onAccessExpired: () => { } }) });
+
+    const p2 = ax.get('/me', lat(5));
+    await sleep(20);
+    resolveOld(false);                                   // 旧刷新失败
+    const r2 = await p2;
+    await p1;
+
+    expect(r2.status).toBe(200);
+    expect(newRefresh).not.toHaveBeenCalled();
+  });
+});
+
+
+describe('auth 集成 — urlPattern 按 pathname 匹配', () => {
+  it("urlPattern:'/me' 命中绝对 URL 与带查询串的 URL，不命中其它路径", async () => {
+    const net = makeNetwork();
+    const seen: Record<string, string | undefined> = {};
+    net.fallback((c) => { seen[c.url!] = authHeader(c); return { data: { code: 0, data: null } }; });
+    const tm = makeTM('t1');
+    const api = Axp.create(axios.create({ adapter: net.adapter }));
+    use(api, auth({ tokenManager: tm, urlPattern: ['/me'], onRefresh: () => true, onAccessExpired: () => { } }));
+
+    await api.get('/me')();
+    await api.get('/me?x=1')();
+    await api.get('https://x.com/me')();
+    await api.get('https://x.com/me?x=1#h')();
+    await api.get('/other')();
+    expect(seen['/me']).toBe('Bearer t1');
+    expect(seen['/me?x=1']).toBe('Bearer t1');
+    expect(seen['https://x.com/me']).toBe('Bearer t1');
+    expect(seen['https://x.com/me?x=1#h']).toBe('Bearer t1');
+    expect(seen['/other']).toBeUndefined();
+  });
+});

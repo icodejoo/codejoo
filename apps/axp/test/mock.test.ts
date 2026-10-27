@@ -1,5 +1,6 @@
-import { describe, it, expect } from 'vitest';
-import { $shouldMock, $resolveMock, $rewriteUrl, type IMockOptions } from '../src/plugins/mock';
+import { describe, it, expect, vi } from 'vitest';
+import axios from 'axios';
+import mock, { $shouldMock, $resolveMock, $rewriteUrl, $shouldFallback, type IMockOptions } from '../src/plugins/mock';
 
 
 describe('$shouldMock — runWhen 守卫', () => {
@@ -88,5 +89,48 @@ describe('$rewriteUrl', () => {
         const cfg: any = { url: '://bad-url' };
         $rewriteUrl(cfg, 'http://m');
         expect(cfg.url).toBe('http://m/://bad-url');
+    });
+});
+
+
+describe('$shouldFallback — 默认“mock 不存在”判定', () => {
+    const httpErr = (status: number) => ({ response: { status }, isAxiosError: true });
+
+    it('error.response 为 403/500 → false（mock 存在，只是业务/服务端错误）', () => {
+        expect($shouldFallback({ error: httpErr(403) })).toBe(false);
+        expect($shouldFallback({ error: httpErr(500) })).toBe(false);
+    });
+
+    it('error.response 为 404 → true；直接给 response 的 404 / 200 同理', () => {
+        expect($shouldFallback({ error: httpErr(404) })).toBe(true);
+        expect($shouldFallback({ response: { status: 404 } as any })).toBe(true);
+        expect($shouldFallback({ response: { status: 200 } as any })).toBe(false);
+    });
+
+    it('无 response 的网络错误 → true（mock 不可达）', () => {
+        expect($shouldFallback({ error: new Error('ECONNREFUSED') })).toBe(true);
+    });
+
+    it('取消 → false', () => {
+        expect($shouldFallback({ error: { code: 'ERR_CANCELED' } })).toBe(false);
+        expect($shouldFallback({ error: { name: 'CanceledError' } })).toBe(false);
+    });
+});
+
+
+describe('mock — 裸 axios.create()（非函数 adapter）', () => {
+    it('安装不崩；mock 返回 403 时不回落真实接口', async () => {
+        const seen: string[] = [];
+        const net = vi.fn(async (config: any) => {
+            seen.push(config.url);
+            const status = String(config.url).startsWith('http://m') ? 403 : 200;
+            const resp = { status, statusText: '', headers: {}, config, data: 'x' };
+            if (status >= 400) throw Object.assign(new Error('forbidden'), { response: resp, config, isAxiosError: true });
+            return resp as any;
+        });
+        const ax = axios.create({ adapter: [net as any] });
+        mock({ enable: true, mockUrl: 'http://m' }).install(ax);
+        await expect(ax.get('/api', { mock: true })).rejects.toThrow('forbidden');
+        expect(seen).toEqual(['http://m/api']);
     });
 });

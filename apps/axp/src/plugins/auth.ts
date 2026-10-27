@@ -40,8 +40,12 @@ export const ACCESS_DENIED_CODE = 'ACCESS_DENIED';
  * closure-local variable, `PluginManager#refresh()`'s full plugin reinstall
  * would reset it to null, losing an in-flight refresh and letting a second
  * `onRefresh` race. A WeakMap survives closure rebuilds.
+ *
+ * 状态记录所属 tokenManager，只有同一个 tm 重装才复用；换 tm 的新安装不能等旧会话的刷新。
+ * The state records its owning tokenManager and is reused only by a reinstall with the
+ * same tm; an install with a different tm must not wait on the old session's refresh.
  */
-const refreshStates = new WeakMap<AxiosInstance, { current: Promise<boolean> | null }>();
+const refreshStates = new WeakMap<AxiosInstance, { current: Promise<boolean> | null; tm: ITokenManager }>();
 
 
 /* ── onFailure 路由动作 ──────────────────────────────────────────────────── */
@@ -146,8 +150,8 @@ export default function axpAuth(options: IAuthOptions): Plugin {
 
       const { tokenManager: tm, matchMethod, matchUrl } = cfg;
       let refreshState = refreshStates.get(axios);
-      if (!refreshState) {
-        refreshState = { current: null };
+      if (!refreshState || refreshState.tm !== tm) {
+        refreshState = { current: null, tm };
         refreshStates.set(axios, refreshState);
       }
 
@@ -157,13 +161,27 @@ export default function axpAuth(options: IAuthOptions): Plugin {
         catch (e) { pluginError(axios.defaults, `[${name}] ${label} threw`, e); return undefined; }
       };
 
-      /** 启动/加入唯一 refresh 流程，成功=!==false / starts/joins the single refresh flow; success = `!== false`. */
-      const startRefresh = (resp: AxiosResponse): Promise<boolean> =>
-        (refreshState.current ??= (async () => {
+      /**
+       * 启动/加入唯一 refresh 流程，成功=!==false。先把 promise 写入 `current` 再挂清理：
+       * onRefresh 同步抛错时 async IIFE 会同步跑完，若在 IIFE 内清理会先于赋值，已 settle 的
+       * promise 又被写回 `current`，永久锁死后续请求；这里按身份校验清理，规避该时序。
+       *
+       * Starts/joins the single refresh flow; success = `!== false`. The promise is stored in
+       * `current` before cleanup is attached: if `onRefresh` throws synchronously the async IIFE
+       * finishes synchronously, so cleaning up inside it would run before the assignment and the
+       * already-settled promise would be written back, locking later requests forever; an
+       * identity-checked cleanup avoids that ordering.
+       */
+      const startRefresh = (resp: AxiosResponse): Promise<boolean> => {
+        if (refreshState.current) return refreshState.current;
+        const p: Promise<boolean> = (async () => {
           try { return (await cfg.onRefresh(tm, resp)) !== false; }
           catch (e) { pluginError(axios.defaults, `[${name}] onRefresh threw`, e); return false; }
-          finally { refreshState.current = null; }
-        })());
+        })();
+        refreshState.current = p;
+        void p.finally(() => { if (refreshState.current === p) refreshState.current = null; });
+        return p;
+      };
 
       /** 判定过期：tm.clear() 后调用 onAccessExpired / handles expiry: tm.clear() then calls onAccessExpired. */
       const expire = async (resp: AxiosResponse): Promise<void> => {
@@ -196,7 +214,8 @@ export default function axpAuth(options: IAuthOptions): Plugin {
           pluginError(config, `[${name}] protected/isProtected threw`, e);
         }
         if (matchMethod !== TRUE && !matchMethod((config.method || 'get').toLowerCase())) return false;
-        return matchUrl(config.url ?? '');
+        // 按 pathname 匹配：绝对 URL / 带查询串的相对 URL 先剥成纯路径
+        return matchUrl($pathnameOf(config.url ?? ''));
       };
 
       // ─── 请求侧 ───
@@ -247,14 +266,16 @@ export default function axpAuth(options: IAuthOptions): Plugin {
         const bag = config as Record<string, unknown>;
         const propagate = () => originalError !== undefined ? Promise.reject(originalError) : response;
 
-        // 已重放过仍失败——兜底 expired，防回环 / already replayed and still failing — falls back to expired, guards against loops
-        if (bag[REFRESHED] === true) {
+        const action = (await safe('onFailure', () => cfg.onFailure(tm, response))) ?? AuthFailureAction.Others;
+
+        // 已重放过仍被判需要 Refresh/Replay——兜底 expired，防回环；其余 action（如 500 → Others）照常路由，不误登出
+        //
+        // already replayed and onFailure still says Refresh/Replay — falls back to expired, guards against loops; other actions (e.g. a 500 → Others) route normally, no spurious logout
+        if (bag[REFRESHED] === true && (action === AuthFailureAction.Refresh || action === AuthFailureAction.Replay)) {
           await expire(response);
           $clearFlags(bag);
           return propagate();
         }
-
-        const action = (await safe('onFailure', () => cfg.onFailure(tm, response))) ?? AuthFailureAction.Others;
 
         switch (action) {
           case AuthFailureAction.Refresh: {
@@ -314,7 +335,8 @@ export default function axpAuth(options: IAuthOptions): Plugin {
       return () => {
         axios.interceptors.request.eject(reqId);
         axios.interceptors.response.eject(resId);
-        refreshStates.delete(axios);
+        // 有在途刷新时保留状态，handle 重排后新装的闭包才能接上，不会并发跑出第二个 onRefresh
+        if (!refreshState.current && refreshStates.get(axios) === refreshState) refreshStates.delete(axios);
       };
     },
   };
@@ -342,6 +364,19 @@ function $synthDenied(config: AxiosRequestConfig, code: string): AxiosResponse {
     headers: {},
     config: config as InternalAxiosRequestConfig,
   } as AxiosResponse;
+}
+
+/**
+ * 取出 URL 的 pathname：去掉 `scheme://host` 前缀与 `?query`/`#hash` 后缀，空结果返回 `'/'`。
+ *
+ * Extracts a URL's pathname: strips the `scheme://host` prefix and the `?query`/`#hash` suffix; an empty result yields `'/'`.
+ *
+ * @internal exported for unit tests
+ * @param url 请求 url（相对或绝对） / the request url (relative or absolute)
+ * @returns 纯路径，至少为 `'/'` / the bare path, at least `'/'`
+ */
+export function $pathnameOf(url: string): string {
+  return url.replace(/^([a-z][a-z\d+\-.]*:)?\/\/[^/?#]*/i, '').replace(/[?#].*$/, '') || '/';
 }
 
 /**

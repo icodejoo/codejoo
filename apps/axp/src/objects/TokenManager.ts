@@ -19,9 +19,47 @@ export interface ITokenManager {
   clear(): void;
 }
 
-/** SSR / 非浏览器环境下 localStorage 不存在，统一经此安全访问 / guarded access since localStorage doesn't exist in SSR/non-browser envs. */
-const storage: Pick<Storage, "getItem" | "setItem" | "removeItem"> | null =
-  typeof localStorage !== "undefined" ? localStorage : null;
+/** 可用的 Storage 子集 / the subset of Storage used here. */
+type TokenStorage = Pick<Storage, "getItem" | "setItem" | "removeItem">;
+
+/**
+ * 安全取得 localStorage：SSR 下不存在、沙箱 iframe / 禁用存储的浏览器里访问会抛
+ * SecurityError，两种情况都返回 null，保证模块导入本身不会崩。
+ *
+ * Safely obtains localStorage: it's absent in SSR and accessing it throws SecurityError
+ * in sandboxed iframes / storage-disabled browsers; both yield null so importing the
+ * module never crashes.
+ */
+function getStorage(): TokenStorage | null {
+  try {
+    return typeof localStorage !== "undefined" ? localStorage : null;
+  } catch {
+    return null;
+  }
+}
+
+/** 模块加载时探测一次的存储 / storage probed once at module load. */
+const storage: TokenStorage | null = getStorage();
+
+/** 读存储，异常（配额/隐私模式等）当作无值 / reads storage; any error (quota/privacy mode, etc.) counts as no value. */
+function readItem(key: string): string | undefined {
+  try {
+    return storage?.getItem(key) || undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+/** 写/删存储，异常静默吞掉，内存态不受影响 / writes/removes a storage item, swallowing errors so the in-memory state is unaffected. */
+function writeItem(key: string, value: string | undefined | null): void {
+  try {
+    if (!storage) return;
+    if (value) storage.setItem(key, value);
+    else storage.removeItem(key);
+  } catch {
+    /* 存储不可用：仅内存生效 / storage unavailable: memory-only */
+  }
+}
 
 /**
  * `ITokenManager` 的默认实现：access/refresh token 存于内存并镜像持久化到
@@ -53,8 +91,8 @@ export default class TokenManager implements ITokenManager {
    * undefined in SSR/non-browser environments or when there was no prior login.
    */
   constructor() {
-    this.#accessToken = storage?.getItem(TokenManager.#key1) || undefined;
-    this.#refreshToken = storage?.getItem(TokenManager.#key2) || undefined;
+    this.#accessToken = readItem(TokenManager.#key1);
+    this.#refreshToken = readItem(TokenManager.#key2);
   }
 
   /** 直接可用于 Authorization 头：裸 token 存在时返回 `Bearer <token>` / returns `Bearer <token>` when present, else undefined. */
@@ -100,17 +138,12 @@ export default class TokenManager implements ITokenManager {
   clear(): void {
     this.#accessToken = undefined;
     this.#refreshToken = undefined;
-    storage?.removeItem(TokenManager.#key1);
-    storage?.removeItem(TokenManager.#key2);
+    writeItem(TokenManager.#key1, undefined);
+    writeItem(TokenManager.#key2, undefined);
   }
 
   /** 把 value 写入 localStorage（若存在），空值时移除该键 / writes value to localStorage, or removes the key when falsy. */
   static #cache(value: string | undefined | null, key: string) {
-    if (!storage) return;
-    if (value) {
-      storage.setItem(key, value);
-    } else {
-      storage.removeItem(key);
-    }
+    writeItem(key, value);
   }
 }

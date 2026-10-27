@@ -27,8 +27,15 @@ const instances = new WeakMap<AxiosInstance, Set<AbortController>>();
  * already released", which would leave re-sends stuck without a new
  * controller and untracked by cancelAll. Identity (this WeakSet), not
  * presence, is what distinguishes them — a hit means it's safe to reissue.
+ *
+ * 同时记录 signal → controller 的映射：retry 经 bare 实例重发后，最终响应的 config 是
+ * mergeConfig 出来的新对象，Symbol bag 丢了，但可枚举的 `signal` 还在，释放时据此回查。
+ *
+ * Also maps signal → controller: after retry resends through a bare instance, the final
+ * response's config is a freshly merged object whose Symbol bag is gone, but the enumerable
+ * `signal` survives — release falls back to looking the controller up by it.
  */
-const selfIssued = new WeakSet<AbortSignal>();
+const selfIssued = new WeakMap<AbortSignal, AbortController>();
 
 
 /**
@@ -68,7 +75,7 @@ export default function axpCancel({ enable = true }: ICancelOptions = {}): Plugi
                     if (config.signal && !selfIssued.has(config.signal)) return config;
                     const ctrl = new AbortController();
                     config.signal = ctrl.signal;
-                    selfIssued.add(ctrl.signal);
+                    selfIssued.set(ctrl.signal, ctrl);
                     // 内部 controller 收进私有 bag（Symbol 键），不以可枚举字段污染 config
                     //
                     // internal controller goes into the private bag (Symbol key), not an enumerable field on config
@@ -80,7 +87,9 @@ export default function axpCancel({ enable = true }: ICancelOptions = {}): Plugi
 
             const release = (config: any) => {
                 if (!config) return;
-                const ctrl = getInternal<AbortController>(config, CANCEL_CTRL);
+                // 优先读 bag；bag 没有（重发后的 merged config）就按 signal 身份回查
+                const ctrl = getInternal<AbortController>(config, CANCEL_CTRL)
+                    ?? (config.signal ? selfIssued.get(config.signal) : undefined);
                 if (!ctrl) return;
                 set.delete(ctrl);
                 delInternal(config, CANCEL_CTRL);

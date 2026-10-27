@@ -112,6 +112,10 @@ export default function axpRetry({
         initialResp?: AxiosResponse,
       ): Promise<any> => {
         const m = $resolveMax(config, defaults);
+        // max<=0（默认）= 不重试：原样透传初始结果，避免把成功响应误判成 "exhausted retries"
+        //
+        // max<=0 (the default) = no retrying: pass the initial outcome through untouched, so a success isn't misreported as "exhausted retries"
+        if (m <= 0) return initialErr ? Promise.reject(initialErr) : initialResp;
         const getDelay = $resolveDelay(config, defaults);
         const jitter = $resolveJitter(config, defaults);
         const delayMax = $resolveDelayMax(config, defaults);

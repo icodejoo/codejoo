@@ -1,4 +1,7 @@
 import { describe, it, expect, vi } from 'vitest';
+import axios from 'axios';
+import { Axp, axpKey, axpCache, axpShare, axpRetry } from '../src';
+import { makeNetwork } from './helpers/network';
 import cancel, { cancelAll } from '../src/plugins/cancel';
 import { getInternal } from '../src/bag';
 
@@ -121,5 +124,54 @@ describe('cancel — enable:false', () => {
         const { ax, reqHandlers } = makeMockCtx();
         cancel({ enable: false }).install(ax);
         expect(reqHandlers).toHaveLength(0);
+    });
+});
+
+
+describe('cancel — 与 cache / share / retry 组合（Axp.install 规范顺序）', () => {
+    const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+
+    it('cancel + cache：命中缓存后 controller 不残留，cancelAll 返回 0', async () => {
+        const net = makeNetwork();
+        const ax = axios.create({ adapter: net.adapter });
+        Axp.install(ax, { key: axpKey(), cancel: cancel(), cache: axpCache() });
+        await ax.get('/a', { key: 'k', cache: true } as any);   // 未命中，真实请求
+        await ax.get('/a', { key: 'k', cache: true } as any);   // 命中，响应来自缓存
+        expect(net.calls('GET', '/a')).toBe(1);
+        expect(cancelAll(ax)).toBe(0);
+    });
+
+    it('cancel + key + share：并发同 key 请求全部完成后 cancelAll 返回 0', async () => {
+        const net = makeNetwork();
+        const ax = axios.create({ adapter: net.adapter });
+        Axp.install(ax, { key: axpKey(), cancel: cancel(), share: axpShare() });
+        const reqs = Array.from({ length: 5 }, () => ax.get('/s', { key: 'same', share: 'start', latency: 10 } as any));
+        await Promise.all(reqs);
+        expect(net.calls('GET', '/s')).toBe(1);
+        expect(cancelAll(ax)).toBe(0);
+    });
+
+    it('cancel + retry：重试等待期间 cancelAll 能中止（返回 1），请求以取消告终', async () => {
+        const net = makeNetwork();
+        net.fallback(() => ({ status: 500 }));
+        const ax = axios.create({ adapter: net.adapter });
+        Axp.install(ax, { cancel: cancel(), retry: axpRetry({ max: 2, delay: 200 }) });
+        const p = ax.get('/r').then(() => 'ok' as const, (e) => e);
+        await sleep(60);                       // 首次 500 已返回，正在等待重试
+        expect(cancelAll(ax)).toBe(1);
+        const out: any = await p;
+        expect(axios.isCancel(out)).toBe(true);
+        expect(net.calls('GET', '/r')).toBe(1); // 取消后没有再发第二次
+    });
+
+    it('cancel + retry：重试最终成功后 controller 被释放（cancelAll 返回 0）', async () => {
+        const net = makeNetwork();
+        net.fallback((_c, hit) => (hit < 2 ? { status: 500 } : { data: { code: 0, data: 'ok' } }));
+        const ax = axios.create({ adapter: net.adapter });
+        Axp.install(ax, { cancel: cancel(), retry: axpRetry({ max: 2, delay: 1 }) });
+        const r = await ax.get('/r2');
+        expect(r.status).toBe(200);
+        expect(net.calls('GET', '/r2')).toBe(2);
+        expect(cancelAll(ax)).toBe(0);
     });
 });

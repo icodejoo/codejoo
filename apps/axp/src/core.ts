@@ -4,7 +4,7 @@ import type {
   AxiosRequestConfig,
   AxiosResponse,
 } from 'axios';
-import { cloneAxiosDefaults } from './helper';
+import { cloneAxiosDefaults, resolveAdapter } from './helper';
 import AxpResponse from './objects/Response';
 import type {
   CoreOptions,
@@ -38,9 +38,7 @@ export default class Core<T = unknown> {
     //
     // Normalize the adapter: axios 1.x allows `defaults.adapter` to be string / string[] / function / undefined; resolve it to a function once so plugins don't each need their own compat handling.
     if (typeof this.axios.defaults.adapter !== 'function') {
-      this.axios.defaults.adapter = axiosLib.getAdapter(
-        this.axios.defaults.adapter ?? ['xhr', 'http', 'fetch'],
-      );
+      this.axios.defaults.adapter = resolveAdapter(this.axios);
     }
     this.axios.defaults.transitional = {
       ...this.axios.defaults.transitional,
@@ -104,7 +102,10 @@ export default class Core<T = unknown> {
   #build() {
     if (PROTO_BUILT) return;
     const bodyMethods: HttpMethodLower[] = ['delete', 'post', 'put', 'patch'];
-    const methods: HttpMethodLower[] = ['get', 'head', 'options', ...bodyMethods];
+    // purge/link/unlink 与 get 同属走 params 的方法，补齐 HttpPrototype 声明的全部动词
+    //
+    // purge/link/unlink go through `params` like get; fills in every verb HttpPrototype declares
+    const methods: HttpMethodLower[] = ['get', 'head', 'options', 'purge', 'link', 'unlink', ...bodyMethods];
     const proto = Core.prototype as unknown as Record<HttpMethodLower, unknown>;
     for (const m of methods) {
       proto[m] ||= this.#buildMethod(m, bodyMethods.includes(m) ? 'data' : 'params');

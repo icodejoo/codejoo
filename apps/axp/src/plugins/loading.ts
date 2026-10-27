@@ -1,6 +1,6 @@
 
 import type { Plugin } from '../types';
-import { pluginLog } from '../helper';
+import { callAdapter, pluginLog, resolveAdapter } from '../helper';
 import type { AxiosAdapter, AxiosRequestConfig } from 'axios';
 
 
@@ -43,8 +43,8 @@ export default function axpLoading({ enable = true, loading, delay = 0, delayClo
         install(axios) {
             pluginLog(axios.defaults, `[${name}] enabled:${enable} hasDefault:${!!loading} delay:${delay} delayClose:${delayClose}`);
             if (!enable) return;
-            // Core 构造时已把 defaults.adapter 归一化为函数，这里直接当 AxiosAdapter 用
-            const prev = axios.defaults.adapter as AxiosAdapter;
+            // defaults.adapter 可能是数组（裸 axios.create()），统一归一化为函数
+            const prev = resolveAdapter(axios);
             axios.defaults.adapter = $wrap(prev, defaults);
             return () => { axios.defaults.adapter = prev; };
         },
@@ -186,7 +186,8 @@ export function $wrap(prev: AxiosAdapter, defaults: ILoadingOptions): AxiosAdapt
                 }
             }
         }
-        return prev(config).finally(() => {
+        // 经 callAdapter 调用：prev 同步抛错也走 finally，计数不会泄漏
+        return callAdapter(prev, config).finally(() => {
             if (--count === 0) {
                 if (showTimer) {
                     // 还没到显示的点请求就已经全部结束了，直接取消，从不显示。

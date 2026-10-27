@@ -1,9 +1,9 @@
 // Each test here is constructed so it FAILS if Axp.install's canonical
 // order were wrong — not just "happens to pass regardless of order". See
 // src/install.ts's class doc for the derivation.
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 import axios from 'axios';
-import { Axp, axpKey as key, axpFilter as filter, axpCache as cache, axpAuth as auth, axpRetry as retry, axpNormalize as normalize } from '../src';
+import { Axp, axpShare, axpMock, axpLoading, axpKey as key, axpFilter as filter, axpCache as cache, axpAuth as auth, axpRetry as retry, axpNormalize as normalize } from '../src';
 import { makeNetwork } from './helpers/network';
 
 function mkApi() {
@@ -143,5 +143,103 @@ describe('Axp.install — canonical order', () => {
     const foreign = namedPlugin('foreign');
     expect(() => handle.insertBefore(foreign, namedPlugin('x'))).toThrow();
     expect(() => handle.insertAfter(foreign, namedPlugin('x'))).toThrow();
+  });
+});
+
+
+describe('Axp.install — AxpHandle 内部簿记与回滚', () => {
+  /** 当前仍挂在 axios 上的请求拦截器数量（eject 后槽位为 null） */
+  const activeReq = (ax: any) => ax.interceptors.request.handlers.filter(Boolean).length;
+  const throwing = { name: 'boom', install(): void { throw new Error('install boom'); } };
+
+  it('同一个插件对象 append 两次：两份 cleanup 都保留，dispose 全部卸载', () => {
+    const ax = axios.create();
+    const handle = Axp.install(ax, {});
+    let active = 0;
+    const dup = { name: 'dup', install() { active++; return () => { active--; }; } };
+    handle.append(dup);
+    handle.append(dup);
+    expect(active).toBe(2);
+    handle.dispose();
+    expect(active).toBe(0);
+  });
+
+  it('同一个插件对象重复出现时，重排（prepend）也按下标拆装，数量不漂移', () => {
+    const ax = axios.create();
+    const handle = Axp.install(ax, {});
+    let active = 0;
+    const dup = { name: 'dup', install() { active++; return () => { active--; }; } };
+    handle.append(dup);
+    handle.append(dup);
+    handle.prepend(dup);
+    expect(active).toBe(3);
+    handle.dispose();
+    expect(active).toBe(0);
+  });
+
+  it('Axp.install 中途有插件 install 抛错：先卸掉已装的（key 的拦截器被摘除）再 rethrow', () => {
+    const ax = axios.create();
+    expect(() => Axp.install(ax, { key: key(), cache: throwing })).toThrow('install boom');
+    expect(activeReq(ax)).toBe(0);
+  });
+
+  it('prepend 失败：list 与已装插件恢复原状，再 rethrow', () => {
+    const ax = axios.create();
+    const handle = Axp.install(ax, { key: key() });
+    const before = activeReq(ax);
+    expect(before).toBeGreaterThan(0);
+    expect(() => handle.prepend(throwing)).toThrow('install boom');
+    expect(handle.plugins.map((p) => p.name)).toEqual(['axp:key']);
+    expect(activeReq(ax)).toBe(before);
+    handle.dispose();
+    expect(activeReq(ax)).toBe(0);
+  });
+
+  it('append 失败：失败的插件不留在 list 里', () => {
+    const ax = axios.create();
+    const handle = Axp.install(ax, { key: key() });
+    expect(() => handle.append(throwing)).toThrow('install boom');
+    expect(handle.plugins.map((p) => p.name)).toEqual(['axp:key']);
+  });
+});
+
+
+describe('Core — 运行时动词与 adapter 归一化', () => {
+  it('HttpPrototype 声明的全部动词运行时都存在，purge/link/unlink 走 params', async () => {
+    const seen: any[] = [];
+    const adapter = async (config: any) => {
+      seen.push(config);
+      return { status: 200, statusText: 'OK', headers: {}, config, data: { code: 0, data: null } } as any;
+    };
+    const api: any = Axp.create(axios.create({ adapter }));
+    for (const m of ['get', 'head', 'options', 'delete', 'post', 'put', 'patch', 'purge', 'link', 'unlink']) {
+      expect(typeof api[m]).toBe('function');
+    }
+    await api.link('/x')({ a: 1 });
+    expect(seen[0].method).toBe('link');
+    expect(seen[0].params).toEqual({ a: 1 });
+  });
+
+  it('裸 axios.create() 构造 Core 后 defaults.adapter 已归一化为函数', () => {
+    const ax = axios.create();
+    expect(typeof ax.defaults.adapter).not.toBe('function');
+    Axp.create(ax);
+    expect(typeof ax.defaults.adapter).toBe('function');
+  });
+});
+
+
+describe('Axp.install — 裸 axios.create() 上的 adapter 类插件', () => {
+  it('不经 Core，cache/share/mock/loading 一起装到带数组 adapter 的实例上请求正常', async () => {
+    const net = vi.fn(async (config: any) => ({ status: 200, statusText: 'OK', headers: {}, config, data: { n: 1 } }) as any);
+    const ax = axios.create({ adapter: [net as any] });
+    const onLoading = vi.fn();
+    Axp.install(ax, { key: key(), cache: cache(), share: axpShare(), mock: axpMock(), loading: axpLoading({ loading: onLoading }) });
+    const r1 = await ax.get('/a', { key: 'k', cache: true, loading: true } as any);
+    const r2 = await ax.get('/a', { key: 'k', cache: true, loading: true } as any);
+    expect(r1.data).toEqual({ n: 1 });
+    expect(r2.data).toEqual({ n: 1 });
+    expect(net).toHaveBeenCalledTimes(1);
+    expect(onLoading.mock.calls).toEqual([[true], [false], [true], [false]]);
   });
 });

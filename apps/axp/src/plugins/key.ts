@@ -228,14 +228,18 @@ function hashByte(c: number, h: number): number {
 function deepHash(target: any, h: number, opts?: KeyOpts, sample = false): number | undefined {
     // 顶部一次性 destructure：避免每层递归重复 ?. 链式查找
     const ignores = opts?.ignores;
-    if (ignores?.length && matchesIgnoreValue(target, ignores)) {
+    if (ignores?.length && ignores.includes(target)) {
         return hash('!' + safeStr(target), h);
     }
     // 默认过滤：null / undefined / NaN / 空串（trim 后）
     if (target == null || Number.isNaN(target)) return undefined;
     const t = typeof target;
     if (t === 'string') return stringHash(target, h, sample);
-    if (t !== 'object') return hash(String(target), h);
+    if (t !== 'object') {
+        // 与字符串同一套长度分帧，保持数字 1 与字符串 "1" 等价
+        const str = String(target);
+        return hash(str, hash(str.length + '"', h));
+    }
     if (typeof target.byteLength === 'number') {
         return target.byteLength === 0 ? undefined : hash('bin' + target.byteLength, h);
     }
@@ -260,7 +264,8 @@ function deepHash(target: any, h: number, opts?: KeyOpts, sample = false): numbe
     let any = false;
     for (const key in target) {
         if (!Object.prototype.hasOwnProperty.call(target, key)) continue;
-        const baseH = hashByte(CC_COLON, hash(key, hashByte(CC_OBJ, h)));
+        // key 先混入长度前缀再哈希内容（长度分帧），避免 {'a:b':'c'} 与 {a:'b:c'} 这类分隔符碰撞
+        const baseH = hashByte(CC_COLON, hash(key, hash(key.length + '"', hashByte(CC_OBJ, h))));
         let r = deepHash(target[key], baseH, opts, sample);
         // ignores 命中键名且 value 判空：注入占位符 '!E'，保证该 key 仍参与最终 hash
         if (r === undefined && hasIgnores && ignores!.includes(key)) {
@@ -275,17 +280,6 @@ function deepHash(target: any, h: number, opts?: KeyOpts, sample = false): numbe
     return any ? hash('}', (h + acc) >>> 0) : undefined;
 }
 
-
-/** ignores 值命中检测：=== 比较 + NaN 特例 / ignores value-match check: `===` comparison plus a NaN special case */
-function matchesIgnoreValue(target: any, list: any[]): boolean {
-    const targetIsNaN = Number.isNaN(target);
-    for (let i = 0; i < list.length; i++) {
-        const v = list[i];
-        if (v === target) return true;
-        if (targetIsNaN && Number.isNaN(v)) return true;
-    }
-    return false;
-}
 
 /** 把任意 falsy/特殊值转成稳定的短字符串标签 / converts any falsy/special value into a stable short string tag */
 function safeStr(v: any): string {
@@ -308,6 +302,8 @@ function stringHash(s: string, h: number, sample: boolean): number | undefined {
     const t = s.trim();
     const l = t.length;
     if (l === 0) return undefined;
+    // 先混入长度前缀（长度分帧），避免 ['ab,c'] 与 ['ab','c'] 这类内容含分隔符的碰撞
+    h = hash(l + '"', h);
     if (!sample || l <= SAMPLE_THRESHOLD) return hash(t, h);
     const mid = (l - SAMPLE_WINDOW) >> 1;
     h = hash(t.substring(0, SAMPLE_WINDOW), h);
