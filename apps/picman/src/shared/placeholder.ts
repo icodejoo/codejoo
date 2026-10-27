@@ -78,16 +78,40 @@ export function lightDark(palette: [number, number, number][]): [[number, number
   return [light, dark];
 }
 
+/** 匹配 `#rgb` / `#rrggbb`(`#` 可省略) */
+const HEX_COLOR_RE = /^#?([0-9a-f]{3}|[0-9a-f]{6})$/i;
+
+/**
+ * Normalize a hex color to lowercase `#rrggbb`.
+ *
+ * 把十六进制颜色规范化为小写 `#rrggbb`。
+ * @param input - `#rgb` / `#rrggbb` (the `#` is optional, case-insensitive) — `#rgb` / `#rrggbb`(可省略 `#`,不区分大小写)
+ * @returns Lowercase `#rrggbb`, or null when the input is not a valid hex color — 小写 `#rrggbb`,非法输入返回 null
+ * @example
+ * normalizeHexColor("#ABC"); // "#aabbcc"
+ * normalizeHexColor("e0e0e0"); // "#e0e0e0"
+ * normalizeHexColor("red"); // null
+ */
+export function normalizeHexColor(input: string): string | null {
+  const m = HEX_COLOR_RE.exec(input.trim());
+  if (!m) return null;
+  const hex = m[1]!.toLowerCase();
+  const full = hex.length === 3 ? hex.replace(/./g, "$&$&") : hex;
+  return `#${full}`;
+}
+
 /**
  * Adjust a hex color's brightness by a signed percentage.
  *
- * 按带符号百分比调整十六进制颜色的亮度。
+ * 按带符号百分比调整十六进制颜色的亮度。非法颜色原样返回。
  * @param hex - Source hex color — 来源十六进制颜色
  * @param pct - Signed adjustment, e.g. 0.08 for +8% — 带符号调整量,如 0.08 表示 +8%
  * @returns Adjusted hex color — 调整后的十六进制颜色
  */
 function adjustHexBrightness(hex: string, pct: number): string {
-  const n = parseInt(hex.replace("#", ""), 16);
+  const normalized = normalizeHexColor(hex);
+  if (!normalized) return hex;
+  const n = parseInt(normalized.slice(1), 16);
   const r = (n >> 16) & 0xff;
   const g = (n >> 8) & 0xff;
   const b = n & 0xff;

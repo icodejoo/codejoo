@@ -5,7 +5,7 @@
  * 增量动画 WebP(VP8X/ANIM/ANMF)遍历器 + 尝试性首帧重打包——只解结构,不解 VP8/VP8L 位流。
  */
 
-import { asciiEquals, readLE24 } from "../bytes";
+import { asciiEquals, readFourCC, readLE24 } from "../bytes";
 
 /**
  * Result of scanning a (possibly partial) WebP byte buffer.
@@ -66,7 +66,7 @@ interface ChunkHeader {
  */
 function readChunkHeader(buf: Uint8Array, off: number): ChunkHeader | null {
   if (off + 8 > buf.length) return null;
-  const fourcc = String.fromCharCode(buf[off]!, buf[off + 1]!, buf[off + 2]!, buf[off + 3]!);
+  const fourcc = readFourCC(buf, off);
   const size = readLE32(buf, off + 4);
   return { fourcc, size, total: 8 + size + (size % 2) };
 }
@@ -85,7 +85,7 @@ export function scanWebp(buf: Uint8Array): WebpScan {
   const first = readChunkHeader(buf, 12);
   if (!first) return { status: "need-more" };
 
-  if (first.fourcc === "VP8 " || first.fourcc === "VP8L") return { status: "static" };
+  // VP8 / VP8L 与其他未知首块都按静图处理
   if (first.fourcc !== "VP8X") return { status: "static" };
   if (12 + first.total > buf.length) return { status: "need-more" };
   if (first.size < 10) return { status: "static" };

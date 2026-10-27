@@ -10,6 +10,9 @@ import type { ImgprogressSWOptions } from "../shared/types";
 import { auto } from "./auto";
 import type { ImgprogressAutoOptions } from "./types";
 
+/** 等待 SW ready 的超时(毫秒):注册成功但安装失败时 ready 永不 resolve,超时后视为未控制继续启动 */
+const READY_TIMEOUT_MS = 10000;
+
 /**
  * Options accepted by {@link registerImgprogressSW}: page-side takeover options
  * merged with the transferable subset of SW-side options.
@@ -66,7 +69,15 @@ export async function registerImgprogressSW(swUrl: string, options: RegisterImgp
   let controlled = false;
   try {
     await navigator.serviceWorker.register(appendSWConfig(swUrl, options), { type: "module" });
-    await navigator.serviceWorker.ready;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const timeout = new Promise<void>((resolve) => {
+      timer = setTimeout(resolve, READY_TIMEOUT_MS);
+    });
+    try {
+      await Promise.race([navigator.serviceWorker.ready, timeout]);
+    } finally {
+      clearTimeout(timer);
+    }
     controlled = !!navigator.serviceWorker.controller;
   } catch {
     // 注册失败降级:接管仍会挂上,被接管的图片走原图正常加载 — on failure, takeover degrades to native image loading

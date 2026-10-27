@@ -56,21 +56,55 @@ export function isImgprogressMessage(data: unknown): data is ImgprogressMessage 
   return typeof data === "object" && data !== null && (data as { imgprogress?: unknown }).imgprogress === 1;
 }
 
+/** 全部会被剥掉的标记参数 */
+const MARKER_PARAMS = [PARAM_FULL, PARAM_BYPASS, PARAM_PLAY, PARAM_SKE, PARAM_THUMB_SCALE] as const;
+
+/** 默认骨架色(无调色板、未指定 `data-ske-color` 时的色块颜色) */
+export const DEFAULT_SKE_COLOR = "#e0e0e0";
+
+/**
+ * 解码 query 片段的参数名(`+` 视为空格),解码失败时用原文
+ * @param fragment - 形如 `name=value` 或 `name` 的原始片段
+ * @returns 解码后的参数名
+ */
+function queryNameOf(fragment: string): string {
+  const raw = fragment.split("=", 1)[0].replaceAll("+", " ");
+  try {
+    return decodeURIComponent(raw);
+  } catch {
+    return raw;
+  }
+}
+
+/**
+ * 直接在原始 query 字符串上丢掉指定名字的参数,其余片段原样保留(不经 URLSearchParams,避免改写编码)
+ * @param u - 要修改的 URL(原地改 search)
+ * @param names - 要丢掉的参数名集合
+ * @param append - 丢完后追加在末尾的原始片段
+ * @returns 是否丢掉了至少一个片段
+ */
+function rewriteQuery(u: URL, names: readonly string[], append?: string): boolean {
+  const fragments = u.search.startsWith("?") ? u.search.slice(1).split("&") : [];
+  const kept = fragments.filter((f) => !names.includes(queryNameOf(f)));
+  const dropped = kept.length !== fragments.length;
+  if (append !== undefined) kept.push(append);
+  u.search = kept.length ? `?${kept.join("&")}` : "";
+  return dropped;
+}
+
 /**
  * Strip imgprogress marker params, returning the canonical original URL.
+ * Markers are removed directly from the raw query string; other params are never re-encoded.
+ * URLs without any marker are returned as-is.
  *
- * 剥掉 imgprogress 标记参数,得到规范化原始 URL。
+ * 剥掉 imgprogress 标记参数,得到规范化原始 URL。直接在原始 query 上删标记,不重写其余参数;无标记时原样返回。
  * @param url - Absolute URL possibly carrying markers — 可能带标记的绝对 URL
  * @returns URL without imgprogress params — 去标记后的 URL
  */
 export function stripImgprogressParams(url: string): string {
   const u = new URL(url);
-  u.searchParams.delete(PARAM_FULL);
-  u.searchParams.delete(PARAM_BYPASS);
-  u.searchParams.delete(PARAM_PLAY);
-  u.searchParams.delete(PARAM_SKE);
-  u.searchParams.delete(PARAM_THUMB_SCALE);
-  return u.href;
+  const original = u.href;
+  return rewriteQuery(u, MARKER_PARAMS) ? u.href : original;
 }
 
 /**
@@ -84,7 +118,7 @@ export function stripImgprogressParams(url: string): string {
  */
 export function withStageParam(url: string, stage: ImgprogressStage): string {
   const u = new URL(url);
-  u.searchParams.set(PARAM_FULL, stage);
+  rewriteQuery(u, [PARAM_FULL], `${PARAM_FULL}=${stage}`);
   return u.href;
 }
 
@@ -98,6 +132,6 @@ export function withStageParam(url: string, stage: ImgprogressStage): string {
  */
 export function withPlayParam(url: string): string {
   const u = new URL(url);
-  u.searchParams.set(PARAM_PLAY, "1");
+  rewriteQuery(u, [PARAM_PLAY], `${PARAM_PLAY}=1`);
   return u.href;
 }

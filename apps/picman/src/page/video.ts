@@ -10,17 +10,18 @@
  * 在用户意图出现时、或对 autoplay 视频在主线程 LCP 之后空闲时,还原真实源。
  */
 
-import { withPlayParam } from "../shared/protocol";
+import { DEFAULT_SKE_COLOR, withPlayParam } from "../shared/protocol";
 import { svgColorBlock, svgDataUri } from "../shared/placeholder";
 import type { ImgprogressErrorContext } from "../shared/types";
 import { scheduleIdle } from "./idle";
+import { inViewport } from "./viewport";
 
-/** Fallback cover color when none is derivable — 无可推导颜色时的封面底色 */
-const DEFAULT_COVER_COLOR = "#e0e0e0";
 /** Fallback cover aspect (width:height) when the element has no size hints — 元素无尺寸提示时的封面比例 */
 const DEFAULT_COVER = { width: 320, height: 180 };
 /** Longest side of a grabbed first-frame cover, px — 抓取首帧封面的长边上限(像素) */
 const MAX_COVER_SIDE = 512;
+/** 等待离屏视频解出首帧的超时(毫秒) */
+const FRAME_TIMEOUT_MS = 10000;
 
 /**
  * Resolved video-facade options (the subset of {@link ImgprogressAutoOptions} this
@@ -135,21 +136,6 @@ function absolute(raw: string): string {
 }
 
 /**
- * Whether an element currently intersects the viewport (best-effort; treats a
- * zero-size layout, as in headless test envs, as visible).
- *
- * 元素当前是否与视口相交(尽力而为;把零尺寸布局——如无头测试环境——视为可见)。
- * @param el - Element to test — 待测元素
- * @returns Whether it is in view — 是否在视口内
- */
-function inViewport(el: Element): boolean {
-  if (typeof (el as HTMLElement).getBoundingClientRect !== "function" || typeof innerHeight === "undefined") return true;
-  const r = el.getBoundingClientRect();
-  if (r.width === 0 && r.height === 0) return true;
-  return r.top < innerHeight && r.bottom > 0;
-}
-
-/**
  * Compute the effective source URL a `<video>` would load (attribute `src`
  * first, then the first `<source>` with a `src`).
  *
@@ -184,14 +170,27 @@ function coverSize(video: HTMLVideoElement): { width: number; height: number } {
 /**
  * Wait until a detached `<video>` has its first frame decoded (or fail).
  *
- * 等待离屏 `<video>` 解出首帧(或失败)。
+ * 等待离屏 `<video>` 解出首帧(或失败/超时)。超时时间见 {@link FRAME_TIMEOUT_MS}。
  * @param v - Detached video element — 离屏视频元素
- * @returns Resolves when a frame is available — 有帧可用时 resolve
+ * @returns Resolves when a frame is available; rejects on decode error or timeout — 有帧可用时 resolve;解码出错或超时 reject
  */
 function waitFirstFrame(v: HTMLVideoElement): Promise<void> {
   return new Promise<void>((resolve, reject) => {
-    v.addEventListener("loadeddata", () => resolve(), { once: true });
-    v.addEventListener("error", () => reject(new Error("video decode failed")), { once: true });
+    /** 结算一次:清定时器并摘掉监听,之后任何事件都不再生效 */
+    const settle = (fn: () => void): void => {
+      clearTimeout(timer);
+      v.removeEventListener("loadeddata", onLoaded);
+      v.removeEventListener("error", onError);
+      fn();
+    };
+    /** 首帧数据就绪:按成功结算 */
+    const onLoaded = (): void => settle(resolve);
+    /** 解码出错:按失败结算 */
+    const onError = (): void => settle(() => reject(new Error("video decode failed")));
+    /** 超时兜底:迟迟没有首帧时按失败结算 */
+    const timer = setTimeout(() => settle(() => reject(new Error("video first frame timeout"))), FRAME_TIMEOUT_MS);
+    v.addEventListener("loadeddata", onLoaded);
+    v.addEventListener("error", onError);
   });
 }
 
@@ -215,7 +214,11 @@ async function grabFrameCover(url: string, opts: ResolvedVideoOptions, deps: Vid
   try {
     const resp = await deps.fetchImpl(url, { mode: "cors", headers: { Range: `bytes=0-${opts.videoRangeBytes - 1}` } });
     if (resp.type === "opaque") return null;
-    if (!resp.ok && resp.status !== 206) return null;
+    // 只接受 206:服务器忽略 Range 回 200 会把整个视频下载下来,直接取消 body
+    if (resp.status !== 206) {
+      await resp.body?.cancel().catch(() => {});
+      return null;
+    }
     blob = await resp.blob();
   } catch {
     return null;
@@ -331,7 +334,7 @@ export function createVideoFacade(opts: ResolvedVideoOptions, deps: VideoFrameDe
     if (posterAttr) return; // 有 poster:零额外请求,直接用
 
     const { width, height } = coverSize(video);
-    video.poster = svgDataUri(svgColorBlock({ width, height, mode: "gradient", fallbackColor: DEFAULT_COVER_COLOR }));
+    video.poster = svgDataUri(svgColorBlock({ width, height, mode: "gradient", fallbackColor: DEFAULT_SKE_COLOR }));
 
     if (!opts.videoFrame || !url) return;
 
@@ -378,6 +381,11 @@ export function createVideoFacade(opts: ResolvedVideoOptions, deps: VideoFrameDe
     return st;
   }
 
+  /**
+   * 开始接管一个 `<video>`:中和贪婪加载、挂封面占位、登记用户意图与 autoplay 放行时机。
+   * 同一元素重复调用无副作用。
+   * @param video - 待接管的视频元素
+   */
   function track(video: HTMLVideoElement): void {
     if (states.has(video)) return;
 
@@ -411,6 +419,9 @@ export function createVideoFacade(opts: ResolvedVideoOptions, deps: VideoFrameDe
     }
   }
 
+  /**
+   * 停止接管:断开视口观察器,并把所有仍存活的被管理元素还原为真实源(不触发播放)。
+   */
   function stop(): void {
     io?.disconnect();
     io = null;

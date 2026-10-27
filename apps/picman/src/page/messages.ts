@@ -82,16 +82,23 @@ export function _getContainer(): ServiceWorkerContainer | null {
  * const unsubscribe = subscribe(url, e => console.log(e.type))
  */
 export function subscribe(url: string, cb: (e: StageEvent) => void): () => void {
-  let subs = registry.get(url);
-  if (!subs) {
-    subs = new Set();
-    registry.set(url, subs);
+  let existing = registry.get(url);
+  if (!existing) {
+    existing = new Set();
+    registry.set(url, existing);
   }
+  const subs = existing;
   subs.add(cb);
   ensureListening();
 
+  /** 本订阅是否仍有效,用于让退订幂等 */
+  let active = true;
   return () => {
-    subs!.delete(cb);
-    if (subs!.size === 0) registry.delete(url);
+    // 幂等:重复退订直接忽略
+    if (!active) return;
+    active = false;
+    subs.delete(cb);
+    // 仅当登记表里仍是自己这份集合才移除,避免误删同 URL 后来者新建的集合
+    if (subs.size === 0 && registry.get(url) === subs) registry.delete(url);
   };
 }

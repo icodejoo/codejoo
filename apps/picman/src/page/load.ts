@@ -4,7 +4,7 @@
  * 页面端显式 API:发起某个 URL 的渐进加载并观察其各阶段。
  */
 
-import { withStageParam } from "../shared/protocol";
+import { stripImgprogressParams, withStageParam } from "../shared/protocol";
 import { scheduleIdle } from "./idle";
 import { _getContainer, subscribe } from "./messages";
 
@@ -33,7 +33,8 @@ export interface ImgprogressTask {
  * await task.done
  */
 export function load(url: string): ImgprogressTask {
-  const canonical = new URL(url, location.href).href;
+  // 与 SW 通知 URL、auto() 的规范化保持一致:剥掉 imgprogress 标记参数
+  const canonical = stripImgprogressParams(new URL(url, location.href).href);
   const stageCbs: ((stage: "placeholder" | "first-frame" | "complete", displayUrl: string) => void)[] = [];
 
   let resolveDone!: (v: string) => void;
@@ -72,6 +73,28 @@ export function load(url: string): ImgprogressTask {
     emit("first-frame", displayUrl);
   };
 
+  // complete 只处理一次:SW 通知与缓存对账两路都可能触发。
+  // completeScheduled 在调度时置位(去重 + 拦截此后到达的 first-frame/error);
+  // scheduleIdle 先进先出,complete 调度之前已排队的 first-frame 本就先于它发出。
+  let completeScheduled = false;
+
+  /** 调度一次 first-frame:complete 已调度后一律忽略 */
+  const onFirstFrame = (ffUrl: string): void => {
+    if (completeScheduled) return;
+    scheduleIdle(() => emitFirstFrameOnce(ffUrl));
+  };
+
+  /** 调度一次 complete:只会生效一次 */
+  const onComplete = (full: string): void => {
+    if (completeScheduled) return;
+    completeScheduled = true;
+    unsubscribe();
+    scheduleIdle(() => {
+      emit("complete", full);
+      resolveDone(full);
+    });
+  };
+
   const task: ImgprogressTask = {
     url: canonical,
     onStage(cb) {
@@ -101,16 +124,11 @@ export function load(url: string): ImgprogressTask {
   // 交给页面,这样重复访问时的瞬间缓存命中永远不会抢在 LCP 前面。
   const unsubscribe = subscribe(canonical, (e) => {
     if (e.type === "first-frame") {
-      const ffUrl = withStageParam(canonical, "ff");
-      scheduleIdle(() => emitFirstFrameOnce(ffUrl));
+      onFirstFrame(withStageParam(canonical, "ff"));
     } else if (e.type === "complete") {
-      const full = withStageParam(canonical, "1");
-      unsubscribe();
-      scheduleIdle(() => {
-        emit("complete", full);
-        resolveDone(full);
-      });
+      onComplete(withStageParam(canonical, "1"));
     } else {
+      if (completeScheduled) return;
       unsubscribe();
       rejectDone(new Error(e.message ?? "imgprogress download failed"));
     }
@@ -134,17 +152,7 @@ export function load(url: string): ImgprogressTask {
   // 完成首次绘制;当这张图是页面的 LCP 候选元素时,字节已在本地后,卡在关键路径上的是
   // 解码成本,不是网络延迟。
   if (typeof caches !== "undefined") {
-    void reconcileFromCache(
-      canonical,
-      (ffUrl) => scheduleIdle(() => emitFirstFrameOnce(ffUrl)),
-      (full) => {
-        unsubscribe();
-        scheduleIdle(() => {
-          emit("complete", full);
-          resolveDone(full);
-        });
-      },
-    );
+    void reconcileFromCache(canonical, onFirstFrame, onComplete);
   }
 
   return task;

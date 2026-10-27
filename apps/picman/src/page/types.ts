@@ -62,15 +62,13 @@ export interface ImgprogressAutoOptions {
    * - `'keep'` (default): keep the full content — no swap-back, no flicker.
    * - `'thumbnail'`: swap back to the cached thumbnail/first-frame stage,
    *   letting the browser drop the full image's decode memory.
-   * - `'placeholder'`: swap back to the original URL (the SW answers it with
-   *   the color-block placeholder while stages are in flight; once fully
-   *   cached this behaves like `'keep'` for repeat visits).
+   * - `'placeholder'`: swap back to a color-block data URI generated page-side
+   *   at the element's own size (no network request, independent of SW state).
    *
    * 被跟踪图片离开视口后显示什么(完整阶段在进入方向始终有视口门控):
    * - `'keep'`(默认):保持完整内容——不回切、无闪烁。
    * - `'thumbnail'`:回退到已缓存的缩略图/首帧阶段,让浏览器得以释放完整图的解码内存。
-   * - `'placeholder'`:回退到原始 URL(阶段进行中时 SW 会应答色块占位;已完整缓存后,
-   *   重复访问下表现与 `'keep'` 相近)。
+   * - `'placeholder'`:回退为页面端按元素尺寸生成的色块 data URI(不发请求,与 SW 状态无关)。
    */
   offViewport?: "keep" | "thumbnail" | "placeholder";
 

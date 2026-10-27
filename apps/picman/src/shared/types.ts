@@ -4,7 +4,7 @@
  * 各入口共享的公共配置/上下文类型。
  */
 
-import { CACHE_NAME } from "./protocol";
+import { CACHE_NAME, DEFAULT_SKE_COLOR } from "./protocol";
 
 /**
  * Error context passed to onError hooks on both sides.
@@ -122,7 +122,7 @@ export function resolveSWOptions(o: ImgprogressSWOptions = {}): ResolvedSWOption
     include: o.include ?? [/\.(gif|png|apng|webp|avif|jpe?g)(\?|$)/i],
     exclude: o.exclude ?? [],
     colorBlock: o.colorBlock ?? "gradient",
-    fallbackColor: o.fallbackColor ?? "#e0e0e0",
+    fallbackColor: o.fallbackColor ?? DEFAULT_SKE_COLOR,
     firstFrame: o.firstFrame ?? "sharp",
     blurRadius: o.blurRadius ?? 12,
     headBytes: o.headBytes ?? 4096,

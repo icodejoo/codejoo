@@ -46,6 +46,8 @@ export class ImgprogressCache implements ImgprogressCacheLike {
   private readonly cachesImpl: CacheStorage;
   /** Clock, injectable for tests — 时钟,测试可注入 */
   private readonly now: () => number;
+  /** 索引读改写的串行化链,永不 reject */
+  private indexLock: Promise<unknown> = Promise.resolve();
 
   /**
    * @param opts - Cache tuning: bucket name, entry cap, max age in seconds — 缓存配置:桶名、条目上限、最大存活秒数
@@ -100,47 +102,69 @@ export class ImgprogressCache implements ImgprogressCacheLike {
     await cache.delete(withStageParam(url, "1"));
   }
 
-  async matchStage(url: string, stage: ImgprogressStage): Promise<Response | undefined> {
-    const cache = await this.cachesImpl.open(this.name);
-
-    if (stage === "1") {
-      const index = await this.loadIndex(cache);
-      const entry = index[url];
-      if (entry && this.now() - entry.ts > this.maxAgeSeconds * 1000) return undefined;
-    }
-
-    const resp = await cache.match(withStageParam(url, stage));
-    if (!resp) return undefined;
-
-    if (stage === "1") {
-      const index = await this.loadIndex(cache);
-      if (index[url]) {
-        index[url] = { ts: this.now() };
-        await this.saveIndex(cache, index);
-      }
-    }
-
-    return resp;
+  /**
+   * 串行执行索引的读改写段,避免并发完成时 last-writer-wins 丢条目。
+   * 前一段无论成败都不会阻塞后一段。
+   * @param fn - 在锁内执行的读改写逻辑
+   * @returns fn 的返回值
+   */
+  private withIndexLock<T>(fn: () => Promise<T>): Promise<T> {
+    const run = this.indexLock.then(fn);
+    this.indexLock = run.catch(() => {});
+    return run;
   }
 
+  /**
+   * 查找某阶段缓存;"1" 阶段会校验过期并触碰 LRU 时间戳。见 {@link ImgprogressCacheLike.matchStage}。
+   * @param url - 规范化图片 URL
+   * @param stage - 目标阶段
+   * @returns 命中的响应,未命中或已过期为 undefined
+   */
+  async matchStage(url: string, stage: ImgprogressStage): Promise<Response | undefined> {
+    const cache = await this.cachesImpl.open(this.name);
+    const resp = await cache.match(withStageParam(url, stage));
+    if (!resp || stage !== "1") return resp;
+
+    // 过期判断与触碰共用一次索引读取,且放在锁内,避免触碰覆盖并发写入
+    return this.withIndexLock(async () => {
+      const index = await this.loadIndex(cache);
+      const entry = index[url];
+      if (!entry) return resp;
+      if (this.now() - entry.ts > this.maxAgeSeconds * 1000) return undefined;
+      index[url] = { ts: this.now() };
+      await this.saveIndex(cache, index);
+      return resp;
+    });
+  }
+
+  /**
+   * 存储某阶段响应;配额失败时淘汰最旧一半后重试一次。见 {@link ImgprogressCacheLike.putStage}。
+   * @param url - 规范化图片 URL
+   * @param stage - 目标阶段
+   * @param resp - 待存储响应(body 会被消耗)
+   * @returns 最终写入成功为 true,失败为 false
+   */
   async putStage(url: string, stage: ImgprogressStage, resp: Response): Promise<boolean> {
     const cache = await this.cachesImpl.open(this.name);
     const key = withStageParam(url, stage);
 
     try {
-      await cache.put(key, resp);
+      // 首次写入用 clone:Cache.put 会消耗 body,失败后原响应还要用于重试
+      await cache.put(key, resp.clone());
     } catch {
       // Quota-like failure — evict the oldest half of tracked entries and retry once.
       // 类配额失败——淘汰最旧的一半已跟踪条目后重试一次。
       try {
-        const index = await this.loadIndex(cache);
-        const oldestFirst = Object.entries(index).sort((a, b) => a[1].ts - b[1].ts);
-        const toEvict = oldestFirst.slice(0, Math.ceil(oldestFirst.length / 2));
-        for (const [evictUrl] of toEvict) {
-          await this.deleteStages(cache, evictUrl);
-          delete index[evictUrl];
-        }
-        await this.saveIndex(cache, index);
+        await this.withIndexLock(async () => {
+          const index = await this.loadIndex(cache);
+          const oldestFirst = Object.entries(index).sort((a, b) => a[1].ts - b[1].ts);
+          const toEvict = oldestFirst.slice(0, Math.ceil(oldestFirst.length / 2));
+          for (const [evictUrl] of toEvict) {
+            await this.deleteStages(cache, evictUrl);
+            delete index[evictUrl];
+          }
+          await this.saveIndex(cache, index);
+        });
         await cache.put(key, resp);
       } catch {
         return false;
@@ -148,24 +172,32 @@ export class ImgprogressCache implements ImgprogressCacheLike {
     }
 
     if (stage === "1") {
-      const index = await this.loadIndex(cache);
-      index[url] = { ts: this.now() };
-      while (Object.keys(index).length > this.maxEntries) {
-        const [oldestUrl] = Object.entries(index).sort((a, b) => a[1].ts - b[1].ts)[0]!;
-        await this.deleteStages(cache, oldestUrl);
-        delete index[oldestUrl];
-      }
-      await this.saveIndex(cache, index);
+      await this.withIndexLock(async () => {
+        const index = await this.loadIndex(cache);
+        index[url] = { ts: this.now() };
+        while (Object.keys(index).length > this.maxEntries) {
+          const [oldestUrl] = Object.entries(index).sort((a, b) => a[1].ts - b[1].ts)[0]!;
+          await this.deleteStages(cache, oldestUrl);
+          delete index[oldestUrl];
+        }
+        await this.saveIndex(cache, index);
+      });
     }
 
     return true;
   }
 
+  /**
+   * 删除一个 URL 的两阶段缓存并更新 LRU 索引。见 {@link ImgprogressCacheLike.deleteUrl}。
+   * @param url - 规范化图片 URL
+   */
   async deleteUrl(url: string): Promise<void> {
     const cache = await this.cachesImpl.open(this.name);
     await this.deleteStages(cache, url);
-    const index = await this.loadIndex(cache);
-    delete index[url];
-    await this.saveIndex(cache, index);
+    await this.withIndexLock(async () => {
+      const index = await this.loadIndex(cache);
+      delete index[url];
+      await this.saveIndex(cache, index);
+    });
   }
 }

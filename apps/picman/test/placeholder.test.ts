@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
+import { normalizeHexColor } from "../src/shared/placeholder";
 import { avgColor, lightDark, makeFirstFramePlaceholder, rgbHex, svgColorBlock } from "../src/sw/placeholder";
 
 describe("svgColorBlock", () => {
@@ -26,6 +27,21 @@ describe("svgColorBlock", () => {
   });
 });
 
+describe("normalizeHexColor", () => {
+  it("接受 #rgb / #rrggbb,无 # 与大小写均可,输出小写 #rrggbb", () => {
+    expect(normalizeHexColor("#ABC")).toBe("#aabbcc");
+    expect(normalizeHexColor("e0E0e0")).toBe("#e0e0e0");
+    expect(normalizeHexColor(" #123456 ")).toBe("#123456");
+  });
+  it("非法输入返回 null", () => {
+    for (const bad of ["", "red", "#12", "#12345", "#gggggg", "#1234567"]) expect(normalizeHexColor(bad)).toBeNull();
+  });
+  it("gradient 回退色非法时不产生 NaN", () => {
+    const svg = svgColorBlock({ width: 1, height: 1, mode: "gradient", fallbackColor: "not-a-color" });
+    expect(svg).not.toContain("NaN");
+  });
+});
+
 describe("makeFirstFramePlaceholder", () => {
   const okDeps = () => {
     const ctx = { filter: "", drawImage: vi.fn() };
@@ -48,5 +64,19 @@ describe("makeFirstFramePlaceholder", () => {
     const { deps } = okDeps();
     deps.decode = vi.fn().mockRejectedValue(new Error("bad"));
     await expect(makeFirstFramePlaceholder(new Uint8Array([1]), "image/gif", { firstFrame: "sharp", blurRadius: 12 }, deps)).resolves.toBeNull();
+  });
+  it("convertToBlob reject 时返回 null,且 bitmap 仍被关闭", async () => {
+    const close = vi.fn();
+    const ctx = { filter: "", drawImage: vi.fn() };
+    const canvas = { getContext: () => ctx, convertToBlob: vi.fn().mockRejectedValue(new Error("boom")) };
+    const deps = { decode: vi.fn().mockResolvedValue({ width: 10, height: 10, close }), createCanvas: vi.fn().mockReturnValue(canvas) };
+    await expect(makeFirstFramePlaceholder(new Uint8Array([1]), "image/gif", { firstFrame: "sharp", blurRadius: 12 }, deps)).resolves.toBeNull();
+    expect(close).toHaveBeenCalledOnce();
+  });
+  it("极端长宽比缩放后宽高至少 1px", async () => {
+    const { deps } = okDeps();
+    deps.decode = vi.fn().mockResolvedValue({ width: 4000, height: 1 });
+    await makeFirstFramePlaceholder(new Uint8Array([1]), "image/gif", { firstFrame: "sharp", blurRadius: 12 }, deps);
+    expect(deps.createCanvas).toHaveBeenCalledWith(512, 1);
   });
 });

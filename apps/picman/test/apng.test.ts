@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { apngFirstFrame, scanPng } from "../src/shared/walkers/apng";
-import { makeApng } from "./fixtures";
+import { makeApng, makeBigPng } from "./fixtures";
 import { asciiEquals, readBE32 } from "../src/shared/bytes";
 
 const chunkTypes = (b: Uint8Array): string[] => {
@@ -17,6 +17,13 @@ describe("scanPng / apngFirstFrame", () => {
   it("acTL → animated;无 → static", () => {
     expect(scanPng(makeApng({ animated: true })).status).toBe("animated");
     expect(scanPng(makeApng({ animated: false })).status).toBe("static");
+  });
+  it("只收到首个 IDAT 块头(单个巨大 IDAT)即可定 status", () => {
+    const png = makeBigPng({ idatBytes: 100000, chunkSize: 100000, interlaced: true });
+    const r = scanPng(png.subarray(0, 8 + 25 + 8 + 100));
+    expect(r.status).toBe("static");
+    expect(r.interlaced).toBe(true);
+    expect(r.idatBytes).toBeGreaterThan(0);
   });
   it("增量喂:最终 animated 且 firstFrameReady", () => {
     const a = makeApng({ animated: true });

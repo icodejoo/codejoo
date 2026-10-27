@@ -6,7 +6,8 @@
  */
 
 import { ByteAccumulator } from "../shared/bytes";
-import { HEADER_MARK, PARAM_BYPASS, PARAM_FULL, PARAM_PLAY, PARAM_SKE, type ImgprogressMessage, type ImgprogressStage, stripImgprogressParams } from "../shared/protocol";
+import { normalizeHexColor } from "../shared/placeholder";
+import { HEADER_MARK, PARAM_BYPASS, PARAM_FULL, PARAM_PLAY, PARAM_SKE, type ImgprogressMessage, stripImgprogressParams } from "../shared/protocol";
 import { sniff } from "../shared/sniff";
 import type { ImgprogressErrorContext, ResolvedSWOptions } from "../shared/types";
 import { apngFirstFrame } from "../shared/walkers/apng";
@@ -52,6 +53,9 @@ const inflight = new Map<string, Promise<Response>>();
 /** Memoized static color blocks, keyed by `color|mode|WxH` — 静态色块记忆缓存,按 `颜色|样式|宽x高` 键存 */
 const colorBlockCache = new Map<string, string>();
 
+/** 色块缓存条目上限,超出时整体清空,防止按元素颜色/尺寸无限增长 */
+const COLOR_BLOCK_CACHE_MAX = 256;
+
 /**
  * Get a static color-block SVG, generated once per (color, mode, size) and
  * reused thereafter. No per-request palette extraction and no per-request
@@ -71,9 +75,21 @@ function getColorBlock(width: number, height: number, color: string, mode: "soli
   let svg = colorBlockCache.get(key);
   if (svg === undefined) {
     svg = svgColorBlock({ width, height, mode, fallbackColor: color });
+    if (colorBlockCache.size >= COLOR_BLOCK_CACHE_MAX) colorBlockCache.clear();
     colorBlockCache.set(key, svg);
   }
   return svg;
+}
+
+/**
+ * 构造 SVG 色块占位响应(不缓存,带占位标记头)。
+ * @param svg - 色块 SVG 字符串
+ * @returns 占位 Response
+ */
+function placeholderResponse(svg: string): Response {
+  return new Response(svg, {
+    headers: { "Content-Type": "image/svg+xml", "Cache-Control": "no-store", [HEADER_MARK]: "placeholder" },
+  });
 }
 
 /**
@@ -87,7 +103,7 @@ function getColorBlock(width: number, height: number, color: string, mode: "soli
 export function shouldIntercept(request: Request, options: ResolvedSWOptions): boolean {
   if (request.method !== "GET") return false;
 
-  const destination = (request as unknown as { destination?: string }).destination;
+  const destination = request.destination;
 
   // Video fallback gate: a play-marked request is a real user play → native
   // passthrough (preserves Range/206/seek); otherwise defer only when opted in.
@@ -104,7 +120,12 @@ export function shouldIntercept(request: Request, options: ResolvedSWOptions): b
   const parsed = new URL(url);
   if (parsed.searchParams.has(PARAM_FULL) || parsed.searchParams.has(PARAM_BYPASS)) return true;
 
-  const matches = (rules: (string | RegExp)[]) => rules.some((r) => (typeof r === "string" ? url.includes(r) : r.test(url)));
+  const matches = (rules: (string | RegExp)[]) =>
+    rules.some((r) => {
+      if (typeof r === "string") return url.includes(r);
+      r.lastIndex = 0; // 带 g/y 标志的正则 test 有状态,先重置
+      return r.test(url);
+    });
   if (matches(options.exclude)) return false;
   if (!matches(options.include)) return false;
   return true;
@@ -137,7 +158,43 @@ function concatStream(prefix: Uint8Array, reader: ReadableStreamDefaultReader<Ui
       }
       controller.enqueue(value);
     },
+    cancel(reason) {
+      return reader.cancel(reason);
+    },
   });
+}
+
+/**
+ * 透传:先回放已缓冲字节,再接着泵送剩余响应体,保留原响应的状态与头。
+ * @param acc - 已缓冲字节的累积器
+ * @param reader - 剩余响应体 reader
+ * @param resp - 原始网络响应(取 status/statusText/headers)
+ * @returns 透传 Response
+ */
+function passthroughResponse(acc: ByteAccumulator, reader: ReadableStreamDefaultReader<Uint8Array>, resp: Response): Response {
+  return new Response(concatStream(acc.view().slice(), reader), responseInitOf(resp));
+}
+
+/**
+ * 取原响应的状态、状态文本与头,用于构造保持原语义的新 Response。
+ * @param resp - 原始网络响应
+ * @returns 可直接传给 `new Response` 的 init
+ */
+function responseInitOf(resp: Response): ResponseInit {
+  return { status: resp.status, statusText: resp.statusText, headers: resp.headers };
+}
+
+/**
+ * 回调用户 onError 钩子;钩子自己抛错时吞掉,不影响后续通知与降级流程。
+ * @param deps - 管线依赖
+ * @param ctx - 错误上下文
+ */
+function reportError(deps: PipelineDeps, ctx: ImgprogressErrorContext): void {
+  try {
+    deps.options.onError(ctx);
+  } catch {
+    // 用户钩子的异常不得打断管线
+  }
 }
 
 /**
@@ -171,6 +228,36 @@ function tryRecomposeFirstFrame(sr: ReturnType<typeof sniff>, bytes: Uint8Array)
 }
 
 /**
+ * 后台下载收尾(成功):写入 "1" 阶段缓存并通知页面完成。
+ * @param acc - 已持有完整字节的累积器
+ * @param url - 规范化图片 URL
+ * @param origResp - 原始网络响应,用于复用响应头
+ * @param deps - 管线依赖
+ */
+async function completeDownload(acc: ByteAccumulator, url: string, origResp: Response, deps: PipelineDeps): Promise<void> {
+  await deps.cache.putStage(url, "1", new Response(acc.view().slice(), { headers: origResp.headers }));
+  await deps.notify({ imgprogress: 1, type: "complete", url });
+}
+
+/**
+ * 后台下载收尾(失败):停掉 reader,先回调 onError,再通知页面;通知失败不影响 onError。
+ * @param err - 捕获到的异常
+ * @param reader - 仍在读的响应体 reader
+ * @param url - 规范化图片 URL
+ * @param deps - 管线依赖
+ */
+async function failDownload(err: unknown, reader: ReadableStreamDefaultReader<Uint8Array>, url: string, deps: PipelineDeps): Promise<void> {
+  reader.cancel().catch(() => {});
+  const ctx: ImgprogressErrorContext = { url, stage: "download", error: err };
+  reportError(deps, ctx);
+  try {
+    await deps.notify({ imgprogress: 1, type: "error", url, stage: "download", message: String(err) });
+  } catch {
+    // 通知失败不再向外抛,onError 已经回调过了
+  }
+}
+
+/**
  * Continue downloading in the background: emit the first-frame placeholder
  * once ready, then cache the full image and notify pages.
  *
@@ -201,10 +288,11 @@ async function background(reader: ReadableStreamDefaultReader<Uint8Array>, acc: 
             // makeFirstFrame 无论源格式是什么,始终光栅化为 PNG blob(见
             // makeFirstFramePlaceholder 的 canvas.convertToBlob),所以缓存响应的
             // Content-Type 必须是 'image/png'——沿用原始格式的 mime 会与实际字节不符。
-            await deps.cache.putStage(url, "ff", new Response(blob, { headers: { "Content-Type": "image/png" } }));
-            await deps.notify({ imgprogress: 1, type: "first-frame", url });
+            // 写缓存失败时不发通知:页面据此请求 ff 阶段会缓存未命中,回落网络下载整图
+            const stored = await deps.cache.putStage(url, "ff", new Response(blob, { headers: { "Content-Type": "image/png" } }));
+            if (stored) await deps.notify({ imgprogress: 1, type: "first-frame", url });
           } else {
-            deps.options.onError({ url, stage: "first-frame", error: new Error("first-frame render returned null") });
+            reportError(deps, { url, stage: "first-frame", error: new Error("first-frame render returned null") });
           }
           firstFrameDone = true;
         }
@@ -213,15 +301,12 @@ async function background(reader: ReadableStreamDefaultReader<Uint8Array>, acc: 
       const { done, value } = await reader.read();
       if (value) acc.append(value);
       if (done) break;
-      if (!firstFrameDone) currentSniff = sniff(acc.view());
+      if (!firstFrameDone && acc.length <= deps.options.firstFrameMaxBytes) currentSniff = sniff(acc.view());
     }
 
-    await deps.cache.putStage(url, "1", new Response(acc.view().slice(), { headers: origResp.headers }));
-    await deps.notify({ imgprogress: 1, type: "complete", url });
+    await completeDownload(acc, url, origResp, deps);
   } catch (err) {
-    await deps.notify({ imgprogress: 1, type: "error", url, stage: "download", message: String(err) });
-    const ctx: ImgprogressErrorContext = { url, stage: "download", error: err };
-    deps.options.onError(ctx);
+    await failDownload(err, reader, url, deps);
   }
 }
 
@@ -256,9 +341,9 @@ async function backgroundStatic(reader: ReadableStreamDefaultReader<Uint8Array>,
   let thumbDone = false;
 
   const putPrefixThumb = async (): Promise<void> => {
-    await deps.cache.putStage(url, "ff", new Response(acc.view().slice(), { headers: { "Content-Type": mime } }));
-    await deps.notify({ imgprogress: 1, type: "first-frame", url });
-    thumbDone = true;
+    thumbDone = true; // 只尝试一次,写失败也不在后续 chunk 重复尝试
+    const stored = await deps.cache.putStage(url, "ff", new Response(acc.view().slice(), { headers: { "Content-Type": mime } }));
+    if (stored) await deps.notify({ imgprogress: 1, type: "first-frame", url });
   };
 
   try {
@@ -277,17 +362,14 @@ async function backgroundStatic(reader: ReadableStreamDefaultReader<Uint8Array>,
     if (!thumbDone) {
       const blob = await deps.makeFirstFrame(acc.view(), mime);
       if (blob) {
-        await deps.cache.putStage(url, "ff", new Response(blob, { headers: { "Content-Type": "image/png" } }));
-        await deps.notify({ imgprogress: 1, type: "first-frame", url });
+        const stored = await deps.cache.putStage(url, "ff", new Response(blob, { headers: { "Content-Type": "image/png" } }));
+        if (stored) await deps.notify({ imgprogress: 1, type: "first-frame", url });
       }
     }
 
-    await deps.cache.putStage(url, "1", new Response(acc.view().slice(), { headers: origResp.headers }));
-    await deps.notify({ imgprogress: 1, type: "complete", url });
+    await completeDownload(acc, url, origResp, deps);
   } catch (err) {
-    await deps.notify({ imgprogress: 1, type: "error", url, stage: "download", message: String(err) });
-    const ctx: ImgprogressErrorContext = { url, stage: "download", error: err };
-    deps.options.onError(ctx);
+    await failDownload(err, reader, url, deps);
   }
 }
 
@@ -301,9 +383,9 @@ async function backgroundStatic(reader: ReadableStreamDefaultReader<Uint8Array>,
  */
 async function mainFlow(request: Request, deps: PipelineDeps): Promise<Response> {
   // 骨架色:优先用本请求携带的按元素 data-ske-color(经 PARAM_SKE),否则用全局静态默认色。
-  // Skeleton color: prefer this request's per-element data-ske-color (via PARAM_SKE), else the global static default.
+  // 颜色先过规范化校验,非法值(含注入尝试)回退全局默认色。
   const ske = new URL(request.url).searchParams.get(PARAM_SKE);
-  const color = ske ?? deps.options.fallbackColor;
+  const color = (ske !== null ? normalizeHexColor(ske) : null) ?? deps.options.fallbackColor;
 
   // 规范化 URL 用于 fetch/缓存/通知——绝不能把 ske 等标记参数发给源站或写进 key,
   // 否则页面端(用规范 URL 订阅)会与通知对不上。无参数时沿用原 Request 保留语义。
@@ -327,7 +409,7 @@ async function mainFlow(request: Request, deps: PipelineDeps): Promise<Response>
     if (value) acc.append(value);
 
     if (!cl && done && acc.length < deps.options.threshold) {
-      return new Response(acc.view().slice(), { status: resp.status, headers: resp.headers });
+      return new Response(acc.view().slice(), responseInitOf(resp));
     }
 
     if (acc.length >= deps.options.headBytes || done) {
@@ -344,26 +426,29 @@ async function mainFlow(request: Request, deps: PipelineDeps): Promise<Response>
         if (deps.options.staticProgressive && (sr.format === "jpeg" || sr.format === "apng") && sr.width !== undefined && sr.height !== undefined && !done) {
           const svg = getColorBlock(sr.width, sr.height, color, deps.options.colorBlock);
           deps.waitUntil(backgroundStatic(reader, acc, sr, canonical, resp, deps));
-          return new Response(svg, {
-            headers: { "Content-Type": "image/svg+xml", "Cache-Control": "no-store", [HEADER_MARK]: "placeholder" },
-          });
+          return placeholderResponse(svg);
         }
-        return new Response(concatStream(acc.view().slice(), reader), { headers: resp.headers });
+        return passthroughResponse(acc, reader, resp);
       }
 
-      if (sr.status === "animated" && sr.width !== undefined && sr.height !== undefined) {
+      if (sr.status === "animated") {
+        if (sr.width === undefined || sr.height === undefined) {
+          // 动图但拿不到宽高,没法生成色块——直接透传,不把整个响应体缓冲完
+          return passthroughResponse(acc, reader, resp);
+        }
         const svg = getColorBlock(sr.width, sr.height, color, deps.options.colorBlock);
         deps.waitUntil(background(reader, acc, sr, canonical, resp, deps));
-        return new Response(svg, {
-          headers: { "Content-Type": "image/svg+xml", "Cache-Control": "no-store", [HEADER_MARK]: "placeholder" },
-        });
+        return placeholderResponse(svg);
       }
 
       if (done) {
         // Stream ended without a conclusive result — hand back whatever arrived.
         // 流已结束但结论未定——原样交回已收到的数据。
-        return new Response(acc.view().slice(), { headers: resp.headers });
+        return new Response(acc.view().slice(), responseInitOf(resp));
       }
+
+      // 累积量已超过首帧上限仍判不出结论:继续缓冲没有意义,直接透传
+      if (acc.length > deps.options.firstFrameMaxBytes) return passthroughResponse(acc, reader, resp);
     }
   }
 }
@@ -388,20 +473,24 @@ export async function handleImageRequest(request: Request, deps: PipelineDeps): 
     // bytes download; the page-side facade re-requests with PARAM_PLAY on play.
     // 延迟视频:仅当 deferVideos 开启且请求无播放标记时到达——用极小响应"饿死"它,
     // 不下载任何视频字节;页面端 facade 会在播放时带 PARAM_PLAY 重新请求。
-    if ((request as unknown as { destination?: string }).destination === "video") {
+    if (request.destination === "video") {
       return new Response(null, { status: 204, headers: { [HEADER_MARK]: "deferred", "Cache-Control": "no-store" } });
     }
 
+    // 回落请求带上原 Request 的 mode/credentials 等;直接传字符串会变成默认 CORS 请求,跨域 no-cors 图片会失败
     if (url.searchParams.has(PARAM_BYPASS)) {
-      return deps.fetchImpl(stripImgprogressParams(request.url));
+      return deps.fetchImpl(new Request(stripImgprogressParams(request.url), request));
     }
 
     if (url.searchParams.has(PARAM_FULL)) {
-      const stage = url.searchParams.get(PARAM_FULL) as ImgprogressStage;
+      const stage = url.searchParams.get(PARAM_FULL);
       const strip = stripImgprogressParams(request.url);
+      // 回落网络:带原 Request 的 mode/credentials 拉取去标记后的原图
+      const fallback = () => deps.fetchImpl(new Request(strip, request));
+      // 阶段值不是 ff/1 视为无效,直接回落网络
+      if (stage !== "ff" && stage !== "1") return fallback();
       const cached = await deps.cache.matchStage(strip, stage);
-      if (cached) return cached;
-      return deps.fetchImpl(strip);
+      return cached ?? fallback();
     }
 
     const key = stripImgprogressParams(request.url);
@@ -423,7 +512,7 @@ export async function handleImageRequest(request: Request, deps: PipelineDeps): 
     }
   } catch (err) {
     const ctx: ImgprogressErrorContext = { url: request.url, stage: "fetch", error: err };
-    deps.options.onError(ctx);
+    reportError(deps, ctx);
     return deps.fetchImpl(request);
   }
 }

@@ -15,6 +15,19 @@ describe("scanGif", () => {
     expect(scanGif(makeGif({ frames: 2, loop: false })).status).toBe("animated");
     expect(scanGif(makeGif({ frames: 1, loop: false })).status).toBe("static");
   });
+  it("截断在第 2 帧中间:已判 animated,firstFrameEnd 为首帧边界", () => {
+    const g = makeGif({ frames: 3, loop: true });
+    const full = scanGif(g);
+    const end = full.firstFrameEnd!;
+    // 第 2 帧先是 8 字节的图形控制扩展,其后才是图像描述符(0x2c);只多出标记及其后若干字节
+    for (const extra of [9, 15]) {
+      const r = scanGif(g.subarray(0, end + extra));
+      expect(r.status).toBe("animated");
+      expect(r.firstFrameEnd).toBe(end);
+    }
+    // 还没看到第 2 个图像描述符时仍待定
+    expect(scanGif(g.subarray(0, end + 8)).status).toBe("need-more");
+  });
   it("增量 1 字节喂:无异常,最终结论一致", () => {
     const g = makeGif({ frames: 2, loop: true });
     let last = scanGif(g.subarray(0, 1));

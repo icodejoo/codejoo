@@ -16,7 +16,7 @@ function inertDeps(): VideoFrameDeps {
 }
 
 /** 一个可控的离屏 <video> 桩,src 一被赋值即在微任务里派发 loadeddata */
-function stubVideo(width = 160, height = 90): HTMLVideoElement {
+function stubVideo(width = 160, height = 90, autoLoad = true): HTMLVideoElement & { listenerCount: () => number } {
   const listeners: Record<string, (() => void)[]> = {};
   let src = "";
   return {
@@ -29,13 +29,18 @@ function stubVideo(width = 160, height = 90): HTMLVideoElement {
     },
     set src(v: string) {
       src = v;
-      queueMicrotask(() => (listeners.loadeddata ?? []).forEach((f) => f()));
+      if (autoLoad) queueMicrotask(() => (listeners.loadeddata ?? []).forEach((f) => f()));
     },
     addEventListener(type: string, cb: () => void) {
       (listeners[type] ??= []).push(cb);
     },
+    removeEventListener(type: string, cb: () => void) {
+      listeners[type] = (listeners[type] ?? []).filter((f) => f !== cb);
+    },
+    /** 当前仍挂着的监听器总数 */
+    listenerCount: () => Object.values(listeners).reduce((n, l) => n + l.length, 0),
     removeAttribute() {},
-  } as unknown as HTMLVideoElement;
+  } as unknown as HTMLVideoElement & { listenerCount: () => number };
 }
 
 beforeEach(() => {
@@ -107,7 +112,7 @@ describe("video facade", () => {
     document.body.append(v);
 
     const deps: VideoFrameDeps = {
-      fetchImpl: vi.fn().mockResolvedValue(new Response(new Blob([new Uint8Array([1, 2, 3])]))) as unknown as typeof fetch,
+      fetchImpl: vi.fn().mockResolvedValue(new Response(new Blob([new Uint8Array([1, 2, 3])]), { status: 206 })) as unknown as typeof fetch,
       createVideo: () => stubVideo(),
       createCanvas: () => ({ getContext: () => ({ drawImage() {} }), toDataURL: () => "data:image/jpeg;base64,ZZZZ" }),
     };
@@ -117,13 +122,55 @@ describe("video facade", () => {
     expect(v.poster).toBe("data:image/jpeg;base64,ZZZZ");
   });
 
+  it("服务器忽略 Range 回 200:取消 body,不抓帧,停留色块封面", async () => {
+    const v = document.createElement("video");
+    v.setAttribute("src", VIDEO_URL);
+    document.body.append(v);
+
+    const resp = new Response(new Blob([new Uint8Array([1, 2, 3])]), { status: 200 });
+    const cancel = vi.spyOn(resp.body!, "cancel");
+    const deps: VideoFrameDeps = {
+      fetchImpl: vi.fn().mockResolvedValue(resp) as unknown as typeof fetch,
+      createVideo: () => stubVideo(),
+      createCanvas: () => ({ getContext: () => ({ drawImage() {} }), toDataURL: () => "data:image/jpeg;base64,ZZZZ" }),
+    };
+    createVideoFacade(resolveVideoOptions({ videoFrame: true, videoAutoplay: false }), deps).track(v);
+
+    await flush();
+    expect(cancel).toHaveBeenCalled();
+    expect(v.poster).toContain("data:image/svg+xml");
+  });
+
+  it("等待首帧超时:停留色块封面,且监听器已摘除", async () => {
+    vi.useFakeTimers();
+    try {
+      const v = document.createElement("video");
+      v.setAttribute("src", VIDEO_URL);
+      document.body.append(v);
+
+      const offscreen = stubVideo(160, 90, false);
+      const deps: VideoFrameDeps = {
+        fetchImpl: vi.fn().mockResolvedValue(new Response(new Blob([new Uint8Array([1, 2, 3])]), { status: 206 })) as unknown as typeof fetch,
+        createVideo: () => offscreen,
+        createCanvas: () => ({ getContext: () => ({ drawImage() {} }), toDataURL: () => "data:image/jpeg;base64,ZZZZ" }),
+      };
+      createVideoFacade(resolveVideoOptions({ videoFrame: true, videoAutoplay: false }), deps).track(v);
+
+      await vi.advanceTimersByTimeAsync(20000);
+      expect(v.poster).toContain("data:image/svg+xml");
+      expect(offscreen.listenerCount()).toBe(0);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it("抓帧失败(toDataURL 抛 SecurityError):停留色块封面", async () => {
     const v = document.createElement("video");
     v.setAttribute("src", VIDEO_URL);
     document.body.append(v);
 
     const deps: VideoFrameDeps = {
-      fetchImpl: vi.fn().mockResolvedValue(new Response(new Blob([new Uint8Array([1, 2, 3])]))) as unknown as typeof fetch,
+      fetchImpl: vi.fn().mockResolvedValue(new Response(new Blob([new Uint8Array([1, 2, 3])]), { status: 206 })) as unknown as typeof fetch,
       createVideo: () => stubVideo(),
       createCanvas: () => ({
         getContext: () => ({ drawImage() {} }),
