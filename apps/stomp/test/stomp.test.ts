@@ -25,6 +25,12 @@ async function pump(cond: () => boolean, timeout = 3000): Promise<void> {
   }
 }
 
+/** 把消息收窄成顶层对象，不是对象就抛错（测试断言字段用）。 */
+function obj(v: ParsedMessage | undefined): JsonMessage {
+  if (typeof v !== "object" || v === null || Array.isArray(v)) throw new Error("not object");
+  return v;
+}
+
 beforeEach(async () => {
   broker = new StompTestBroker();
   await broker.start();
@@ -42,13 +48,13 @@ describe("@codejoo/stomp Stompsocket", () => {
     c.activate();
     await pump(() => c.connected);
 
-    const got: JsonMessage[] = [];
+    const got: ParsedMessage[] = [];
     c.subscribe("/topic/a", (j) => got.push(j));
     await pump(() => broker.subscriptionCount === 1);
 
     broker.sendMessage("/topic/a", '{"v":1}');
     await pump(() => got.length > 0);
-    expect(got[0].v).toBe(1);
+    expect(obj(got[0]).v).toBe(1);
   });
 
   it("subscribe：相同 id 多回调共享一份解析数据，且只订阅一次", async () => {
@@ -56,8 +62,8 @@ describe("@codejoo/stomp Stompsocket", () => {
     c.activate();
     await pump(() => c.connected);
 
-    let a: JsonMessage | undefined;
-    let b: JsonMessage | undefined;
+    let a: ParsedMessage | undefined;
+    let b: ParsedMessage | undefined;
     c.subscribe("/topic/a", (j) => (a = j), { id: "S" });
     c.subscribe("/topic/a", (j) => (b = j), { id: "S" });
     await pump(() => broker.subscriptionCount === 1);
@@ -177,21 +183,21 @@ describe("@codejoo/stomp Stompsocket", () => {
 
   it("未连接时订阅，连接后自动重放", async () => {
     const c = make();
-    const got: JsonMessage[] = [];
+    const got: ParsedMessage[] = [];
     c.subscribe("/topic/a", (j) => got.push(j)); // activate 前
     c.activate();
 
     await pump(() => broker.subscriptionCount === 1);
     broker.sendMessage("/topic/a", '{"v":9}');
     await pump(() => got.length > 0);
-    expect(got[0].v).toBe(9);
+    expect(obj(got[0]).v).toBe(9);
   });
 
   it("断线重连后自动重新订阅", async () => {
     const c = make();
     c.activate();
     await pump(() => c.connected);
-    const got: JsonMessage[] = [];
+    const got: ParsedMessage[] = [];
     c.subscribe("/topic/a", (j) => got.push(j));
     await pump(() => broker.subscriptionCount === 1);
 
@@ -202,7 +208,7 @@ describe("@codejoo/stomp Stompsocket", () => {
 
     broker.sendMessage("/topic/a", '{"v":7}');
     await pump(() => got.length > 0);
-    expect(got[0].v).toBe(7);
+    expect(obj(got[0]).v).toBe(7);
   });
 
   it("smart：处理成功发 ACK", async () => {
@@ -303,7 +309,7 @@ describe("@codejoo/stomp Stompsocket", () => {
     await pump(() => c.connected);
 
     let saved: AckControl | undefined;
-    let got: JsonMessage | undefined;
+    let got: ParsedMessage | undefined;
     c.subscribe(
       "/topic/m",
       (j, ack) => {
@@ -317,7 +323,7 @@ describe("@codejoo/stomp Stompsocket", () => {
 
     broker.sendMessage("/topic/m", '{"v":1}', { withAck: true });
     await pump(() => saved !== undefined);
-    expect(got?.v).toBe(1);
+    expect(obj(got).v).toBe(1);
 
     await new Promise((r) => setTimeout(r, 50));
     expect(broker.framesOf("ACK").length).toBe(0); // manual 下不自动应答
@@ -424,13 +430,13 @@ describe("@codejoo/stomp Stompsocket", () => {
     });
     c.activate();
     await pump(() => c.connected);
-    let got: JsonMessage | undefined;
+    let got: ParsedMessage | undefined;
     c.subscribe("/topic/bin", (j) => (got = j));
     await pump(() => broker.subscriptionCount === 1);
 
     broker.sendMessage("/topic/bin", '{"b":true}', { contentType: "application/octet-stream", binary: true });
     await pump(() => got !== undefined);
-    expect(got?.b).toBe(true);
+    expect(obj(got).b).toBe(true);
   });
 
   it("未配置 binaryDecoder：二进制消息按解析失败处理（NACK）", async () => {
@@ -457,13 +463,13 @@ describe("@codejoo/stomp Stompsocket", () => {
     });
     c.activate();
     await pump(() => c.connected);
-    let got: JsonMessage | undefined;
+    let got: ParsedMessage | undefined;
     c.subscribe("/topic/mislabeled", (j) => (got = j));
     await pump(() => broker.subscriptionCount === 1);
 
     broker.sendRawMessage("/topic/mislabeled", raw, { contentType: "application/json" });
     await pump(() => got !== undefined);
-    expect(got?.ok).toBe(true);
+    expect(obj(got).ok).toBe(true);
     expect(decodedBytes).toEqual(raw);
   });
 
@@ -471,13 +477,13 @@ describe("@codejoo/stomp Stompsocket", () => {
     const c = make();
     c.activate();
     await pump(() => c.connected);
-    let got: JsonMessage | undefined;
+    let got: ParsedMessage | undefined;
     c.subscribe("/topic/nohdr", (j) => (got = j));
     await pump(() => broker.subscriptionCount === 1);
 
     broker.sendRawMessage("/topic/nohdr", new TextEncoder().encode('{"n":1}'));
     await pump(() => got !== undefined);
-    expect(got?.n).toBe(1);
+    expect(obj(got).n).toBe(1);
   });
 
   it("onStompError：服务端 ERROR 帧回调", async () => {
@@ -504,12 +510,34 @@ describe("@codejoo/stomp Stompsocket", () => {
     expect(c.connected).toBe(true);
   });
 
+  it("onUnhandledReceipt 抛错时连接仍存活，后续帧照常处理", async () => {
+    const c = make({
+      onUnhandledReceipt: () => {
+        throw new Error("boom");
+      },
+    });
+    c.activate();
+    await pump(() => c.connected);
+
+    broker.sendUnsolicitedReceipt("x");
+    await new Promise((r) => setTimeout(r, 100));
+
+    // 再订阅并收一条消息，证明回调异常没有打断后续帧处理
+    const got: ParsedMessage[] = [];
+    c.subscribe("/topic/after", (j) => got.push(j));
+    await pump(() => broker.subscriptionCount === 1);
+    broker.sendMessage("/topic/after", '{"v":1}');
+    await pump(() => got.length === 1);
+
+    expect(c.connected).toBe(true);
+  });
+
   it("引用计数：同 id 两回调，取消一个仍在线，取消最后一个才 UNSUBSCRIBE", async () => {
     const c = make();
     c.activate();
     await pump(() => c.connected);
-    const got1: JsonMessage[] = [];
-    const got2: JsonMessage[] = [];
+    const got1: ParsedMessage[] = [];
+    const got2: ParsedMessage[] = [];
     const s1 = c.subscribe("/topic/a", (j) => got1.push(j), { id: "S" });
     const s2 = c.subscribe("/topic/a", (j) => got2.push(j), { id: "S" });
     await pump(() => broker.subscriptionCount === 1);
@@ -545,19 +573,19 @@ describe("@codejoo/stomp Stompsocket", () => {
 
     derived.activate();
     await pump(() => derived.connected);
-    const got: JsonMessage[] = [];
+    const got: ParsedMessage[] = [];
     derived.subscribe("/topic/copy", (j) => got.push(j));
     await pump(() => broker.subscriptionCount === 1);
     broker.sendMessage("/topic/copy", '{"v":1}');
     await pump(() => got.length > 0);
-    expect(got[0].v).toBe(1);
+    expect(obj(got[0]).v).toBe(1);
   });
 
   it("dispose 后可再次 activate 复用；keepSubscriptions 保留订阅", async () => {
     const c = make();
     c.activate();
     await pump(() => c.connected);
-    const got: JsonMessage[] = [];
+    const got: ParsedMessage[] = [];
     c.subscribe("/topic/a", (j) => got.push(j));
     await pump(() => broker.subscriptionCount === 1);
 
@@ -568,7 +596,7 @@ describe("@codejoo/stomp Stompsocket", () => {
 
     broker.sendMessage("/topic/a", '{"v":42}');
     await pump(() => got.length > 0);
-    expect(got.at(-1)?.v).toBe(42);
+    expect(obj(got.at(-1)).v).toBe(42);
   });
 
   it("断线期间 unsubscribe / dispose 不抛异常、也不往死 socket 发 UNSUBSCRIBE 帧", async () => {
@@ -602,18 +630,18 @@ describe("@codejoo/stomp Stompsocket", () => {
   });
 
   it("content-type 带参数（application/octet-stream;foo=bar）也走 binaryDecoder", async () => {
-    let got: JsonMessage | undefined;
+    let got: ParsedMessage | undefined;
     const c = make({
       binaryDecoder: () => ({ ok: true }),
     });
     c.activate();
     await pump(() => c.connected);
-    c.subscribe("/topic/param", (j) => (got = j as JsonMessage));
+    c.subscribe("/topic/param", (j) => (got = j));
     await pump(() => broker.subscriptionCount === 1);
 
     broker.sendMessage("/topic/param", "x", { contentType: "application/octet-stream;foo=bar", binary: true });
     await pump(() => got !== undefined);
-    expect(got?.ok).toBe(true);
+    expect(obj(got).ok).toBe(true);
   });
 
   it("reconnectTimeMode/maxReconnectDelay 透传给 stompjs", () => {
@@ -625,5 +653,119 @@ describe("@codejoo/stomp Stompsocket", () => {
     const linear = make();
     const linearInner = (linear as unknown as { client: { reconnectTimeMode: number } }).client;
     expect(linearInner.reconnectTimeMode).toBe(0); // 默认 LINEAR
+  });
+
+  it("已连接时再次 activate()：状态保持 connected，不会重复 CONNECT", async () => {
+    const c = make();
+    c.activate();
+    await pump(() => c.connected);
+    expect(c.state).toBe(ConnectionState.connected);
+
+    c.activate();
+    expect(c.state).toBe(ConnectionState.connected);
+    await new Promise((r) => setTimeout(r, 100));
+    expect(c.state).toBe(ConnectionState.connected);
+    expect(broker.framesOf("CONNECT").length).toBe(1);
+  });
+
+  it("reconnectDelay=0 断线后再次 activate() 能重新连上", async () => {
+    const c = make({ reconnectDelay: 0 });
+    c.activate();
+    await pump(() => c.connected);
+
+    await broker.dropConnections();
+    await pump(() => c.state === ConnectionState.disconnected, 5000);
+
+    c.activate();
+    await pump(() => c.connected, 5000);
+    expect(c.state).toBe(ConnectionState.connected);
+    expect(broker.framesOf("CONNECT").length).toBe(2);
+  });
+
+  it("dispose() 不 await 就 activate()：最终是 connected，不会被旧 dispose 写回 disconnected", async () => {
+    const c = make();
+    c.activate();
+    await pump(() => c.connected);
+
+    const pending = c.dispose();
+    c.activate();
+    await pending;
+    // 旧实现会在 dispose 完成时无条件写回 disconnected，这里卡住该回归
+    expect(c.state).not.toBe(ConnectionState.disconnected);
+    await pump(() => c.state === ConnectionState.connected, 5000);
+    expect(c.connected).toBe(true);
+  });
+
+  it("某个 onState 监听器抛错：其他监听器仍收到 connected，onConnected 仍被调用", async () => {
+    let connectedCalled = false;
+    const seen: ConnectionState[] = [];
+    const c = make({
+      onStateChanged: () => {
+        throw new Error("onStateChanged boom");
+      },
+      onConnected: () => (connectedCalled = true),
+    });
+    c.onState(() => {
+      throw new Error("listener boom");
+    });
+    c.onState((s) => seen.push(s));
+
+    c.activate();
+    await pump(() => c.connected);
+    await pump(() => connectedCalled);
+    expect(seen).toContain(ConnectionState.connecting);
+    expect(seen).toContain(ConnectionState.connected);
+  });
+
+  it("maxQueuedMessages: 0 时离线 send 不缓冲，连上后也不会补发", async () => {
+    const c = make({ maxQueuedMessages: 0 });
+    c.send("/app/x", { body: "dropped" });
+    c.activate();
+    await pump(() => c.connected);
+    await new Promise((r) => setTimeout(r, 100));
+    expect(broker.framesOf("SEND").length).toBe(0);
+  });
+
+  it("离线 send 循环引用对象会同步抛出，不影响之后消息的补发", async () => {
+    const c = make();
+    const cyclic: Record<string, unknown> = {};
+    cyclic.self = cyclic;
+    expect(() => c.send("/app/x", { body: cyclic })).toThrow();
+
+    c.send("/app/x", { body: "ok" });
+    c.activate();
+    await pump(() => broker.framesOf("SEND").length === 1, 5000);
+    expect(broker.framesOf("SEND")[0].body).toBe("ok");
+  });
+
+  it("content-type 大小写不敏感：Application/Octet-Stream 也走 binaryDecoder", async () => {
+    let got: ParsedMessage | undefined;
+    const c = make({
+      binaryDecoder: () => ({ ok: true }),
+    });
+    c.activate();
+    await pump(() => c.connected);
+    c.subscribe("/topic/case", (j) => (got = j));
+    await pump(() => broker.subscriptionCount === 1);
+
+    broker.sendMessage("/topic/case", "x", { contentType: "Application/Octet-Stream", binary: true });
+    await pump(() => got !== undefined);
+    expect(obj(got).ok).toBe(true);
+  });
+
+  it("smart：onParseFailure 抛错也不影响 NACK", async () => {
+    const c = make({
+      onParseFailure: () => {
+        throw new Error("onParseFailure boom");
+      },
+    });
+    c.activate();
+    await pump(() => c.connected);
+    c.subscribe("/topic/bad", () => {}, { ack: AckMode.smart });
+    await pump(() => broker.subscriptionCount === 1);
+
+    broker.sendMessage("/topic/bad", "anything", { contentType: "application/octet-stream", binary: true, withAck: true });
+    await pump(() => broker.framesOf("NACK").length > 0);
+    expect(broker.framesOf("ACK").length).toBe(0);
   });
 });

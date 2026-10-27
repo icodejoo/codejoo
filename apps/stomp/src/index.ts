@@ -1,4 +1,4 @@
-import { Client, type IFrame, type IMessage, type ReconnectionTimeMode, type StompSubscription } from "@stomp/stompjs";
+import { Client, type IFrame, type IMessage, type IPublishParams, type ReconnectionTimeMode, type StompSubscription } from "@stomp/stompjs";
 
 /** 解析后的 JSON 消息（约定顶层为对象）。 */
 export type JsonMessage = Record<string, unknown>;
@@ -20,7 +20,9 @@ export type JsonCallback = (json: ParsedMessage, ack: AckControl) => void;
 /** 手动确认句柄，随每条消息传入回调（见 [AckMode.manual]）。可存起来在回调外任意时刻调用；
  * 仅同一连接内有效，重连后旧句柄自动失效（no-op），重复调用幂等。 */
 export interface AckControl {
+  /** 确认（ACK）这条消息。 */
   ack: () => void;
+  /** 拒收（NACK）这条消息，通常触发服务端重投。 */
   nack: () => void;
 }
 
@@ -42,19 +44,13 @@ export type AckMode = (typeof AckMode)[keyof typeof AckMode];
 const NOOP_ACK: AckControl = { ack: () => {}, nack: () => {} };
 
 /**
- * 通用空回调。stompjs 的 `Client.configure()` 内部用 `Object.assign(this, conf)` 应用配置——
- * 即便某个 key 的值是 `undefined`，只要 key 存在于 conf 里就会覆盖掉 stompjs 自己预设的
- * no-op 默认值，调用时直接 `TypeError: xxx is not a function`。所以 onUnhandledMessage /
- * onUnhandledReceipt / onUnhandledFrame 这类可选回调，未提供时必须显式兜底成 NOOP，
- * 不能把 `undefined` 原样传给 stompjs。
- */
-const NOOP = (): void => {};
-
-/**
  * 严格 UTF-8 解码器（fatal 模式），模块级单例、所有 parse() 调用复用，不逐帧新建。
  * 用于 [Stompsocket]'s parse 里判断消息体是否为合法文本——见该方法注释。
  */
 const STRICT_UTF8_DECODER = new TextDecoder("utf-8", { fatal: true });
+
+/** 二进制消息的媒体类型，parse 据此直接走 binaryDecoder（比较时已去参数、转小写）。 */
+const BINARY_MEDIA_TYPE = "application/octet-stream";
 
 /**
  * 消息体解析失败时的自动确认动作（仅在 [AckMode] 非 auto 时生效）。
@@ -96,6 +92,7 @@ export interface StompSub {
   unsubscribe: () => void;
 }
 
+/** [Stompsocket] 的构造参数，除 [brokerURL] 外均可选。 */
 export interface StompsocketOptions {
   /** WebSocket 地址（ws:// 或 wss://）。 */
   brokerURL: string;
@@ -133,7 +130,7 @@ export interface StompsocketOptions {
   binaryDecoder?: (bytes: Uint8Array) => any;
   /** 未连接时是否缓冲出站消息，连上后按序补发，默认 true。 */
   queueWhileDisconnected?: boolean;
-  /** 出站缓冲上限，超出丢弃最旧，默认 100。 */
+  /** 出站缓冲上限，超出丢弃最旧，默认 100；<=0 等同不缓冲（离线消息直接丢弃）。 */
   maxQueuedMessages?: number;
   /**
    * 回前台（visibilitychange→visible）或网络恢复（online）时，若当前未连接则立即重连
@@ -178,22 +175,21 @@ export interface StompsocketOptions {
 
 /** 单次订阅回调注册。 */
 interface CallbackReg {
+  /** 用户传入的订阅回调。 */
   cb: JsonCallback;
-}
-
-/** 一条待发送的出站消息。 */
-interface Outbound {
-  destination: string;
-  body?: string | Uint8Array | object;
-  headers?: Record<string, string>;
 }
 
 /** 单个订阅：内部维护一个回调队列，同一订阅收到消息只解析一次再分发给所有回调。 */
 interface Subscription {
+  /** 订阅 id（同时作为 STOMP 的 id 头）。 */
   readonly id: string;
+  /** 订阅目的地。 */
   readonly destination: string;
+  /** 确认模式。 */
   readonly ack: AckMode;
+  /** 消息体解析失败时的自动确认动作。 */
   readonly onParseError: ParseFailureAck;
+  /** 回调队列，同一订阅的所有回调共享一次解析结果。 */
   readonly callbacks: CallbackReg[];
   /** stompjs 返回的订阅句柄（连接建立后才有值）。 */
   wire?: StompSubscription;
@@ -207,6 +203,23 @@ const AUTO_DEST_SEP = "\x1f";
 const AUTO_DEST_PREFIX = `auto#dest${AUTO_DEST_SEP}`;
 
 /**
+ * 把 send 的入参转成 stompjs 的发布参数，并在这里完成序列化。
+ * Uint8Array 走 binaryBody；string 原样；undefined/null 无 body；其余对象按 JSON 编码，
+ * 并补 `content-type: application/json`（用户传的同名头优先）。
+ * 循环引用、BigInt 等无法序列化的对象会在此同步抛出。
+ */
+function toPublishParams(destination: string, body: string | Uint8Array | object | undefined, headers: Record<string, string> | undefined): IPublishParams {
+  if (body instanceof Uint8Array) return { destination, headers, binaryBody: body };
+  if (typeof body === "string") return { destination, headers, body };
+  if (body === undefined || body === null) return { destination, headers };
+  return {
+    destination,
+    headers: { "content-type": "application/json", ...headers },
+    body: JSON.stringify(body),
+  };
+}
+
+/**
  * 对 `@stomp/stompjs` 的框架无关二次封装。
  *
  * 增强能力：函数队列共享解析、三种取消（句柄/id/topic + clear）、断线后自动重订阅、
@@ -215,21 +228,34 @@ const AUTO_DEST_PREFIX = `auto#dest${AUTO_DEST_SEP}`;
  *
  * 关键点：stompjs 只重连**传输**、不恢复订阅，本类在 onConnect 里重放本地订阅。
  * 状态观测用框架无关的监听器（[state]/[onState]/onStateChanged），Vue 可几行桥接成 ref。
+ * 用户传入的各类回调抛异常都会被隔离并记日志，不会打断连接、重连或 ACK/NACK 流程。
  */
 export class Stompsocket {
+  /** 底层 stompjs 客户端。 */
   private readonly client: Client;
+  /** 补齐默认值后的配置。 */
   private readonly opts: Required<Pick<StompsocketOptions, "queueWhileDisconnected" | "maxQueuedMessages" | "debug" | "reconnectDelay" | "resumeOnForeground">> & StompsocketOptions;
 
+  /** 本地订阅登记表（订阅 id → 订阅），重连时据此重放。 */
   private readonly subscriptions = new Map<string, Subscription>();
-  private readonly outbox: Outbound[] = [];
+  /** 离线出站缓冲：已序列化好的发布参数，连上后按序补发。 */
+  private readonly outbox: IPublishParams[] = [];
+  /** 业务是否期望保持连接（activate 置 true，dispose 置 false）。 */
   private wantConnection = false;
-  private connectHeaders: Record<string, string>;
 
+  /** 当前连接状态。 */
   private stateValue: ConnectionState = ConnectionState.idle;
   /** 会话代次：每次连接成功自增；manual 模式的 AckControl 据此在重连后失效。 */
   private generation = 0;
+  /** 通过 [onState] 注册的状态监听器。 */
   private readonly stateListeners = new Set<StateListener>();
 
+  /**
+   * 创建实例（不会自动连接，需调用 [activate]）。
+   * @param options 连接与行为配置，见 [StompsocketOptions]
+   * @example
+   * const ws = new Stompsocket({ brokerURL: "wss://example.com/ws" });
+   */
   constructor(options: StompsocketOptions) {
     this.opts = {
       queueWhileDisconnected: true,
@@ -239,11 +265,10 @@ export class Stompsocket {
       resumeOnForeground: true,
       ...options,
     };
-    this.connectHeaders = { ...options.connectHeaders };
 
     this.client = new Client({
       brokerURL: options.brokerURL,
-      connectHeaders: this.connectHeaders,
+      connectHeaders: { ...options.connectHeaders },
       heartbeatIncoming: options.heartbeatIncoming ?? 10000,
       heartbeatOutgoing: options.heartbeatOutgoing ?? 10000,
       connectionTimeout: options.connectionTimeout ?? 0,
@@ -260,9 +285,11 @@ export class Stompsocket {
       onStompError: this.handleStompError,
       onWebSocketError: this.handleWebSocketError,
       onWebSocketClose: this.handleWebSocketClose,
-      onUnhandledMessage: options.onUnhandledMessage ?? NOOP,
-      onUnhandledReceipt: options.onUnhandledReceipt ?? NOOP,
-      onUnhandledFrame: options.onUnhandledFrame ?? NOOP,
+      // 这三项必须始终传函数：stompjs configure 用 Object.assign，传 undefined 会覆盖其默认
+      // no-op，触发时 TypeError；包一层 safely 同时隔离用户回调的异常。
+      onUnhandledMessage: (m) => this.safely("onUnhandledMessage", () => this.opts.onUnhandledMessage?.(m)),
+      onUnhandledReceipt: (f) => this.safely("onUnhandledReceipt", () => this.opts.onUnhandledReceipt?.(f)),
+      onUnhandledFrame: (f) => this.safely("onUnhandledFrame", () => this.opts.onUnhandledFrame?.(f)),
       debug: this.handleDebug,
     });
   }
@@ -271,52 +298,83 @@ export class Stompsocket {
   // 状态观测（框架无关）
   // ---------------------------------------------------------------------------
 
-  /** 当前连接状态（同步读取）。 */
+  /**
+   * 当前连接状态（同步读取）。
+   * @returns 当前的 [ConnectionState]
+   * @example
+   * if (ws.state === ConnectionState.connected) ws.send("/app/ping");
+   */
   get state(): ConnectionState {
     return this.stateValue;
   }
 
+  /**
+   * 底层 STOMP 会话当前是否已连接。
+   * @returns 已连接为 true
+   * @example
+   * if (ws.connected) ws.send("/app/ping");
+   */
   get connected(): boolean {
     return this.client.connected;
   }
 
   /**
-   * 订阅连接状态变化，返回取消函数。可多路订阅。
-   * Vue 桥接示例：`const s = ref(client.state); client.onState((v) => (s.value = v))`。
+   * 订阅连接状态变化，可多路订阅；监听器抛异常会被隔离，不影响其他监听器。
+   * @param listener 状态变化时调用，入参为新状态
+   * @returns 取消订阅的函数
+   * @example
+   * // Vue 桥接
+   * const s = ref(client.state);
+   * const off = client.onState((v) => (s.value = v));
    */
   onState(listener: StateListener): () => void {
     this.stateListeners.add(listener);
     return () => this.stateListeners.delete(listener);
   }
 
+  /** 更新状态并通知 onStateChanged 与所有监听器（逐个隔离异常）；状态没变则不通知。 */
   private setState(s: ConnectionState): void {
     if (this.stateValue === s) return;
     this.stateValue = s;
-    this.opts.onStateChanged?.(s);
-    for (const l of this.stateListeners) l(s);
+    this.safely("onStateChanged", () => this.opts.onStateChanged?.(s));
+    for (const l of this.stateListeners) this.safely("状态监听器", () => l(s));
   }
 
   // ---------------------------------------------------------------------------
   // 生命周期
   // ---------------------------------------------------------------------------
 
-  /** 启动（或在 [dispose] 之后重新启动）连接。 */
+  /**
+   * 启动（或在 [dispose] 之后重新启动）连接。可重复调用：已连接或正在连接/重连时不会回退状态。
+   * @example
+   * ws.activate();
+   */
   activate(): void {
     this.wantConnection = true;
     this.addLifecycleListeners();
+    // 以 active 为准而非 connected：优雅关闭（deactivate）等回执期间 connected 仍为 true，
+    // 此时的 activate 必须交给 stompjs，由它等关闭完成后再激活。
+    // reconnectDelay=0 断线后 stompjs 仍停在 ACTIVE、不会自己重连，也会忽略 activate，需强制复位。
+    const stalled = this.client.active && !this.client.connected && this.stateValue === ConnectionState.disconnected;
+    if (this.client.active && !stalled) return; // 已连接/正在连接/等待重连：保持状态，交给 stompjs
     this.setState(ConnectionState.connecting);
-    this.client.activate();
+    if (!this.wantConnection) return; // 状态监听器里同步调用了 dispose
+    if (stalled) void this.doForceReconnect();
+    else this.client.activate();
   }
 
   /**
    * 立即重连（跳过 reconnectDelay 等待），仅在"期望连接但当前未连接"时生效。
    * 供回前台/网络恢复自动调用，也可由业务在 connectivity 变化时手动调用。
+   * @example
+   * window.addEventListener("focus", () => ws.forceReconnect());
    */
   forceReconnect(): void {
     if (!this.wantConnection || this.client.connected) return;
     void this.doForceReconnect();
   }
 
+  /** 强制关掉当前传输再重新激活，跳过重连等待。 */
   private async doForceReconnect(): Promise<void> {
     try {
       await this.client.deactivate({ force: true });
@@ -326,20 +384,24 @@ export class Stompsocket {
     }
   }
 
+  /** 页面可见性变化：回到前台时尝试重连。 */
   private readonly onVisibility = (): void => {
     if (typeof document !== "undefined" && document.visibilityState === "visible") this.forceReconnect();
   };
 
+  /** 网络恢复：尝试重连。 */
   private readonly onOnline = (): void => {
     this.forceReconnect();
   };
 
+  /** 注册回前台/网络恢复监听（开启 resumeOnForeground 且处于浏览器环境时）。 */
   private addLifecycleListeners(): void {
     if (!this.opts.resumeOnForeground) return;
     if (typeof document !== "undefined") document.addEventListener("visibilitychange", this.onVisibility);
     if (typeof window !== "undefined") window.addEventListener("online", this.onOnline);
   }
 
+  /** 移除回前台/网络恢复监听。 */
   private removeLifecycleListeners(): void {
     if (typeof document !== "undefined") document.removeEventListener("visibilitychange", this.onVisibility);
     if (typeof window !== "undefined") window.removeEventListener("online", this.onOnline);
@@ -349,18 +411,29 @@ export class Stompsocket {
    * 断开连接（可逆的停止）：dispose 之后仍可再次 [activate] 复用本实例。
    * - keepSubscriptions=false（默认）：清空订阅并释放回调引用；再次 activate 后需重新订阅。
    * - keepSubscriptions=true：保留订阅登记，再次 activate 连上后自动重放（pause/resume）。
+   * @param keepSubscriptions 是否保留订阅登记，默认 false
+   * @returns 底层连接关闭完成后 resolve
+   * @example
+   * await ws.dispose(); // 彻底停止
+   * await ws.dispose(true); // 暂停，之后 activate() 自动恢复订阅
    */
   async dispose(keepSubscriptions = false): Promise<void> {
     this.wantConnection = false;
     this.removeLifecycleListeners();
     if (!keepSubscriptions) this.clear();
     await this.client.deactivate();
-    this.setState(ConnectionState.disconnected);
+    // 等待期间若又被 activate，状态归新一轮连接管，这里不能写回 disconnected
+    if (!this.wantConnection) this.setState(ConnectionState.disconnected);
   }
 
   /**
    * 复制一份新实例：[overrides] 中提供的参数覆盖，未提供的继承当前配置。
    * 返回的是全新的、未连接的实例（不克隆订阅与连接状态），需自行 [activate]。
+   * @param overrides 要覆盖的配置项
+   * @returns 新的 [Stompsocket] 实例
+   * @example
+   * const other = ws.copyWith({ reconnectDelay: 1000 });
+   * other.activate();
    */
   copyWith(overrides: Partial<StompsocketOptions> = {}): Stompsocket {
     return new Stompsocket({ ...this.opts, ...overrides });
@@ -373,15 +446,21 @@ export class Stompsocket {
   /**
    * 发送一条消息到 [destination]。body 支持 string（原样）、object（自动 JSON 编码，
    * content-type=application/json）、Uint8Array（二进制）、undefined（无 body）。
-   * 未连接时按 queueWhileDisconnected 缓冲、连上后按序补发。
+   * 未连接时按 queueWhileDisconnected / maxQueuedMessages 缓冲、连上后按序补发。
+   * object 无法序列化（循环引用等）时同步抛出，消息不会入队。
+   * @param destination 目的地，如 `/app/order`
+   * @param options.body 消息体
+   * @param options.headers 额外的 STOMP 头，同名时优先于自动生成的头
+   * @example
+   * ws.send("/app/order", { body: { sku: "A", qty: 2 } });
    */
   send(destination: string, options: { body?: string | Uint8Array | object; headers?: Record<string, string> } = {}): void {
-    const out: Outbound = { destination, body: options.body, headers: options.headers };
+    const params = toPublishParams(destination, options.body, options.headers);
     if (this.client.connected) {
-      this.sendNow(out);
+      this.client.publish(params);
       return;
     }
-    if (!this.opts.queueWhileDisconnected) {
+    if (!this.opts.queueWhileDisconnected || this.opts.maxQueuedMessages <= 0) {
       this.log(`未连接，丢弃发往 ${destination} 的消息`);
       return;
     }
@@ -389,32 +468,16 @@ export class Stompsocket {
       this.outbox.shift();
       this.log(`出站缓冲已满(${this.opts.maxQueuedMessages})，丢弃最旧消息`);
     }
-    this.outbox.push(out);
+    this.outbox.push(params);
   }
 
-  private sendNow(out: Outbound): void {
-    const { destination, body, headers } = out;
-    if (body instanceof Uint8Array) {
-      this.client.publish({ destination, headers, binaryBody: body });
-    } else if (typeof body === "string") {
-      this.client.publish({ destination, headers, body });
-    } else if (body === undefined || body === null) {
-      this.client.publish({ destination, headers });
-    } else {
-      this.client.publish({
-        destination,
-        headers: { "content-type": "application/json", ...headers },
-        body: JSON.stringify(body),
-      });
-    }
-  }
-
+  /** 连上后按序补发离线缓冲；中途失败（只可能是又断线）则把剩余消息退回缓冲头部。 */
   private flushOutbox(): void {
     if (this.outbox.length === 0) return;
     const pending = this.outbox.splice(0, this.outbox.length);
     for (let i = 0; i < pending.length; i++) {
       try {
-        this.sendNow(pending[i]);
+        this.client.publish(pending[i]);
       } catch (e) {
         // 补发中途又断线等 publish 抛异常：把没发出去的（含当前这条）塞回缓冲头部，
         // 等下次连接成功再补发，不能让剩余消息随循环中断一起丢掉。
@@ -438,6 +501,15 @@ export class Stompsocket {
    *   id + 相同 destination 照样合并；id 不同则独立——用于需要同一 destination 存在多份
    *   独立订阅（如不同 selector 头）的逃生门。
    * - ack/onParseError 只在该键首次订阅时生效；未连接时先登记、连上后自动重放。
+   * @param destination 订阅目的地
+   * @param callback 收到消息时的回调，抛异常会被隔离（smart 模式下触发 NACK）
+   * @param options.id 显式订阅 id，不传则按三元组自动归并
+   * @param options.ack 确认模式，默认 [AckMode.auto]
+   * @param options.onParseError 解析失败时的确认动作，默认 [ParseFailureAck.nack]
+   * @returns 订阅句柄，含 id 与 `unsubscribe()`
+   * @example
+   * const sub = ws.subscribe("/topic/news", (msg) => console.log(msg));
+   * sub.unsubscribe();
    */
   subscribe(destination: string, callback: JsonCallback, options: { id?: string; ack?: AckMode; onParseError?: ParseFailureAck } = {}): StompSub {
     const ack = options.ack ?? AckMode.auto;
@@ -473,7 +545,12 @@ export class Stompsocket {
 
   /**
    * 取消订阅。传 id 取消单个；传 destination 批量取消该 topic；两者都传优先 id；
-   * 都不传无操作。返回被取消的订阅数量。
+   * 都不传无操作。
+   * @param options.id 订阅 id
+   * @param options.destination 目的地，取消该 topic 下所有订阅
+   * @returns 被取消的订阅数量
+   * @example
+   * ws.unsubscribe({ destination: "/topic/news" });
    */
   unsubscribe(options: { id?: string; destination?: string }): number {
     if (options.id !== undefined) {
@@ -488,7 +565,11 @@ export class Stompsocket {
     return 0;
   }
 
-  /** 取消所有订阅。 */
+  /**
+   * 取消所有订阅。
+   * @example
+   * ws.clear();
+   */
   clear(): void {
     // 快照后再删，避免遍历时改动底层 Map
     for (const s of Array.from(this.subscriptions.values())) this.remove(s);
@@ -498,6 +579,7 @@ export class Stompsocket {
   // 内部
   // ---------------------------------------------------------------------------
 
+  /** 在 wire 上真正发出 SUBSCRIBE，并记下 stompjs 返回的订阅句柄。 */
   private openOnWire(sub: Subscription): void {
     // 显式用我们的 id 作为 STOMP 订阅 id（否则 stompjs 会自动生成 sub-N，破坏按 id 取消/去重）
     const headers: Record<string, string> = { id: sub.id };
@@ -505,6 +587,7 @@ export class Stompsocket {
     sub.wire = this.client.subscribe(sub.destination, this.onIncoming(sub), headers);
   }
 
+  /** 从登记表移除订阅并（已连接时）撤销 wire 订阅；返回是否真的移除了。 */
   private remove(sub: Subscription | undefined): boolean {
     if (!sub) return false;
     this.subscriptions.delete(sub.id);
@@ -516,36 +599,51 @@ export class Stompsocket {
     return true;
   }
 
+  /** 用户回调的异常隔离：抛出的异常只记日志，不向外传播，避免打断后续流程。 */
+  private safely(label: string, fn: () => void): void {
+    try {
+      fn();
+    } catch (e) {
+      this.log(`${label} 抛出异常`, e);
+    }
+  }
+
+  /** 连接成功：换代、重放订阅、补发离线消息、更新状态并通知 onConnected。 */
   private readonly handleConnect = (frame: IFrame): void => {
     this.generation++; // 新会话：旧的 manual AckControl 句柄据此失效
     // 重连是全新会话，服务端订阅已失效；首连时本地订阅也还没上线 → 统一重放。
     for (const sub of this.subscriptions.values()) this.openOnWire(sub);
     this.flushOutbox();
     this.setState(ConnectionState.connected);
-    this.opts.onConnected?.(frame);
+    this.safely("onConnected", () => this.opts.onConnected?.(frame));
   };
 
+  /** 收到 STOMP DISCONNECT 后的处理：记日志并通知 onDisconnected。 */
   private readonly handleDisconnect = (frame: IFrame): void => {
     this.log("已断开连接");
-    this.opts.onDisconnected?.(frame);
+    this.safely("onDisconnected", () => this.opts.onDisconnected?.(frame));
   };
 
+  /** 服务端 ERROR 帧：记日志并通知 onStompError。 */
   private readonly handleStompError = (frame: IFrame): void => {
     this.log(`STOMP 错误: ${frame.body}`, frame.headers.message);
-    this.opts.onStompError?.(frame);
+    this.safely("onStompError", () => this.opts.onStompError?.(frame));
   };
 
+  /** WebSocket 层错误：记日志并通知 onWebSocketError。 */
   private readonly handleWebSocketError = (event: Event): void => {
     this.log("WebSocket 错误", event);
-    this.opts.onWebSocketError?.(event);
+    this.safely("onWebSocketError", () => this.opts.onWebSocketError?.(event));
   };
 
+  /** WebSocket 关闭：先更新状态，再通知 onWebSocketClose（回调异常不会让 stompjs 跳过重连）。 */
   private readonly handleWebSocketClose = (event: CloseEvent): void => {
-    this.opts.onWebSocketClose?.(event);
     // 断开：库会按 reconnectDelay 自动重连（>0 时）。dispose 已置 wantConnection=false，
     // 由 dispose 负责置 disconnected，这里不覆盖。
-    if (!this.wantConnection) return;
-    this.setState(this.opts.reconnectDelay > 0 ? ConnectionState.reconnecting : ConnectionState.disconnected);
+    if (this.wantConnection) {
+      this.setState(this.opts.reconnectDelay > 0 ? ConnectionState.reconnecting : ConnectionState.disconnected);
+    }
+    this.safely("onWebSocketClose", () => this.opts.onWebSocketClose?.(event));
   };
 
   /** 每次连接前执行用户 beforeConnect（可刷新 token）并更新 CONNECT 头；吞异常避免打断连接。 */
@@ -554,15 +652,13 @@ export class Stompsocket {
     if (!before) return;
     try {
       const headers = await before();
-      if (headers) {
-        this.connectHeaders = { ...headers };
-        this.client.connectHeaders = this.connectHeaders;
-      }
+      if (headers) this.client.connectHeaders = { ...headers };
     } catch (e) {
       this.log("beforeConnect 失败", e);
     }
   };
 
+  /** 为订阅生成 stompjs 的消息处理函数：解析一次、按确认模式分发并应答。 */
   private onIncoming(sub: Subscription): (message: IMessage) => void {
     return (message: IMessage): void => {
       // 该订阅可能已被取消，或被同 id 重新订阅（换了新对象）
@@ -575,7 +671,7 @@ export class Stompsocket {
       } catch (e) {
         parseError = `解析失败: ${String(e)}`;
         this.log(parseError);
-        this.opts.onParseFailure?.(message, e);
+        this.safely("onParseFailure", () => this.opts.onParseFailure?.(message, e));
       }
 
       switch (sub.ack) {
@@ -642,8 +738,9 @@ export class Stompsocket {
   }
 
   /**
-   * 解析消息体。`content-type: application/octet-stream` 直接走 binaryDecoder（快路径，
-   * 明确声明了就不必再做校验）；其余一律先对原始字节做**严格 UTF-8 解码**（fatal 模式），
+   * 解析消息体。`content-type` 的媒体类型（取 `;` 前的部分，忽略大小写与参数）为
+   * `application/octet-stream` 时直接走 binaryDecoder（快路径，明确声明了就不必再做校验）；
+   * 其余一律先对原始字节做**严格 UTF-8 解码**（fatal 模式），
    * 解码成功才当文本尝试 JSON.parse——能解析就直接返回解析后的值（对象/数组/字符串/
    * 数字/布尔/null 都可能，不要求顶层必须是对象）；`JSON.parse` 本身失败（不是合法
    * JSON）才原样把收到的原始文本传回给回调，由回调自行判断怎么处理。真正的解析失败
@@ -666,8 +763,9 @@ export class Stompsocket {
    * `new TextDecoder(...)`。
    */
   private parse(message: IMessage): ParsedMessage | undefined {
-    // startsWith 而非全等：兼容带参数的写法（application/octet-stream;chunked=true 之类）
-    if ((message.headers["content-type"] ?? "").startsWith("application/octet-stream")) {
+    // 只取 `;` 前的媒体类型比较：兼容带参数写法（application/octet-stream;chunked=true）和大小写差异
+    const mediaType = (message.headers["content-type"] ?? "").split(";")[0].trim().toLowerCase();
+    if (mediaType === BINARY_MEDIA_TYPE) {
       return this.decodeBinary(message);
     }
 
@@ -695,15 +793,21 @@ export class Stompsocket {
 
   /** 帧级流水日志，原样透传给 onDebugMessage，并在 debug 开启时经 log 输出。 */
   private readonly handleDebug = (message: string): void => {
-    this.opts.onDebugMessage?.(message);
+    // safely 出错时会走 log，而 log 不会回到 handleDebug，不会递归
+    this.safely("onDebugMessage", () => this.opts.onDebugMessage?.(message));
     if (this.opts.debug) this.log(message);
   };
 
+  /** 输出日志：debug 关闭时静默；有 onLog 走它（其自身抛错会被忽略），否则回退 console.warn。 */
   private log(message: string, error?: unknown): void {
     if (!this.opts.debug) return;
     const sink = this.opts.onLog;
     if (sink) {
-      sink(message, error);
+      try {
+        sink(message, error);
+      } catch {
+        // 日志出口自己出错不能反过来打断业务流程，静默忽略
+      }
       return;
     }
     if (error === undefined) console.warn(`[stomp] ${message}`);
