@@ -2,7 +2,7 @@
 // 来源：packages/quicktype-core/src/language/CSharp/language.ts
 // 注意：framework='NewtonSoft' 走 Newtonsoft.Json，'SystemTextJson' 走 System.Text.Json。
 
-import type { CommonBase, LangConfig } from "./shared";
+import type { BaseInput, CommonBase, LangConfig } from "./shared";
 import { DEFAULT_INFERENCE_FLAGS, type InferenceFlags } from "./shared";
 
 export function configureCSharp(input: ConfigureCSharpInput = {}): CSharpLangConfig {
@@ -39,7 +39,7 @@ const DEFAULT_OTHERS: CSharpOthersOptions = {
 };
 
 export interface ConfigureCSharpInput {
-  base?: Partial<CSharpBase>;
+  base?: BaseInput<CSharpBase>;
   primary?: Partial<CSharpPrimaryOptions>;
   others?: Partial<CSharpOthersOptions>;
 }

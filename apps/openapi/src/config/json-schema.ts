@@ -2,7 +2,7 @@
 // 来源：packages/quicktype-core/src/language/JSONSchema/language.ts
 // 注意：JSON Schema 没有可配置的 renderer 选项；fileHeader 默认为空（保证产出是合法 JSON）。
 
-import type { CommonBase, LangConfig } from "./shared";
+import type { BaseInput, CommonBase, LangConfig } from "./shared";
 import { DEFAULT_INFERENCE_FLAGS, type InferenceFlags } from "./shared";
 
 export function configureJsonSchema(input: ConfigureJsonSchemaInput = {}): JsonSchemaLangConfig {
@@ -21,7 +21,7 @@ export function configureJsonSchema(input: ConfigureJsonSchemaInput = {}): JsonS
 }
 
 export interface ConfigureJsonSchemaInput {
-  base?: Partial<JsonSchemaBase>;
+  base?: BaseInput<JsonSchemaBase>;
 }
 
 export interface JsonSchemaBase extends CommonBase {

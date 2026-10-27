@@ -15,17 +15,24 @@
 
 import type { InputData, JSONSchemaInput } from "quicktype-core";
 
-import type { MegaSchemaResult } from "../schema";
+import { HTTP_METHOD_ORDER, type MegaSchemaResult } from "../schema";
 
 // ============================================================================
 // 工厂：base config（填默认值）
 // ============================================================================
 
+/**
+ * 构造与语言无关的基础配置，未填的字段用默认值（strictObjects=true、标准 HTTP 方法顺序、`Name$n` 冲突后缀）。
+ * @param input 基础配置输入，至少要有 `source`
+ * @returns 填满默认值的 {@link BaseConfig}
+ * @example
+ * const base = configureBase({ source: "./openapi.json" });
+ */
 export function configureBase(input: ConfigureBaseInput): BaseConfig {
   return {
     source: input.source,
     strictObjects: input.strictObjects ?? true,
-    httpMethodOrder: input.httpMethodOrder ?? ["get", "post", "put", "delete", "patch", "options", "head"],
+    httpMethodOrder: input.httpMethodOrder ?? HTTP_METHOD_ORDER,
     conflictSuffix: input.conflictSuffix ?? ((base, n) => `${base}$${n}`),
   };
 }
@@ -119,6 +126,14 @@ export interface CommonBase {
    */
   modelsFile?: string;
 }
+
+/**
+ * 各语言 `configureXxx({ base })` 的 base 入参类型：除 `inferenceFlags` 外所有字段可选，
+ * `inferenceFlags` 本身也只需给想覆盖的那几项（工厂内部会与默认值合并）。
+ * @example
+ * const input: BaseInput<TsBase> = { dir: "./out", inferenceFlags: { inferDateTimes: true } };
+ */
+export type BaseInput<B extends CommonBase> = Omit<Partial<B>, "inferenceFlags"> & { inferenceFlags?: Partial<InferenceFlags> };
 
 /**
  * runner 跑完 quicktype 后传给 emitter 回调的全部上下文。

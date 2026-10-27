@@ -2,7 +2,7 @@
 // 来源：packages/quicktype-core/src/language/Ruby/language.ts
 // strict / coercible 模式需要 dry-types 与 dry-struct gem。
 
-import type { CommonBase, LangConfig } from "./shared";
+import type { BaseInput, CommonBase, LangConfig } from "./shared";
 import { DEFAULT_INFERENCE_FLAGS, type InferenceFlags } from "./shared";
 
 export function configureRuby(input: ConfigureRubyInput = {}): RubyLangConfig {
@@ -30,7 +30,7 @@ const DEFAULT_OTHERS: RubyOthersOptions = {
 };
 
 export interface ConfigureRubyInput {
-  base?: Partial<RubyBase>;
+  base?: BaseInput<RubyBase>;
   primary?: Partial<RubyPrimaryOptions>;
   others?: Partial<RubyOthersOptions>;
 }

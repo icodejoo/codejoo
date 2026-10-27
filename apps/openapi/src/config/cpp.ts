@@ -1,7 +1,7 @@
 // C++ 语言配置工厂。
 // 来源：packages/quicktype-core/src/language/CPlusPlus/language.ts
 
-import type { CommonBase, LangConfig } from "./shared";
+import type { BaseInput, CommonBase, LangConfig } from "./shared";
 import { DEFAULT_INFERENCE_FLAGS, type InferenceFlags } from "./shared";
 
 export function configureCpp(input: ConfigureCppInput = {}): CppLangConfig {
@@ -41,7 +41,7 @@ const DEFAULT_OTHERS: CppOthersOptions = {
 type NamingStyle = "pascal-case" | "underscore-case" | "camel-case" | "upper-underscore-case" | "pascal-case-upper-acronyms" | "camel-case-upper-acronyms";
 
 export interface ConfigureCppInput {
-  base?: Partial<CppBase>;
+  base?: BaseInput<CppBase>;
   primary?: Partial<CppPrimaryOptions>;
   others?: Partial<CppOthersOptions>;
 }

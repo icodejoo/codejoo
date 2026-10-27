@@ -2,7 +2,7 @@
 // 来源：packages/quicktype-core/src/language/TypeScriptFlow/language.ts
 // 与 TypeScript 共享同一组 tsFlowOptions（继承自 javaScriptOptions）。
 
-import type { CommonBase, LangConfig } from "./shared";
+import type { BaseInput, CommonBase, LangConfig } from "./shared";
 import { DEFAULT_INFERENCE_FLAGS, type InferenceFlags } from "./shared";
 
 export function configureFlow(input: ConfigureFlowInput = {}): FlowLangConfig {
@@ -39,7 +39,7 @@ const DEFAULT_OTHERS: FlowOthersOptions = {
 };
 
 export interface ConfigureFlowInput {
-  base?: Partial<FlowBase>;
+  base?: BaseInput<FlowBase>;
   primary?: Partial<FlowPrimaryOptions>;
   others?: Partial<FlowOthersOptions>;
 }

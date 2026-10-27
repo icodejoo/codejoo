@@ -6,7 +6,7 @@
 // 来源：packages/quicktype-core/src/language/Dart/language.ts
 
 import { emitDart } from "../emitters/dart-emitter";
-import { DEFAULT_INFERENCE_FLAGS, type CommonBase, type InferenceFlags, type LangConfig } from "./shared";
+import { DEFAULT_INFERENCE_FLAGS, type BaseInput, type CommonBase, type InferenceFlags, type LangConfig } from "./shared";
 
 // ============================================================================
 // 工厂
@@ -56,7 +56,7 @@ const DEFAULT_DART_OTHERS: DartOthersOptions = {
 // ============================================================================
 
 export interface ConfigureDartInput {
-  base?: Partial<DartBase>;
+  base?: BaseInput<DartBase>;
   primary?: Partial<DartPrimaryOptions>;
   others?: Partial<DartOthersOptions>;
 }

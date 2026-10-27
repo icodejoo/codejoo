@@ -2,7 +2,7 @@
 // 来源：packages/quicktype-core/src/language/Rust/language.ts
 // 注意：所有选项都是 secondary（无 primary）。
 
-import type { CommonBase, LangConfig } from "./shared";
+import type { BaseInput, CommonBase, LangConfig } from "./shared";
 import { DEFAULT_INFERENCE_FLAGS, type InferenceFlags } from "./shared";
 
 export function configureRust(input: ConfigureRustInput = {}): RustLangConfig {
@@ -32,7 +32,7 @@ const DEFAULT_OTHERS: RustOthersOptions = {
 };
 
 export interface ConfigureRustInput {
-  base?: Partial<RustBase>;
+  base?: BaseInput<RustBase>;
   others?: Partial<RustOthersOptions>;
 }
 

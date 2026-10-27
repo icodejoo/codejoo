@@ -1,7 +1,7 @@
 // JavaScript 语言配置工厂。
 // 来源：packages/quicktype-core/src/language/JavaScript/language.ts
 
-import type { CommonBase, LangConfig } from "./shared";
+import type { BaseInput, CommonBase, LangConfig } from "./shared";
 import { DEFAULT_INFERENCE_FLAGS, type InferenceFlags } from "./shared";
 
 export function configureJavascript(input: ConfigureJsInput = {}): JsLangConfig {
@@ -31,7 +31,7 @@ const DEFAULT_OTHERS: JsOthersOptions = {
 };
 
 export interface ConfigureJsInput {
-  base?: Partial<JsBase>;
+  base?: BaseInput<JsBase>;
   primary?: Partial<JsPrimaryOptions>;
   others?: Partial<JsOthersOptions>;
 }

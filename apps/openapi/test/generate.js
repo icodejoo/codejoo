@@ -1,4 +1,4 @@
-import { generate, configureTypescript, configureBase } from "../dist/index.es.js";
+import { generate, configureTypescript, configureBase } from "../dist/index.mjs";
 import json from "./demo.json" with { type: "json" };
 
 generate(

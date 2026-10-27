@@ -2,7 +2,7 @@
 // 来源：packages/quicktype-core/src/language/Kotlin/language.ts
 // framework 决定使用哪个 renderer：klaxon (Klaxon)/kotlinx (KotlinX serialization)/jackson (Jackson)/just-types (无运行时依赖)
 
-import type { CommonBase, LangConfig } from "./shared";
+import type { BaseInput, CommonBase, LangConfig } from "./shared";
 import { DEFAULT_INFERENCE_FLAGS, type InferenceFlags } from "./shared";
 
 export function configureKotlin(input: ConfigureKotlinInput = {}): KotlinLangConfig {
@@ -30,7 +30,7 @@ const DEFAULT_OTHERS: KotlinOthersOptions = {
 };
 
 export interface ConfigureKotlinInput {
-  base?: Partial<KotlinBase>;
+  base?: BaseInput<KotlinBase>;
   primary?: Partial<KotlinPrimaryOptions>;
   others?: Partial<KotlinOthersOptions>;
 }

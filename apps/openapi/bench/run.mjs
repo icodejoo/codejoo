@@ -46,21 +46,25 @@ function parse(out) {
   }
   return r;
 }
-function run(opts) {
+/** 跑一个变体：tsc 非零退出不再悄悄吞掉，而是标记 ok=false 并把错误摘要打到 stderr，避免失败数据混进性能对比 */
+function run(name, opts) {
   const dir = join(tmpdir(), "axp-bench", Math.random().toString(36).slice(2));
   generate(dir, opts);
   let out;
+  let ok = true;
   try {
     out = execFileSync(process.execPath, [TSC, "-p", join(dir, "tsconfig.json"), "--extendedDiagnostics"], { encoding: "utf8" });
   } catch (e) {
+    ok = false;
     out = (e.stdout || "") + (e.stderr || "");
+    console.error(`[FAIL] ${name}\n${out.split("\n").slice(0, 5).join("\n")}\n`);
   }
-  return parse(out);
+  return { ...parse(out), ok: ok ? "ok" : "FAIL" };
 }
 
 console.log("tsc:", TSC, "\n");
-const rows = variants.map((v) => ({ name: v.name, ...run(v.opts) }));
-const cols = ["name", ...METRICS];
+const rows = variants.map((v) => ({ name: v.name, ...run(v.name, v.opts) }));
+const cols = ["name", "ok", ...METRICS];
 const w = cols.map((c) => Math.max(c.length, ...rows.map((r) => String(r[c] ?? "").length)));
 const line = (vals) => vals.map((x, i) => String(x ?? "").padEnd(w[i])).join("  ");
 console.log(line(cols));

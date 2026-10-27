@@ -1,7 +1,7 @@
 // TypeScript + Effect Schema 配置工厂（生成 @effect/schema 定义）。
 // 来源：packages/quicktype-core/src/language/TypeScriptEffectSchema/language.ts
 
-import type { CommonBase, LangConfig } from "./shared";
+import type { BaseInput, CommonBase, LangConfig } from "./shared";
 import { DEFAULT_INFERENCE_FLAGS, type InferenceFlags } from "./shared";
 
 export function configureTypescriptEffectSchema(input: ConfigureTsEffectInput = {}): TsEffectLangConfig {
@@ -24,7 +24,7 @@ const DEFAULT_PRIMARY: TsEffectPrimaryOptions = {
 };
 
 export interface ConfigureTsEffectInput {
-  base?: Partial<TsEffectBase>;
+  base?: BaseInput<TsEffectBase>;
   primary?: Partial<TsEffectPrimaryOptions>;
 }
 
