@@ -136,13 +136,18 @@ export class SkzBox extends BaseElement {
   }
 }
 
+/** SkzBox 构造函数是否已被注册过（同一个构造函数只能注册一个标签名） */
+let boxDefined = false;
+
 /**
  * 注册 <skz-box>；重复注册是安全的。
+ * 用不同标签名多次调用也可以：第一个标签注册 SkzBox 本身，之后的标签注册它的空子类，行为一致。
  * @param tag 标签名，默认 skz-box
  * @example defineSkzBox();
+ * @example defineSkzBox("my-skeleton");
  */
 export function defineSkzBox(tag: string = SKZ_BOX_TAG): void {
-  if (typeof customElements !== "undefined" && !customElements.get(tag)) {
-    customElements.define(tag, SkzBox);
-  }
+  if (typeof customElements === "undefined" || customElements.get(tag)) return;
+  customElements.define(tag, boxDefined ? class extends SkzBox {} : SkzBox);
+  boxDefined = true;
 }

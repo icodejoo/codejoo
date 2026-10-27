@@ -40,10 +40,13 @@
   }
 }
 
-/* 减少动态效果：全部静止 */
+/* 减少动态效果：全部静止。
+ * pulse 根把 --skz-fill 设成 var(--skz-pulse-c)，动画一取消，--skz-pulse-c 就停在 @property 注册的初始值（浅色 #d9dde3），
+ * 深色主题和用户自定义的 --skz-color 都会失效；这里把它固定成当前的 --skz-color（静止的基色），骨头颜色才继续跟主题走 */
 @media (prefers-reduced-motion: reduce) {
   [skz] {
     --skz-bg-img: none !important;
+    --skz-pulse-c: var(--skz-color) !important;
     animation: none !important;
   }
 }

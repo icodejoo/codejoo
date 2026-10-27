@@ -117,8 +117,9 @@
     @include sk-bone;
     border-radius: 50%;
   }
-  #{$auto} i:empty::before,
-  #{$auto} [class*="icon"]:empty::before {
+  // 忽略区里的图标字体字形保持原样，所以排除忽略区自身及其子树
+  #{$auto} i:empty#{$not-ignored}::before,
+  #{$auto} [class*="icon"]:empty#{$not-ignored}::before {
     color: transparent !important;
     visibility: hidden !important;
   }

@@ -124,6 +124,49 @@ it("忽略区：只锁不含忽略区的分支，忽略区自己保持可交互"
   expect(sibling.inert).toBe(false);
 });
 
+describe("无原生 inert：启用时让根内已聚焦的元素失焦", () => {
+  /**
+   * 造一个"已聚焦"的假元素：记录 blur 次数，closest 按是否在忽略区返回
+   * @param root 根（作为父，contains 成立）
+   * @param inIgnore 是否在忽略区内
+   * @returns 假元素与 blur 计数
+   */
+  function focused(root: FakeEl, inIgnore: boolean): { el: FakeEl; blurred: () => number } {
+    const el = root.add(new FakeEl());
+    let n = 0;
+    Object.assign(el, { blur: (): void => void n++, closest: (): FakeEl | null => (inIgnore ? el : null) });
+    Object.assign(root, { contains: (x: FakeEl): boolean => x === root || root.children.includes(x) });
+    vi.stubGlobal("document", { activeElement: el });
+    return { el, blurred: () => n };
+  }
+
+  beforeEach(() => {
+    // 撤掉 beforeEach 补的原型 inert：supportsInert 为假，走焦点拦截分支
+    Reflect.deleteProperty(FakeEl.prototype, "inert");
+  });
+
+  it("根内已聚焦的元素启用后失焦", () => {
+    const root = new FakeEl();
+    const { blurred } = focused(root, false);
+    const off = enable(asEl(root));
+    expect(blurred()).toBe(1);
+    off();
+  });
+
+  it("忽略区内已聚焦的元素不失焦；根外的聚焦元素也不动", () => {
+    const root = new FakeEl();
+    const { blurred } = focused(root, true);
+    enable(asEl(root))();
+    expect(blurred()).toBe(0);
+
+    const other = new FakeEl();
+    Object.assign(other, { contains: (): boolean => false });
+    const outside = focused(new FakeEl(), false);
+    enable(asEl(other))();
+    expect(outside.blurred()).toBe(0);
+  });
+});
+
 it("懒渲染：根离开视口打上 skz-paused，回来去掉；关闭时取消观察", () => {
   const f = new FakeEl();
   const off = enable(asEl(f), { effect: "shimmer" });
@@ -280,6 +323,8 @@ it("fit：开启写 skz-fit 与 max-height，重入不传 fit 或 off 时完整�
     style: {
       setProperty: (k: string, v: string): void => void props.set(k, v),
       removeProperty: (k: string): void => void props.delete(k),
+      getPropertyValue: (k: string): string => props.get(k) ?? "",
+      getPropertyPriority: (): string => "",
     },
   });
   const cards = [root.add(new FakeEl()), root.add(new FakeEl())];

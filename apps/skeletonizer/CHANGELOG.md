@@ -6,9 +6,17 @@
 - **修复：`<skz-box>` 在 HTML 解析完之前注册时接管不到子根**。比如 head 里的同步脚本先调了 `defineSkzBox()`，宿主连接时子节点还没解析出来；现在会等 `DOMContentLoaded` 再同步一次。
 - **修复：React / Vue 的 `<SkzBox>` 改了 `as` 之后新元素不出骨架**。换元素时会先撤掉旧元素上的骨架，再给新元素挂上（Solid 版原本就是这样）。
 - **修复：`Bone.text` / `Bone.cjk` / `Bone.lines` 传 `Infinity` 会死循环**，现在和非正数一样返回空串。
+- **修复：`Bone.number(Infinity)` 抛 `RangeError`、`Bone.image(Infinity)` 生成含 `Infinity` 的 SVG**，现在分别返回空串和 1px GIF。
+- **修复：`fit` 关闭后丢掉根上原有的内联 `max-height`**，现在开启前会记下原值（含 `!important`），关闭时还原。
+- **修复：Vue `useSkeleton` 的目标元素晚挂载（`v-if`）或被替换时不开骨架、旧目标不撤**，现在跟随目标变化（`flush: "post"`）。
+- **修复：不支持原生 `inert` 的浏览器里，启用前已聚焦在根内的元素仍能接收键盘输入**，现在启用时会让它失焦（忽略区内的除外）。
+- **修复：`defineSkzBox` 用不同标签名多次调用会抛 `NotSupportedError`**，第二个起的标签改用 `SkzBox` 的空子类注册。
+- **修复：减少动态效果下 pulse 的颜色停在浅色初始值**，深色主题和自定义 `--skz-color` 失效；现在固定成当前的 `--skz-color`。
+- **修复：忽略区（`skz-ignore`）没有完全保持原样**：`skz-auto` 推导区里忽略区内的图片不再被推出盒外、svg 内部与图标字体字形不再被藏；写在 `skz-leaf` / `skz-bone` 里的忽略区不再被后代隐藏规则盖掉；`skz-host` 宿主在忽略区里时不再被藏。
+- 文档：`useSkeleton` / `SkzBox` 的注释说明自定义扩展的额外选项不会经 `SkzBox` 透传。
 - **样式**：`--skz-fade-min` 不再在根上声明默认值（默认 0.55 仍在 `var()` 兜底里），写在祖先上的覆盖也能生效了；删掉减少动态效果里早已没有目标的 `[skz]::after` 规则。
 - 继承防火墙的根表改为 `WeakMap`，根被移除但没调 `off()` 时不再强引用。
-- 体积（gzip -9，1 KB = 1024 字节）：完整版 3.91 + 2.32 = 6.23 KB，lite 2.27 + 1.98 = 4.26 KB，element 0.82 KB，vue 0.83 / react 0.59 KB。
+- 体积（gzip -9，1 KB = 1024 字节）：完整版 4.02 + 2.34 = 6.36 KB，lite 2.38 + 2.00 = 4.37 KB，element 0.84 KB，vue 0.85 / react 0.59 KB。
 
 ## 0.3.0 - 2026-10-13
 

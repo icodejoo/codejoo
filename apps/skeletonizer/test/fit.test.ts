@@ -389,6 +389,25 @@ it("容器：骨架在容器可视区以下、容器本来就可滚 → 放宽�
   expect(items.filter((i) => i.attrs.has(HIDE)).length).toBe(7); // 偏移 0~200 的 3 项可见
 });
 
+it("根上原有的内联 max-height（含 !important）：开启后被覆盖，关闭时原样还原；重复开启不丢原值", async () => {
+  const { enableFit, disableFit } = await import("../src/core/fit.ts");
+  const { root } = makeRoot(3, 100, 0);
+  root.style.setProperty("max-height", "50px");
+  enableFit(asEl(root));
+  expect(root.props.get("max-height")).not.toBe("50px");
+  enableFit(asEl(root)); // 重复开启：不能把第一次写入的值当成原值
+  disableFit(asEl(root));
+  expect(root.props.get("max-height")).toBe("50px");
+  expect(root.priorities.get("max-height")).toBe("");
+
+  const b = makeRoot(3, 100, 0);
+  b.root.style.setProperty("max-height", "30px", "important");
+  enableFit(asEl(b.root));
+  disableFit(asEl(b.root));
+  expect(b.root.props.get("max-height")).toBe("30px");
+  expect(b.root.priorities.get("max-height")).toBe("important");
+});
+
 it("容器：骨架在容器内且容器不可滚 → 贴底；容器下方内容把容器撑出滚动 → 放宽", async () => {
   const { enableFit } = await import("../src/core/fit.ts");
   const a = makeRoot(10, 100, 100);

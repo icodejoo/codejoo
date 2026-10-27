@@ -47,7 +47,8 @@
       const nextFrame = () => new Promise((r) => requestAnimationFrame(() => r()));
 
       /**
-       * 测一种配置每帧平均耗时（目标 16.6ms），在控制台调用：await bench(500, [['skz-effect','pulse']])
+       * 测一种配置每帧平均耗时（目标 16.6ms），在控制台调用：await bench(500, [['skz-auto',''], ['skz-effect','pulse']])
+       * 注意：0.3.0 起骨头靠推导生成，需要 skz-auto；不写 skz-auto 时生成的卡片没有任何标记，不会出骨头，测到的不是骨架开销。
        * @param {number} n 卡片数（每张约 8 个元素）
        * @param {Array<[string,string]>} attrs 要写到根上的属性
        * @param {number} [ms] 采样时长

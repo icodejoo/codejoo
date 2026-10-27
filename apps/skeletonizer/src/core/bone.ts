@@ -102,11 +102,11 @@ export const Bone = {
   /**
    * 生成数字占位（固定宽度方块）。
    * @param digits 位数，默认 3
-   * @returns 占位文本
+   * @returns 占位文本；digits<=0 或不是有限数（NaN、Infinity）返回空串
    * @example Bone.number(4)
    */
   number(digits: number = 3): string {
-    return BLOCK.repeat(Math.max(0, digits));
+    return Number.isFinite(digits) ? BLOCK.repeat(Math.max(0, digits)) : "";
   },
 
   /**
@@ -115,7 +115,7 @@ export const Bone = {
    *   请用 img 的 width/height 属性或 CSS 给尺寸，否则会塌成 1px。
    * - 只传 width：height 默认等于 width，得到方形的透明 SVG（头像、图标常用）。
    * - 传 width 和 height：带固有宽高的透明 SVG，保留宽高比、避免布局跳动。
-   * 参数非法（非正数）时退回 1px GIF。
+   * 参数非法（非正数、NaN、Infinity）时退回 1px GIF。
    * 注意：严格 CSP 若不放行 img-src data:，请改用自己托管的透明图。
    * @param width 图片宽（像素），可选
    * @param height 图片高（像素），默认等于 width
@@ -125,7 +125,10 @@ export const Bone = {
    * @example <img :src="Bone.image(120, 80)" />
    */
   image(width?: number, height: number | undefined = width): string {
-    if (!width || !height || !(width > 0) || !(height > 0)) return GIF_1PX;
+    const w = width ?? 0;
+    const h = height ?? 0;
+    // 宽高都得是有限正数；NaN 与 undefined 都过不了 > 0，Infinity 过不了 isFinite
+    if (!(w > 0 && h > 0 && Number.isFinite(w) && Number.isFinite(h))) return GIF_1PX;
     const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}" viewBox="0 0 ${width} ${height}"/>`;
     return `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}`;
   },
