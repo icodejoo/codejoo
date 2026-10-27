@@ -310,7 +310,7 @@ const session = await storage.get("session"); // 过期时间重置
 ## 与其他项目的关系
 
 - **@codejoo/layerman**: 使用 Storage 管理冷却状态和跨标签页同步
-- **@codejoo/picman**: 使用 Storage 管理缓存配置
+- **@codejoo/progimg**: 使用 Storage 管理缓存配置
 - **@codejoo/stomp**: 可用于存储订阅状态和离线消息
 - **应用层**: 提供统一的浏览器存储接口
 

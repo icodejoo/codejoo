@@ -1,0 +1,13 @@
+/**
+ * Prebuilt standalone Service Worker: deploy dist/progimg-sw.js to the site
+ * root and register it directly. Options passed by the page through
+ * `registerProgimgSW` arrive via this script's own URL query and are
+ * parsed here before assembling the pipeline.
+ *
+ * 预构建托管成品 SW:把 dist/progimg-sw.js 部署到站点根目录直接注册。页面经
+ * `registerProgimgSW` 传入的选项通过本脚本自身的 URL query 送达,在此解析后再装配管线。
+ */
+import { parseSWConfig } from "./shared/config-transport";
+import { setupProgimg } from "./sw/index";
+
+setupProgimg(parseSWConfig(location.search));
