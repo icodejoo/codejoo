@@ -24,7 +24,7 @@ import {
 } from '@codejoo/axp';
 import type { AxpPlugins } from '@codejoo/axp';
 import { classifyError, PARSE_MARK } from './classify.ts';
-import { HEADER_RUN, HEADER_STYLE, MOCK_PREFIX, DEFAULT_RETRY_METHODS, DEFAULT_RETRY_STATUSES } from './constants.ts';
+import { HEADER_RUN, HEADER_STYLE, MOCK_PREFIX, DEFAULT_RETRY_METHODS, DEFAULT_RETRY_STATUSES, DEFAULT_CACHE_METHODS } from './constants.ts';
 import type { AdapterName, Style } from './constants.ts';
 import { authUrlPatterns, effectiveRetryStatuses, mapRequestOptions } from './mapping.ts';
 import type { TokenStore } from './tokens.ts';
@@ -37,6 +37,8 @@ export interface ClientHooks {
   /** 实际发起了一次刷新调用 */
   refresh(): void;
   expired(reqTag: string | undefined): void;
+  /** 请求自身的 authExpired 标记（回调一轮只触发一次，其余请求靠标记归类） */
+  expiredMarked(reqTag: string | undefined): void;
   denied(reqTag: string | undefined): void;
   unauthenticated(reqTag: string | undefined): void;
 }
@@ -294,7 +296,7 @@ export function createClient(opts: ClientOptions): ClientHandle {
     slots.cache = axpCache({
       expires: c.ttl_ms,
       max: c.max,
-      shouldCache: c.methods ? makeShouldCache(c.methods) : undefined,
+      shouldCache: makeShouldCache(c.methods ?? [...DEFAULT_CACHE_METHODS]),
     });
   }
   if (p.share) slots.share = axpShare({ policy: (p.share as { policy?: 'start' | 'end' | 'race' }).policy });
@@ -311,6 +313,17 @@ export function createClient(opts: ClientOptions): ClientHandle {
     slots.loading = axpLoading({ loading: opts.hooks.loading, delay: l.delay_ms, delayClose: l.delay_close_ms });
   }
   const handle = Axp.install(instance, slots);
+  // 在 auth 之后观察结果：config 上有 authExpired 的请求（含 business 风格被 resolve 的失败响应）打 expired 标签
+  instance.interceptors.response.use(
+    (res) => {
+      if (res.config?.authExpired) opts.hooks.expiredMarked(reqTagOf(res.config));
+      return res;
+    },
+    (err: { config?: unknown }) => {
+      if ((err?.config as { authExpired?: boolean } | undefined)?.authExpired) opts.hooks.expiredMarked(reqTagOf(err.config));
+      return Promise.reject(err);
+    },
+  );
 
   return {
     axios: instance,

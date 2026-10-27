@@ -84,8 +84,8 @@ describe('config：命令行优先于环境变量，未知过滤值直接报错'
   const acceptDir = path.resolve('accept');
   it('默认值与相对路径', () => {
     const c = parseConfig([], { TESTKIT_SCENARIOS: 'rel/dir' }, '/work', acceptDir);
-    expect(c.server).toBe('http://127.0.0.1:8080');
-    expect(c.netem).toBe('http://127.0.0.1:9090');
+    expect(c.server).toBe('http://127.0.0.1:47080');
+    expect(c.netem).toBe('http://127.0.0.1:47090');
     expect(c.scenarios).toBe(path.resolve('/work', 'rel/dir'));
     expect(c.dry).toBe(false);
   });

@@ -23,7 +23,7 @@ axp 具备的能力：`auth cache retry share cancel loading mock normalize noti
 | （auth 的回调） | 执行器提供 | `onFailure`、`onAccessExpired`、`onAccessDenied` 见表 3 |
 | `cache.ttl_ms` | 已映射 | `axpCache({ expires })` |
 | `cache.max` | 已映射 | `axpCache({ max })` |
-| `cache.methods` | 已映射 | axp 没有方法白名单，用 `shouldCache(res)` 叠加：方法在名单内且业务成功才写缓存。**未写 `methods` 时不叠加**，保持 axp 原生行为（axp 的缓存由请求级 `cache` 开关驱动，不区分方法） |
+| `cache.methods` | 已映射 | axp 没有方法白名单，用 `shouldCache(res)` 叠加：方法在名单内且业务成功才写缓存。**未写 `methods` 时取中立默认 GET/HEAD**（axp 本身的缓存由请求级 `cache` 开关驱动、不区分方法，这里让中立语义与 retry 的默认方法对称） |
 | `retry.max` | 已映射 | `axpRetry({ max })` |
 | `retry.delay_ms` | 已映射 | `delay` |
 | `retry.statuses` | 已映射 | `statusCodes`；缺省取中立默认 `[500,502,503,504]`（比 axp 默认少 408/429） |
@@ -141,8 +141,8 @@ business 风格下失败是 **HTTP 200 + code**，axp 默认只看 HTTP 状态�
 
 ## 已知与 axp 原生行为的差异（不是执行器 bug，会体现在结果里）
 
-- `expired` 回调每个请求各触发一次（场景要求"一次失败只触发一次"）。
+- `expired` 回调一轮失败只触发一次；每个因过期失败的请求靠 `config.authExpired` 标记归类为 `expired`（执行器在 auth 之后的响应拦截器里读标记）。
 - `share` 的首发请求被取消时，底层请求用的是首发请求的 signal，会连带取消跟随者（场景要求"首发取消不连累跟随者"）。
-- 缓存不区分方法：请求级 `cache: true` 的 POST 也会被缓存（场景 `cache.post-not-cached-by-default`）。
+- 缓存不区分方法：请求级 `cache: true` 的 POST 也会被缓存；执行器用 `cache.methods` 默认值（GET/HEAD）叠加 `shouldCache` 对齐中立语义（场景 `cache.post-not-cached-by-default`）。
 
 这些都是用真实服务器跑之后才能最终确认的结论，这里只记录从源码读到的预判。

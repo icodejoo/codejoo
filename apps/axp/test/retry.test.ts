@@ -18,6 +18,7 @@ import { Axp } from '../src/install';
 import { makeNetwork } from './helpers/network';
 import { use } from './helpers/install';
 import share from '../src/plugins/share';
+import cache from '../src/plugins/cache';
 
 it('review #2 — 并发重试始终保留 share:false', async () => {
     const path = '/review-share';
@@ -26,6 +27,18 @@ it('review #2 — 并发重试始终保留 share:false', async () => {
     Axp.install(ax, { retry: axpRetry({ max: 1, delay: 10 }), share: share() });
     await Promise.all(Array.from({ length: 2 }, () => ax.get(path, { key: 'review-share', share: false })));
     expect(net.totalStarted).toBe(4);
+});
+
+it('retry + cache — 失败后重试成功的那次写入缓存，后续请求命中缓存', async () => {
+    const net = makeNetwork().on('GET', '/rc', (_c, hit) => (hit < 2 ? { status: 500 } : { data: { code: 0, data: 'ok' } }));
+    const ax = axios.create({ adapter: net.adapter });
+    Axp.install(ax, { retry: axpRetry({ max: 1, delay: 0 }), cache: cache() });
+    const r1 = await ax.get('/rc', { cache: { key: 'retry-cache' } });
+    expect(r1.status).toBe(200);
+    expect(net.calls('GET', '/rc')).toBe(2);   // 500 + 重试成功
+    const r2 = await ax.get('/rc', { cache: { key: 'retry-cache' } });
+    expect(r2.status).toBe(200);
+    expect(net.calls('GET', '/rc')).toBe(2);   // 命中缓存，没有新请求
 });
 
 function mkApi() {
@@ -194,12 +207,22 @@ describe('retry 集成 — 网络/HTTP 错误路径', () => {
         expect(net.calls('GET', '/x')).toBe(3);  // 首发 + 2 次重试
     });
 
-    it('耗尽次数时若最后一次其实是成功响应但 shouldRetry 仍判定要重试（恒为 true）→ 照样合成错误 reject，最后一次响应挂在 error.response 上', async () => {
+    it('耗尽次数时最后一次是已 resolve 的响应（shouldRetry 恒为 true）→ 原样 resolve 最后一次响应，不合成错误', async () => {
         const { net, api } = mkApi();
         net.on('GET', '/x', () => ({ data: { code: 0, data: 'ok' } }));
         use(api, axpRetry({ max: 2, delay: 0, shouldRetry: () => true }));
-        await expect(api.get('/x')(undefined, { retry: 2 } as any)).rejects.toMatchObject({ response: { data: { code: 0 } } });
+        await expect(api.get('/x')(undefined, { retry: 2 } as any)).resolves.toBe('ok');
         expect(net.calls('GET', '/x')).toBe(3);  // 首发 + 2 次重试，shouldRetry 一直说重试直到预算耗尽
+    });
+
+    it('business 风格（HTTP 200 + 失败码）耗尽后 resolve 最后一次响应，交给下游 normalize 转成失败', async () => {
+        const net = makeNetwork().on('GET', '/b', () => ({ data: { code: 500, message: 'boom' } }));
+        const ax = axios.create({ adapter: net.adapter });
+        Axp.install(ax, { retry: axpRetry({ max: 2, delay: 0, shouldRetry: (r) => (r?.data as any)?.code === 500 }) });
+        const resp = await ax.get('/b');
+        expect(resp.status).toBe(200);
+        expect(resp.data).toMatchObject({ code: 500 });   // 原响应，而非通用 "exhausted retries" 错误
+        expect(net.calls('GET', '/b')).toBe(3);
     });
 
     it('默认 shouldRetry 只认状态码表，4xx（不在表里）不重试', async () => {

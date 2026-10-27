@@ -8,6 +8,7 @@ import share, {
     $end,
     $race,
     $start,
+    $follow,
     type ISharedOptions,
 } from '../src/plugins/share';
 
@@ -377,5 +378,178 @@ describe('share — 共享响应按调用方换上各自的 config', () => {
         expect(r2.config).toBe(c2);
         expect(r1.data).toBe(data);
         expect(r2.data).toBe(data);
+    });
+});
+
+
+// ───────────────────────────────────────────────────────────────────────────
+//  B4：start 下 leader 单独取消不连带 follower
+// ───────────────────────────────────────────────────────────────────────────
+
+describe('$start 取消语义', () => {
+    /** 构造带独立 AbortController 的订阅者：返回 config、ctrl 与 $follow 后的 promise */
+    const sub = (adp: AxiosAdapter, map: Map<string, any>) => {
+        const ctrl = new AbortController();
+        const config = { signal: ctrl.signal } as any as InternalAxiosRequestConfig;
+        const p = $follow($start(adp, map, 'k1', config), config);
+        p.catch(() => {}); // 避免晚挂 handler 触发 unhandled 告警
+        return { ctrl, p };
+    };
+
+    it('leader 取消：自己 canceled，follower 仍拿到结果，底层不 abort', async () => {
+        const map = new Map();
+        const { adp, pending } = deferredAdapter();
+        const L = sub(adp, map);
+        const F = sub(adp, map);
+        const underlying = pending[0].config.signal as AbortSignal;
+        L.ctrl.abort();
+        await expect(L.p).rejects.toMatchObject({ code: 'ERR_CANCELED' });
+        expect(underlying.aborted).toBe(false);
+        pending[0].resolve(mockResp('ok'));
+        await expect(F.p).resolves.toMatchObject({ data: 'ok' });
+        expect(adp).toHaveBeenCalledOnce();
+    });
+
+    it('底层请求不带 leader 的 signal', () => {
+        const map = new Map();
+        const { adp, pending } = deferredAdapter();
+        const L = sub(adp, map);
+        expect(pending[0].config.signal).not.toBe(L.ctrl.signal);
+        L.ctrl.abort();
+        return expect(L.p).rejects.toBeDefined();
+    });
+
+    it('全部订阅者都取消才 abort 底层，并摘除 entry', async () => {
+        const map = new Map();
+        const { adp, pending } = deferredAdapter();
+        const L = sub(adp, map);
+        const F = sub(adp, map);
+        const underlying = pending[0].config.signal as AbortSignal;
+        L.ctrl.abort();
+        expect(underlying.aborted).toBe(false);
+        F.ctrl.abort();
+        expect(underlying.aborted).toBe(true);
+        expect(map.size).toBe(0);
+        await expect(L.p).rejects.toMatchObject({ code: 'ERR_CANCELED' });
+        await expect(F.p).rejects.toMatchObject({ code: 'ERR_CANCELED' });
+        // 全取消后新请求重新发 HTTP
+        const N = sub(adp, map);
+        expect(adp).toHaveBeenCalledTimes(2);
+        pending[1].resolve(mockResp('new'));
+        await expect(N.p).resolves.toMatchObject({ data: 'new' });
+    });
+
+    it('leader 取消后新订阅者加入：仍复用同一请求并拿到结果', async () => {
+        const map = new Map();
+        const { adp, pending } = deferredAdapter();
+        const L = sub(adp, map);
+        const F1 = sub(adp, map);
+        L.ctrl.abort();
+        const F2 = sub(adp, map);
+        expect(adp).toHaveBeenCalledOnce();
+        F1.ctrl.abort();
+        // F2 还在，底层不能 abort
+        expect((pending[0].config.signal as AbortSignal).aborted).toBe(false);
+        pending[0].resolve(mockResp('late'));
+        await expect(F2.p).resolves.toMatchObject({ data: 'late' });
+        await expect(F1.p).rejects.toBeDefined();
+    });
+
+    it('已中止 signal 的单一订阅者：直接 canceled 且底层被 abort', async () => {
+        const map = new Map();
+        const { adp, pending } = deferredAdapter();
+        const ctrl = new AbortController();
+        ctrl.abort();
+        const config = { signal: ctrl.signal } as any as InternalAxiosRequestConfig;
+        const p = $follow($start(adp, map, 'k1', config), config);
+        p.catch(() => {}); // 避免晚挂 handler 触发 unhandled 告警
+        await expect(p).rejects.toMatchObject({ code: 'ERR_CANCELED' });
+        expect((pending[0].config.signal as AbortSignal).aborted).toBe(true);
+        expect(map.size).toBe(0);
+    });
+});
+
+
+// ───────────────────────────────────────────────────────────────────────────
+//  B5：race 下 business 风格失败（200 + 非成功 code）不算赢家
+// ───────────────────────────────────────────────────────────────────────────
+
+describe('$race business 风格', () => {
+    const bizFail = (msg: string) => mockResp({ code: 500, message: msg, data: null });
+    const bizOk = (v: any) => mockResp({ code: 0, message: 'ok', data: v });
+
+    it('先到的 200+code500 不算赢家，后到成功者胜出', async () => {
+        const map = new Map();
+        const { adp, pending } = deferredAdapter();
+        const pA = $race(adp, map, 'k1', cfg());
+        const pB = $race(adp, map, 'k1', cfg());
+        pending[0].resolve(bizFail('A fail'));
+        await new Promise((r) => setTimeout(r, 0));
+        pending[1].resolve(bizOk('B'));
+        const [a, b] = await Promise.all([pA, pB]);
+        expect(a.data.data).toBe('B');
+        expect(b.data.data).toBe('B');
+    });
+
+    it('adapter 层 data 是未解析的 JSON 字符串时，200+code500 同样不算赢家', async () => {
+        const map = new Map();
+        const { adp, pending } = deferredAdapter();
+        const pA = $race(adp, map, 'k1', cfg());
+        const pB = $race(adp, map, 'k1', cfg());
+        pending[0].resolve(mockResp(JSON.stringify({ code: 500, message: 'A fail', data: null })));
+        await new Promise((r) => setTimeout(r, 0));
+        pending[1].resolve(mockResp(JSON.stringify({ code: 0, message: 'ok', data: 'B' })));
+        const [a, b] = await Promise.all([pA, pB]);
+        expect(JSON.parse(a.data).data).toBe('B');
+        expect(JSON.parse(b.data).data).toBe('B');
+    });
+
+    it('先失败者之后又有 reject，再来成功者仍胜出', async () => {
+        const map = new Map();
+        const { adp, pending } = deferredAdapter();
+        const pA = $race(adp, map, 'k1', cfg());
+        const pB = $race(adp, map, 'k1', cfg());
+        const pC = $race(adp, map, 'k1', cfg());
+        pending[0].resolve(bizFail('A'));
+        pending[1].reject(new Error('B net'));
+        await new Promise((r) => setTimeout(r, 0));
+        pending[2].resolve(bizOk('C'));
+        const [a] = await Promise.all([pA, pB, pC]);
+        expect(a.data.data).toBe('C');
+    });
+
+    it('全部业务失败：resolve 最后一个失败响应（与不装 share 时形态一致）', async () => {
+        const map = new Map();
+        const { adp, pending } = deferredAdapter();
+        const pA = $race(adp, map, 'k1', cfg());
+        const pB = $race(adp, map, 'k1', cfg());
+        pending[0].resolve(bizFail('A'));
+        await new Promise((r) => setTimeout(r, 0));
+        pending[1].resolve(bizFail('B'));
+        const [a, b] = await Promise.all([pA, pB]);
+        expect(a.data.message).toBe('B');
+        expect(b.data.message).toBe('B');
+    });
+
+    it('最后落定的是 reject：以该 error reject', async () => {
+        const map = new Map();
+        const { adp, pending } = deferredAdapter();
+        const pA = $race(adp, map, 'k1', cfg());
+        const pB = $race(adp, map, 'k1', cfg());
+        pending[0].resolve(bizFail('A'));
+        await new Promise((r) => setTimeout(r, 0));
+        pending[1].reject(new Error('B net'));
+        await expect(pA).rejects.toThrow('B net');
+        await expect(pB).rejects.toThrow('B net');
+    });
+
+    it('http 风格（无 code 信封）：首个 resolve 仍直接胜出', async () => {
+        const map = new Map();
+        const { adp, pending } = deferredAdapter();
+        const pA = $race(adp, map, 'k1', cfg());
+        const pB = $race(adp, map, 'k1', cfg());
+        pending[1].resolve(mockResp('FAST'));
+        const [a] = await Promise.all([pA, pB]);
+        expect(a.data).toBe('FAST');
     });
 });

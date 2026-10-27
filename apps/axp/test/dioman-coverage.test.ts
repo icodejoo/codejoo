@@ -419,25 +419,17 @@ describe.skip('share: registerDownstreamSettler / hasMultipleDownstreamSettlers 
 // ───────────────────────────────────────────────────────────────────────────
 
 describe('retry: business-failure loop exhaustion and error-path behavior', () => {
-  it('when every retry attempt still looks like a business failure (shouldRetry), the loop exhausts and propagates the LAST attempt as-is', async () => {
-    // Unlike Dio (which gives up and RESOLVES with the last, still-failing
-    // attempt), axp's retry wraps an exhausted business-failure in a
-    // synthetic AxiosError and REJECTS with it — the last attempt's data is
-    // still reachable via error.response.data.
+  it('when every retry attempt still looks like a business failure (shouldRetry), the loop exhausts and RESOLVES with the LAST attempt as-is', async () => {
+    // Same as Dio: gives up and resolves with the last, still-failing attempt,
+    // so downstream normalize turns it into the usual failure (same as without retry).
     const { net, api } = mkApi();
     let attempts = 0;
     net.fallback(() => { attempts++; return { data: { code: 1, data: { attempt: attempts } } }; });
     use(api, [retry({ max: 2, delay: 0, shouldRetry: (r) => (r?.data as any)?.code !== 0 })]);
 
-    let caught: any;
-    try {
-      await api.axios.get('/data', { retry: { max: 2, shouldRetry: (r: any) => r?.data?.code !== 0 } } as any);
-      expect.unreachable();
-    } catch (e) {
-      caught = e;
-    }
+    const resp: any = await api.axios.get('/data', { retry: { max: 2, shouldRetry: (r: any) => r?.data?.code !== 0 } } as any);
     expect(attempts).toBe(3);
-    expect(caught.response.data.code).toBe(1);
+    expect(resp.data.code).toBe(1);
   });
 
   it('a constructor-disabled retry never intercepts a network error at all', async () => {

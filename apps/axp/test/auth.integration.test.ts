@@ -11,6 +11,7 @@ import retry from '../src/plugins/retry';
 import notify from '../src/plugins/notify';
 import mock from '../src/plugins/mock';
 import share from '../src/plugins/share';
+import cache from '../src/plugins/cache';
 
 import { sleep } from './helpers/sleep';
 const lat = (ms: number) => ({ latency: ms } as any);
@@ -172,8 +173,79 @@ describe('auth 集成 — 刷新失败', () => {
     );
     expect(results.every((r) => r.status === 'rejected')).toBe(true);
     expect(onRefresh).toHaveBeenCalledTimes(1);
-    expect(onAccessExpired).toHaveBeenCalled();
+    expect(onAccessExpired).toHaveBeenCalledTimes(1);   // 一轮失败只通知一次，不随并发数放大
     expect(tm.accessToken).toBeUndefined();   // tm.clear() 执行过
+  });
+
+  it('无法刷新（canRefresh=false）时并发 N 个请求 → onAccessExpired 只触发 1 次，全部仍 reject', async () => {
+    const net = authBackend('srv-1');
+    const tm = makeTM('stale');
+    tm.canRefresh = false;
+    const api = Axp.create(axios.create({ adapter: net.adapter }));
+    const onRefresh = vi.fn(() => true);
+    const onAccessExpired = vi.fn();
+    use(api, auth({ tokenManager: tm, urlPattern: ['/me'], onRefresh, onAccessExpired }));
+
+    const results = await Promise.allSettled(Array.from({ length: 8 }, () => api.get('/me')(undefined, lat(5))));
+    expect(results.every((r) => r.status === 'rejected')).toBe(true);
+    expect(onRefresh).not.toHaveBeenCalled();
+    expect(onAccessExpired).toHaveBeenCalledTimes(1);
+    // 回调只一次，但每个因过期失败的请求自身都带 authExpired 标记
+    for (const r of results) expect((r as PromiseRejectedResult).reason?.config?.authExpired).toBe(true);
+  });
+
+  it('[auth.req.authExpired] 成功（刷新后重放）的请求不带 authExpired 标记', async () => {
+    const net = authBackend('srv-1');
+    const tm = makeTM('stale');
+    const inst = axios.create({ adapter: net.adapter });
+    let seen: unknown = 'unset';
+    const api = Axp.create(inst);
+    use(api, auth({ tokenManager: tm, urlPattern: ['/me'], onRefresh: () => { tm.set('srv-1'); return true; }, onAccessExpired: vi.fn() }));
+    inst.interceptors.response.use((res) => { seen = res.config?.authExpired; return res; });
+    await api.get('/me')(undefined, lat(5));
+    expect(seen).toBeUndefined();
+  });
+
+  it('恢复（重新登录）后再次过期 → 会再次通知，每轮各一次', async () => {
+    const net = authBackend('srv-1');
+    const tm = makeTM('stale');
+    const api = Axp.create(axios.create({ adapter: net.adapter }));
+    const onRefresh = vi.fn(async () => false);
+    const onAccessExpired = vi.fn();
+    use(api, auth({ tokenManager: tm, urlPattern: ['/me'], onRefresh, onAccessExpired }));
+
+    await Promise.allSettled(Array.from({ length: 5 }, () => api.get('/me')(undefined, lat(5))));
+    expect(onAccessExpired).toHaveBeenCalledTimes(1);
+
+    tm.set('srv-1');                 // 重新登录：新一轮开始
+    tm.canRefresh = true;
+    const ok: any = await api.get('/me')(undefined, lat(5));
+    expect(ok.user).toBe('u');
+    expect(onAccessExpired).toHaveBeenCalledTimes(1);
+
+    tm.set('stale');                 // 令牌再次失效
+    await Promise.allSettled(Array.from({ length: 5 }, () => api.get('/me')(undefined, lat(5))));
+    expect(onAccessExpired).toHaveBeenCalledTimes(2);   // 第二轮照常通知，且只通知一次
+  });
+});
+
+
+describe('auth 集成 — 刷新重放 + cache', () => {
+  it('401 → 刷新 → 重放成功的那次写入缓存，后续相同 key 请求命中缓存', async () => {
+    const net = authBackend('srv-1');
+    const tm = makeTM('stale');
+    const ax = axios.create({ adapter: net.adapter });
+    Axp.install(ax, {
+      auth: auth({ tokenManager: tm, urlPattern: ['/me'], onRefresh: () => { tm.set('srv-1'); return true; }, onAccessExpired: () => { } }),
+      cache: cache(),
+    });
+
+    const r1 = await ax.get('/me', { cache: { key: 'auth-cache' } });
+    expect(r1.status).toBe(200);
+    expect(net.calls('GET', '/me')).toBe(2);   // 401 + 重放
+    const r2 = await ax.get('/me', { cache: { key: 'auth-cache' } });
+    expect(r2.status).toBe(200);
+    expect(net.calls('GET', '/me')).toBe(2);   // 命中缓存，没有新请求
   });
 });
 
@@ -272,7 +344,7 @@ describe('auth 集成 — 高并发 + 乱序 + 混合（a/b/c/d/e 时序）', ()
     expect(refreshCalls).toBe(1);                       // 仅一次刷新尝试
     expect((prot as string[]).every((r) => r === 'rej')).toBe(true);  // 受保护全部失败
     expect(late).toBe('rej');                           // 窗口内挂起的也失败（不重放）
-    expect(expired).toBeGreaterThan(0);
+    expect(expired).toBe(1);                            // 同一轮失败只通知一次
     expect(pubOk).toBe(true);                           // 非鉴权放行
     expect(tm.accessToken).toBeUndefined();             // 已清空
   });
@@ -299,7 +371,7 @@ describe('auth 集成 — 极端：带当前 token 的 401 有界收敛（不死
 
     expect(settled.every((s) => s.status === 'rejected')).toBe(true);  // 全部失败
     expect(refreshCalls).toBe(1);            // 单飞 + 有界：carried===cur 也只刷新一次，绝不无限刷新
-    expect(expired).toBe(10);                // 每个请求「重放仍失败」后判过期
+    expect(expired).toBe(1);                 // 10 个请求「重放仍失败」都判过期，但同一轮只通知一次
     expect(net.calls('GET', '/me')).toBe(20); // 每请求恰好 2 次（首发 + 一次重放），无更多
   });
 });

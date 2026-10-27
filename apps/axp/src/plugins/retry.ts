@@ -1,7 +1,7 @@
 import type { Plugin } from "../types";
 import { pluginLog, captureRawRequest, runAttempt } from "../helper";
-import { AxiosError } from "axios";
 import type {
+  AxiosError,
   AxiosRequestConfig,
   AxiosResponse,
   GenericAbortSignal,
@@ -11,6 +11,8 @@ import type {
 const name = "axp:retry";
 /** 保存 share adapter 会消费的请求选项，避免重试退回全局共享策略。 */
 const SHARE = `${name}:share`;
+/** 保存 cache adapter 会消费并删除的请求开关，重发时恢复，保证成功的那次尝试能写缓存。 */
+const CACHE = `${name}:cache`;
 
 /**
  * 失败重试插件：请求失败（或被判定为业务异常）后按 `delay` 等待、重发，最多 `max` 次。
@@ -105,6 +107,7 @@ export default function axpRetry({
         /** 在 adapter 消费 share 前保存原始请求开关。 */
         (config) => {
           (config as unknown as Record<string, unknown>)[SHARE] = config.share;
+          (config as unknown as Record<string, unknown>)[CACHE] = config.cache;
           captureRawRequest(config);
           return config;
         },
@@ -163,7 +166,8 @@ export default function axpRetry({
           );
           try {
             const share = (config as unknown as Record<string, unknown>)[SHARE] as AxiosRequestConfig['share'];
-            resp = await runAttempt(axios, { ...config, share });
+            const cache = (config as unknown as Record<string, unknown>)[CACHE] as AxiosRequestConfig['cache'];
+            resp = await runAttempt(axios, { ...config, share, cache });
             err = undefined;
             if (!$shouldRetry(config, defaults, resp, undefined)) return resp;
           } catch (e) {
@@ -174,15 +178,9 @@ export default function axpRetry({
           }
         }
         if (err) return Promise.reject(err);
-        return Promise.reject(
-          new AxiosError(
-            `[${name}] exhausted retries`,
-            undefined,
-            config,
-            undefined,
-            resp,
-          ),
-        );
+        // 耗尽且最后一次是已 resolve 的响应（business 风格的 HTTP 200 + 失败码）：原样返回，
+        // 让下游 normalize 照常转成 AxpError，与不装 retry 时一致
+        return resp;
       };
 
       const id = axios.interceptors.response.use(
