@@ -4,12 +4,20 @@ import { supported } from "./helper";
 
 /** 插件内部的宽松方法签名（处理器方法均为闭包实现、不依赖 this，可安全取引用与替换） */
 interface Wrapped {
+  /** 当前命名空间前缀（getter，实时值） */
+  readonly namespace: string;
   set(key: string, value: unknown, options?: number | StorageOptions): unknown;
   remove(key: string | readonly string[]): unknown;
   clear(): unknown;
   /** 幂等标记：已挂载过则再次调用为空操作 */
   __crossTab?: boolean;
 }
+
+/** 回放用的键校验：字符串，或元素全为字符串的数组（批量） */
+const validKey = (k: unknown): k is string | string[] => typeof k === "string" || (Array.isArray(k) && k.every((x) => typeof x === "string"));
+
+/** 同进程内 channel 名 → 已挂载的 handler，用于识别「不同 handler 共用同一 channel」的误用（见下方 owners 检查） */
+const owners = new Map<string, Wrapped>();
 
 /**
  * 跨标签页同步插件（**独立导入**、可 tree-shake，不进核心）。
@@ -19,7 +27,8 @@ interface Wrapped {
  *
  * 注意：
  * - 本地写入**先于**广播生效；广播经结构化克隆，值不可克隆时仅告警、不影响本地数据；
- * - `setNamespace` 不参与同步——切换命名空间（如切账号）需各标签页自行调用；
+ * - `setNamespace` 不参与同步——切换命名空间（如切账号）需各标签页自行调用，
+ *   且仅回放与本标签当前命名空间相同的消息（命名空间不同的标签互不影响）；
  * - 回放在远端各自构建 entity，createdAt/expireAt 与源标签可能相差毫秒级。
  *
  * ```ts
@@ -29,9 +38,6 @@ interface Wrapped {
  * ```
  * @returns 停止函数：关闭通道并还原被包装的方法
  */
-/** 同进程内 channel 名 → 已挂载的 handler，用于识别「不同 handler 共用同一 channel」的误用（见下方 owners 检查） */
-const owners = new Map<string, Wrapped>();
-
 export function crossTab(handler: Handlers<SyncStore>, channel = "@codejoo/storage:sync"): () => void {
   const h = handler as unknown as Wrapped;
   if (supported.storage || typeof BroadcastChannel === "undefined" || h.__crossTab) return () => {};
@@ -41,13 +47,14 @@ export function crossTab(handler: Handlers<SyncStore>, channel = "@codejoo/stora
   owners.set(channel, h);
   h.__crossTab = true;
   const bc = new BroadcastChannel(channel);
+  let stopped = false; // stop 幂等标记
   // 原始引用：回放远端操作时直接调用，不再二次广播。处理器方法均为闭包实现、不依赖 this，取引用安全
   // oxlint-disable-next-line typescript-eslint/unbound-method
   const { set, remove, clear } = h;
-  /** 广播失败（值不可结构化克隆等）只告警——本地写入已先行生效，不能被广播问题破坏 */
-  const cast = (msg: unknown[]): void => {
+  /** 广播失败（值不可结构化克隆等）只告警——本地写入已先行生效，不能被广播问题破坏。消息格式 [op, ns, ...args]，ns 取发送时的实时命名空间 */
+  const cast = (op: string, ...args: unknown[]): void => {
     try {
-      bc.postMessage(msg);
+      bc.postMessage([op, h.namespace, ...args]);
     } catch (err) {
       console.warn("[storage] crossTab broadcast failed (value not structured-cloneable?); local write is unaffected", err);
     }
@@ -55,27 +62,33 @@ export function crossTab(handler: Handlers<SyncStore>, channel = "@codejoo/stora
 
   h.set = (k, v, o) => {
     const r = set(k, v, o);
-    cast(["set", k, v, o]);
+    cast("set", k, v, o);
     return r;
   };
   h.remove = (k) => {
     const r = remove(k);
-    cast(["remove", k]);
+    cast("remove", k);
     return r;
   };
   h.clear = () => {
     const r = clear();
-    cast(["clear"]);
+    cast("clear");
     return r;
   };
   bc.onmessage = (e: MessageEvent) => {
-    const [op, k, v, o] = e.data as [string, string, unknown, undefined];
-    if (op === "set") set(k, v, o);
-    else if (op === "remove") remove(k);
-    else clear();
+    if (!Array.isArray(e.data)) return; // 非本插件消息
+    const [op, ns, k, v, o] = e.data as [string, string, string, unknown, StorageOptions | number | undefined];
+    if (ns !== h.namespace) return; // 命名空间不同的标签不回放，避免串写/误清
+    if (op === "clear") clear();
+    else if ((op === "set" || op === "remove") && validKey(k)) {
+      if (op === "set") set(k, v, o);
+      else remove(k);
+    } // 未知 op / 键不合法一律忽略
   };
 
   return () => {
+    if (stopped) return; // 幂等：重复调用不会把后续重新挂载的包装还原掉
+    stopped = true;
     bc.close();
     h.__crossTab = false;
     if (owners.get(channel) === h) owners.delete(channel); // 释放占用，避免误判后续接手同 channel 的新 handler

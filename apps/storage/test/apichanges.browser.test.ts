@@ -230,26 +230,6 @@ describe("缺口 — cloned 深隔离（嵌套对象/Map/Set）", () => {
   });
 });
 
-// ── 缺口：sliding 90% 阈值两侧 ──
-describe("缺口 — sliding 90% 阈值两侧", () => {
-  it(">90% 剩余：跳过回写", () => {
-    const { ls } = factory({ sliding: true });
-    ls.set("k", "v", 10000);
-    const before = localStorage.getItem("k");
-    ls.get("k");
-    expect(localStorage.getItem("k")).toEqual(before);
-  });
-  it("<90% 剩余：回写续期", async () => {
-    const { ls } = factory({ sliding: true });
-    ls.set("k", "v", 100);
-    const before = JSON.parse(localStorage.getItem("k")!).expireAt;
-    await sleep(30);
-    ls.get("k");
-    const after = JSON.parse(localStorage.getItem("k")!).expireAt;
-    expect(after > before).toBe(true);
-  });
-});
-
 // ── 缺口：destroy 后再用 ──
 describe("缺口 — destroy 后再用", () => {
   it("同步层 destroy 后仍可继续读写（仅清了 memo）", () => {

@@ -1,5 +1,25 @@
 # Changelog
 
+## Unreleased
+
+### Fixed
+
+- **`Idb` 写入以事务提交为成功标志**：此前 request 成功即视为写入成功，而 readwrite 事务之后仍可能因配额等原因 abort 回滚，导致调用方以为写入成功、memo 被写入且不触发 `onError`。现在事务 abort 会 reject，走 `onError`/日志。
+- **非 memoized 写入会清掉旧缓存**：此前 `set(k, 1, { memoized: true })` 之后再 `set(k, 2)`，后端是 2 而 memo 仍是 1，`get` 读到旧值。
+- **sliding 续期同步 memo**：实例未开 `memoized`、但条目经 per-call `{ memoized: true }` 进入 memo 时，续期后 memo 里仍是旧 `expireAt`，旧时间一到会把已续期的数据误删。
+- **异步读在途时的写/删/清/切命名空间不再被旧值回填复活**：此前 `db.get` 在途期间发生 `remove`/`set`/`clear`/`setNamespace`，读完成后仍会把旧值写回 memo，之后一直命中旧值。
+- **非 entity 的合法 JSON 视为脏数据**：后端为 `"1"`/`"false"`/`"[]"` 等时，`get` 以往返回 `undefined`，现在清除该键并返回默认值。
+- **`raw` 模式下 `purge()`/容量清理不再处理裸字符串**：此前会把裸字符串当 entity 解析，形如 `{"expireAt":...}` 的外部数据可能被误删。
+- **`key(index)` 在有 `namespace`/`enckey` 时对下标归一化**：`key(1.5)`/`key(NaN)` 此前会抛错，现与原生行为一致（向零取整、NaN 视为 0）。
+- **`codec` 空字符串口令**：`codecBase64("")`/`codecAtob("")` 解码此前返回空串；并修复以 U+FEFF 开头的明文被吞掉首字符的问题。
+- **sessionStorage 单独探测**：此前 `ss` 复用 localStorage 的探测结果，若 localStorage 可用而访问 `sessionStorage` 抛 SecurityError，`factory()` 会整体崩溃；现各自探测，`ss` 不可用时退回内存兜底。
+- **`crossTab` 仅回放同命名空间的消息**：消息携带发送方命名空间，避免 A 标签 userA 的写入/清空被 B 标签 userB 误落地；未知 op 与非数组消息一律忽略（此前未知消息会被当作 clear）；stop 函数幂等。
+- **`JSONX` 往返无效 Date**：此前 `new Date(NaN)` 还原成 1970 年，现保持 Invalid Date。
+
+### Internal
+
+- 补充对应单测（共 116 条）；放大 sliding 用例时序余量并删除重复的阈值用例；补全 `src/` 与 `scripts/` 的中文注释（修正 `Memory`/`post-minify` 过时说明、纠正注释错位）；`persist` 的清理重试纳入 `onError` 保护。
+
 ## 0.1.2
 
 全量 code review 后修复的一批真实 bug；均只影响边界场景（原生存储不可用的内存兜底、并发 IndexedDB 打开失败、quota 重试等），常规用法不受影响。无破坏性变更、无新增 API。

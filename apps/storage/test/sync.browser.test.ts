@@ -4,6 +4,9 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { factory } from "../src/core";
 import { codec } from "../src/codec";
 import { JSONX } from "../src/serialization";
+import { Memory } from "../src/memory";
+import { proxy } from "../src/proxy";
+import type { StorageEntity } from "../src/interface";
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
@@ -102,10 +105,10 @@ describe("过期 — ttl / expireAt", () => {
 describe("sliding — 滑动续期", () => {
   it("每次读命中按 ttl 续期", async () => {
     const { ls: s } = factory({ sliding: true });
-    s.set("sl", "v", 80);
-    await sleep(50);
+    s.set("sl", "v", 400);
+    await sleep(250); // 剩余 <90%，触发续期
     expect(s.get("sl")).toEqual("v");
-    await sleep(50);
+    await sleep(250); // 已超过原过期点，仍可读说明续期生效
     expect(s.get("sl")).toEqual("v");
   });
   it("续期有阈值：剩余寿命 >90% 时跳过回写", () => {
@@ -117,9 +120,9 @@ describe("sliding — 滑动续期", () => {
   });
   it("剩余寿命 <90% 时正常续期回写", async () => {
     const { ls: s } = factory({ sliding: true });
-    s.set("sl3", "v", 100);
+    s.set("sl3", "v", 1000);
     const before = JSON.parse(localStorage.getItem("sl3")!).expireAt;
-    await sleep(30);
+    await sleep(150);
     expect(s.get("sl3")).toEqual("v");
     const after = JSON.parse(localStorage.getItem("sl3")!).expireAt;
     expect(after > before).toBe(true);
@@ -134,6 +137,18 @@ describe("sliding — 滑动续期", () => {
     const { ls: s } = factory({ sliding: true });
     s.set("renew", "v", { expireAt: Date.now() - 1000, ttl: 500 });
     expect(s.get("renew")).toEqual("v");
+  });
+});
+
+describe("sliding — memo 续期同步", () => {
+  it("实例未开 memoized、条目经 per-call memoized 进 memo：续期后 memo 的 expireAt 同步更新", async () => {
+    const memo = new Memory();
+    const p = proxy(new Memory(), memo, { sliding: true });
+    p.set("k", "v", { ttl: 1000, memoized: true });
+    const before = (memo.get("k") as StorageEntity).expireAt!;
+    await sleep(150); // 剩余 <90%，触发续期
+    expect(p.get("k")).toEqual("v");
+    expect((memo.get("k") as StorageEntity).expireAt! > before).toBe(true);
   });
 });
 
@@ -220,12 +235,47 @@ describe("serialize — JSONX 富类型", () => {
     expect(back.d instanceof Date && back.m instanceof Map && back.s instanceof Set).toBe(true);
     expect(typeof back.big === "bigint").toBe(true);
   });
+  it("JSONX 往返无效 Date（不变成 1970 年）", () => {
+    const back = JSONX.parse(JSONX.stringify({ d: new Date(NaN) }));
+    expect(back.d instanceof Date).toBe(true);
+    expect(back.d.getTime()).toBeNaN();
+  });
   it("storage 配 JSONX 存取富类型", () => {
     const { ls: j } = factory({ serialize: JSONX.stringify, deserialize: JSONX.parse });
     const v = { when: new Date(0), tags: new Set(["a"]) };
     j.set("rich", v);
     expect(j.get("rich")).toEqual(v);
     expect((j.get("rich") as { when: Date }).when instanceof Date).toBe(true);
+  });
+});
+
+describe("memoized — 写入与旧缓存", () => {
+  it("memoized 写入后再用非 memoized 覆盖：不再读到旧缓存（entity）", () => {
+    const { ls } = factory({ namespace: "mm" });
+    ls.set("k", 1, { memoized: true });
+    ls.set("k", 2);
+    expect(ls.get("k")).toEqual(2);
+  });
+  it("同上（raw 模式）", () => {
+    const { ls } = factory({ raw: true, namespace: "mr" });
+    ls.set("k", "a", { memoized: true });
+    ls.set("k", "b");
+    expect(ls.get("k")).toEqual("b");
+  });
+});
+
+describe("脏数据 — 合法 JSON 但非 entity", () => {
+  it("数字/数组/布尔：返回默认值并清除该键", () => {
+    const { ls } = factory();
+    for (const [k, raw] of [
+      ["n", "123"],
+      ["a", "[]"],
+      ["b", "false"],
+    ]) {
+      localStorage.setItem(k, raw);
+      expect(ls.get(k, 42)).toEqual(42);
+      expect(localStorage.getItem(k)).toEqual(null);
+    }
   });
 });
 
@@ -275,6 +325,19 @@ describe("批量 — 数组 keys", () => {
   });
 });
 
+describe("key(index) — 下标归一化", () => {
+  it("有命名空间时 key(1.5)/key(NaN) 按向零取整/0 处理，不抛错", () => {
+    const { ls } = factory({ namespace: "kn" });
+    ls.set("a", 1);
+    ls.set("b", 2);
+    expect(ls.key(1.5)).toEqual(ls.key(1));
+    expect(ls.key(NaN)).toEqual(ls.key(0));
+    expect(typeof ls.key(0)).toEqual("string");
+    expect(ls.key(-1)).toEqual(null);
+    expect(ls.key(99)).toEqual(null);
+  });
+});
+
 describe("keys / purge — 枚举与主动清理", () => {
   it("keys() 仅返回本命名空间逻辑键，不混入外部数据", () => {
     localStorage.setItem("foreign", "1");
@@ -286,6 +349,13 @@ describe("keys / purge — 枚举与主动清理", () => {
     const { ls: e } = factory({ codeable: true, codec: codec("pw"), enckey: true, namespace: "ke" });
     e.set("sec", 1);
     expect(e.keys()).toEqual(["sec"]);
+  });
+  it("raw 模式下 purge() 不处理裸字符串（即使形如过期 entity）", () => {
+    const text = JSON.stringify({ value: "x", createdAt: 1, expireAt: 2 });
+    localStorage.setItem("k", text);
+    const { ls } = factory({ raw: true });
+    ls.purge();
+    expect(localStorage.getItem("k")).toEqual(text);
   });
   it("purge() 主动回收过期但从未被读取的条目", async () => {
     const { ls: p } = factory({ namespace: "pg" });

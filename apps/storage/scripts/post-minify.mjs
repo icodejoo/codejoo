@@ -1,13 +1,8 @@
 /**
- * Post-process `dist/index.min.js` with terser to mangle private `_*` fields.
+ * 构建后处理：用 terser 对 `dist/index.min.js` 做二次压缩。
  *
- * Why: oxc-minifier (used by vp pack) doesn't support `mangle.properties`.
- * Class-internal `_xxx` fields stay as full names in the bundle. Running
- * terser as a final pass with `mangle.properties: { regex: /^_/ }` shrinks
- * those names to 1-2 chars, saving ~10% raw / ~4% gzip on the .min.js.
- *
- * Only names matching /^_/ are mangled, so the public API surface
- * (Ticker.defaults, ticker.manager, task.id, etc.) stays intact.
+ * 原因：打包用的 oxc-minifier 不支持 `mangle.properties`，用 terser 再过一遍进一步缩小体积。
+ * 属性混淆只作用于 `_` 前缀名（约定的内部成员），公共 API 的属性名保持不变。
  */
 import { minify } from "terser";
 import { readFile, writeFile, stat } from "node:fs/promises";

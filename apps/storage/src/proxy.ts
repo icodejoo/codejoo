@@ -15,6 +15,9 @@ function attempt<T>(run: () => Maybe<T>, onErr: (e: unknown) => Maybe<T>): Maybe
   }
 }
 
+/** 异步分支：并发等待一组 Maybe<void> 并归一为 Promise<void> */
+const all = (xs: Maybe<void>[]): Promise<void> => Promise.all(xs.map((x) => Promise.resolve(x))).then(() => undefined);
+
 /** 后端为异步存储时，get/set 等返回 Promise，否则返回同步值 */
 export type Result<S, T> = S extends AsyncStorage ? Promise<T> : T;
 
@@ -53,7 +56,7 @@ export interface Handlers<S extends SyncStore | AsyncStorage> {
   key(index: number): Result<S, string | null>;
   /** 本实例管辖范围内的全部逻辑键（已解密、去命名空间前缀） */
   keys(): Result<S, string[]>;
-  /** 主动清理已过期条目（仅本实例管辖、本库写入的数据）。平时为惰性过期，长期不被读取的过期数据靠它回收配额 */
+  /** 主动清理已过期条目（仅本实例管辖、本库写入的数据；raw 模式无 entity 信封，不处理）。平时为惰性过期，长期不被读取的过期数据靠它回收配额 */
   purge(): Result<S, void>;
   /** 命名空间前缀（形如 "ns:"，无则为空串） */
   readonly namespace: string;
@@ -102,10 +105,13 @@ export function proxy<S extends SyncStore | AsyncStorage>(storage: S, memo: Memo
   // 注：曾尝试 IndexedDB 非加密时 entity 对象直存（跳过 JSON、走结构化克隆），实测反而慢 10%+
   // ——结构化克隆序列化器遍历对象图比 JSON.stringify 慢，单条字符串存取近似 memcpy。故保持 JSON 路径。
   const dump = (e: StorageEntity): string => (codeable ? cdc!.encode(serialize(e)) : serialize(e));
+  /** 后端串 → entity；解码/解析失败或结构不符返回 null */
   const load = (s: string): StorageEntity | null => {
     try {
       const text = codeable ? cdc!.decode(s) : s;
-      return text == null ? null : deserialize(text);
+      if (text == null) return null;
+      const v = deserialize(text);
+      return v != null && typeof v === "object" && !Array.isArray(v) ? (v as StorageEntity) : null; // 合法 JSON 但非 entity（"1"/"[]"/"false"）一律视为脏数据
     } catch {
       return null;
     }
@@ -139,8 +145,23 @@ export function proxy<S extends SyncStore | AsyncStorage>(storage: S, memo: Memo
   /** cloned：返回与 memo 共享的对象时给出深拷贝，隔离调用方修改对缓存的污染（原始值天然不可变，跳过） */
   const dup = (v: unknown): unknown => (cloned && typeof v === "object" && v != null ? structuredClone(v) : v);
 
+  // 全局代次：任何写/删/清/切命名空间都 +1；异步读在途期间若代次变化，读完成后不再回填 memo，避免旧值复活
+  let epoch = 0;
+  /** 回填 memo：代次未变（e0 为读发起时捕获的值）才写入；已变则让该键缓存失效（宁可多一次未命中，也不留旧值/旧 expireAt） */
+  const backfill = (e0: number, k: string, v: unknown): void => {
+    if (epoch === e0) memo.set(k, v);
+    else memo.remove(k);
+  };
+
+  /** 写入成功后同步 memo：memoized 则更新缓存，否则清掉旧缓存，避免读到过期的旧值 */
+  const remember = (k: string, v: unknown, memoized: boolean): void => {
+    if (memoized) memo.set(k, v);
+    else memo.remove(k);
+  };
+
   /** 双删：memo + 持久层 */
   const del = (k: string): Maybe<void> => {
+    epoch++;
     memo.remove(k);
     return st.remove(k);
   };
@@ -166,14 +187,16 @@ export function proxy<S extends SyncStore | AsyncStorage>(storage: S, memo: Memo
     })();
   }
 
-  /**
-   * 清理已过期数据：仅本实例管辖、且 entity 带 createdAt（本库写入标志）的条目，
-   * 避免误删外部恰好形如 {expireAt} 的数据。容量不足重试与公开的 purge() 共用此入口。
-   */
   /** 是否已过期：须同时带 createdAt（本库写入标志），避免外部恰好形如 {expireAt} 的数据被误判 */
   const isExpired = (e: StorageEntity | null, now: number): boolean => e?.expireAt != null && e.createdAt != null && now >= e.expireAt;
 
+  /**
+   * 清理已过期数据：仅本实例管辖、且 entity 带 createdAt（本库写入标志）的条目，
+   * 避免误删外部恰好形如 {expireAt} 的数据。容量不足重试与公开的 purge() 共用此入口。
+   * raw 模式没有 entity 信封，不做任何处理。
+   */
   function purgeExpired(): Maybe<void> {
+    if (isRaw) return;
     const now = Date.now();
     const dead = (s: string | null): boolean => isExpired(load(s ?? ""), now);
     return chain(ownKeys(), (ks): Maybe<void> => {
@@ -182,7 +205,7 @@ export function proxy<S extends SyncStore | AsyncStorage>(storage: S, memo: Memo
         return;
       }
       // 逐键复用单键 del（含 memo 双删）：异步后端逐键一事务
-      return Promise.all(ks.map((k) => chain(st.get(k), (s) => (dead(s) ? del(k) : undefined)))).then(() => undefined);
+      return all(ks.map((k) => chain(st.get(k), (s) => (dead(s) ? del(k) : undefined))));
     });
   }
 
@@ -198,14 +221,17 @@ export function proxy<S extends SyncStore | AsyncStorage>(storage: S, memo: Memo
       (err) => {
         if (!force) throw err;
         if (isAsync) return fail(err);
-        void purgeExpired(); // 同步后端此调用同步完成
-        return attempt(() => chain(st.set(k, str), () => true), fail);
+        // 清理也放进重试体内：其抛错同样走 fail/onError。同步后端此调用同步完成
+        return attempt(() => {
+          void purgeExpired();
+          return chain(st.set(k, str), () => true);
+        }, fail);
       },
     );
   }
 
-  /** entity 命中后的过期/续期处理，返回最终值 */
-  function resolve(entity: StorageEntity, k: string, fromMemo: boolean, fallback: unknown): Maybe<unknown> {
+  /** entity 命中后的过期/续期处理，返回最终值；e0 为读发起时的代次，用于丢弃过期的回填 */
+  function resolve(entity: StorageEntity, k: string, fromMemo: boolean, fallback: unknown, e0: number): Maybe<unknown> {
     const now = Date.now();
     if (isExpired(entity, now)) return chain(del(k), () => fallback); // 懒过期：双删
     const shared = fromMemo || cache; // 值对象与 memo 共享引用（cloned 开启时对这类返回做深拷贝）
@@ -213,31 +239,31 @@ export function proxy<S extends SyncStore | AsyncStorage>(storage: S, memo: Memo
       // 续期写到副本而非原地改 entity——entity 可能是 memo 里的共享引用，原地改会在 persist 落盘前就污染 memo
       const renewed: StorageEntity = { ...entity, expireAt: now + entity.ttl }; // 剩余寿命 >90% 时跳过（消除高频读写放大，最多提前 ttl 的 10% 过期）
       return chain(persist(k, dump(renewed)), (ok) => {
-        if (ok && cache) memo.set(k, renewed); // 与 write() 一致：仅落盘成功才写 memo，避免 memo 显示已续期而后端仍是旧值
+        if (ok && (fromMemo || cache)) backfill(e0, k, renewed); // 与 write() 一致：仅落盘成功才写 memo；条目来自 memo（含 per-call memoized）时也要同步续期，否则旧 expireAt 到点会误删
         return shared ? dup(entity.value) : entity.value;
       });
     }
-    if (!fromMemo && cache) memo.set(k, entity); // 读穿回填（仅开启缓存时）
+    if (!fromMemo && cache) backfill(e0, k, entity); // 读穿回填（仅开启缓存时）
     return shared ? dup(entity.value) : entity.value;
   }
 
   /** 后端取回的原始串 → 最终值（raw 直返并按需回填缓存；entity 解码 + 过期/续期处理） */
-  const hydrate = (s: string | null, k: string, fallback: unknown): Maybe<unknown> => {
+  const hydrate = (s: string | null, k: string, fallback: unknown, e0: number): Maybe<unknown> => {
     if (s == null) return fallback;
     if (isRaw) {
-      if (cache) memo.set(k, s);
+      if (cache) backfill(e0, k, s);
       return s;
     }
     const entity = load(s);
     if (entity == null) return chain(del(k), () => fallback); // 解不开 → 清除，回退
-    return resolve(entity, k, false, fallback);
+    return resolve(entity, k, false, fallback, e0);
   };
 
   /** memo 命中检查：raw 接受任意非空值；entity 仅接受对象（raw 实例可能向共享 memo 写入字符串，误读会得 undefined） */
-  const fromMemo = (k: string, fallback: unknown): { hit: boolean; value?: Maybe<unknown> } => {
+  const fromMemo = (k: string, fallback: unknown, e0: number): { hit: boolean; value?: Maybe<unknown> } => {
     const m = memo.get(k);
     if (isRaw) return m != null ? { hit: true, value: dup(m) } : { hit: false };
-    if (m != null && typeof m === "object") return { hit: true, value: resolve(m as StorageEntity, k, true, fallback) };
+    if (m != null && typeof m === "object") return { hit: true, value: resolve(m as StorageEntity, k, true, fallback, e0) };
     return { hit: false };
   };
 
@@ -250,11 +276,12 @@ export function proxy<S extends SyncStore | AsyncStorage>(storage: S, memo: Memo
       const rs = key.map((k, i) => get(k, ds?.[i]));
       return out(isAsync ? Promise.all(rs) : rs);
     }
+    const e0 = epoch; // 发起时的代次：异步读完成时若已变化则不回填 memo
     const k = fullKey(key);
     const fallback = defaultValue ?? null;
-    const m = fromMemo(k, fallback);
+    const m = fromMemo(k, fallback, e0);
     if (m.hit) return out(m.value);
-    return out(chain(st.get(k), (s) => hydrate(s, k, fallback)));
+    return out(chain(st.get(k), (s) => hydrate(s, k, fallback, e0)));
   }
 
   /** set 第三参解析：数字=ttl（毫秒）/ 对象=选项，未指定的并入实例级默认 */
@@ -298,8 +325,9 @@ export function proxy<S extends SyncStore | AsyncStorage>(storage: S, memo: Memo
       const n = Math.min(key.length, vs.length);
       const rs: Maybe<void>[] = [];
       for (let i = 0; i < n; i++) rs.push(set(key[i], vs[i], arg));
-      return out(isAsync ? Promise.all(rs).then(() => undefined) : undefined);
+      return out(isAsync ? all(rs) : undefined);
     }
+    epoch++; // 同步生效（含 readonly 分支）：使在途的异步读不再回填旧值
     const { ttl, memoized, expireAt } = parseArg(arg);
     const k = fullKey(key);
 
@@ -311,13 +339,13 @@ export function proxy<S extends SyncStore | AsyncStorage>(storage: S, memo: Memo
           return;
         }
         return chain(persist(k, value), (ok) => {
-          if (ok && memoized) memo.set(k, value);
+          if (ok) remember(k, value, memoized);
         });
       }
       const entity = mkEntity(value, ttl, expireAt, key);
       if (!entity) return;
       return chain(persist(k, dump(entity)), (ok) => {
-        if (ok && memoized) memo.set(k, entity);
+        if (ok) remember(k, entity, memoized);
       });
     };
 
@@ -334,31 +362,33 @@ export function proxy<S extends SyncStore | AsyncStorage>(storage: S, memo: Memo
     },
     /** 切换命名空间：先清 memo 读缓存再原地改前缀（fullKey 等闭包读 ns，已持有引用自动生效） */
     setNamespace(n?: string) {
+      epoch++;
       memo.clear();
       ns = n ? n + ":" : "";
     },
     /** 第 index 个逻辑键（已解密、去命名空间前缀）；供调试/枚举。有命名空间或 enckey 时按管辖范围取下标，与 keys()/length 口径一致 */
-    key: (index: number) =>
-      ns || enckey
-        ? R(chain(ownKeys(), (ks) => (index < 0 || index >= ks.length ? null : logical(ks[index]))))
-        : R(chain(st.key(index), (sk) => (sk == null ? null : logical(sk)))),
+    key: (index: number) => {
+      index = Math.trunc(index) || 0; // 与 Memory.key/原生一致：NaN→0、向零取整
+      return ns || enckey ? R(chain(ownKeys(), (ks) => (index < 0 || index >= ks.length ? null : logical(ks[index])))) : R(chain(st.key(index), (sk) => (sk == null ? null : logical(sk))));
+    },
     keys: () => R(chain(ownKeys(), (ks) => ks.map(logical))),
     purge: () => R(purgeExpired()),
     remove: (key: string | readonly string[]) => {
       if (typeof key === "string") return R(del(fullKey(key)));
       // 批量：逐键复用单键 del（含 memo 双删）
       const fks = key.map((k) => fullKey(k));
-      if (isAsync) return R(Promise.all(fks.map((k) => del(k))).then(() => undefined));
+      if (isAsync) return R(all(fks.map((k) => del(k))));
       for (const k of fks) void del(k);
       return R(undefined);
     },
     /** 清空：有命名空间或 enckey 时仅清本实例管辖的键（不波及同源其他应用/命名空间），否则整库清空 */
     clear: () => {
+      epoch++;
       memo.clear();
       if (!ns && !enckey) return R(st.clear());
       return R(
         chain(ownKeys(), (ks): Maybe<void> => {
-          if (isAsync) return Promise.all(ks.map((k) => st.remove(k))).then(() => undefined);
+          if (isAsync) return all(ks.map((k) => st.remove(k)));
           for (const k of ks) void st.remove(k); // 同步分支：st.remove 实际返回 void
         }),
       );

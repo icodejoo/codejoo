@@ -1,5 +1,5 @@
 // 周边插件：fast/lazy/batchFast 绑定访问器、crossTab 跨标签同步、debug 解密快照。
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { factory } from "../src/core";
 import { batchFast, fast, lazy } from "../src/fast";
 import { crossTab } from "../src/sync";
@@ -9,6 +9,7 @@ import { debug } from "../src/debug";
 import { supported } from "../src/helper";
 import { Memory } from "../src/memory";
 import { proxy } from "../src/proxy";
+import type { BaseStorageOptions } from "../src/interface";
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
@@ -98,6 +99,20 @@ describe("debug — 解密快照", () => {
   });
 });
 
+/** 向 BroadcastChannel 发消息（同源通道，无 targetOrigin 概念） */
+// oxlint-disable-next-line unicorn/require-post-message-target-origin
+const post = (bc: BroadcastChannel, msg: unknown): void => bc.postMessage(msg);
+
+/** 模拟一个纯内存模式的「标签」并挂载 crossTab（挂载瞬间临时关闭 supported.storage） */
+const mountTab = (channel: string, opts?: BaseStorageOptions) => {
+  const orig = supported.storage;
+  supported.storage = false;
+  const h = proxy(new Memory(), new Memory(), opts);
+  const stop = crossTab(h, channel);
+  supported.storage = orig;
+  return { h, stop };
+};
+
 describe("crossTab — 跨标签同步插件", () => {
   it("原生 storage 可用时为空操作", () => {
     const { ls } = factory();
@@ -138,5 +153,109 @@ describe("crossTab — 跨标签同步插件", () => {
     expect(flag()).toBe(true);
     stop1();
     expect(flag()).toBe(false);
+  });
+  it("命名空间不同的标签不回放；相同命名空间正常回放", async () => {
+    const a = mountTab("test-ct-ns", { namespace: "userA" });
+    const a2 = mountTab("test-ct-ns", { namespace: "userA" });
+    const b = mountTab("test-ct-ns", { namespace: "userB" });
+    try {
+      a.h.set("k", 1);
+      await vi.waitFor(() => expect(a2.h.get("k")).toEqual(1)); // 同命名空间已收到 → 消息已投递
+      expect(b.h.get("k")).toEqual(null);
+      expect(b.h.length).toEqual(0);
+      b.h.set("keep", 2);
+      a.h.clear(); // A 的 clear 不应清掉 B 的数据
+      a.h.set("ctl", 3); // 对照：消息按序投递，a2 收到它说明前面的 clear 广播已被各标签处理完
+      await vi.waitFor(() => expect(a2.h.get("ctl")).toEqual(3));
+      expect(b.h.get("keep")).toEqual(2);
+    } finally {
+      a.stop();
+      a2.stop();
+      b.stop();
+    }
+  });
+  it("未知 op / 非数组消息被忽略，不会清空数据", async () => {
+    const t = mountTab("test-ct-bogus");
+    const bc = new BroadcastChannel("test-ct-bogus");
+    try {
+      t.h.set("keep", 1);
+      post(bc, ["bogus", ""]);
+      post(bc, ["bogus"]);
+      post(bc, "junk");
+      post(bc, ["set", "", "ctl", 2, undefined]); // 对照：合法消息按序处理，说明前面的已被消费
+      await vi.waitFor(() => expect(t.h.get("ctl")).toEqual(2));
+      expect(t.h.get("keep")).toEqual(1);
+    } finally {
+      bc.close();
+      t.stop();
+    }
+  });
+  it("op 合法但键不合法（缺失/非字符串）被忽略，不抛错；合法的批量数组键照常回放", async () => {
+    const t = mountTab("test-ct-badkey");
+    const bc = new BroadcastChannel("test-ct-badkey");
+    const errors: unknown[] = [];
+    const onErr = (e: ErrorEvent) => errors.push(e.error);
+    window.addEventListener("error", onErr);
+    try {
+      t.h.set("keep", 1);
+      post(bc, ["set", ""]);
+      post(bc, ["remove", ""]);
+      post(bc, ["set", "", 123, 1]);
+      post(bc, ["remove", "", ["a", 1]]);
+      post(bc, ["set", "", ["a", "b"], [1, 2]]); // 对照：合法批量消息按序处理
+      await vi.waitFor(() => expect(t.h.get("b")).toEqual(2));
+      expect(t.h.get("a")).toEqual(1);
+      expect(t.h.get("keep")).toEqual(1);
+      expect(errors).toEqual([]);
+    } finally {
+      window.removeEventListener("error", onErr);
+      bc.close();
+      t.stop();
+    }
+  });
+  it("stop 幂等：旧 stop 再次调用不会还原重新挂载后的包装", () => {
+    const orig = supported.storage;
+    supported.storage = false;
+    const h = proxy(new Memory(), new Memory());
+    const stopA = crossTab(h, "test-ct-stop");
+    stopA();
+    const stopB = crossTab(h, "test-ct-stop");
+    supported.storage = orig;
+    const flag = () => (h as unknown as { __crossTab?: boolean }).__crossTab;
+    stopA();
+    expect(flag()).toBe(true);
+    stopB();
+    expect(flag()).toBe(false);
+    stopB(); // 重复调用无副作用
+    expect(flag()).toBe(false);
+  });
+});
+
+describe("supported — 存储探测相互独立", () => {
+  it("sessionStorage 访问抛 SecurityError 时 session=false，localStorage 不受影响，factory 不崩", async () => {
+    const desc = Object.getOwnPropertyDescriptor(window, "sessionStorage")!;
+    Object.defineProperty(window, "sessionStorage", {
+      configurable: true,
+      get() {
+        throw new DOMException("denied", "SecurityError");
+      },
+    });
+    const origSession = supported.session;
+    try {
+      // 带查询串重新求值 helper 模块，让探测在 sessionStorage 抛错的环境下重跑一次
+      const { supported: s } = await import(/* @vite-ignore */ `../src/helper.ts?probe=${Date.now()}`);
+      expect(s.storage).toBe(true);
+      expect(s.session).toBe(false);
+      // 以探测结果驱动 factory：ss 退回内存兜底，不触碰会抛错的 window.sessionStorage
+      supported.session = s.session;
+      const { ls, ss } = factory();
+      ss.set("k", 1);
+      expect(ss.get("k")).toEqual(1);
+      ls.set("k", 2);
+      expect(ls.get("k")).toEqual(2);
+    } finally {
+      supported.session = origSession;
+      Object.defineProperty(window, "sessionStorage", desc);
+    }
   });
 });
