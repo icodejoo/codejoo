@@ -1,8 +1,8 @@
 // @vitest-environment happy-dom
-import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest";
+import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import { auto } from "../src/page/auto";
 import { _setServiceWorkerContainer } from "../src/page/messages";
-import { withStageParam } from "../src/shared/protocol";
+import { PARAM_BYPASS, withStageParam } from "../src/shared/protocol";
 
 function fakeSW() {
   const listeners = new Set<(e: MessageEvent) => void>();
@@ -78,6 +78,61 @@ describe("auto", () => {
     document.body.append(img);
     await flush();
     expect(img.src).toBe(withStageParam(URL1, "1"));
+  });
+  it("error 触发重试:src 保持 bypass URL,不被已知阶段覆盖回去", async () => {
+    const sw = fakeSW();
+    _setServiceWorkerContainer(sw as unknown as ServiceWorkerContainer);
+    const img = document.createElement("img");
+    img.src = URL1;
+    document.body.append(img);
+    stop = auto({ onError: () => {} });
+    sw.emit({ imgprogress: 1, type: "complete", url: URL1 });
+    await flush();
+    expect(img.src).toBe(withStageParam(URL1, "1"));
+
+    sw.emit({ imgprogress: 1, type: "error", url: URL1, stage: "download", message: "net" });
+    await flush();
+    expect(img.src).toContain(PARAM_BYPASS);
+  });
+  it("元素 src 从 A 换成 B 后,A 的 complete 通知不再改动该元素", async () => {
+    const URL_B = "https://a.com/y.gif";
+    const sw = fakeSW();
+    _setServiceWorkerContainer(sw as unknown as ServiceWorkerContainer);
+    const img = document.createElement("img");
+    img.src = URL1;
+    document.body.append(img);
+    stop = auto();
+    await flush();
+    img.src = URL_B;
+    await flush();
+    sw.emit({ imgprogress: 1, type: "complete", url: URL1 });
+    await flush();
+    expect(img.src).toBe(URL_B);
+    // B 的通知仍然生效
+    sw.emit({ imgprogress: 1, type: "complete", url: URL_B });
+    await flush();
+    expect(img.src).toBe(withStageParam(URL_B, "1"));
+  });
+  it('背景元素的 url() 加引号并转义:含括号与反斜杠的 URL 写入 `url("...")`', async () => {
+    // happy-dom 对这类值回读为空,所以直接拦截 backgroundImage 的 setter 断言实际写入的字符串
+    const setter = vi.spyOn(Object.getPrototypeOf(document.createElement("div").style), "backgroundImage", "set");
+    try {
+      const sw = fakeSW();
+      _setServiceWorkerContainer(sw as unknown as ServiceWorkerContainer);
+      const raw = "https://a.com/x(1).gif?q=a\\b";
+      const div = document.createElement("div");
+      div.setAttribute("data-imgprogress-bg", raw);
+      document.body.append(div);
+      stop = auto();
+      const canonical = new URL(raw).href;
+      sw.emit({ imgprogress: 1, type: "complete", url: canonical });
+      await flush();
+      const full = withStageParam(canonical, "1");
+      expect(full).toContain("\\b"); // 前提:URL 解析保留了反斜杠
+      expect(setter).toHaveBeenLastCalledWith(`url("${full.replaceAll("\\", "\\\\")}")`);
+    } finally {
+      setter.mockRestore();
+    }
   });
   it("stop() 后不再接管", async () => {
     const sw = fakeSW();

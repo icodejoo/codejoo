@@ -5,12 +5,13 @@
  * 页面端零改造接管:跟踪 <img> 与打标背景元素,随 SW 阶段推进切换其显示 URL。
  */
 
-import { type ImgprogressStage, PARAM_BYPASS, isImgprogressMessage, stripImgprogressParams, withStageParam } from "../shared/protocol";
+import { DEFAULT_SKE_COLOR, type ImgprogressStage, PARAM_BYPASS, isImgprogressMessage, stripImgprogressParams, withStageParam } from "../shared/protocol";
 import { svgColorBlock, svgDataUri } from "../shared/placeholder";
 import type { ImgprogressErrorContext } from "../shared/types";
 import type { ImgprogressAutoOptions } from "./types";
 import { scheduleIdle } from "./idle";
 import { _getContainer } from "./messages";
+import { inViewport } from "./viewport";
 import { createVideoFacade, resolveVideoOptions, type VideoFacade } from "./video";
 
 /** Attribute marking a non-<img> element as a background-image takeover target — 标记非 <img> 元素为背景图接管目标的属性 */
@@ -39,23 +40,9 @@ function applyUrl(el: Element, displayUrl: string): void {
   if (el instanceof HTMLImageElement) {
     el.src = displayUrl;
   } else if (el.hasAttribute(BG_ATTR)) {
-    (el as HTMLElement).style.backgroundImage = `url(${displayUrl})`;
+    // 加引号并转义 \ 和 ",否则 URL 含括号(如色块 data URI 里的 url(#g))会让 url() 失效
+    (el as HTMLElement).style.backgroundImage = `url("${displayUrl.replace(/[\\"]/g, "\\$&")}")`;
   }
-}
-
-/**
- * Whether an element currently intersects the viewport (best-effort; treats a
- * zero-size layout, as in headless test envs, as visible).
- *
- * 元素当前是否与视口相交(尽力而为;把零尺寸布局——如无头测试环境——视为可见)。
- * @param el - Element to test — 待测元素
- * @returns Whether it is in view — 是否在视口内
- */
-function inViewport(el: Element): boolean {
-  if (typeof (el as HTMLElement).getBoundingClientRect !== "function" || typeof innerHeight === "undefined") return true;
-  const r = el.getBoundingClientRect();
-  if (r.width === 0 && r.height === 0) return true;
-  return r.top < innerHeight && r.bottom > 0;
 }
 
 /**
@@ -117,11 +104,6 @@ export function auto(options: ImgprogressAutoOptions = {}): () => void {
   let fullIO: IntersectionObserver | null = null;
 
   /**
-   * Ensure the shared full-stage viewport observer exists.
-   *
-   * 确保完整阶段共享视口观察器已创建。
-   */
-  /**
    * Build the off-viewport fallback display URL for an element, per the
    * `offViewport` option: the cached thumbnail stage, or a page-side color
    * block sized to the element.
@@ -137,11 +119,16 @@ export function auto(options: ImgprogressAutoOptions = {}): () => void {
     if (offViewport === "placeholder") {
       const w = (el as HTMLElement).clientWidth || 300;
       const h = (el as HTMLElement).clientHeight || 150;
-      return svgDataUri(svgColorBlock({ width: w, height: h, mode: "gradient", fallbackColor: "#e0e0e0" }));
+      return svgDataUri(svgColorBlock({ width: w, height: h, mode: "gradient", fallbackColor: DEFAULT_SKE_COLOR }));
     }
     return null;
   }
 
+  /**
+   * Ensure the shared full-stage viewport observer exists.
+   *
+   * 确保完整阶段共享视口观察器已创建。
+   */
   function ensureFullObserver(): void {
     if (fullIO || typeof IntersectionObserver === "undefined") return;
     fullIO = new IntersectionObserver((entries) => {
@@ -272,7 +259,7 @@ export function auto(options: ImgprogressAutoOptions = {}): () => void {
     u.searchParams.set(PARAM_BYPASS, "1");
     for (const ref of set) {
       const el = ref.deref();
-      if (el) applyUrl(el, u.href);
+      if (el) setDisplay(el, u.href); // 记录期望值,避免被当成外部改动重新跟踪后又被阶段 URL 覆盖
     }
   }
 
@@ -329,12 +316,20 @@ export function auto(options: ImgprogressAutoOptions = {}): () => void {
    */
   function track(el: Element, rawUrl: string): void {
     const url = canonicalize(rawUrl);
+    const prev = elUrl.get(el);
+    // 元素 src 换成了另一个 URL:先从旧 URL 的集合里摘掉,免得旧 URL 的阶段通知继续改动它
+    if (prev !== undefined && prev !== url) {
+      removeFromUrlSet(el, prev);
+      pendingFull.delete(el);
+    }
     let set = tracked.get(url);
+    const created = !set;
     if (!set) {
       set = new Set();
       tracked.set(url, set);
     }
-    set.add(new WeakRef(el));
+    // 同一 URL 下已在跟踪就不再重复加 WeakRef
+    if (prev !== url || created) set.add(new WeakRef(el));
     elUrl.set(el, url);
 
     const known = stageOf.get(url);
@@ -342,6 +337,26 @@ export function auto(options: ImgprogressAutoOptions = {}): () => void {
       applyStageToElement(el, url, known);
     } else {
       void reconcileFromCache(url);
+    }
+  }
+
+  /**
+   * 把元素从某 URL 的跟踪集合里摘掉(顺带清掉死 WeakRef);集合清空后连同该 URL 的元数据一并释放。
+   * 不带 isConnected 守卫,供 untrackElement 与 track(换 URL)共用。
+   * @param el - 待摘除的元素
+   * @param url - 其所属的规范化 URL
+   */
+  function removeFromUrlSet(el: Element, url: string): void {
+    const set = tracked.get(url);
+    if (!set) return;
+    for (const ref of set) {
+      const e = ref.deref();
+      if (e === el || e === undefined) set.delete(ref);
+    }
+    if (set.size === 0) {
+      tracked.delete(url);
+      stageOf.delete(url);
+      reconciled.delete(url);
     }
   }
 
@@ -365,17 +380,7 @@ export function auto(options: ImgprogressAutoOptions = {}): () => void {
     const url = elUrl.get(el);
     elUrl.delete(el);
     if (url === undefined) return;
-    const set = tracked.get(url);
-    if (!set) return;
-    for (const ref of set) {
-      const e = ref.deref();
-      if (e === el || e === undefined) set.delete(ref);
-    }
-    if (set.size === 0) {
-      tracked.delete(url);
-      stageOf.delete(url);
-      reconciled.delete(url);
-    }
+    removeFromUrlSet(el, url);
   }
 
   /**
@@ -475,7 +480,7 @@ export function auto(options: ImgprogressAutoOptions = {}): () => void {
       applyStageWhenIdle(url, "ff");
     } else if (e.data.type === "complete") {
       applyStageWhenIdle(url, "1");
-    } else {
+    } else if (e.data.type === "error") {
       const ctx: ImgprogressErrorContext = { url, stage: e.data.stage, error: new Error(e.data.message) };
       onError(ctx);
       retryAll(url);

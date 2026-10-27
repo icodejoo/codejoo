@@ -101,14 +101,15 @@ export function scanJpeg(buf: Uint8Array): JpegScan {
 
     if (marker === 0xda) {
       const scanDataStart = p + 2 + segLen;
-      const scanEnd = findScanEnd(buf, scanDataStart);
+      // 只有渐进式才需要第一个 scan 的结束位置,baseline 不扫熵数据,避免每个 chunk 重扫 O(n²)
+      const scanEnd = progressive ? findScanEnd(buf, scanDataStart) : -1;
       return {
         status: "static",
         width,
         height,
         progressive,
         scanDataStart,
-        firstScanEnd: progressive && scanEnd !== -1 ? scanEnd : undefined,
+        firstScanEnd: scanEnd !== -1 ? scanEnd : undefined,
       };
     }
 

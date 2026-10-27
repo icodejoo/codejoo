@@ -52,17 +52,23 @@ export async function makeFirstFramePlaceholder(bytes: Uint8Array, mime: string,
     return null;
   }
 
-  const scale = Math.min(1, MAX_SIDE / Math.max(bitmap.width, bitmap.height));
-  const scaledW = Math.round(bitmap.width * scale);
-  const scaledH = Math.round(bitmap.height * scale);
+  try {
+    const scale = Math.min(1, MAX_SIDE / Math.max(bitmap.width, bitmap.height));
+    // 极端长宽比下取整可能得 0,至少保留 1px
+    const scaledW = Math.max(1, Math.round(bitmap.width * scale));
+    const scaledH = Math.max(1, Math.round(bitmap.height * scale));
 
-  const canvas = deps.createCanvas(scaledW, scaledH);
-  const ctx = canvas.getContext("2d");
-  if (!ctx) return null;
+    const canvas = deps.createCanvas(scaledW, scaledH);
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return null;
 
-  if (opts.firstFrame === "blur") ctx.filter = `blur(${opts.blurRadius}px)`;
-  ctx.drawImage(bitmap, 0, 0, scaledW, scaledH);
-  bitmap.close?.();
+    if (opts.firstFrame === "blur") ctx.filter = `blur(${opts.blurRadius}px)`;
+    ctx.drawImage(bitmap, 0, 0, scaledW, scaledH);
 
-  return canvas.convertToBlob({ type: "image/png" });
+    return await canvas.convertToBlob({ type: "image/png" });
+  } catch {
+    return null;
+  } finally {
+    bitmap.close?.();
+  }
 }

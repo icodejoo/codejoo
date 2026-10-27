@@ -68,6 +68,27 @@ describe("load", () => {
     await flush();
     expect(cb).not.toHaveBeenCalledWith("complete", expect.anything());
   });
+  it("complete 之后到达的 first-frame 不再 emit", async () => {
+    const sw = fakeSW();
+    _setServiceWorkerContainer(sw as unknown as ServiceWorkerContainer);
+    const seen: string[] = [];
+    const task = load(URL1).onStage((s) => seen.push(s));
+    await Promise.resolve();
+    sw.emit({ imgprogress: 1, type: "complete", url: URL1 });
+    sw.emit({ imgprogress: 1, type: "first-frame", url: URL1 });
+    await flush();
+    await task.done;
+    expect(seen).toEqual(["placeholder", "complete"]);
+  });
+  it("入参带 imgprogress 标记参数:规范化后仍能收到 SW 通知", async () => {
+    const sw = fakeSW();
+    _setServiceWorkerContainer(sw as unknown as ServiceWorkerContainer);
+    const task = load(withStageParam(URL1, "1"));
+    expect(task.url).toBe(URL1);
+    sw.emit({ imgprogress: 1, type: "complete", url: URL1 });
+    await flush();
+    await expect(task.done).resolves.toBe(withStageParam(URL1, "1"));
+  });
   it("download error → done reject(错误不受 idle 调度影响,立即 reject)", async () => {
     const sw = fakeSW();
     _setServiceWorkerContainer(sw as unknown as ServiceWorkerContainer);
@@ -118,6 +139,38 @@ describe("load", () => {
       await expect(task.done).resolves.toBe(withStageParam(URL1, "1"));
       expect(seen).not.toContain("first-frame");
       expect(seen).toContain("complete");
+    });
+
+    it("SW 通知与缓存对账同时 complete:只 emit 一次 complete", async () => {
+      const sw = fakeSW();
+      _setServiceWorkerContainer(sw as unknown as ServiceWorkerContainer);
+      fakeCaches(new Set([withStageParam(URL1, "1")]));
+
+      const cb = vi.fn();
+      const task = load(URL1).onStage(cb);
+      await Promise.resolve();
+      sw.emit({ imgprogress: 1, type: "complete", url: URL1 });
+      await flush();
+      await flush();
+      await task.done;
+
+      expect(cb.mock.calls.filter((c) => c[0] === "complete")).toHaveLength(1);
+    });
+
+    it("SW 的 complete 先到、对账的 ff 后到:first-frame 不在 complete 之后 emit,complete 只一次", async () => {
+      const sw = fakeSW();
+      _setServiceWorkerContainer(sw as unknown as ServiceWorkerContainer);
+      fakeCaches(new Set([withStageParam(URL1, "ff"), withStageParam(URL1, "1")]));
+
+      const seen: string[] = [];
+      const task = load(URL1).onStage((s) => seen.push(s));
+      // 同步派发 complete:此时对账的 caches.match(ff) 还没返回,ff 命中必然晚于 complete 调度
+      sw.emit({ imgprogress: 1, type: "complete", url: URL1 });
+      await flush();
+      await flush();
+      await task.done;
+
+      expect(seen).toEqual(["placeholder", "complete"]);
     });
 
     it("SW 实时通知与缓存对账都命中 first-frame 时只 emit 一次", async () => {

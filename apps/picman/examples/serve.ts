@@ -14,12 +14,13 @@
 
 import { createReadStream, existsSync, statSync } from "node:fs";
 import { type IncomingMessage, type ServerResponse, createServer } from "node:http";
-import { extname, join } from "node:path";
+import { extname, join, resolve, sep } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const here = fileURLToPath(new URL(".", import.meta.url));
-const examplesDir = here;
-const distDir = join(here, "..", "dist");
+// resolve 会去掉目录末尾的分隔符,后面做前缀校验时才不会漏判
+const examplesDir = resolve(here);
+const distDir = resolve(here, "..", "dist");
 
 /** Parse --throttle <bytes/s> from argv; null means unthrottled(default) — 从 argv 解析 --throttle(字节/秒);null 表示不限速(默认) */
 function parseThrottle(): number | null {
@@ -41,6 +42,17 @@ const MIME: Record<string, string> = {
   ".mp4": "video/mp4",
   ".webm": "video/webm",
 };
+
+/**
+ * 把请求路径解析到 baseDir 之下的绝对路径,并拒绝越出 baseDir 的路径(路径穿越)。
+ * @param baseDir - 允许访问的根目录(绝对路径,末尾无分隔符)
+ * @param relPath - 以 "/" 开头、相对 baseDir 的请求路径
+ * @returns 安全的绝对路径;越界时为 null
+ */
+function resolveInside(baseDir: string, relPath: string): string | null {
+  const filePath = resolve(baseDir, "." + relPath);
+  return filePath === baseDir || filePath.startsWith(baseDir + sep) ? filePath : null;
+}
 
 const throttleBytesPerSec = parseThrottle();
 const port = 8787;
@@ -105,12 +117,22 @@ createServer((req: IncomingMessage, res: ServerResponse) => {
   const url = new URL(req.url ?? "/", `http://localhost:${port}`);
   // decode percent-encoding so non-ASCII filenames (e.g. sample_1280×853.png) resolve on disk
   // 解码 percent-encoding,使非 ASCII 文件名(如 sample_1280×853.png)能在磁盘上找到
-  const pathname = decodeURIComponent(url.pathname === "/" ? "/index.html" : url.pathname);
+  let pathname: string;
+  try {
+    pathname = decodeURIComponent(url.pathname === "/" ? "/index.html" : url.pathname);
+  } catch {
+    res.writeHead(400).end("bad request");
+    return;
+  }
 
   // Serve built ESM entries/chunks straight out of dist/ (index.html imports ../dist/esm/*.mjs)
   // 直接从 dist/ 提供构建产物(index.html 引用 ../dist/esm/*.mjs)
   if (pathname.startsWith("/dist/")) {
-    const filePath = join(distDir, pathname.slice("/dist/".length));
+    const filePath = resolveInside(distDir, pathname.slice("/dist".length));
+    if (filePath === null) {
+      res.writeHead(403).end("forbidden");
+      return;
+    }
     if (!existsSync(filePath) || !statSync(filePath).isFile()) {
       res.writeHead(404).end("not found");
       return;
@@ -120,17 +142,21 @@ createServer((req: IncomingMessage, res: ServerResponse) => {
   }
 
   // Serve the prebuilt standalone SW straight out of dist/ — 直接从 dist/ 提供预构建成品 SW
-  if (pathname === "/picman-sw.js") {
-    const filePath = join(distDir, "picman-sw.js");
+  if (pathname === "/imgprogress-sw.js") {
+    const filePath = join(distDir, "imgprogress-sw.js");
     if (!existsSync(filePath)) {
-      res.writeHead(404).end("dist/picman-sw.js not found — run `pnpm build` first");
+      res.writeHead(404).end("dist/imgprogress-sw.js not found — run `pnpm build` first");
       return;
     }
     void streamThrottled(filePath, req, res);
     return;
   }
 
-  const filePath = join(examplesDir, pathname);
+  const filePath = resolveInside(examplesDir, pathname);
+  if (filePath === null) {
+    res.writeHead(403).end("forbidden");
+    return;
+  }
   if (!existsSync(filePath) || !statSync(filePath).isFile()) {
     res.writeHead(404).end("not found");
     return;

@@ -23,7 +23,10 @@
     "README.md"
   ],
   "type": "module",
-  "sideEffects": false,
+  "sideEffects": [
+    "./dist/esm/element.mjs",
+    "./src/element.ts"
+  ],
   "main": "./dist/esm/index.mjs",
   "module": "./dist/esm/index.mjs",
   "types": "./dist/esm/index.d.mts",
@@ -35,15 +38,18 @@
     },
     "./sw": {
       "types": "./dist/esm/sw.d.mts",
-      "import": "./dist/esm/sw.mjs"
+      "import": "./dist/esm/sw.mjs",
+      "default": "./dist/esm/sw.mjs"
     },
     "./element": {
       "types": "./dist/esm/element.d.mts",
-      "import": "./dist/esm/element.mjs"
+      "import": "./dist/esm/element.mjs",
+      "default": "./dist/esm/element.mjs"
     },
     "./shared": {
       "types": "./dist/esm/shared.d.mts",
-      "import": "./dist/esm/shared.mjs"
+      "import": "./dist/esm/shared.mjs",
+      "default": "./dist/esm/shared.mjs"
     },
     "./imgprogress-sw.js": "./dist/imgprogress-sw.js",
     "./package.json": "./package.json"
@@ -58,7 +64,7 @@
     "build": "node scripts/build.mjs",
     "dev": "vp pack --watch",
     "test": "vp test",
-    "prepublishOnly": "pnpm run check && vp pack"
+    "prepublishOnly": "pnpm run check && pnpm run build"
   },
   "devDependencies": {
     "@types/node": "catalog:",

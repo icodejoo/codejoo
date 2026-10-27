@@ -113,11 +113,11 @@
     </section>
 
     <script type="module">
-      import { registerPicmanSW } from "../dist/esm/index.mjs";
+      import { registerImgprogressSW } from "../dist/esm/index.mjs";
       import { auto } from "../dist/esm/index.mjs";
 
       const swStatusEl = document.getElementById("sw-status");
-      const { controlled } = await registerPicmanSW("/picman-sw.js");
+      const { controlled } = await registerImgprogressSW("/imgprogress-sw.js");
       if (!controlled) {
         // 首次访问——SW 尚未接管本页。避免死循环:只自动刷新一次(用 sessionStorage 打标记),
         // 刷新后仍未接管才提示用户手动处理(理论上不该发生,除非 SW 注册失败)。
@@ -171,7 +171,7 @@
             if (m.type !== "attributes" || m.attributeName !== "src") continue;
             const newSrc = realImg.getAttribute("src");
             log(`src 变为: ${newSrc}`);
-            if (newSrc.includes("__picman_full__=1")) {
+            if (newSrc.includes("__imgprogress_full__=1")) {
               log(`(展示层延迟 ${DEMO_COMPLETE_DELAY_MS}ms 后再切到完整动画)`);
               setTimeout(() => {
                 displayImg.src = newSrc;

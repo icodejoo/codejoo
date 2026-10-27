@@ -5,7 +5,7 @@
  * 增量 PNG/APNG 容器遍历器:基于 acTL 的动图判定、调色板、首帧就绪——只解结构,不做 zlib inflate。
  */
 
-import { readBE32 } from "../bytes";
+import { concatBytes, readBE32, readFourCC } from "../bytes";
 
 /**
  * Result of scanning a (possibly partial) PNG/APNG byte buffer.
@@ -69,13 +69,17 @@ export function scanPng(buf: Uint8Array): PngScan {
   while (p + 8 <= buf.length) {
     const len = readBE32(buf, p);
     const total = 12 + len;
-    const type = String.fromCharCode(buf[p + 4]!, buf[p + 5]!, buf[p + 6]!, buf[p + 7]!);
+    const type = readFourCC(buf, p + 4);
 
     if (p + total > buf.length) {
       // Chunk tail not arrived — still count the received part of IDAT payload
       // toward displayability before breaking.
       // chunk 尾部未收全——break 前仍把 IDAT 负载的已到部分计入可显示信号。
-      if (type === "IDAT") idatBytes += Math.max(0, Math.min(len, buf.length - (p + 8)));
+      if (type === "IDAT") {
+        idatBytes += Math.max(0, Math.min(len, buf.length - (p + 8)));
+        // 只看到首个 IDAT 的块头就能定 status,不必等整块到齐(单个巨大 IDAT 时否则永不触发)
+        if (!sawIDAT) status = sawACTL ? "animated" : "static";
+      }
       break;
     }
 
@@ -128,7 +132,7 @@ export function apngFirstFrame(buf: Uint8Array): Uint8Array {
     const total = 12 + len;
     if (p + total > buf.length) break;
 
-    const type = String.fromCharCode(buf[p + 4]!, buf[p + 5]!, buf[p + 6]!, buf[p + 7]!);
+    const type = readFourCC(buf, p + 4);
 
     if (type === "acTL" || type === "fcTL" || type === "fdAT" || type === "IEND") {
       p += total;
@@ -149,13 +153,5 @@ export function apngFirstFrame(buf: Uint8Array): Uint8Array {
   }
 
   parts.push(IEND_BYTES);
-
-  const totalLen = parts.reduce((n, part) => n + part.length, 0);
-  const out = new Uint8Array(totalLen);
-  let off = 0;
-  for (const part of parts) {
-    out.set(part, off);
-    off += part.length;
-  }
-  return out;
+  return concatBytes(parts);
 }

@@ -68,21 +68,18 @@ export function scanGif(buf: Uint8Array): GifScan {
     for (let i = 13; i < gctEnd; i += 3) palette.push([buf[i]!, buf[i + 1]!, buf[i + 2]!]);
   }
 
-  let animated = false;
-  let imageCount = 0;
   let firstFrameEnd: number | undefined;
   let q = gctEnd;
 
   const needMore = (): GifScan => ({ status: "need-more", width, height, palette, firstFrameEnd });
 
   while (true) {
-    if (animated && firstFrameEnd !== undefined) return { status: "animated", width, height, palette, firstFrameEnd };
     if (q >= buf.length) return needMore();
 
     const marker = buf[q]!;
 
     if (marker === 0x3b) {
-      return { status: animated ? "animated" : "static", width, height, palette, firstFrameEnd };
+      return { status: "static", width, height, palette, firstFrameEnd };
     }
 
     if (marker === 0x21) {
@@ -100,8 +97,9 @@ export function scanGif(buf: Uint8Array): GifScan {
     }
 
     if (marker === 0x2c) {
-      imageCount++;
-      if (imageCount >= 2) animated = true;
+      // 第 2 个图像描述符出现时首帧边界已确定(上一帧必已完整走完才会前进到这里),
+      // 立即判动图,不必等第 2 帧数据到齐。
+      if (firstFrameEnd !== undefined) return { status: "animated", width, height, palette, firstFrameEnd };
       const descStart = q + 1;
       const descEnd = descStart + 9;
       if (buf.length < descEnd) return needMore();
@@ -112,7 +110,7 @@ export function scanGif(buf: Uint8Array): GifScan {
       const subBlocksStart = afterDesc + 1;
       const subEnd = walkSubBlocks(buf, subBlocksStart);
       if (subEnd === -1) return needMore();
-      if (imageCount === 1) firstFrameEnd = subEnd;
+      firstFrameEnd = subEnd;
       q = subEnd;
       continue;
     }

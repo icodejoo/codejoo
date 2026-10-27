@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import { handleImageRequest, shouldIntercept, type PipelineDeps } from "../src/sw/pipeline";
 import { resolveSWOptions } from "../src/shared/types";
-import { HEADER_MARK, PARAM_BYPASS, PARAM_SKE, withPlayParam, withStageParam } from "../src/shared/protocol";
+import { HEADER_MARK, PARAM_BYPASS, PARAM_FULL, PARAM_SKE, withPlayParam, withStageParam } from "../src/shared/protocol";
 import { makeBigPng, makeGif, makeJpeg } from "./fixtures";
 
 const GIF_URL = "https://a.com/big.gif";
@@ -50,6 +50,11 @@ describe("shouldIntercept", () => {
   });
 
   const VIDEO_URL = "https://a.com/hero.mp4";
+  it("带 g 标志的正则多次调用结果稳定", () => {
+    const gOpts = resolveSWOptions({ include: [/\.gif/g] });
+    const req = () => withDest(img(GIF_URL), "image");
+    expect([shouldIntercept(req(), gOpts), shouldIntercept(req(), gOpts), shouldIntercept(req(), gOpts)]).toEqual([true, true, true]);
+  });
   it("video 默认不拦(deferVideos 关)", () => {
     expect(shouldIntercept(withDest(img(VIDEO_URL), "video"), o)).toBe(false);
   });
@@ -110,7 +115,9 @@ describe("handleImageRequest", () => {
     const u = new URL(GIF_URL);
     u.searchParams.set(PARAM_BYPASS, "1");
     expect(await handleImageRequest(new Request(u.href), d)).toBe(net);
-    expect(d.fetchImpl).toHaveBeenCalledWith(GIF_URL);
+    const arg = (d.fetchImpl as ReturnType<typeof vi.fn>).mock.calls[0]![0];
+    expect(arg).toBeInstanceOf(Request);
+    expect((arg as Request).url).toBe(GIF_URL);
   });
   it("首帧生成失败(makeFirstFrame null):无 ff 通知,complete 照常", async () => {
     const gif = makeGif({ frames: 3, loop: true });
@@ -169,6 +176,93 @@ describe("handleImageRequest", () => {
     expect(d.notify).toHaveBeenCalledWith({ imgprogress: 1, type: "complete", url: GIF_URL });
   });
 
+  it("ff 阶段缓存写入失败:不发 first-frame 通知,complete 照常", async () => {
+    const gif = makeGif({ frames: 3, loop: true });
+    const d = makeDeps();
+    (d.cache.putStage as ReturnType<typeof vi.fn>).mockImplementation(async (_u: string, stage: string) => stage !== "ff");
+    (d.fetchImpl as ReturnType<typeof vi.fn>).mockResolvedValue(streamResponse(gif, 7));
+    await handleImageRequest(new Request(GIF_URL), d);
+    await drain(d);
+    expect(d.notify).not.toHaveBeenCalledWith(expect.objectContaining({ type: "first-frame" }));
+    expect(d.notify).toHaveBeenCalledWith({ imgprogress: 1, type: "complete", url: GIF_URL });
+  });
+  it("后台下载失败:notify 抛错也不吞 onError", async () => {
+    const gif = makeGif({ frames: 3, loop: true });
+    const onError = vi.fn();
+    const d = makeDeps({ options: resolveSWOptions({ threshold: 10, headBytes: 16, onError }), notify: vi.fn().mockRejectedValue(new Error("notify down")) });
+    (d.fetchImpl as ReturnType<typeof vi.fn>).mockResolvedValue(streamResponse(gif, 7));
+    await handleImageRequest(new Request(GIF_URL), d);
+    await expect(drain(d)).resolves.toBeDefined();
+    expect(onError).toHaveBeenCalledWith(expect.objectContaining({ url: GIF_URL, stage: "download" }));
+  });
+  it("后台下载失败且 onError 自己抛错:error 通知照常发出,不向外抛", async () => {
+    const gif = makeGif({ frames: 3, loop: true });
+    const onError = vi.fn(() => {
+      throw new Error("hook boom");
+    });
+    const d = makeDeps({ options: resolveSWOptions({ threshold: 10, headBytes: 16, onError }), makeFirstFrame: vi.fn().mockRejectedValue(new Error("render down")) });
+    (d.fetchImpl as ReturnType<typeof vi.fn>).mockResolvedValue(streamResponse(gif, 7));
+    await handleImageRequest(new Request(GIF_URL), d);
+    await expect(drain(d)).resolves.toBeDefined();
+    expect(onError).toHaveBeenCalled();
+    expect(d.notify).toHaveBeenCalledWith(expect.objectContaining({ type: "error", url: GIF_URL, stage: "download" }));
+  });
+  it("首帧渲染返回 null 且 onError 抛错:complete 照常发出", async () => {
+    const gif = makeGif({ frames: 3, loop: true });
+    const onError = vi.fn(() => {
+      throw new Error("hook boom");
+    });
+    const d = makeDeps({ options: resolveSWOptions({ threshold: 10, headBytes: 16, onError }), makeFirstFrame: vi.fn().mockResolvedValue(null) });
+    (d.fetchImpl as ReturnType<typeof vi.fn>).mockResolvedValue(streamResponse(gif, 7));
+    await handleImageRequest(new Request(GIF_URL), d);
+    await drain(d);
+    expect(onError).toHaveBeenCalledWith(expect.objectContaining({ stage: "first-frame" }));
+    expect(d.notify).toHaveBeenCalledWith({ imgprogress: 1, type: "complete", url: GIF_URL });
+  });
+  it("fetch 抛异常且 onError 自己抛错:仍透传重试,不抛", async () => {
+    const onError = vi.fn(() => {
+      throw new Error("hook boom");
+    });
+    const d = makeDeps({ options: resolveSWOptions({ threshold: 10, onError }) });
+    (d.fetchImpl as ReturnType<typeof vi.fn>).mockRejectedValueOnce(new Error("boom")).mockResolvedValueOnce(new Response("retry"));
+    const resp = await handleImageRequest(new Request(GIF_URL), d);
+    expect(await resp.text()).toBe("retry");
+  });
+  it("R1 回归:带 `,` `/` 的原图 URL,写入索引的 key 与 PARAM_FULL 请求 matchStage 的 key 一致", async () => {
+    const gif = makeGif({ frames: 3, loop: true });
+    const oss = "https://a.com/big.gif?x-oss-process=image/resize,w_100&n=a%20b";
+    const d = makeDeps();
+    (d.fetchImpl as ReturnType<typeof vi.fn>).mockResolvedValue(streamResponse(gif, 7));
+    await handleImageRequest(new Request(oss), d);
+    await drain(d);
+    const written = (d.cache.putStage as ReturnType<typeof vi.fn>).mock.calls.map((c) => c[0]);
+    expect(written.length).toBeGreaterThan(0);
+    expect(new Set(written)).toEqual(new Set([oss]));
+
+    (d.cache.matchStage as ReturnType<typeof vi.fn>).mockClear();
+    await handleImageRequest(new Request(withStageParam(oss, "1")), d);
+    expect(d.cache.matchStage).toHaveBeenCalledWith(oss, "1");
+  });
+  it("PARAM_FULL 值无效:直接以 Request 回落网络,不查缓存", async () => {
+    const d = makeDeps();
+    const net = new Response("net");
+    (d.fetchImpl as ReturnType<typeof vi.fn>).mockResolvedValue(net);
+    const u = new URL(GIF_URL);
+    u.searchParams.set(PARAM_FULL, "bogus");
+    expect(await handleImageRequest(new Request(u.href), d)).toBe(net);
+    expect(d.cache.matchStage).not.toHaveBeenCalled();
+    expect(((d.fetchImpl as ReturnType<typeof vi.fn>).mock.calls[0]![0] as Request).url).toBe(GIF_URL);
+  });
+  it("PARAM_SKE 非法颜色:回退全局默认色,不注入 SVG", async () => {
+    const gif = makeGif({ frames: 3, loop: true });
+    const d = makeDeps({ options: resolveSWOptions({ threshold: 10, headBytes: 16, colorBlock: "solid", fallbackColor: "#00ff00" }) });
+    (d.fetchImpl as ReturnType<typeof vi.fn>).mockResolvedValue(streamResponse(gif, 7));
+    const u = new URL(GIF_URL);
+    u.searchParams.set(PARAM_SKE, '"/><script>');
+    const svg = await (await handleImageRequest(new Request(u.href), d)).text();
+    expect(svg).toContain('fill="#00ff00"');
+    expect(svg).not.toContain("script");
+  });
   describe("静态渐进(staticProgressive)", () => {
     const JPG_URL = "https://a.com/photo.jpg";
     const PNG_URL = "https://a.com/photo.png";
