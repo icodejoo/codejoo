@@ -63,6 +63,31 @@ export interface SniffResult {
 /** Minimum IDAT bytes before an interlaced PNG's mosaic preview is worth showing — 隔行 PNG 马赛克预览值得展示前的最少 IDAT 字节 */
 const MIN_PIXEL_BYTES = 4096;
 
+/** PNG 颜色类型 → 每像素通道数 */
+const PNG_CHANNELS: Record<number, number> = { 0: 1, 2: 3, 3: 1, 4: 2, 6: 4 };
+
+/**
+ * 估算隔行(Adam7)PNG 第 1 遍(1/8 尺寸马赛克)完整可解所需的最少 IDAT 字节数。
+ * 第 1 遍尺寸为 ceil(w/8) x ceil(h/8),每行 = 1 个滤波字节 + 像素字节;
+ * deflate 输出最坏仅比原文略大,故再加 zlib/deflate 余量,收齐这么多字节即可保证第 1 遍完整。
+ * @param width - 图片宽
+ * @param height - 图片高
+ * @param bitDepth - 位深
+ * @param colorType - PNG 颜色类型
+ * @returns 第 1 遍原始数据 + 余量的字节数;参数缺失/非法返回 0
+ * @example
+ * adam7Pass1Bytes(4000, 3000, 8, 2) // 约 563k
+ */
+export function adam7Pass1Bytes(width: number | undefined, height: number | undefined, bitDepth: number | undefined, colorType: number | undefined): number {
+  const channels = colorType === undefined ? undefined : PNG_CHANNELS[colorType];
+  if (!width || !height || !bitDepth || !channels) return 0;
+  const pw = Math.ceil(width / 8);
+  const ph = Math.ceil(height / 8);
+  const rowBytes = 1 + Math.ceil((pw * channels * bitDepth) / 8);
+  const raw = ph * rowBytes;
+  return raw + Math.ceil(raw / 1000) + 16;
+}
+
 /**
  * Sniff a (possibly partial) byte buffer's magic bytes and delegate to the
  * matching format walker.
@@ -96,7 +121,7 @@ export function sniff(buf: Uint8Array): SniffResult {
       height: r.height,
       palette: r.palette,
       apngFirstFrameReady: r.firstFrameReady,
-      staticDisplayable: r.status === "static" && r.interlaced === true && (r.idatBytes ?? 0) >= MIN_PIXEL_BYTES,
+      staticDisplayable: r.status === "static" && r.interlaced === true && (r.idatBytes ?? 0) >= Math.max(MIN_PIXEL_BYTES, adam7Pass1Bytes(r.width, r.height, r.bitDepth, r.colorType)),
       mime: "image/png",
     };
   }

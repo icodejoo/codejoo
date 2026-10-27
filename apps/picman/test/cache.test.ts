@@ -1,9 +1,9 @@
 import { describe, expect, it } from "vitest";
 import { ImgprogressCache } from "../src/sw/cache";
 
-/** 极简内存 CacheStorage mock — 只实现用到的 open/put/match/delete/keys */
+/** 极简内存 CacheStorage mock — 只实现用到的 open/put/match/delete/keys;put 消费 body 存字节与 headers,match 每次返回新 Response(贴近真实 Cache 语义) */
 function memCaches(failPuts = 0, consumeBodyBeforeFail = false): CacheStorage {
-  const store = new Map<string, Response>();
+  const store = new Map<string, { body: ArrayBuffer; status: number; headers: Headers }>();
   let fails = failPuts;
   const cache = {
     async put(req: Request | string, resp: Response) {
@@ -13,10 +13,11 @@ function memCaches(failPuts = 0, consumeBodyBeforeFail = false): CacheStorage {
         if (consumeBodyBeforeFail) await resp.arrayBuffer();
         throw new DOMException("quota", "QuotaExceededError");
       }
-      store.set(typeof req === "string" ? req : req.url, resp);
+      store.set(typeof req === "string" ? req : req.url, { body: await resp.arrayBuffer(), status: resp.status, headers: new Headers(resp.headers) });
     },
     async match(req: Request | string) {
-      return store.get(typeof req === "string" ? req : (req as Request).url);
+      const hit = store.get(typeof req === "string" ? req : (req as Request).url);
+      return hit ? new Response(hit.body.slice(0), { status: hit.status, headers: new Headers(hit.headers) }) : undefined;
     },
     async delete(req: Request | string) {
       return store.delete(typeof req === "string" ? req : (req as Request).url);
@@ -51,6 +52,38 @@ describe("ImgprogressCache", () => {
     expect(await c.matchStage(URL1, "1")).toBeUndefined();
     expect(await c.matchStage(URL1, "ff")).toBeUndefined();
     expect(await c.matchStage(URL3, "1")).toBeDefined();
+  });
+  it("只写了 ff 的 URL 同样登记 LRU,会被 maxEntries 淘汰", async () => {
+    let t = 0;
+    const c = new ImgprogressCache(opts, memCaches(), () => ++t);
+    await c.putStage(URL1, "ff", new Response("f1")); // 下载失败遗留的 ff
+    await c.putStage(URL2, "1", new Response("2"));
+    await c.putStage(URL3, "1", new Response("3")); // 超上限,挤掉最旧的 URL1
+    expect(await c.matchStage(URL1, "ff")).toBeUndefined();
+    expect(await c.matchStage(URL2, "1")).toBeDefined();
+    expect(await c.matchStage(URL3, "1")).toBeDefined();
+  });
+  it("索引写失败(阶段写成功):putStage 不抛,仍返回 true 且数据可用", async () => {
+    const base = memCaches();
+    const failing = {
+      open: async (n: string) => {
+        const c = await base.open(n);
+        return Object.assign(Object.create(c) as Cache, {
+          put: (req: Request | string, resp: Response) => (String(typeof req === "string" ? req : req.url).includes("__index__") ? Promise.reject(new DOMException("quota", "QuotaExceededError")) : c.put(req, resp)),
+        });
+      },
+    } as unknown as CacheStorage;
+    const c = new ImgprogressCache(opts, failing, () => 1);
+    await expect(c.putStage(URL1, "1", new Response("full"))).resolves.toBe(true);
+    expect(await (await c.matchStage(URL1, "1"))!.text()).toBe("full");
+  });
+  it("全图过期后再写 ff:不刷新已有时间戳,matchStage(1) 仍判过期", async () => {
+    let now = 1000;
+    const c = new ImgprogressCache(opts, memCaches(), () => now);
+    await c.putStage(URL1, "1", new Response("x"));
+    now += 101 * 1000;
+    await c.putStage(URL1, "ff", new Response("f"));
+    expect(await c.matchStage(URL1, "1")).toBeUndefined();
   });
   it("过期条目 match 不命中", async () => {
     let now = 1000;

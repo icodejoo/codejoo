@@ -25,6 +25,12 @@ describe("scanWebp / webpFirstFrame", () => {
       expect(scanWebp(ff).status).toBe("static");
     }
   });
+  it("首帧非整画布(帧有偏移或尺寸小于画布):返回 null", () => {
+    const shifted = makeWebp({ animated: true, frameOffsetX: 1 });
+    expect(webpFirstFrame(shifted, scanWebp(shifted).anmf!)).toBeNull();
+    const smaller = makeWebp({ animated: true, frameWidth: 1 });
+    expect(webpFirstFrame(smaller, scanWebp(smaller).anmf!)).toBeNull();
+  });
   it("结构不符返回 null", () => {
     expect(webpFirstFrame(new Uint8Array(30), [0, 30])).toBeNull();
   });

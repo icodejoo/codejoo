@@ -374,6 +374,16 @@ async function backgroundStatic(reader: ReadableStreamDefaultReader<Uint8Array>,
 }
 
 /**
+ * 判断 Cache-Control 头是否含 no-store 指令(大小写不敏感,按逗号分隔匹配,不误伤 no-store-x 之类)。
+ * @param header - Cache-Control 头原值,可为 null
+ * @returns 含 no-store 为 true
+ */
+function hasNoStore(header: string | null): boolean {
+  if (!header) return false;
+  return header.split(",").some((d) => d.trim().split("=")[0]!.trim().toLowerCase() === "no-store");
+}
+
+/**
  * Main download flow: threshold check, streaming sniff, placeholder + background handoff.
  *
  * 主下载流程:阈值判断、流式嗅探、占位响应 + 后台交接。
@@ -397,6 +407,8 @@ async function mainFlow(request: Request, deps: PipelineDeps): Promise<Response>
 
   const resp = await deps.fetchImpl(fetchReq);
   if (!resp.ok || resp.type === "opaque" || !resp.body) return resp;
+  // 源站声明 no-store:不进渐进管线、不写缓存,原样透传
+  if (hasNoStore(resp.headers.get("Cache-Control"))) return resp;
 
   const cl = resp.headers.get("Content-Length");
   if (cl && Number(cl) < deps.options.threshold) return resp;
@@ -412,7 +424,8 @@ async function mainFlow(request: Request, deps: PipelineDeps): Promise<Response>
       return new Response(acc.view().slice(), responseInitOf(resp));
     }
 
-    if (acc.length >= deps.options.headBytes || done) {
+    // 无 Content-Length 时必须累计到 threshold(或流结束)才交接,否则小动图会被误出占位
+    if ((acc.length >= deps.options.headBytes && (cl || acc.length >= deps.options.threshold)) || done) {
       const sr = sniff(acc.view());
 
       if (sr.status === "static") {
@@ -513,6 +526,8 @@ export async function handleImageRequest(request: Request, deps: PipelineDeps): 
   } catch (err) {
     const ctx: ImgprogressErrorContext = { url: request.url, stage: "fetch", error: err };
     reportError(deps, ctx);
-    return deps.fetchImpl(request);
+    // 回落时不能把标记参数发给源站:去标记后与原 URL 相同就沿用原请求
+    const strip = stripImgprogressParams(request.url);
+    return deps.fetchImpl(strip === request.url ? request : new Request(strip, request));
   }
 }

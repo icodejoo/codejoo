@@ -54,7 +54,16 @@ export function load(url: string): ImgprogressTask {
   done.catch(() => {});
 
   const emit = (stage: "placeholder" | "first-frame" | "complete", displayUrl: string) => {
-    for (const cb of stageCbs) cb(stage, displayUrl);
+    for (const cb of stageCbs) {
+      try {
+        cb(stage, displayUrl);
+      } catch (err) {
+        // 回调异常异步重抛:不吞、不阻断其余回调与 resolveDone
+        queueMicrotask(() => {
+          throw err;
+        });
+      }
+    }
   };
 
   // De-dupe first-frame emission: it can arrive twice (once from a live SW
@@ -67,15 +76,18 @@ export function load(url: string): ImgprogressTask {
   // 来自 SW 实时通知和下方缓存对账两路"first-frame"(对页面无害——同一 URL 浏览器
   // 不会重新解码——但重复触发没有意义)。
   let firstFrameEmitted = false;
+  /** complete 已真正发出(在 idle 回调里置位):此后 first-frame 一律丢弃 */
+  let completeEmitted = false;
   const emitFirstFrameOnce = (displayUrl: string) => {
-    if (firstFrameEmitted) return;
+    if (firstFrameEmitted || completeEmitted) return;
     firstFrameEmitted = true;
     emit("first-frame", displayUrl);
   };
 
   // complete 只处理一次:SW 通知与缓存对账两路都可能触发。
   // completeScheduled 在调度时置位(去重 + 拦截此后到达的 first-frame/error);
-  // scheduleIdle 先进先出,complete 调度之前已排队的 first-frame 本就先于它发出。
+  // scheduleIdle 不保证先进先出(LCP 未到时会走 setTimeout 轮询),
+  // 因此另用 completeEmitted 在 complete 真正发出后拦截晚到的 first-frame。
   let completeScheduled = false;
 
   /** 调度一次 first-frame:complete 已调度后一律忽略 */
@@ -90,6 +102,7 @@ export function load(url: string): ImgprogressTask {
     completeScheduled = true;
     unsubscribe();
     scheduleIdle(() => {
+      completeEmitted = true;
       emit("complete", full);
       resolveDone(full);
     });

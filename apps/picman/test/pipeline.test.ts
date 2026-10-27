@@ -128,6 +128,50 @@ describe("handleImageRequest", () => {
     expect(d.notify).not.toHaveBeenCalledWith(expect.objectContaining({ type: "first-frame" }));
     expect(d.notify).toHaveBeenCalledWith({ imgprogress: 1, type: "complete", url: GIF_URL });
   });
+  it("Cache-Control 含 no-store(大小写不敏感、逗号分隔):原样透传,不进管线不写缓存", async () => {
+    const gif = makeGif({ frames: 3, loop: true });
+    const d = makeDeps();
+    const orig = streamResponse(gif, 7, { "Cache-Control": "Public, No-Store" });
+    (d.fetchImpl as ReturnType<typeof vi.fn>).mockResolvedValue(orig);
+    const resp = await handleImageRequest(new Request(GIF_URL), d);
+    expect(resp).toBe(orig);
+    expect(d.bg).toHaveLength(0);
+    expect(d.cache.putStage).not.toHaveBeenCalled();
+  });
+  it("Cache-Control 无 no-store(如 no-cache):仍走渐进管线", async () => {
+    const gif = makeGif({ frames: 3, loop: true });
+    const d = makeDeps();
+    (d.fetchImpl as ReturnType<typeof vi.fn>).mockResolvedValue(streamResponse(gif, 7, { "Cache-Control": "max-age=0, no-cache" }));
+    const resp = await handleImageRequest(new Request(GIF_URL), d);
+    expect(resp.headers.get(HEADER_MARK)).toBe("placeholder");
+    await drain(d);
+  });
+  it("无 CL、总长小于 threshold 但大于 headBytes 的动图:原样返回,不出占位", async () => {
+    const gif = makeGif({ frames: 3, loop: true });
+    const d = makeDeps({ options: resolveSWOptions({ threshold: 100000, headBytes: 16 }) });
+    (d.fetchImpl as ReturnType<typeof vi.fn>).mockResolvedValue(streamResponse(gif, 7));
+    const resp = await handleImageRequest(new Request(GIF_URL), d);
+    expect(resp.headers.get(HEADER_MARK)).toBeNull();
+    expect(new Uint8Array(await resp.arrayBuffer())).toEqual(gif);
+    expect(d.bg).toHaveLength(0);
+  });
+  it("fetch 抛异常且请求带标记参数:兜底回落请求用去标记 URL", async () => {
+    const d = makeDeps();
+    (d.fetchImpl as ReturnType<typeof vi.fn>).mockRejectedValueOnce(new Error("boom")).mockResolvedValueOnce(new Response("retry"));
+    const u = new URL(GIF_URL);
+    u.searchParams.set(PARAM_SKE, "#ff0000");
+    await handleImageRequest(new Request(u.href), d);
+    const fallbackArg = (d.fetchImpl as ReturnType<typeof vi.fn>).mock.calls[1]![0] as Request;
+    expect(fallbackArg).toBeInstanceOf(Request);
+    expect(fallbackArg.url).toBe(GIF_URL);
+  });
+  it("fetch 抛异常且请求无标记参数:兜底回落沿用原 Request", async () => {
+    const d = makeDeps();
+    (d.fetchImpl as ReturnType<typeof vi.fn>).mockRejectedValueOnce(new Error("boom")).mockResolvedValueOnce(new Response("retry"));
+    const req = new Request(GIF_URL);
+    await handleImageRequest(req, d);
+    expect((d.fetchImpl as ReturnType<typeof vi.fn>).mock.calls[1]![0]).toBe(req);
+  });
   it("fetch 抛异常:onError 后透传重试不抛", async () => {
     const onError = vi.fn();
     const d = makeDeps({ options: resolveSWOptions({ threshold: 10, onError }) });
@@ -268,7 +312,8 @@ describe("handleImageRequest", () => {
     const PNG_URL = "https://a.com/photo.png";
 
     it("渐进式 JPEG:占位 SVG,首 scan 收完后 ff=已到前缀原始字节(早于下载完成),最后 complete", async () => {
-      const jpg = makeJpeg({ progressive: true, scanBytes: 6000, endFirstScan: true });
+      // 首 scan 结束后还有 8000 字节后续数据,用来证明 ff 早于下载完成
+      const jpg = makeJpeg({ progressive: true, scanBytes: 6000, endFirstScan: true, tailBytes: 8000 });
       const d = makeDeps();
       (d.fetchImpl as ReturnType<typeof vi.fn>).mockResolvedValue(streamResponse(jpg, 1024));
       const resp = await handleImageRequest(new Request(JPG_URL), d);
@@ -284,6 +329,9 @@ describe("handleImageRequest", () => {
       const ffBytes = new Uint8Array(await ffResp.arrayBuffer());
       expect(ffBytes[0]).toBe(0xff);
       expect(ffBytes[1]).toBe(0xd8);
+      // ff 只是全文件的一段前缀:比全文件短,且逐字节等于全文件开头
+      expect(ffBytes.length).toBeLessThan(jpg.length);
+      expect(ffBytes).toEqual(jpg.slice(0, ffBytes.length));
       expect(d.makeFirstFrame).not.toHaveBeenCalled();
 
       expect(d.notify).toHaveBeenCalledWith({ imgprogress: 1, type: "first-frame", url: JPG_URL });

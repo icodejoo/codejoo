@@ -43,9 +43,21 @@ function stubVideo(width = 160, height = 90, autoLoad = true): HTMLVideoElement 
   } as unknown as HTMLVideoElement & { listenerCount: () => number };
 }
 
+/** 全局改写前的 URL.createObjectURL/revokeObjectURL 原值,afterEach 恢复 */
+const originalURLDescs = {
+  create: Object.getOwnPropertyDescriptor(globalThis.URL, "createObjectURL"),
+  revoke: Object.getOwnPropertyDescriptor(globalThis.URL, "revokeObjectURL"),
+};
+
+/** 按保存的属性描述符恢复(原先没有则删除) */
+function restoreURLProp(name: "createObjectURL" | "revokeObjectURL", desc: PropertyDescriptor | undefined): void {
+  if (desc) Object.defineProperty(globalThis.URL, name, desc);
+  else delete (globalThis.URL as unknown as Record<string, unknown>)[name];
+}
+
 beforeEach(() => {
-  // 稳定 idle 调度与 objectURL(happy-dom 未必实现)
-  (globalThis as unknown as { requestIdleCallback?: unknown }).requestIdleCallback = (cb: () => void) => setTimeout(cb, 0);
+  // 稳定 idle 调度与 objectURL(happy-dom 未必实现);afterEach 里统一恢复
+  vi.stubGlobal("requestIdleCallback", (cb: () => void) => setTimeout(cb, 0));
   globalThis.URL.createObjectURL = () => "blob:stub";
   globalThis.URL.revokeObjectURL = () => {};
 });
@@ -53,6 +65,9 @@ beforeEach(() => {
 afterEach(() => {
   document.body.innerHTML = "";
   vi.restoreAllMocks();
+  vi.unstubAllGlobals();
+  restoreURLProp("createObjectURL", originalURLDescs.create);
+  restoreURLProp("revokeObjectURL", originalURLDescs.revoke);
 });
 
 describe("video facade", () => {
@@ -83,6 +98,7 @@ describe("video facade", () => {
   });
 
   it(".play() 先还原真实源(带播放标记)再播放", async () => {
+    const nativePlay = vi.spyOn(HTMLMediaElement.prototype, "play").mockResolvedValue(undefined);
     const v = document.createElement("video");
     v.setAttribute("src", VIDEO_URL);
     document.body.append(v);
@@ -94,6 +110,7 @@ describe("video facade", () => {
     if (p && typeof p.catch === "function") p.catch(() => {});
     expect(v.getAttribute("src")).toContain(PARAM_PLAY);
     expect(v.getAttribute("src")).toContain("hero.mp4");
+    expect(nativePlay).toHaveBeenCalledTimes(1);
   });
 
   it("pointerenter 手势还原真实源", () => {
@@ -186,6 +203,7 @@ describe("video facade", () => {
   });
 
   it("autoplay after-lcp:idle 后还原并播放(视口内)", async () => {
+    const nativePlay = vi.spyOn(HTMLMediaElement.prototype, "play").mockResolvedValue(undefined);
     const v = document.createElement("video");
     v.setAttribute("src", VIDEO_URL);
     v.setAttribute("autoplay", "");
@@ -196,6 +214,103 @@ describe("video facade", () => {
 
     await flush(20);
     expect(v.getAttribute("src")).toContain(PARAM_PLAY);
+    expect(nativePlay).toHaveBeenCalledTimes(1);
+  });
+
+  it("videoAutoplay:false 时悬停只恢复加载源,不恢复 autoplay 属性", () => {
+    const v = document.createElement("video");
+    v.setAttribute("src", VIDEO_URL);
+    v.setAttribute("autoplay", "");
+    document.body.append(v);
+
+    createVideoFacade(resolveVideoOptions({ videoFrame: false, videoAutoplay: false }), inertDeps()).track(v);
+    v.dispatchEvent(new Event("pointerenter"));
+    expect(v.getAttribute("src")).toContain(PARAM_PLAY);
+    expect(v.hasAttribute("autoplay")).toBe(false);
+  });
+
+  it("after-lcp:不在视口且无 IntersectionObserver 时直接放行,不停在占位", async () => {
+    vi.spyOn(HTMLMediaElement.prototype, "play").mockResolvedValue(undefined);
+    vi.stubGlobal("IntersectionObserver", undefined);
+    const v = document.createElement("video");
+    v.setAttribute("src", VIDEO_URL);
+    v.setAttribute("autoplay", "");
+    v.getBoundingClientRect = () => ({ top: 9999, bottom: 10099, left: 0, right: 100, width: 100, height: 100, x: 0, y: 9999, toJSON: () => ({}) }) as DOMRect;
+    document.body.append(v);
+
+    createVideoFacade(resolveVideoOptions({ videoFrame: false, videoAutoplay: "after-lcp", videoAutoplayDelay: 5 }), inertDeps()).track(v);
+    await flush(20);
+    expect(v.getAttribute("src")).toContain(PARAM_PLAY);
+  });
+
+  it("接管期间应用改写了 src/<source>:还原时以当前值为准", () => {
+    const v = document.createElement("video");
+    v.setAttribute("src", VIDEO_URL);
+    const source = document.createElement("source");
+    source.setAttribute("src", "https://a.com/old.webm");
+    v.append(source);
+    document.body.append(v);
+
+    createVideoFacade(resolveVideoOptions({ videoFrame: false, videoAutoplay: false }), inertDeps()).track(v);
+    v.setAttribute("src", "https://a.com/new.mp4");
+    source.setAttribute("src", "https://a.com/new.webm");
+    v.dispatchEvent(new Event("pointerenter"));
+    expect(v.getAttribute("src")).toContain("new.mp4");
+    expect(v.getAttribute("src")).not.toContain("hero.mp4");
+    expect(source.getAttribute("src")).toContain("new.webm");
+    expect(source.getAttribute("src")).toContain(PARAM_PLAY);
+  });
+
+  it("接管期间新增/替换 <source>:还原后新节点带播放标记,快照中被移除的节点不回填", () => {
+    const v = document.createElement("video");
+    const kept = document.createElement("source");
+    kept.setAttribute("src", "https://a.com/kept.webm");
+    const removed = document.createElement("source");
+    removed.setAttribute("src", "https://a.com/removed.webm");
+    v.append(kept, removed);
+    document.body.append(v);
+
+    createVideoFacade(resolveVideoOptions({ videoFrame: false, videoAutoplay: false }), inertDeps()).track(v);
+    removed.remove();
+    const added = document.createElement("source");
+    added.setAttribute("src", "https://a.com/added.mp4");
+    v.append(added);
+    v.dispatchEvent(new Event("pointerenter"));
+
+    expect(added.getAttribute("src")).toContain("added.mp4");
+    expect(added.getAttribute("src")).toContain(PARAM_PLAY);
+    expect(kept.getAttribute("src")).toContain("kept.webm"); // 回填快照
+    expect(kept.getAttribute("src")).toContain(PARAM_PLAY);
+    expect(removed.hasAttribute("src")).toBe(false);
+  });
+
+  it("stop() 后 play 补丁被清掉(回到原型方法),意图监听也已取消", () => {
+    const v = document.createElement("video");
+    v.setAttribute("src", VIDEO_URL);
+    document.body.append(v);
+
+    const facade = createVideoFacade(resolveVideoOptions({ videoFrame: false, videoAutoplay: false }), inertDeps());
+    facade.track(v);
+    expect(Object.hasOwn(v, "play")).toBe(true); // 接管期间有补丁
+    facade.stop();
+    expect(Object.hasOwn(v, "play")).toBe(false);
+    // 监听已 abort:换回占位后再触发手势,不会再被重复还原改写
+    v.setAttribute("src", "https://a.com/other.mp4");
+    v.dispatchEvent(new Event("pointerenter"));
+    expect(v.getAttribute("src")).toBe("https://a.com/other.mp4");
+  });
+
+  it("接管前已有 own play:还原时写回原值", () => {
+    const v = document.createElement("video");
+    v.setAttribute("src", VIDEO_URL);
+    const custom = (() => Promise.resolve()) as HTMLVideoElement["play"];
+    v.play = custom;
+    document.body.append(v);
+
+    const facade = createVideoFacade(resolveVideoOptions({ videoFrame: false, videoAutoplay: false }), inertDeps());
+    facade.track(v);
+    facade.stop();
+    expect(Object.getOwnPropertyDescriptor(v, "play")?.value).toBe(custom);
   });
 
   it("stop() 还原所有被管理元素", () => {

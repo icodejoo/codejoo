@@ -23,7 +23,7 @@ interface IndexEntry {
 export interface ImgprogressCacheLike {
   /** Look up a cached stage response — 查找某阶段的缓存响应 */
   matchStage: (url: string, stage: ImgprogressStage) => Promise<Response | undefined>;
-  /** Store a stage response; false when the write ultimately failed (e.g. quota) — 存储某阶段响应;写入最终失败(如配额)返回 false */
+  /** Store a stage response (any stage registers the URL in the LRU index; only the full stage refreshes its timestamp); false when the write ultimately failed (e.g. quota) — 存储某阶段响应(任意阶段都会登记 LRU 索引,但只有全图写入才刷新已有时间戳);写入最终失败(如配额)返回 false */
   putStage: (url: string, stage: ImgprogressStage, resp: Response) => Promise<boolean>;
   /** Delete both stage entries for a URL and drop it from the LRU index — 删除一个 URL 的两阶段缓存并从 LRU 索引移除 */
   deleteUrl: (url: string) => Promise<void>;
@@ -138,7 +138,7 @@ export class ImgprogressCache implements ImgprogressCacheLike {
   }
 
   /**
-   * 存储某阶段响应;配额失败时淘汰最旧一半后重试一次。见 {@link ImgprogressCacheLike.putStage}。
+   * 存储某阶段响应(含 "ff",下载失败遗留的 ff 条目同样受上限与淘汰约束;ff 不刷新已有时间戳;索引登记失败不影响返回 true);配额失败时淘汰最旧一半后重试一次。见 {@link ImgprogressCacheLike.putStage}。
    * @param url - 规范化图片 URL
    * @param stage - 目标阶段
    * @param resp - 待存储响应(body 会被消耗)
@@ -171,10 +171,13 @@ export class ImgprogressCache implements ImgprogressCacheLike {
       }
     }
 
-    if (stage === "1") {
+    // 阶段数据已写成功;索引登记失败(如配额)不向外抛,照常返回 true(数据已可用)
+    try {
       await this.withIndexLock(async () => {
         const index = await this.loadIndex(cache);
-        index[url] = { ts: this.now() };
+        // 只有全图写入或该 URL 尚无条目才写时间戳;ff 不刷新已有条目,
+        // 否则已过期但未删除的全图会因 ff 写入被重新判为有效
+        if (stage === "1" || !index[url]) index[url] = { ts: this.now() };
         while (Object.keys(index).length > this.maxEntries) {
           const [oldestUrl] = Object.entries(index).sort((a, b) => a[1].ts - b[1].ts)[0]!;
           await this.deleteStages(cache, oldestUrl);
@@ -182,6 +185,8 @@ export class ImgprogressCache implements ImgprogressCacheLike {
         }
         await this.saveIndex(cache, index);
       });
+    } catch {
+      // 索引写失败:忽略
     }
 
     return true;

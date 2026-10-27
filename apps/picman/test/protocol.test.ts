@@ -51,5 +51,18 @@ describe("protocol", () => {
     expect(isImgprogressMessage({ imgprogress: 1, type: "complete", url: "u" })).toBe(true);
     expect(isImgprogressMessage({ type: "complete" })).toBe(false);
     expect(isImgprogressMessage(null)).toBe(false);
+    // 标记正确但字段残缺/非法也要拒绝
+    expect(isImgprogressMessage({ imgprogress: 1 })).toBe(false);
+    expect(isImgprogressMessage({ imgprogress: 1, type: "complete" })).toBe(false);
+    expect(isImgprogressMessage({ imgprogress: 1, type: "complete", url: 1 })).toBe(false);
+    expect(isImgprogressMessage({ imgprogress: 1, type: "weird", url: "u" })).toBe(false);
+    expect(isImgprogressMessage({ imgprogress: 1, type: "first-frame", url: "u" })).toBe(true);
+    // error 必须带 message(string)与合法 stage
+    expect(isImgprogressMessage({ imgprogress: 1, type: "error", url: "u" })).toBe(false);
+    expect(isImgprogressMessage({ imgprogress: 1, type: "error", url: "u", message: "m" })).toBe(false);
+    expect(isImgprogressMessage({ imgprogress: 1, type: "error", url: "u", message: 1, stage: "download" })).toBe(false);
+    expect(isImgprogressMessage({ imgprogress: 1, type: "error", url: "u", message: "m", stage: "other" })).toBe(false);
+    expect(isImgprogressMessage({ imgprogress: 1, type: "error", url: "u", message: "m", stage: "download" })).toBe(true);
+    expect(isImgprogressMessage({ imgprogress: 1, type: "error", url: "u", message: "m", stage: "first-frame" })).toBe(true);
   });
 });

@@ -108,6 +108,12 @@ interface VideoOrigState {
   origPlay: HTMLVideoElement["play"];
   /** Whether the true source has been restored — 是否已还原真实源 */
   restored: boolean;
+  /** 接管前 video 自身是否带有 own 属性 `play` */
+  hadOwnPlay: boolean;
+  /** 接管前 own 属性 `play` 的值(仅 hadOwnPlay 时有意义) */
+  ownPlay: HTMLVideoElement["play"] | undefined;
+  /** 用户意图监听共用的取消器,还原时 abort */
+  intent: AbortController;
 }
 
 /**
@@ -287,13 +293,25 @@ export function createVideoFacade(opts: ResolvedVideoOptions, deps: VideoFrameDe
     if (!st || st.restored) return;
     st.restored = true;
 
-    if (st.src !== null) video.setAttribute("src", withPlayParam(absolute(st.src)));
-    for (const s of st.sources) {
-      if (s.src !== null) s.el.setAttribute("src", withPlayParam(absolute(s.src)));
+    // 清理意图监听与 play 补丁(无 own 属性则删掉回到原型方法,有则写回原值)
+    st.intent.abort();
+    if (st.hadOwnPlay) video.play = st.ownPlay!;
+    else delete (video as { play?: unknown }).play;
+
+    // 接管期间应用若改写过 src,以当前值为准;否则用旧快照
+    const srcNow = video.getAttribute("src") ?? st.src;
+    if (srcNow !== null) video.setAttribute("src", withPlayParam(absolute(srcNow)));
+    // 遍历元素当前的 <source>:有 src 的(含接管期间新增/替换的)套播放标记;
+    // 快照里仍在元素内且当前无 src 的原节点,回填快照 src
+    const snap = new Map(st.sources.map((s) => [s.el, s.src]));
+    for (const el of video.querySelectorAll("source")) {
+      const v = el.getAttribute("src") ?? snap.get(el) ?? null;
+      if (v !== null) el.setAttribute("src", withPlayParam(absolute(v)));
     }
     if (st.preload !== null) video.setAttribute("preload", st.preload);
     else video.removeAttribute("preload");
-    if (st.autoplay) video.setAttribute("autoplay", "");
+    // videoAutoplay:false 时悬停/聚焦只恢复加载,不因 autoplay 属性自动开播
+    if (st.autoplay && (play || opts.videoAutoplay !== false)) video.setAttribute("autoplay", "");
 
     video.load();
 
@@ -356,6 +374,7 @@ export function createVideoFacade(opts: ResolvedVideoOptions, deps: VideoFrameDe
    */
   function neutralize(video: HTMLVideoElement): VideoOrigState {
     const sources = Array.from(video.querySelectorAll("source")).map((el) => ({ el, src: el.getAttribute("src") }));
+    const ownPlayDesc = Object.getOwnPropertyDescriptor(video, "play");
     const st: VideoOrigState = {
       src: video.getAttribute("src"),
       sources,
@@ -363,6 +382,9 @@ export function createVideoFacade(opts: ResolvedVideoOptions, deps: VideoFrameDe
       autoplay: video.autoplay || video.hasAttribute("autoplay"),
       origPlay: video.play.bind(video),
       restored: false,
+      hadOwnPlay: ownPlayDesc !== undefined,
+      ownPlay: ownPlayDesc?.value as HTMLVideoElement["play"] | undefined,
+      intent: new AbortController(),
     };
 
     video.removeAttribute("src");
@@ -403,14 +425,15 @@ export function createVideoFacade(opts: ResolvedVideoOptions, deps: VideoFrameDe
     // 用户意图:悬停/按下/聚焦即还原(仅加载,不强制播放)。
     const onIntent = (): void => restore(video, false);
     for (const type of ["pointerenter", "pointerdown", "focus"] as const) {
-      video.addEventListener(type, onIntent, { once: true });
+      video.addEventListener(type, onIntent, { once: true, signal: st.intent.signal });
     }
 
     // autoplay 视频:after-lcp 在主线程空闲(LCP 之后)放行;false 时也只等手势。
     if (isAutoplay && opts.videoAutoplay === "after-lcp") {
       scheduleIdle(() => {
         if (states.get(video)?.restored) return;
-        if (inViewport(video)) restore(video, true);
+        // 无 IntersectionObserver 又不在视口:没法等进入视口,直接放行免得永远停在占位
+        if (inViewport(video) || typeof IntersectionObserver === "undefined") restore(video, true);
         else {
           ensureObserver();
           io?.observe(video);

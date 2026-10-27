@@ -80,6 +80,52 @@ describe("load", () => {
     await task.done;
     expect(seen).toEqual(["placeholder", "complete"]);
   });
+  it("某个阶段回调抛错:不阻断其余回调,done 仍 resolve,异常被异步重抛", async () => {
+    const sw = fakeSW();
+    _setServiceWorkerContainer(sw as unknown as ServiceWorkerContainer);
+    const second = vi.fn();
+    const task = load(URL1)
+      .onStage((s) => {
+        if (s === "complete") throw new Error("boom");
+      })
+      .onStage(second);
+    await Promise.resolve();
+    // 捕获 emit 里重抛用的 queueMicrotask,避免真的触发未处理异常
+    const rethrown: unknown[] = [];
+    const spy = vi.spyOn(globalThis, "queueMicrotask").mockImplementation((fn) => {
+      try {
+        fn();
+      } catch (e) {
+        rethrown.push(e);
+      }
+    });
+    sw.emit({ imgprogress: 1, type: "complete", url: URL1 });
+    await flush();
+    spy.mockRestore();
+    await expect(task.done).resolves.toBe(withStageParam(URL1, "1"));
+    expect(second).toHaveBeenCalledWith("complete", withStageParam(URL1, "1"));
+    expect(rethrown).toHaveLength(1);
+    expect((rethrown[0] as Error).message).toBe("boom");
+  });
+  it("idle 非先进先出:complete 先发出后,晚到的 first-frame 被丢弃", async () => {
+    const sw = fakeSW();
+    _setServiceWorkerContainer(sw as unknown as ServiceWorkerContainer);
+    // 手动队列:后入先出地执行,模拟 first-frame 的 idle 回调晚于 complete
+    const queue: (() => void)[] = [];
+    (globalThis as unknown as { requestIdleCallback: (cb: () => void) => void }).requestIdleCallback = (cb) => queue.push(cb);
+    try {
+      const seen: string[] = [];
+      const task = load(URL1).onStage((s) => seen.push(s));
+      await Promise.resolve();
+      sw.emit({ imgprogress: 1, type: "first-frame", url: URL1 });
+      sw.emit({ imgprogress: 1, type: "complete", url: URL1 });
+      while (queue.length) queue.pop()!();
+      await task.done;
+      expect(seen).toEqual(["placeholder", "complete"]);
+    } finally {
+      (globalThis as unknown as { requestIdleCallback: (cb: () => void) => void }).requestIdleCallback = (cb) => setTimeout(cb, 0);
+    }
+  });
   it("入参带 imgprogress 标记参数:规范化后仍能收到 SW 通知", async () => {
     const sw = fakeSW();
     _setServiceWorkerContainer(sw as unknown as ServiceWorkerContainer);

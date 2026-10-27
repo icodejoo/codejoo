@@ -14,5 +14,8 @@ export function inViewport(el: Element): boolean {
   if (typeof (el as HTMLElement).getBoundingClientRect !== "function" || typeof innerHeight === "undefined") return true;
   const r = el.getBoundingClientRect();
   if (r.width === 0 && r.height === 0) return true;
-  return r.top < innerHeight && r.bottom > 0;
+  const vertical = r.top < innerHeight && r.bottom > 0;
+  // innerWidth 缺失时横向不设限
+  const horizontal = typeof innerWidth === "undefined" || (r.left < innerWidth && r.right > 0);
+  return vertical && horizontal;
 }

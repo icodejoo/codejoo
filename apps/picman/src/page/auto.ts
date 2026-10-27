@@ -30,6 +30,15 @@ function canonicalize(raw: string): string {
 }
 
 /**
+ * 读取 img 的有效 src:按属性判空。`img.src="" `会被解析成页面 URL,不能直接拿来判空。
+ * @param img - 图片元素
+ * @returns 属性非空时为解析后的绝对 URL;属性缺失或为空为 null
+ */
+function imgSrc(img: HTMLImageElement): string | null {
+  return img.getAttribute("src") ? img.src : null;
+}
+
+/**
  * Apply a display URL to a tracked element (img src or background element style).
  *
  * 把展示 URL 应用到被跟踪的元素(img 的 src,或背景元素的样式)。
@@ -97,6 +106,9 @@ export function auto(options: ImgprogressAutoOptions = {}): () => void {
     elExpected.set(el, displayUrl);
     applyUrl(el, displayUrl);
   }
+
+  /** stop() 已调用:此后 idle 回调一律不再回写 */
+  let stopped = false;
 
   /** Elements waiting for viewport entry before their full-stage swap — 等待进入视口才切换完整阶段的元素 */
   const pendingFull = new WeakMap<Element, string>();
@@ -240,6 +252,8 @@ export function auto(options: ImgprogressAutoOptions = {}): () => void {
    */
   function applyStageWhenIdle(url: string, stage: ImgprogressStage): void {
     scheduleIdle(() => {
+      // 已 stop 或该 URL 已无人跟踪:不写 stageOf,避免异步回写与无限增长
+      if (stopped || !tracked.has(url)) return;
       if (stage === "ff" && stageOf.get(url) === "1") return;
       stageOf.set(url, stage);
       swapAll(url, stage);
@@ -321,6 +335,8 @@ export function auto(options: ImgprogressAutoOptions = {}): () => void {
     if (prev !== undefined && prev !== url) {
       removeFromUrlSet(el, prev);
       pendingFull.delete(el);
+      // 换 URL 后旧的期望值作废,否则把 src 改回旧阶段 URL 会被误判为回声
+      elExpected.delete(el);
     }
     let set = tracked.get(url);
     const created = !set;
@@ -364,16 +380,26 @@ export function auto(options: ImgprogressAutoOptions = {}): () => void {
    * Stop tracking one element and release everything held for it: unobserve it
    * from the viewport gate, drop its WeakRef from the URL's set, and when that
    * set becomes empty drop the URL's metadata entries too. Guarded by
-   * `isConnected` so a merely-moved element (removed + re-added within one
-   * mutation batch) is not mistakenly untracked.
+   * `root.contains(el)` so a merely-moved element (removed + re-added within one
+   * mutation batch) is not mistakenly untracked, while an element that left a
+   * custom root yet stays in the document is still cleaned up.
    *
    * 停止跟踪某元素并释放为它持有的一切:从视口门控观察器移除、从该 URL 的集合删掉它的
-   * WeakRef;集合清空后连同该 URL 的元数据一并删除。用 `isConnected` 守卫,避免把仅仅被
-   * 移动(同一批变更里先移除又重新插入)的元素误清理。
-   * @param el - Element leaving the DOM — 正在离开 DOM 的元素
+   * WeakRef;集合清空后连同该 URL 的元数据一并删除。用 `root.contains(el)` 守卫,避免把
+   * 仅仅被移动(同一批变更里先移除又重新插入)的元素误清理;自定义 root 时元素移出 root
+   * 但仍在文档中也会被清理。
+   * @param el - Element leaving the root — 正在离开 root 的元素
    */
   function untrackElement(el: Element): void {
-    if (el.isConnected) return;
+    if ((root as unknown as Node).contains(el)) return;
+    releaseElement(el);
+  }
+
+  /**
+   * 无条件释放某元素持有的全部跟踪状态(不看是否仍在 DOM 中)。
+   * @param el - 待释放的元素
+   */
+  function releaseElement(el: Element): void {
     fullIO?.unobserve(el);
     pendingFull.delete(el);
     elExpected.delete(el);
@@ -416,7 +442,8 @@ export function auto(options: ImgprogressAutoOptions = {}): () => void {
   function isOwnEcho(el: Element, rawUrl: string): boolean {
     if (elExpected.get(el) === rawUrl) return true;
     const url = canonicalize(rawUrl);
-    if (!tracked.has(url)) return false;
+    // URL 状态回退只对"本来就跟踪这个 URL"的元素生效;换成别的 URL 必须重新跟踪
+    if (elUrl.get(el) !== url || !tracked.has(url)) return false;
     const known = stageOf.get(url);
     const expected = known ? withStageParam(url, known) : url;
     return rawUrl === expected;
@@ -429,7 +456,10 @@ export function auto(options: ImgprogressAutoOptions = {}): () => void {
    * @param node - Subtree root — 子树根
    */
   function scan(node: ParentNode): void {
-    node.querySelectorAll?.("img[src]").forEach((img) => track(img, (img as HTMLImageElement).src));
+    node.querySelectorAll?.("img[src]").forEach((img) => {
+      const s = imgSrc(img as HTMLImageElement);
+      if (s) track(img, s);
+    });
     if (backgrounds) {
       node.querySelectorAll?.(`[${BG_ATTR}]`).forEach((el) => {
         const v = el.getAttribute(BG_ATTR);
@@ -448,7 +478,10 @@ export function auto(options: ImgprogressAutoOptions = {}): () => void {
       if (m.type === "childList") {
         m.addedNodes.forEach((n) => {
           if (!(n instanceof Element)) return;
-          if (n.matches("img[src]")) track(n, (n as HTMLImageElement).src);
+          if (n.matches("img[src]")) {
+            const s = imgSrc(n as HTMLImageElement);
+            if (s) track(n, s);
+          }
           if (backgrounds && n.hasAttribute(BG_ATTR)) {
             const v = n.getAttribute(BG_ATTR);
             if (v) track(n, v);
@@ -461,11 +494,20 @@ export function auto(options: ImgprogressAutoOptions = {}): () => void {
         m.removedNodes.forEach((n) => untrackSubtree(n));
       } else if (m.type === "attributes") {
         const el = m.target as Element;
-        if (m.attributeName === "src" && el instanceof HTMLImageElement && el.src) {
-          if (!isOwnEcho(el, el.src)) track(el, el.src);
+        // 已不在 root 内的元素(同批先移出 root 再改属性的 transient 记录):先释放再跳过。
+        // untrackSubtree 按当前属性筛选,可能漏掉已删属性的背景元素;releaseElement 对未跟踪元素无副作用
+        if (!(root as unknown as Node).contains(el)) {
+          releaseElement(el);
+          continue;
+        }
+        if (m.attributeName === "src" && el instanceof HTMLImageElement) {
+          const s = imgSrc(el);
+          if (!s) releaseElement(el);
+          else if (!isOwnEcho(el, s)) track(el, s);
         } else if (backgrounds && m.attributeName === BG_ATTR) {
           const v = el.getAttribute(BG_ATTR);
           if (v) track(el, v);
+          else releaseElement(el);
         }
       }
     }
@@ -503,6 +545,7 @@ export function auto(options: ImgprogressAutoOptions = {}): () => void {
   document.addEventListener("visibilitychange", onVisible);
 
   return () => {
+    stopped = true;
     observer.disconnect();
     fullIO?.disconnect();
     fullIO = null;
