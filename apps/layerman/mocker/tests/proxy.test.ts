@@ -30,6 +30,34 @@ describe('proxyRequest', () => {
     globalThis.fetch = originalFetch
   })
 
+  it('does not let a leading // path rewrite the target host', async () => {
+    const calls: string[] = []
+    const originalFetch = globalThis.fetch
+    globalThis.fetch = async (url: string | URL | Request) => {
+      calls.push(url.toString())
+      return new Response('{}', { status: 200 })
+    }
+
+    await proxyRequest(new Request('http://localhost:3000//evil.com/x'), 'https://api.prod.com')
+
+    expect(new URL(calls[0]).host).toBe('api.prod.com')
+    globalThis.fetch = originalFetch
+  })
+
+  it('does not let a backslash rewritten path change the target host', async () => {
+    const calls: string[] = []
+    const originalFetch = globalThis.fetch
+    globalThis.fetch = async (url: string | URL | Request) => {
+      calls.push(url.toString())
+      return new Response('{}', { status: 200 })
+    }
+
+    await proxyRequest(new Request('http://localhost:3000/x'), 'https://api.prod.com', '/\\evil.com/x')
+
+    expect(new URL(calls[0]).host).toBe('api.prod.com')
+    globalThis.fetch = originalFetch
+  })
+
   it('passes query string through unchanged', async () => {
     const calls: string[] = []
     const originalFetch = globalThis.fetch
