@@ -25,6 +25,18 @@ const OWN_PROPS = ["loading", "as", "children", "className"];
  * return <div ref={ref}>...</div>;
  */
 export function useSkeleton(ref: RefObject<HTMLElement | null>, loading: boolean, opts: EnableOptions = {}): void {
+  useSkeletonWith(ref, loading, opts, undefined);
+}
+
+/**
+ * useSkeleton 的内部实现，多一个额外依赖：它一变 effect 就重跑（旧元素由清理函数撤掉，再给新元素挂骨架）。
+ * 用于 ref 指向的 DOM 元素会被换掉、但 ref 对象本身不变的场景（比如 SkzBox 的 as 变了）。
+ * @param ref 目标元素的 ref
+ * @param loading 是否加载中
+ * @param opts 骨架选项
+ * @param extraDep 额外依赖，值变化时重新同步
+ */
+function useSkeletonWith(ref: RefObject<HTMLElement | null>, loading: boolean, opts: EnableOptions, extraDep: unknown): void {
   // 用序列化后的选项当依赖：每次渲染传新对象字面量也不会反复重开，内容真变了才重新同步
   const signature = JSON.stringify(opts);
   useEffect(() => {
@@ -33,7 +45,7 @@ export function useSkeleton(ref: RefObject<HTMLElement | null>, loading: boolean
     return enable(el, opts);
     // opts 的内容已由 signature 体现，对象引用每次渲染都变，不能列入依赖
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [ref, loading, signature]);
+  }, [ref, loading, signature, extraDep]);
 }
 
 /** SkzBox 组件的 props */
@@ -49,7 +61,9 @@ export interface SkzProps extends EnableOptions {
 }
 
 /**
- * 组件版：渲染一个包裹元素并按 loading 开关骨架。
+ * 组件版：渲染一个包裹元素并按 loading 开关骨架；as 变化换了元素时，旧元素的骨架会撤掉，新元素重新挂上。
+ * @param props 组件属性：loading / as / children / className 由组件自己消费，其余当作骨架选项透传给 enable
+ * @returns 带 ref 的包裹元素
  * @example
  * <SkzBox loading={loading}><UserCard user={user} /></SkzBox>
  */
@@ -60,8 +74,9 @@ export function SkzBox(props: SkzProps) {
   for (const key in props) {
     if (OWN_PROPS.indexOf(key) < 0) opts[key] = (props as unknown as Record<string, unknown>)[key];
   }
-  useSkeleton(ref, props.loading, opts as EnableOptions);
-  return createElement(props.as ?? "div", { ref, className: props.className }, props.children);
+  const tag = props.as ?? "div";
+  useSkeletonWith(ref, props.loading, opts as EnableOptions, tag);
+  return createElement(tag, { ref, className: props.className }, props.children);
 }
 
 /**

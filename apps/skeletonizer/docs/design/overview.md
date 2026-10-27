@@ -124,7 +124,7 @@ defineSkzBox(); // <skz-box loading effect="pulse"><div>…</div></skz-box>，sk
 | 样式         | 自带 `full.css`（`skeletonizer/full.css` 可单独引）      | 自带 `lite.css`（`skeletonizer/lite.css` 可单独引）               |
 | 能力         | 另有 underline / leaf、防火墙、svg、懒渲染、老浏览器降级 | fade / solid / pulse / shimmer，文字只有 round / clip             |
 | 门槛与规模   | 三档渐进；上限高得多                                     | Chrome 119+ / Safari 16.4+ / Firefox 128+；单个根约 2000 元素以内 |
-| 体积（gzip） | 6.20 KB（JS 3.87 + CSS 2.33）                            | 4.22 KB（JS 2.22 + CSS 1.99）                                     |
+| 体积（gzip） | 6.23 KB（JS 3.91 + CSS 2.32）                            | 4.26 KB（JS 2.27 + CSS 1.98）                                     |
 
 - lite 没有继承防火墙，pulse / shimmer 每帧重算根下所有元素的样式，规模上限的数据见 [README 的"lite 的规模上限"](../../README.zh-CN.md#lite-的规模上限)和 `bench/2026-10-10-core/NOTES.md`（那里的 core 就是今天的 lite）。
 - 两个构建各自内联一份 core、各有一份注册表，**不要在同一页面同时引**；旧的 `import … from "skeletonizer"`（core）迁到 `skeletonizer/lite`，旧的 `skeletonizer/full` · `/all` · `/global` · `/svg` 迁到 `skeletonizer`（见 Q39 与 CHANGELOG）。

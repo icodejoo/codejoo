@@ -5,11 +5,17 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import * as sass from "sass";
 
+/** 包根目录 */
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
+/** 样式源码目录（scss 分片） */
 const stylesSrc = path.join(root, "src/styles");
+/** 样式分片编译产物的输出目录 */
 const stylesOut = path.join(root, "demo-dist/styles");
 
-/** 从 demo/main.js 里读 CSS_FILES，保证和页面实际加载的分片一致，不再手抄一份 */
+/**
+ * 从 demo/main.js 里读 CSS_FILES，保证和页面实际加载的分片一致，不再手抄一份
+ * @returns {string[]} 分片名列表（不含扩展名）
+ */
 function readCssFiles() {
   const html = fs.readFileSync(path.join(root, "demo/main.js"), "utf8");
   const m = html.match(/const CSS_FILES = \[([^\]]*)\]/);
@@ -19,6 +25,7 @@ function readCssFiles() {
 
 console.log("[build-demo] vite build");
 // 走 vite-plus 的 vp（本包已有依赖），避免 npx 临时下载
+/** 本包 node_modules 里的 vp 可执行文件（Windows 下是 .CMD） */
 const bin = path.join(root, "node_modules/.bin", process.platform === "win32" ? "vp.CMD" : "vp");
 execSync(`"${fs.existsSync(bin) ? bin : "vp"}" build -c vite.demo.config.ts`, { cwd: root, stdio: "inherit" });
 

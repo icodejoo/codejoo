@@ -5,7 +5,7 @@
  * 导入本模块没有副作用，需要手动调用一次 defineSkzBox() 注册。
  */
 import type { EnableOptions } from "skeletonizer/lite";
-import { disable, toggle } from "./adapter-api.js";
+import { disable, enable } from "./adapter-api.js";
 
 /** 非浏览器环境（SSR）没有 HTMLElement，用空类占位，保证 import 不报错 */
 const BaseElement: typeof HTMLElement = typeof HTMLElement !== "undefined" ? HTMLElement : (class {} as unknown as typeof HTMLElement);
@@ -16,11 +16,24 @@ const SKZ_BOX_TAG = "skz-box";
 /** 宿主上的加载开关属性名 */
 const ATTR_LOADING = "loading";
 
+/** 宿主上的 fit 开关属性名 */
+const ATTR_FIT = "fit";
+
 /** 原样透传给 enable 的字符串选项对应的属性名（text / fallback / engine 由完整版扩展处理） */
 const OPTION_ATTRS = ["effect", "text", "fallback", "engine"] as const;
 
 /** 假值字面量：loading="false" 视为关闭 */
 const FALSE_LITERAL = "false";
+
+/**
+ * 宿主上某个布尔属性是否开启：属性存在且值不是 "false"。
+ * @param host 宿主元素
+ * @param name 属性名
+ * @returns 是否开启
+ */
+function isOn(host: Element, name: string): boolean {
+  return host.hasAttribute(name) && host.getAttribute(name) !== FALSE_LITERAL;
+}
 
 /** 每个宿主当前接管的子根元素（模块级 WeakMap：私有字段 / 私有方法在 es2015 目标下会生成一堆 helper） */
 const activeChildren = new WeakMap<SkzBox, HTMLElement>();
@@ -41,9 +54,9 @@ function sync(host: SkzBox): void {
 
   if (host.loading) {
     // text / fallback / engine 是完整版扩展认的选项，core 只管原样透传
-    const opts: Record<string, unknown> = { fit: host.hasAttribute("fit") && host.getAttribute("fit") !== FALSE_LITERAL };
+    const opts: Record<string, unknown> = { fit: isOn(host, ATTR_FIT) };
     for (const name of OPTION_ATTRS) opts[name] = host.getAttribute(name) ?? undefined;
-    toggle(target, true, opts as EnableOptions);
+    enable(target, opts as EnableOptions);
   } else {
     disable(target);
   }
@@ -69,7 +82,7 @@ function sync(host: SkzBox): void {
 export class SkzBox extends BaseElement {
   /** 需要监听的属性 */
   static get observedAttributes(): string[] {
-    return [ATTR_LOADING, ...OPTION_ATTRS, "fit"];
+    return [ATTR_LOADING, ...OPTION_ATTRS, ATTR_FIT];
   }
 
   /**
@@ -78,7 +91,7 @@ export class SkzBox extends BaseElement {
    * @example el.loading; // true
    */
   get loading(): boolean {
-    return this.hasAttribute(ATTR_LOADING) && this.getAttribute(ATTR_LOADING) !== FALSE_LITERAL;
+    return isOn(this, ATTR_LOADING);
   }
 
   /**
@@ -90,9 +103,22 @@ export class SkzBox extends BaseElement {
     this.toggleAttribute(ATTR_LOADING, !!v);
   }
 
-  /** 挂载时同步一次状态 */
+  /**
+   * 挂载时同步一次状态。
+   * 若 defineSkzBox() 跑在 HTML 解析完成之前（比如 head 里的同步脚本），此刻子节点可能还没解析出来，
+   * 之后也没有别的时机接管，所以没子元素又仍在解析时，等 DOMContentLoaded 再同步一次。
+   */
   connectedCallback(): void {
     sync(this);
+    if (!this.firstElementChild && typeof document !== "undefined" && document.readyState === "loading") {
+      document.addEventListener(
+        "DOMContentLoaded",
+        () => {
+          if (this.isConnected) sync(this);
+        },
+        { once: true },
+      );
+    }
   }
 
   /** 卸载时对当前子根解除骨架，但不改变宿主自己的 loading 属性（从而在移动节点后能自然恢复） */

@@ -86,4 +86,26 @@ describe("react 适配层", () => {
     const other = SkzBox({ loading: false, as: "section" }) as unknown as { type: string };
     expect(other.type).toBe("section");
   });
+
+  it("SkzBox：as 从 div 换成 section 后，依赖变了；旧元素被清理撤掉、新元素带上 skz", async () => {
+    const { SkzBox } = await import("../src/react.ts");
+    const oldEl = document.createElement("div");
+    const newEl = document.createElement("section");
+
+    refHolder.current = oldEl;
+    SkzBox({ loading: true, as: "div" });
+    const cleanup = effects[0].fn();
+    expect(oldEl.hasAttribute("skz")).toBe(true);
+
+    // 模拟 React 换了 DOM 元素：ref 指向新元素，再渲染一次
+    refHolder.current = newEl;
+    SkzBox({ loading: true, as: "section" });
+    expect(effects[1].deps[3]).not.toBe(effects[0].deps[3]);
+    // React 先跑旧 effect 的清理，再跑新 effect
+    if (typeof cleanup === "function") cleanup();
+    effects[1].fn();
+
+    expect(oldEl.hasAttribute("skz")).toBe(false);
+    expect(newEl.hasAttribute("skz")).toBe(true);
+  });
 });

@@ -21,7 +21,7 @@ const PULSE_VAR = "--skz-svg-pulse";
 /** 默认时长（毫秒），pulse / shimmer 图的兜底；与 _mixins.scss 的 $default-duration 一致 */
 const DEFAULT_DURATION = 2000;
 
-/** shimmer 光带宽占图宽（= 骨头宽）的百分比。svg 引擎只能按比例，相当于 CSS 根驱动的 fit 模式（不认 skz-shimmer-mode，也不分屏宽档）。svg 图按骨头拉伸、动画在图里，写不了固定 px，只能按比例（CSS 根驱动是固定 300px） */
+/** shimmer 光带宽占图宽（= 骨头宽）的百分比。svg 图按骨头拉伸、只能按比例，行为相当于 CSS 根驱动的 fit 模式，不认 skz-shimmer-mode */
 const SHIMMER_BAND = 60;
 
 /**
@@ -48,7 +48,7 @@ interface SvgEntry {
   refs: number;
 }
 
-/** 按 "高光色|时长|光带宽" 缓存的图 */
+/** 按 "高光色|时长" 缓存的图 */
 const cache = new Map<string, SvgEntry>();
 
 /** 每个根当前使用的缓存键 */

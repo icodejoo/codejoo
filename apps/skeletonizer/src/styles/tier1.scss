@@ -1,4 +1,5 @@
 @use "lists" as *;
+@use "mixins" as *;
 @use "text" as *;
 
 /* ===== 第 1 档：下划线法文字骨头（Safari 14+/Chrome 89+/Firefox 84+，:is() 与 `:not()` 选择器列表的门槛）=====
@@ -57,7 +58,7 @@
    * （这类浏览器没有 clip 的光带，文字条是静态灰，可接受；svg 引擎本来就是静态 --skz-color）。
    * --skz-ul-line 清回缺省：round 根在这类浏览器里同样退回 underline（否则文字透明、背景撤掉、装饰线又是 none，什么都看不见）。
    * core 现代档的门槛（Chrome 105+ / Safari 15.4+ / Firefox 121+）都认 background-clip:text，core 里没有这一支 */
-  @supports not ((-webkit-background-clip: text) or (background-clip: text)) {
+  @supports not (#{$bgclip-gate}) {
     #{$clip} {
       --skz-tbg: transparent;
       --skz-timg: none;

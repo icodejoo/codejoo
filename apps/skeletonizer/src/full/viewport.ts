@@ -25,6 +25,7 @@ export interface ViewportMarker {
 export function viewportMarker(attr: string, rootMargin: string): ViewportMarker {
   let io: IntersectionObserver | null = null;
   return {
+    /** 取观察器，首次调用时才创建 */
     get() {
       if (!io && typeof IntersectionObserver !== "undefined") {
         io = new IntersectionObserver(
@@ -36,6 +37,7 @@ export function viewportMarker(attr: string, rootMargin: string): ViewportMarker
       }
       return io;
     },
+    /** 取消观察一个元素，观察器没创建过就什么都不做 */
     unobserve(el) {
       io?.unobserve(el);
     },

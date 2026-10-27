@@ -24,9 +24,9 @@ declare global {
 const OWNER = Symbol.for("skeletonizer.global");
 
 /** 取全局对象：现代环境用 globalThis，老浏览器退回 self / window */
-function root(): Record<string, unknown> | undefined {
-  if (typeof globalThis !== "undefined") return globalThis as unknown as Record<string, unknown>;
-  if (typeof self !== "undefined") return self as unknown as Record<string, unknown>;
+function root(): Record<PropertyKey, unknown> | undefined {
+  if (typeof globalThis !== "undefined") return globalThis as unknown as Record<PropertyKey, unknown>;
+  if (typeof self !== "undefined") return self as unknown as Record<PropertyKey, unknown>;
   return undefined;
 }
 
@@ -52,7 +52,7 @@ export function mountGlobal(): boolean {
   const g = root();
   if (!g) return false;
   // 私有键总是指向本模块实例的 skz（完整版里它已带扩展），不受公开变量被占用的影响
-  g[SKZ_API_KEY as unknown as string] = skz;
+  g[SKZ_API_KEY] = skz;
   const cur = g.skz;
   if (cur !== undefined && cur !== null && !(cur as { [OWNER]?: true })[OWNER]) {
     try {

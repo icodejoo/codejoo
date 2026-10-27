@@ -54,7 +54,7 @@ $leaf-mod: '[skz-text-mode="leaf"]';
 /// 文字条（gradient 驱动、读同一套背景变量）家族的根限定后缀：没写 skz-text-mode（默认 round）、明写 round、明写 clip。
 /// round 与 clip 共用同一批形状 / 填充 / 圆角规则，只靠根上的几个变量切换外观（见 sk-round-root）：
 /// 其余取值（underline / 未知）一律不在这个家族，落到 underline 的外观；leaf 走叶子背景法。
-/// lite 也只认这一族（它们没有 underline / leaf，也不认那些根），同时同时引了 lite.css 和 full.css时，
+/// lite 也只认这一族（它们没有 underline / leaf，也不认那些根），同时引了 lite.css 和 full.css 时，
 /// core 的规则碰不到 leaf / underline 根，重复加载不改变层叠结果。
 /// 用 :is() 收拢成单项：[skz] 后面的优先级和单个 :not() 一样，sk-auto() 前缀也只多一份。
 $clip-mod: ':is(:not([skz-text-mode]), [skz-text-mode="round"], [skz-text-mode="clip"])';

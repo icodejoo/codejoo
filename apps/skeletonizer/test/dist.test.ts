@@ -356,12 +356,17 @@ skeleton(document.getElementById("a"), { loading: true });
           .join("\n");
       return { css: read(".css"), js: read(".js") };
     } finally {
-      // 先单独摘掉指向包根的链接（rmdir 只删链接本身），确认摘掉了才递归清目录，绝不能顺着链接删到包根
+      // 先单独摘掉指向包根的链接，确认摘掉了才递归清目录，绝不能顺着链接删到包根。
+      // unlink 只删链接本身（Linux / macOS 上 rmdir 对 symlink 会抛 ENOTDIR），失败再退回 rmdir（Windows junction）
       const link = path.join(dir, "node_modules/skeletonizer");
       try {
-        fs.rmdirSync(link);
+        fs.unlinkSync(link);
       } catch {
-        // 链接没建成功或已摘掉
+        try {
+          fs.rmdirSync(link);
+        } catch {
+          // 链接没建成功或已摘掉
+        }
       }
       if (!fs.existsSync(link)) fs.rmSync(dir, { force: true, recursive: true });
     }

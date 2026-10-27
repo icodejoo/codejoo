@@ -205,6 +205,24 @@ describe("SkzBox", () => {
     expect(newChild.hasAttribute(ROOT_ATTR)).toBe(true);
   });
 
+  it("解析期定义：连接时还在解析（readyState=loading）且没有子元素，DOMContentLoaded 之后接管子根", () => {
+    // jsdom 的 readyState 是原型上的 getter，这里在 document 自身上临时覆盖成 loading
+    Object.defineProperty(document, "readyState", { configurable: true, get: () => "loading" });
+    try {
+      const el = mount(document.body, { [ATTR_LOADING]: "" });
+      const child = document.createElement(TAG_DIV);
+      // 模拟解析器随后才把子节点吐出来
+      el.appendChild(child);
+      expect(child.hasAttribute(ROOT_ATTR)).toBe(false);
+
+      document.dispatchEvent(new Event("DOMContentLoaded"));
+      expect(child.hasAttribute(ROOT_ATTR)).toBe(true);
+      el.loading = false;
+    } finally {
+      Reflect.deleteProperty(document, "readyState");
+    }
+  });
+
   it('loading 属性值为 "false" 时视为关闭，其他视为开启', () => {
     const el = mount();
     el.setAttribute(ATTR_LOADING, STR_FALSE);

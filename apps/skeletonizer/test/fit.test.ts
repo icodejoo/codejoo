@@ -1,10 +1,7 @@
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
+import { FIT_ATTR as FIT, FIT_HIDE_ATTR as HIDE } from "../src/core/fit.ts";
 import { asEl, FakeEl } from "./helpers.ts";
 
-/** 根上的 fit 标记属性 */
-const FIT = "skz-fit";
-/** 列表项的隐藏标记属性 */
-const HIDE = "skz-fit-hide";
 /** 视口高度（桩） */
 const VIEWPORT_H = 800;
 

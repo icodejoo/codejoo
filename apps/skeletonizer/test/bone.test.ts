@@ -23,6 +23,12 @@ it("text：结尾不留空格", () => {
   for (let n = 1; n < 100; n++) expect(Bone.text(n).endsWith(" ")).toBe(false);
 });
 
+it("text / cjk / lines：非有限值（Infinity）返回空串，不会死循环", () => {
+  expect(Bone.text(Infinity)).toBe("");
+  expect(Bone.cjk(Infinity)).toBe("");
+  expect(Bone.lines(Infinity)).toBe("");
+});
+
 it("lines：长度 = 行数 × 每行字符数", () => {
   expect(Bone.lines(3, { perLine: 30 }).length).toBe(90);
   expect(Bone.lines(0)).toBe("");

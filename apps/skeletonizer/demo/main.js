@@ -7,6 +7,7 @@ import "../src/full/variants/global.ts";
 import "../src/full/variants/svg.ts";
 
 // ---------- 自带 shadow DOM 的演示组件 ----------
+/** 演示用的 shadow DOM 卡片：验证骨架对 shadow 内部内容的处理 */
 class DemoCard extends HTMLElement {
   connectedCallback() {
     if (this.shadowRoot) return;
@@ -22,6 +23,7 @@ customElements.define("demo-card", DemoCard);
 defineSkzBox();
 
 // ---------- 内容填充 ----------
+/** querySelector 的简写 */
 const $ = (s) => document.querySelector(s);
 // 文字统一用 <span skz-text> 包在块元素内层：round 下行内元素逐行圆角条，直接标在块元素上会变整块；四个对比根各写自己的 skz-text-mode
 const mixedContent = `
@@ -50,6 +52,7 @@ $("#cards").innerHTML = [1, 2, 3]
   )
   .join("");
 
+/** 演示用的"真实图片"（内联 SVG），对比 mock 占位图 */
 const realImg =
   "data:image/svg+xml;charset=utf-8," +
   encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" width="160" height="100"><rect width="160" height="100" fill="#34d399"/><text x="20" y="58" font-size="22" fill="#064e3b">REAL IMG</text></svg>');
@@ -83,15 +86,18 @@ const list100 = Array.from({ length: 100 }, (_, i) => `<div style="padding: 10px
 document.querySelectorAll("[data-demo-fit]").forEach((el) => (el.innerHTML = list100));
 
 // ---------- 开关与控制 ----------
+/** 普通演示根：由 enable() / disable() 驱动 */
 const roots = [...document.querySelectorAll("[data-demo-root]")];
 /** 演示 <skz-box> 的宿主：不调 enable()，靠 loading 属性与 effect / text / engine 属性驱动 */
 const skzBoxes = [...document.querySelectorAll(".demo-skzbox")];
 skzBoxes.forEach((box) => box.querySelectorAll("img.avatar").forEach((img) => (img.src = Bone.image(48))));
+/** 演示 fit 的长列表根 */
 const fitRoots = [...document.querySelectorAll("[data-demo-fit]")];
+/** 控制面板的当前状态 */
 const state = { loading: true, dark: true, effect: "shimmer", engine: "global", tier: 3, text: "round", shimmerMode: "even", fit: true };
 
+/** 把 state 同步到页面：主题、各演示根的骨架开关与按钮文案 */
 function apply() {
-  document.documentElement.toggleAttribute("data-skz-theme", false);
   document.documentElement.setAttribute("data-skz-theme", state.dark ? "dark" : "light");
   roots.forEach((el) => {
     const text = el.dataset.fixedText ?? state.text;
