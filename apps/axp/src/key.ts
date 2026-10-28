@@ -1,6 +1,6 @@
 import type { AxiosRequestConfig } from "axios";
 import type { AxpRequestConfig } from "./types";
-import { isBodyMethod } from "./methods";
+import { isBodyMethod, normalizeMethod } from "./methods";
 import { isPlainObject } from "./utils";
 
 /** key 服务配置，沿用旧 FNV 算法的过滤与采样规则。 */
@@ -15,12 +15,8 @@ export interface IKeyOptions {
     | number
     | ((request: Readonly<AxpRequestConfig>) => string | number | null | undefined | void);
 }
-/** 默认 HTTP 方法。 */
-export const DEFAULT_METHOD = "get";
 /** 作用域分隔符。 */
 const SCOPE_SEPARATOR = "#";
-/** 空方法、空地址和空分区的共同表示。 */
-const EMPTY_TEXT = "";
 /** 最终摘要使用的进制。 */
 const KEY_RADIX = 36;
 
@@ -40,7 +36,7 @@ export function requestKey(
     value = request.key.trim();
     if (!value) return null;
   } else {
-    const method = (request.method ?? DEFAULT_METHOD).toLowerCase();
+    const method = normalizeMethod(request.method);
     try {
       value = $key(
         {
@@ -59,7 +55,7 @@ export function requestKey(
   const scope = typeof options.scope === "function" ? options.scope(request) : options.scope;
   return scope === null ||
     scope === undefined ||
-    scope === EMPTY_TEXT ||
+    scope === "" ||
     (typeof scope === "number" && Number.isNaN(scope))
     ? value
     : value + SCOPE_SEPARATOR + String(scope);
@@ -72,37 +68,37 @@ const FNV_OFFSET = 2166136261 >>> 0;
 /** 第二车道使用黄金比例种子，保持独立轨迹。 */
 const FNV_OFFSET_2 = 0x9e3779b1 >>> 0;
 /** 数组后续元素分隔。 */
-const CC_COMMA = 0x2c;
+const CC_COMMA = ",".charCodeAt(0);
 /** 对象键值分隔。 */
-const CC_COLON = 0x3a;
+const CC_COLON = ":".charCodeAt(0);
 /** 数组首元素标记。 */
-const CC_ARR = 0x61;
+const CC_ARR = "a".charCodeAt(0);
 /** 对象字段标记。 */
-const CC_OBJ = 0x6f;
+const CC_OBJ = "o".charCodeAt(0);
 /** 请求片段分隔。 */
-const CC_PIPE = 0x7c;
+const CC_PIPE = "|".charCodeAt(0);
 /** 查询参数片段标记。 */
-const CC_PARAMS = 0x70;
+const CC_PARAMS = "p".charCodeAt(0);
 /** 请求体片段标记。 */
-const CC_DATA = 0x64;
+const CC_DATA = "d".charCodeAt(0);
 /** 长度分帧结束标记。 */
-const CC_QUOTE = 0x22;
+const CC_QUOTE = '"'.charCodeAt(0);
 /** 对象累加结束标记。 */
-const CC_CLOSE_OBJ = 0x7d;
+const CC_CLOSE_OBJ = "}".charCodeAt(0);
 /** 豁免值前缀。 */
-const CC_IGNORE = 0x21;
+const CC_IGNORE = "!".charCodeAt(0);
 /** 豁免空字段占位。 */
 const EMPTY_FIELD = "!E";
 /** 日期值前缀。 */
-const CC_DATE = 0x44;
+const CC_DATE = "D".charCodeAt(0);
 /** 查询串值前缀。 */
-const CC_SEARCH = 0x55;
+const CC_SEARCH = "U".charCodeAt(0);
 /** 采样总长度前缀。 */
-const CC_LENGTH = 0x4c;
+const CC_LENGTH = "L".charCodeAt(0);
 /** 十进制数位基数。 */
 const DECIMAL_BASE = 10;
 /** 数字零的字符编码。 */
-const CC_ZERO = 0x30;
+const CC_ZERO = "0".charCodeAt(0);
 /** 触发长串采样的长度。 */
 const SAMPLE_THRESHOLD = 64;
 /** 首中尾各自的采样宽度。 */
@@ -126,6 +122,10 @@ interface HashState {
   h1: number;
   /** 第二车道当前摘要。 */
   h2: number;
+  /** 当前请求的过滤和采样选项。 */
+  opts?: IKeyOptions;
+  /** 当前递归路径，用于循环检测和豁免回滚。 */
+  ancestors: object[];
 }
 
 /** 特殊对象没有可枚举字段时，不能按普通空对象过滤。 */
@@ -152,32 +152,26 @@ export function $key(config: AxiosRequestConfig, opts?: IKeyOptions): string {
   const state: HashState = {
     /** 第一车道种子。 */ h1: FNV_OFFSET,
     /** 第二车道种子。 */ h2: FNV_OFFSET_2,
+    /** 请求内共享的哈希配置。 */ opts,
+    /** 查询和请求体复用同一祖先栈。 */ ancestors: [],
   };
-  hash((config.method || EMPTY_TEXT).toUpperCase(), state);
+  hash((config.method || "").toUpperCase(), state);
   hashByte(CC_PIPE, state);
-  hash(config.url || EMPTY_TEXT, state);
-  const ancestors: object[] = [];
-  const skipShallow = !!opts?.ignores?.length;
-  hashPart(config.params, CC_PARAMS, state, opts, ancestors, skipShallow);
-  hashPart(config.data, CC_DATA, state, opts, ancestors, skipShallow);
+  hash(config.url || "", state);
+  hashPart(config.params, CC_PARAMS, state);
+  hashPart(config.data, CC_DATA, state);
   return state.h1.toString(KEY_RADIX) + "-" + state.h2.toString(KEY_RADIX);
 }
 
 /** 给非空请求片段加前缀；深层为空时回滚两条车道。 */
-function hashPart(
-  value: any,
-  marker: number,
-  state: HashState,
-  opts: IKeyOptions | undefined,
-  ancestors: object[],
-  skipShallow: boolean,
-): void {
+function hashPart(value: any, marker: number, state: HashState): void {
+  const skipShallow = !!state.opts?.ignores?.length;
   if (!skipShallow && isShallowEmpty(value)) return;
   const h1 = state.h1;
   const h2 = state.h2;
   hashByte(CC_PIPE, state);
   hashByte(marker, state);
-  if (!deepHash(value, state, opts, ancestors)) {
+  if (!deepHash(value, state)) {
     state.h1 = h1;
     state.h2 = h2;
   }
@@ -203,7 +197,7 @@ function isShallowEmpty(v: any): boolean {
 /** 判断单值自身是否为空，不递归其容器内容。 */
 function isDirectEmpty(v: any): boolean {
   if (v == null || Number.isNaN(v)) return true;
-  if (typeof v === "string") return v.trim() === EMPTY_TEXT;
+  if (typeof v === "string") return v.trim() === "";
   if (typeof v !== "object") return false;
   if (Array.isArray(v)) return v.length === 0;
   for (const _ in v) return false;
@@ -248,37 +242,26 @@ function hashFrame(length: number, state: HashState): void {
 }
 
 /** 共享祖先栈检测循环；异常栈清理由可恢复的对象字段边界负责。 */
-function deepHash(
-  target: any,
-  state: HashState,
-  opts: IKeyOptions | undefined,
-  ancestors: object[],
-): boolean {
-  if (target === null || typeof target !== "object")
-    return hashValue(target, state, opts, ancestors);
+function deepHash(target: any, state: HashState): boolean {
+  if (target === null || typeof target !== "object") return hashValue(target, state);
+  const ancestors = state.ancestors;
   if (ancestors.indexOf(target) !== -1) throw KEY_UNSUPPORTED;
   ancestors.push(target);
-  const present = hashValue(target, state, opts, ancestors);
+  const present = hashValue(target, state);
   ancestors.pop();
   return present;
 }
 
 /** 单次判空、读取和递归同时更新两车道；返回值表示是否贡献摘要。 */
-function hashValue(
-  target: any,
-  state: HashState,
-  opts: IKeyOptions | undefined,
-  ancestors: object[],
-): boolean {
-  const ignores = opts?.ignores;
-  if (ignores?.length && ignores.includes(target)) {
+function hashValue(target: any, state: HashState): boolean {
+  if (state.opts?.ignores?.includes(target)) {
     hashByte(CC_IGNORE, state);
     hash(safeStr(target), state);
     return true;
   }
   if (target == null || Number.isNaN(target)) return false;
   const type = typeof target;
-  if (type === "string") return stringHash(target, state, opts);
+  if (type === "string") return stringHash(target, state);
   if (type !== "object") {
     const str = String(target);
     hashFrame(str.length, state);
@@ -288,38 +271,49 @@ function hashValue(
   if (typeof target.byteLength === "number") {
     if (target.byteLength === 0) return false;
     hash(BINARY_PREFIX, state);
-    hash(EMPTY_TEXT + target.byteLength, state);
+    hash(String(target.byteLength), state);
     return true;
   }
   const tag = toTag.call(target);
   if (tag === TAG_DATE) {
     hashByte(CC_DATE, state);
-    hash(EMPTY_TEXT + target.getTime(), state);
+    hash(specialText(target.getTime()), state);
     return true;
   }
   if (tag === TAG_URL_SEARCH_PARAMS) {
     hashByte(CC_SEARCH, state);
-    hash(EMPTY_TEXT + target.toString(), state);
+    hash(specialText(target.toString()), state);
     return true;
   }
   const array = Array.isArray(target);
   if (!array && isOpaque(target)) throw KEY_UNSUPPORTED;
-  if (array) {
-    let any = false;
-    for (let i = 0; i < target.length; i++) {
-      const h1 = state.h1;
-      const h2 = state.h2;
-      hashByte(any ? CC_COMMA : CC_ARR, state);
-      if (deepHash(target[i], state, opts, ancestors)) {
-        any = true;
-      } else {
-        state.h1 = h1;
-        state.h2 = h2;
-      }
+  return array ? hashArray(target, state) : hashObject(target, state);
+}
+
+/** 正常数字使用显式转换；自定义返回值保留加号的默认提示及 Symbol 异常。 */
+function specialText(value: any): string {
+  return typeof value === "number" ? String(value) : "" + value;
+}
+
+/** 依次混入数组元素，空元素恢复两条车道。 */
+function hashArray(target: any[], state: HashState): boolean {
+  let any = false;
+  for (let i = 0; i < target.length; i++) {
+    const h1 = state.h1;
+    const h2 = state.h2;
+    hashByte(any ? CC_COMMA : CC_ARR, state);
+    if (deepHash(target[i], state)) any = true;
+    else {
+      state.h1 = h1;
+      state.h2 = h2;
     }
-    return any;
   }
-  const hasIgnores = !!ignores?.length;
+  return any;
+}
+
+/** 可交换累加自有字段，豁免字段失败时恢复祖先栈。 */
+function hashObject(target: Record<string, any>, state: HashState): boolean {
+  const ancestors = state.ancestors;
   const h1 = state.h1;
   const h2 = state.h2;
   let acc1 = 0;
@@ -336,16 +330,17 @@ function hashValue(
     const base1 = state.h1;
     const base2 = state.h2;
     const depth = ancestors.length;
+    const ignored = state.opts?.ignores?.includes(key);
     let present: boolean;
     try {
-      present = deepHash(target[key], state, opts, ancestors);
+      present = deepHash(target[key], state);
     } catch (error) {
       // 豁免字段恢复完整祖先路径，避免被放弃的子树污染后续兄弟字段。
-      if (error !== KEY_UNSUPPORTED || !hasIgnores || !ignores!.includes(key)) throw error;
+      if (error !== KEY_UNSUPPORTED || !ignored) throw error;
       ancestors.length = depth;
       present = false;
     }
-    if (!present && hasIgnores && ignores!.includes(key)) {
+    if (!present && ignored) {
       state.h1 = base1;
       state.h2 = base2;
       hash(EMPTY_FIELD, state);
@@ -368,17 +363,17 @@ function safeStr(v: any): string {
   if (v === undefined) return "u";
   if (v === null) return "n";
   if (Number.isNaN(v)) return "NaN";
-  if (v === EMPTY_TEXT) return "e";
+  if (v === "") return "e";
   return String(v);
 }
 
 /** trim 只执行一次；长串按首中尾区间采样，保持原 UTF-16 编码语义。 */
-function stringHash(s: string, state: HashState, opts: IKeyOptions | undefined): boolean {
+function stringHash(s: string, state: HashState): boolean {
   const trimmed = s.trim();
   const length = trimmed.length;
   if (length === 0) return false;
   hashFrame(length, state);
-  if (!opts?.sample || length <= SAMPLE_THRESHOLD) {
+  if (!state.opts?.sample || length <= SAMPLE_THRESHOLD) {
     hash(trimmed, state);
   } else {
     const mid = (length - SAMPLE_WINDOW) >> 1;

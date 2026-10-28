@@ -5,7 +5,7 @@
     "types": ["node"],
     "rootDir": "..",
     "paths": {
-      "@codejoo/axp": ["../src/index.ts"]
+      "@codejoo/axp": ["../dist/esm/index.d.mts"]
     }
   },
   "include": ["./**/*.ts", "../types"],

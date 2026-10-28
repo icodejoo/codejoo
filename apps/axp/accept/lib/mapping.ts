@@ -17,6 +17,15 @@ const KEY_SIMPLE = 'simple';
 /** `key: 'simple'` 映射不了的原因：新 key 服务始终把 params（及请求体）算进 key */
 const KEY_SIMPLE_UNSUPPORTED = `axp 的 key 服务始终含 params 与请求体，没有 '${KEY_SIMPLE}'（只看方法+路径）模式`;
 
+/** 将中立配置的方法列表转成 axp 使用的小写方法。
+ * @param list 中立配置里的方法列表。
+ * @returns 保持顺序的小写方法。
+ * @example `lowerMethods(['GET']) // ['get']`
+ */
+export function lowerMethods(list: string[]): string[] {
+  return list.map(/** 保留方法顺序与空数组含义。 */ (method) => method.toLowerCase());
+}
+
 const isNum: OptionCheck = (v) => (typeof v === 'number' && Number.isFinite(v) ? null : '需要数字');
 const isBool: OptionCheck = (v) => (typeof v === 'boolean' ? null : '需要布尔值');
 const isStrList: OptionCheck = (v) => (Array.isArray(v) && v.every((x) => typeof x === 'string') ? null : '需要字符串数组');
@@ -201,7 +210,7 @@ export function mapCacheOptions(cfg: { ttl_ms?: number; max?: number; methods?: 
   const out: MappedCacheOptions = {};
   if (cfg.ttl_ms !== undefined) out.expires = cfg.ttl_ms;
   if (cfg.max !== undefined) out.max = cfg.max;
-  if (cfg.methods !== undefined) out.methods = cfg.methods.map((m) => m.toLowerCase());
+  if (cfg.methods !== undefined) out.methods = lowerMethods(cfg.methods);
   return out;
 }
 
@@ -227,7 +236,7 @@ export function mapRequestOptions(options: RequestOptions | undefined): MappedRe
         max: r.max,
         delay: r.delay_ms,
         statusCodes: r.statuses,
-        methods: r.methods?.map((m) => m.toLowerCase()),
+        methods: r.methods === undefined ? undefined : lowerMethods(r.methods),
         respectRetryAfter: r.respect_retry_after,
       };
     } else out.retry = o.retry;

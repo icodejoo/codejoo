@@ -26,7 +26,7 @@ import type { AxpPlugins } from '@codejoo/axp';
 import { classifyError, PARSE_MARK } from './classify.ts';
 import { HEADER_RUN, HEADER_STYLE, MOCK_PREFIX, DEFAULT_RETRY_METHODS, DEFAULT_RETRY_STATUSES, DEFAULT_CACHE_METHODS } from './constants.ts';
 import type { AdapterName, Style } from './constants.ts';
-import { authUrlPatterns, effectiveRetryStatuses, mapRequestOptions } from './mapping.ts';
+import { authUrlPatterns, effectiveRetryStatuses, lowerMethods, mapRequestOptions } from './mapping.ts';
 import type { TokenStore } from './tokens.ts';
 import type { PluginConfigs, RequestSpec } from './types.ts';
 
@@ -282,7 +282,7 @@ export function createClient(opts: ClientOptions): ClientHandle {
       max: r.max ?? 0,
       delay: r.delay_ms,
       statusCodes: statuses,
-      methods: (r.methods ?? [...DEFAULT_RETRY_METHODS]).map((m) => m.toLowerCase()),
+      methods: lowerMethods(r.methods ?? [...DEFAULT_RETRY_METHODS]),
       respectRetryAfter: r.respect_retry_after,
       afterStatusCodes: RETRY_AFTER_STATUSES,
       shouldRetry: makeShouldRetry(statuses),

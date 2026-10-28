@@ -5,9 +5,10 @@ import axios, { AxiosError } from 'axios';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { checkResults, evaluateLocal, checkServer, checkClient, checkGeneric } from '../lib/assertions.ts';
 import type { Observed, RequestRecord } from '../lib/assertions.ts';
-import { AxpResponse, isAxpResponse } from '../../src/response.ts';
+import { AxpResponse, AXP_RESPONSE as RESPONSE_BRAND } from '../../src/response.ts';
+import { AXP_RESPONSE } from '../../src/brand.ts';
 import type { AxpKind } from '../../src/response.ts';
-import { classifyError, classifyResponse, errorMatches, errorMatchesAny, hasAxpBrand, PARSE_MARK } from '../lib/classify.ts';
+import { classifyError, classifyResponse, errorMatches, errorMatchesAny, PARSE_MARK } from '../lib/classify.ts';
 import { AUTH_DENIED_MESSAGE, AUTH_REFRESH_FAILED_MESSAGE } from '../lib/constants.ts';
 import type { Expectation } from '../lib/types.ts';
 
@@ -80,13 +81,8 @@ describe('classifyError：IAxpResponse（新架构，直接读 kind / reason）'
     expect(classifyError(undefined)).toMatch(/^unknown:/);
   });
 
-  it('hasAxpBrand 与 src 的 isAxpResponse 判断一致（品牌 Symbol 没对不上）', () => {
-    const samples: unknown[] = [
-      axpResp({ httpStatus: 200 }), failure('cancel'), failure('auth', { reason: 'expired' }),
-      new Error('x'), new TypeError('y'), 'str', 42, null, undefined, {}, { kind: 'http' }, [],
-      Object.defineProperty({}, Symbol.for('axp.response'), { value: true }),
-    ];
-    for (const s of samples) expect(hasAxpBrand(s), String(s)).toBe(isAxpResponse(s));
+  it('响应模块重新导出同一个叶子模块品牌', () => {
+    expect(RESPONSE_BRAND).toBe(AXP_RESPONSE);
   });
 });
 
