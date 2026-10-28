@@ -66,18 +66,24 @@ export const DEFAULT_RETRY_STATUSES: readonly number[] = [500, 502, 503, 504];
 /** 默认可重试的幂等方法（大写） */
 export const DEFAULT_RETRY_METHODS: readonly string[] = ['GET', 'PUT', 'HEAD', 'DELETE', 'OPTIONS'];
 
-/** 默认可缓存的方法（大写）：axp 的缓存不分方法，中立默认只缓存读请求，与 retry 默认方法对称 */
+/**
+ * 默认可缓存的方法（大写），旧 API 的 shouldCache 叠加用。
+ * B7 删除：新版 cache 插件的 `methods` 默认就是 GET/HEAD，与中立默认一致，不用再补。
+ */
 export const DEFAULT_CACHE_METHODS: readonly string[] = ['GET', 'HEAD'];
 
-/** axp 具备的能力名（CONTRACT §7）；不在其中的能力，场景直接跳过 */
-export const SUPPORTED_CAPABILITIES: ReadonlySet<string> = new Set([
-  'auth', 'cache', 'retry', 'share', 'cancel', 'loading', 'mock',
-  'normalize', 'notify', 'repath', 'key', 'filter', 'envs', 'log',
-]);
+/** 内核直接具备的能力（不再是插件）：取消、key 服务、归一化响应、日志开关 */
+export const KERNEL_CAPABILITIES: readonly string[] = ['cancel', 'key', 'normalize', 'log'];
+/** 由内置插件提供的能力 */
+export const PLUGIN_CAPABILITIES: readonly string[] = [
+  'auth', 'cache', 'retry', 'share', 'loading', 'mock', 'notify', 'repath', 'filter', 'envs',
+];
+/** axp 具备的能力名（CONTRACT §7，内核 + 插件）；不在其中的能力，场景直接跳过 */
+export const SUPPORTED_CAPABILITIES: ReadonlySet<string> = new Set([...PLUGIN_CAPABILITIES, ...KERNEL_CAPABILITIES]);
 
-/** auth 插件客户端侧"无令牌即拒绝"抛出的错误消息 */
+/** B7 删除：旧 API 形态。auth 插件客户端侧"无令牌即拒绝"抛出的错误消息 */
 export const AUTH_DENIED_MESSAGE = '[axp:auth] access denied';
-/** auth 插件在等待刷新失败后中止排队请求抛出的错误消息 */
+/** B7 删除：旧 API 形态。auth 插件在等待刷新失败后中止排队请求抛出的错误消息 */
 export const AUTH_REFRESH_FAILED_MESSAGE = '[axp:auth] refresh failed';
 /** auth 插件合成越权响应用的业务码 */
 export const AUTH_SYNTH_CODE = 'ACCESS_DENIED';
