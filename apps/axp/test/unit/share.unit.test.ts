@@ -22,6 +22,11 @@ function response(config: any = {}) {
 describe('$resolvePolicy', () => {
     const defaults: ISharedOptions = { policy: 'start' };
 
+    it('[share.prop.name] 工厂返回稳定的插件名称', () => {
+        expect(share().name).toBe('axp:share');
+        expect(share({ enable: false }).name).toBe('axp:share');
+    });
+
     it('[share.fn.$resolvePolicy][share.opt.policy] 未指定 → 插件默认', () => {
         expect($resolvePolicy({} as AxiosRequestConfig, defaults)).toBe('start');
     });

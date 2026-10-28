@@ -23,6 +23,10 @@ function response(config: any, status = 200, headers: any = {}) {
 }
 
 describe('$resolveMax', () => {
+    it('[retry.prop.name] 工厂返回稳定的插件名称', () => {
+        expect(retry().name).toBe('axp:retry');
+        expect(retry({ enable: false }).name).toBe('axp:retry');
+    });
     it('[retry.fn.$resolveMax][retry.opt.max][retry.req.retry.max] 请求级 number 优先', () => {
         expect($resolveMax({ retry: 5 } as any, { max: 1 })).toBe(5);
     });
@@ -44,7 +48,7 @@ describe('$resolveMax', () => {
 });
 
 describe('$resolveMethods', () => {
-    it('[retry.fn.$resolveMethods][retry.opt.methods] 请求级对象优先', () => {
+    it('[retry.fn.$resolveMethods][retry.opt.methods][retry.req.retry.methods] 请求级对象优先', () => {
         expect($resolveMethods({ retry: { methods: ['post'] } } as any, {})).toEqual(['post']);
     });
     it('[retry.fn.$resolveMethods][retry.opt.methods] 都未指定 → 默认幂等动词，不含 post/patch', () => {
@@ -57,7 +61,7 @@ describe('$resolveMethods', () => {
 
 describe('$resolveShouldRetry', () => {
     const fn = (r?: AxiosResponse) => r?.data?.code !== 0;
-    it('[retry.fn.$resolveShouldRetry][retry.cb.shouldRetry] 请求级对象 shouldRetry 优先', () => {
+    it('[retry.fn.$resolveShouldRetry][retry.cb.shouldRetry][retry.req.retry.shouldRetry] 请求级对象 shouldRetry 优先', () => {
         const reqFn = vi.fn(() => true);
         expect($resolveShouldRetry({ retry: { max: 1, shouldRetry: reqFn } } as any, { shouldRetry: fn }))
             .toBe(reqFn);
@@ -77,7 +81,7 @@ describe('$resolveStatusCodes / $resolveAfterStatusCodes', () => {
     it('[retry.fn.$resolveAfterStatusCodes][retry.opt.afterStatusCodes] $resolveAfterStatusCodes 都未指定 → 默认 [413,429,503]', () => {
         expect($resolveAfterStatusCodes({} as AxiosRequestConfig, {})).toEqual([413, 429, 503]);
     });
-    it('[retry.fn.$resolveStatusCodes][retry.fn.$resolveAfterStatusCodes] 两者都支持请求级覆盖', () => {
+    it('[retry.fn.$resolveStatusCodes][retry.fn.$resolveAfterStatusCodes][retry.req.retry.statusCodes][retry.req.retry.afterStatusCodes] 两者都支持请求级覆盖', () => {
         expect($resolveStatusCodes({ retry: { statusCodes: [418] } } as any, {})).toEqual([418]);
         expect($resolveAfterStatusCodes({ retry: { afterStatusCodes: [418] } } as any, {})).toEqual([418]);
     });
@@ -87,19 +91,19 @@ describe('$resolveDelay / $resolveJitter / $resolveDelayMax', () => {
     it('[retry.fn.$resolveDelay][retry.opt.delay] $resolveDelay 都未指定 → 默认 3000', () => {
         expect($resolveDelay({} as AxiosRequestConfig, {})).toBe(3000);
     });
-    it('[retry.fn.$resolveDelay][retry.opt.delay] $resolveDelay 请求级优先', () => {
+    it('[retry.fn.$resolveDelay][retry.opt.delay][retry.req.retry.delay] $resolveDelay 请求级优先', () => {
         expect($resolveDelay({ retry: { delay: 100 } } as any, { delay: 200 })).toBe(100);
     });
     it('[retry.fn.$resolveJitter][retry.opt.jitter] $resolveJitter 都未指定 → undefined（默认不抖动）', () => {
         expect($resolveJitter({} as AxiosRequestConfig, {})).toBeUndefined();
     });
-    it('[retry.fn.$resolveJitter][retry.opt.jitter] $resolveJitter 请求级优先', () => {
+    it('[retry.fn.$resolveJitter][retry.opt.jitter][retry.req.retry.jitter] $resolveJitter 请求级优先', () => {
         expect($resolveJitter({ retry: { jitter: true } } as any, {})).toBe(true);
     });
     it('[retry.fn.$resolveDelayMax][retry.opt.delayMax] $resolveDelayMax 都未指定 → 默认不封顶', () => {
         expect($resolveDelayMax({} as AxiosRequestConfig, {})).toBe(Infinity);
     });
-    it('[retry.fn.$resolveDelayMax][retry.opt.delayMax] $resolveDelayMax 请求级优先', () => {
+    it('[retry.fn.$resolveDelayMax][retry.opt.delayMax][retry.req.retry.delayMax] $resolveDelayMax 请求级优先', () => {
         expect($resolveDelayMax({ retry: { delayMax: 500 } } as any, { delayMax: 1000 })).toBe(500);
     });
 });
@@ -108,13 +112,13 @@ describe('$resolveRespectRetryAfter / $resolveRetryAfterMax', () => {
     it('[retry.fn.$resolveRespectRetryAfter][retry.opt.respectRetryAfter] $resolveRespectRetryAfter 都未指定 → 默认 true', () => {
         expect($resolveRespectRetryAfter({} as AxiosRequestConfig, {})).toBe(true);
     });
-    it('[retry.fn.$resolveRespectRetryAfter][retry.opt.respectRetryAfter] $resolveRespectRetryAfter 请求级优先', () => {
+    it('[retry.fn.$resolveRespectRetryAfter][retry.opt.respectRetryAfter][retry.req.retry.respectRetryAfter] $resolveRespectRetryAfter 请求级优先', () => {
         expect($resolveRespectRetryAfter({ retry: { respectRetryAfter: false } } as any, {})).toBe(false);
     });
     it('[retry.fn.$resolveRetryAfterMax][retry.opt.retryAfterMax] $resolveRetryAfterMax 都未指定 → 默认不封顶', () => {
         expect($resolveRetryAfterMax({} as AxiosRequestConfig, {})).toBe(Infinity);
     });
-    it('[retry.fn.$resolveRetryAfterMax][retry.opt.retryAfterMax] $resolveRetryAfterMax 请求级优先', () => {
+    it('[retry.fn.$resolveRetryAfterMax][retry.opt.retryAfterMax][retry.req.retry.retryAfterMax] $resolveRetryAfterMax 请求级优先', () => {
         expect($resolveRetryAfterMax({ retry: { retryAfterMax: 5000 } } as any, {})).toBe(5000);
     });
 });

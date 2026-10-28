@@ -259,7 +259,7 @@ describe('$race', () => {
 });
 
 describe('share — 共享响应按调用方换上各自的 config', () => {
-    it('[share.fn.$rebindResponse] 并发同 key 的每个 caller 拿到的 response.config 就是自己的 config，data 共享', async () => {
+    it('[share.fn.axpShare][share.method.install][share.fn.$follow][share.fn.$rebindResponse] 并发同 key 的每个 caller 拿到的 response.config 就是自己的 config，data 共享', async () => {
         const data = { v: 1 };
         const ax: any = {
             defaults: {

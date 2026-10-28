@@ -20,7 +20,7 @@ function response(config: any, status = 200, headers: any = {}) {
 }
 
 describe('retry 集成 — 网络/HTTP 错误路径', () => {
-    it('[retry.opt.max] max=2：前两次 500、第三次成功 → 恢复，调用方只看到成功', async () => {
+    it('[retry.method.install][retry.opt.max] max=2：前两次 500、第三次成功 → 恢复，调用方只看到成功', async () => {
         const { net, api } = mkApi();
         net.on('GET', '/x', (_c, hit) => (hit < 3 ? { status: 500 } : { data: { code: 0, data: 'ok' } }));
         use(api, axpRetry({ max: 2, delay: 0 }));
