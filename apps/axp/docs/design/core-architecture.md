@@ -273,7 +273,7 @@ interface AxpOptions<R> {
   debug?: boolean | AxpLogger         // 取代 axpLogger 插件；开启时还记录调用点 stack
 }
 
-interface AxpClient<S, R> extends HttpVerbs<S, R> {   // get/post/put/patch/delete/head/options，柯里化形态不变
+interface AxpClient<S, R> extends HttpVerbs<S, R> {   // axios 全部 10 个小写动词（含 purge/link/unlink），柯里化形态与 data/params 分派不变
   readonly axios: AxiosInstance
   request<D = unknown>(config: AxpRequestConfig): Promise<D>          // 无类型逃生口，同样支持 wrap/throws 重载
   extend(overrides?: AxiosRequestConfig, opts?: { plugins?: 'inherit' | readonly AxpPlugin<R, any>[] }): AxpClient<S, R>
@@ -317,7 +317,7 @@ const res = await api.post('/pet')(body, { throws: false })        // 不写 try
 | P1 | 链在增删插件时编译，请求时不排序、不查表 | — |
 | P2 | 每层上下文用原型继承逻辑请求级字段，只新建 `request` 视图 | — |
 | P3 | `key()` 惰性计算并按 request 对象缓存；不用 cache/share 的请求不算 key | — |
-| P4 | 只有 `markReplayable()` 且 data 是纯对象/数组时才 `structuredClone` | O6、R2-1 |
+| P4 | 只有 `markReplayable()` 且 data 是纯对象/数组时才 `structuredClone`；克隆失败或环境没有 `structuredClone` 时回退原引用（debug 下 warn），不让请求失败 | O6、R2-1 |
 | P5 | 传输强制 `validateStatus` 全放行，HTTP 错误不构造 AxiosError（省掉调用栈捕获） | — |
 | P6 | 失败直接抛 `R`，不另建错误对象；调用点 stack 只在 debug 模式记录 | D6 |
 | P7 | 不再包装 `transformResponse`，不再拷贝尝试钩子数组 | O6、R2-3 |
@@ -355,6 +355,6 @@ const res = await api.post('/pet')(body, { throws: false })        // 不写 try
 | N8 | 传输强制 `validateStatus` 全放行 | P5；单一路径 | axios 实例上的错误拦截器不再看到 4xx/5xx |
 | N9 | 缓存存判定后的响应，命中不再重跑 `transformResponse` | 更快，也更好理解 | 是 |
 | N10 | loading 从逻辑请求一开始显示，包括等待 token 刷新的时间 | 洋葱最外层的自然结果，体验更好 | 时序变化 |
-| N11 | 删返回形态 `raw: true`，改用 `wrap: true` 后读 `r.raw` | 三种形态收成两个开关 | 是 |
+| N11 | 删返回形态 `raw: true`，改用 `wrap: true` 后读 `r.raw`；同时删除只影响类型的 `nullable` 选项（data 为 null/undefined 时照常原样返回） | 三种形态收成两个开关 | 是 |
 | N12 | `extend()` 默认继承插件（各自新状态） | 状态建在 `setup` 里之后，继承变得安全 | 与 #17 相反 |
-| N13 | 判定类回调（`shouldRetry`、`onFailure`、`isProtected`、`fallbackWhen`、`shouldCache`、`ready`）抛错按 bug 处理，抛原始异常；通知类回调（`loading`、`notify`、`stringify`、`onAccessExpired`、`onAccessDenied`）仍隔离，但用 `console.error` 输出，不受 debug 开关控制 | bug 不伪装成请求失败，也不悄悄吞掉 | 判定类回调以前被吞 |
+| N13 | 判定类回调（`shouldRetry`、retry 的 `delay` / `jitter` 函数、`onFailure`、`isProtected`、`fallbackWhen`、`shouldCache`、`ready`）抛错按 bug 处理，抛原始异常；通知类回调（`loading`、`notify`、`stringify`、`onAccessExpired`、`onAccessDenied`）仍隔离，但用 `console.error` 输出，不受 debug 开关控制 | bug 不伪装成请求失败，也不悄悄吞掉 | 判定类回调以前被吞 |

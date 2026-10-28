@@ -15,6 +15,7 @@
 
 ## 报告（带日期的结果）
 
+- [2026-10-28 洋葱管线 B0 基线](reports/2026-10-28-pipeline-baseline.md) — 旧 API 六场景性能、gzip -9 体积、836 处声明审计与 legacy 归档检查。active。
 - [2026-10-27 Codex 全量 review：终审与修复记录](reports/2026-10-27-codex-full-review.md) — 30 条问题的终审结论、修复方式、对外行为变化；「待优化」O1–O6 由上面的重构解决。active。
 
 ## 外部关联
@@ -27,4 +28,10 @@
 
 ## 参考记录
 
+- [洋葱管线行为迁移总表](reference/pipeline-migration/README.md) — 分层计数、822 口径差异、删除机制及存疑行汇总。active。
+- [洋葱管线 unit 行为清单](reference/pipeline-migration/unit.md) — 227 处旧单元用例的逐条去向与依据。active。
+- [洋葱管线 rule 行为清单](reference/pipeline-migration/rule.md) — 254 处旧规则用例的逐条去向与依据。active。
+- [洋葱管线 boundary 行为清单](reference/pipeline-migration/boundary.md) — 278 处旧边界用例的逐条去向与依据。active。
+- [洋葱管线 combo 行为清单](reference/pipeline-migration/combo.md) — 33 处旧组合用例的逐条去向与依据。active。
+- [洋葱管线 integration 行为清单](reference/pipeline-migration/integration.md) — 44 处旧集成用例的逐条去向与依据。active。
 - [测试用例旧→新映射记录](reference/test-migration-map.md) — 2026-10-28 首次六层迁移的逐条去向、每批核对数和 drop/N/A 清单，已冻结。archived。

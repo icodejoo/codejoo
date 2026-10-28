@@ -8,7 +8,7 @@ summary: 新架构按六层怎么测、覆盖率和 API 台账口径、组合不
 
 - 分层沿用 [测试六层规范](../guides/test-layers.md)：unit → rule → boundary → combo → integration → acceptance，一个行为只在能证明它的最低层测一次。
 - 新增 7 条组合不变量（I1–I7），每个 combo 用例和 powerset 扫描都必须检查。
-- 覆盖率门槛：行 ≥ 95%、分支 ≥ 90%、函数 ≥ 95%；每个公开 API 至少一条 rule 加一条 boundary。
+- 覆盖率门槛：全局行 ≥ 95%、分支 ≥ 90%、函数 ≥ 95%，内核四个文件分支 100%；每个公开 API 至少一条 rule 加一条 boundary。
 - 验收：testkit 场景 × 7 网络 × 2 风格 × 2 adapter；执行器里替 axp 补的业务码适配全部删掉，直接测 axp 自身能力。
 - 性能和体积以重构前的 main 为基线，不许退步；完整插件链的单请求开销目标降低 20%。
 
@@ -134,7 +134,22 @@ summary: 新架构按六层怎么测、覆盖率和 API 台账口径、组合不
 
 - 工具：vitest 的 v8 覆盖率，devDependency `@vitest/coverage-v8`（4.1.6，与 vite-plus-test 0.1.22 的 peer 要求一致，经 catalog 管理），2026-10-28 已引入。
 - 范围：`src/**`，排除纯类型文件。
-- 门槛：行 ≥ 95%、分支 ≥ 90%、函数 ≥ 95%；写进 `vitest.config.ts` 的 `coverage.thresholds`，不达标即失败。
+- 全局门槛：行 ≥ 95%、分支 ≥ 90%、函数 ≥ 95%。
+- 内核门槛：`src/{pipeline,context,response,transport}.ts` 分支 100%。整条链压在这四个文件上，任何一个没走到的分支都可能是"某种请求永远不落定"之类的漏洞。
+  确实走不到的防御分支不许用 `/* v8 ignore */` 糊过去，要么删掉，要么在评审里说明为什么保留、为什么测不到，经主会话同意后才能豁免。
+- 都写进 `vitest.config.ts` 的 `coverage.thresholds`（按文件的门槛用 glob 键），不达标即失败：
+
+  ```ts
+  coverage: {
+    provider: 'v8',
+    include: ['src/**'],
+    thresholds: {
+      lines: 95, branches: 90, functions: 95,
+      'src/{pipeline,context,response,transport}.ts': { branches: 100 },
+    },
+  }
+  ```
+- 生效时间：内核门槛从 B1 起生效（B1 交付这四个文件）；全局门槛 B5 起生效（插件全部迁完之后）。
 - 命令：`vp test --coverage`。
 - 旧代码基线（2026-10-28，main@be379e3）：语句 90.5%、分支 94.15%、函数 85.83%、行 91.67%。
 
@@ -194,7 +209,7 @@ testkit 侧的 D12 契约缺口（flap 时间表、`key: true` 是否含查询�
 
 ## 10. 旧用例迁移
 
-现有 90 个文件、822 处用例声明，`it.each` 展开后实际执行 1002 条（2026-10-28 实测）。映射按声明记，核对时同时报执行条数。按规范 §4 记映射，记录文件为 `docs/reference/test-migration-map-pipeline.md`。
+现有 90 个文件、836 处用例声明，`it.each` 展开后实际执行 1002 条（2026-10-28 B0 用语法树核对；早先估的 822 漏了 14 处双引号标题）。映射按声明记，核对时同时报执行条数。按规范 §4 记映射，记录在 [pipeline-migration](../reference/pipeline-migration/README.md)，按层分文件。
 
 | 动作 | 用于 |
 |---|---|

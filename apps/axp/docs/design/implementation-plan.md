@@ -21,12 +21,12 @@ summary: 重构分几批做、每批改哪些文件、交付什么、怎么验�
 
 | 批次 | 内容 | 主要文件 | 交付与验收 |
 |---|---|---|---|
-| B0 基线 | 量性能、体积、用例数；建行为清单 | `bench/*.bench.ts`、`docs/reference/test-migration-map-pipeline.md` | 基线数字；822 处旧用例声明（执行 1002 条）逐条标 keep/change/drop，**主会话评审清单后再继续** |
-| B1 内核 | 归一化响应（含 `isAxpResponse`、判定 getter）、上下文、管线、传输、落定（含 bug 透传、`reject`、调用点 stack）、客户端、key、取消、日志开关 | `src/{client,pipeline,context,transport,response,key,types}.ts` | 测试方案 §3 全部单元用例；客户端与取消的 rule/boundary；类型测试中与插件无关的部分 |
+| B0 基线 ✅ | 量性能、体积、用例数；建行为清单 | `bench/pipeline.bench.ts`、`docs/reference/pipeline-migration/`、`docs/reports/2026-10-28-pipeline-baseline.md` | 836 处声明（执行 1002 条）：keep 346 / change 423 / drop 67；40 条存疑已终审裁决 |
+| B1 内核 | 归一化响应（含 `isAxpResponse`、判定 getter）、上下文、管线、传输、落定（含 bug 透传、`reject`、调用点 stack）、客户端、key、取消、日志开关 | `src/{client,pipeline,context,transport,response,key,types}.ts` | 测试方案 §3 全部单元用例；客户端与取消的 rule/boundary；类型测试中与插件无关的部分；`vitest.config.ts` 写入内核四文件分支 100% 门槛并达标 |
 | B2 无状态插件 | loading、notify、repath、filter、envs | `src/plugins/{loading,notify,repath,filter,envs}.ts` | 各插件 rule/boundary；loading 与 notify 的 I2、I4 |
 | B3 重试与鉴权 | retry、auth、TokenManager（O4） | `src/plugins/{retry,auth}.ts`、`src/objects/TokenManager.ts` | rule/boundary；auth + retry、loading + auth、notify + auth 组合 |
 | B4 结果来源 | mock、share、cache（O3、O6） | `src/plugins/{mock,share,cache}.ts` | rule/boundary；§5.2 余下组合 |
-| B5 测试收尾 | powerset、不变量、类型测试补齐、覆盖率门槛、删 `test/legacy/` 和旧源码 | `test/combo/powerset.combo.test.ts`、`vitest.config.ts`；删除 `src/{core,install,helper,bag}.ts`、`src/objects/Response.ts`、`src/plugins/{cancel,key,logger,normalize}.ts` | 覆盖率达标；映射核对公式成立；I1–I7 全部生效 |
+| B5 测试收尾 | powerset、不变量、类型测试补齐、覆盖率门槛、删 `test/legacy/` 和旧源码 | `test/combo/powerset.combo.test.ts`、`vitest.config.ts`；删除 `src/{core,install,helper,bag}.ts`、`src/objects/Response.ts`、`src/plugins/{cancel,key,logger,normalize}.ts` | 全局覆盖率门槛写入并达标（内核分支 100% 持续保持）；映射核对公式成立；I1–I7 全部生效 |
 | B6 文档与产物 | README 中英文、ARCHITECTURE.md 重写、CHANGELOG（含迁移指南）、`package.json` exports、e2e playground | 同左 | `vp pack` 成功；子路径检查通过；性能与体积达到门槛并写进报告 |
 | B7 验收 | 改造执行器，跑 `npm run accept` | `accept/lib/*`、`accept/mapping.md` | 达到测试方案 §9.3；验收报告；testkit 台账在 api-ws-demo 单独提交 |
 
@@ -36,6 +36,7 @@ summary: 重构分几批做、每批改哪些文件、交付什么、怎么验�
 
 1. 主会话把本批范围、相关文档章节、上一批终审结论写进派发 prompt，派给 Codex。
 2. Codex 实现，跑 `vp test`、tsgo、`vp check`，然后 `codex review --uncommitted` 自审一轮，修掉成立的问题。
+   `vp check` 的口径：旧源码和 `accept/` 有既有的格式与 lint 问题（B0 实测 178 个文件格式、4 个 lint 错误），每批只要求**本批改动的文件**通过；全量通过分两步达成：B5 删掉旧源码后 `src/`、`test/` 全量通过，B7 改造执行器后 `accept/` 全量通过。
 3. 主会话终审：
    - 对照文档逐条核对行为；
    - 检查有没有偷偷保留旧机制（字符串保活键、`delete config.xxx`、包装 transform、`instanceof`）；

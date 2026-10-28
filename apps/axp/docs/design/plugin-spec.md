@@ -23,14 +23,16 @@ summary: 10 个内置插件和 4 项内核服务在洋葱管线下的阶段、�
 | 简写（各插件注明，如 retry 的数字、share 的策略字符串） | 只覆盖主参数 |
 | 对象 | 按字段覆盖：`请求级 ?? 插件级 ?? 内置默认`；数组字段整体替换；`enable: false` 等同 `false` |
 
-- 不再接受函数形式（N5）。
+- 不再接受函数形式（N5）；**例外**是值本身就是回调的选项，比如 loading 的请求级回调。
+- `null` 与 `undefined` 都按"省略"处理；其它未声明的值类型上报错，运行时也按省略处理。
+- **插件级 `enable`**：每个插件工厂都接受 `enable?: boolean`（默认 true，mock 默认 false）。`false` 时插件不进链、不调用 `setup`、`inspect()` 不列出；请求级开关不能把它重新打开。
 - 插件只读请求选项，不 `delete`；需要给内层改请求时用 `next(patch)`。
 - 请求选项类型通过 `declare module '@codejoo/axp' { interface AxpRequestOptions {…} }` 扩展。
 - 内核自带的请求选项：`wrap`、`throws`、`silent`、`key`、`signal`。
 
 **用户回调抛错**（N13）：
 - 通知类（`loading`、`notify`、`stringify`、`onAccessExpired`、`onAccessDenied`）：隔离，不影响请求结果和插件状态，用 `console.error` 输出，不受 debug 开关控制。
-- 判定类（`shouldRetry`、`onFailure`、`isProtected`、`fallbackWhen`、`shouldCache`、`ready`）：按程序 bug 处理，落定时抛原始异常。
+- 判定类（`shouldRetry`、retry 的 `delay` / `jitter` 函数、`onFailure`、`isProtected`、`fallbackWhen`、`shouldCache`、`ready`）：按程序 bug 处理，落定时抛原始异常。
 - 例外：`onRefresh` 抛错按约定算刷新失败，不算 bug。
 
 ## 1. 内核服务
@@ -71,6 +73,7 @@ summary: 10 个内置插件和 4 项内核服务在洋葱管线下的阶段、�
 
 - 请求级：`false` / `true` / 函数（作为本次回调）/ `{ enable, loading, delay, delayClose }`。
 - 行为：进入时计数 +1，`next()` 返回后在 `finally` 里 -1；一个逻辑请求恰好一对显示/隐藏，重试和重放都在里面。
+- 计数按回调分开：请求级换了回调的请求，计入它自己那个回调的计数，所以每个回调都看到成对的 true/false（旧版可能出现"A 显示、B 隐藏"）。
 - 卸载（`dispose`）取消未触发的定时器。
 - 变化：显示从逻辑请求开始算，包括等待 token 刷新的时间（N10）；`guardTransform`、`COMPLETE` 层键、`logical` 参数全部删除（R2-3、R2-4 的问题不再存在）。
 
@@ -226,7 +229,7 @@ switch onFailure(r, tm, ctx):
 | 选项 | 默认 | 说明 |
 |---|---|---|
 | `expires` | 60_000 | ms |
-| `max` | 500 | LRU 容量，`Infinity` 不限 |
+| `max` | 500 | LRU 容量，`Infinity` 不限；小于 1 时回退 500 |
 | `methods` | `get head`（N7） | 其它方法即使请求级开启也不缓存 |
 | `clone` | — | `'shallow'` / `'deep'` / `(data) => data`，作用于 `r.data` |
 | `shouldCache(r)` | `r.ok` | 是否写入 |
@@ -237,7 +240,8 @@ switch onFailure(r, tm, ctx):
 - 新旧顺序：较早发起、较晚返回的响应不覆盖较新的结果；`clear()` 之后在途请求返回也不写回。语义沿用现状。
 - 表收敛（O3）：`written` 和 `inflight` 合并为 `Map<key, { latestSeq, pending }>`；`epoch` 保留；条目被淘汰且没有在途请求时回收这个 key 的记录。
 - 过期：读时惰性删除；写入超过容量时清扫，不再每次写入全表扫描（O6）。
-- 操作：`client.plugin(cachePlugin)` 返回 `{ remove(key), clear() }`；另导出 `clearCache(client)`、`removeCache(client, key)`。
+- 操作：`client.plugin(cachePlugin)` 返回 `{ remove(key): boolean, clear(): number }`；另导出 `removeCache(client, key): boolean`、`clearCache(client): number`，客户端没装 cache 时返回 `false` / `0`。
+- 删除旧版只有类型、从未生效的 `storage`、`memory` 选项，持久化统一走 `store`。
 
 ```ts
 /** 缓存存储接口：同步，键是 key 服务算出的字符串 */
