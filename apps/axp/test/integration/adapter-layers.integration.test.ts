@@ -1,17 +1,17 @@
 import { describe, it, expect, vi } from 'vitest';
 import axios from 'axios';
 import type { AxiosResponse } from 'axios';
-import { Axp } from '../src/install';
-import cache from '../src/plugins/cache';
-import share from '../src/plugins/share';
-import { create } from '../src/core';
-import { wrapAdapter, getBaseAdapter } from '../src/helper';
+import { Axp } from '../../src/install';
+import cache from '../../src/plugins/cache';
+import share from '../../src/plugins/share';
+import { create } from '../../src/core';
+import { wrapAdapter, getBaseAdapter } from '../../src/helper';
 
 const resp = (data: any, config: any = {}): AxiosResponse =>
     ({ status: 200, statusText: 'OK', headers: {}, config, data }) as any;
 
 describe('wrapAdapter — #18 每层可独立移除', () => {
-    it('非 LIFO 移除：先摘 A 不影响 B，再摘 B 不会复活 A', async () => {
+    it('[helper.wrapAdapter] 非 LIFO 移除：先摘 A 不影响 B，再摘 B 不会复活 A', async () => {
         const base = vi.fn(async (c: any) => resp('base', c));
         const ax = axios.create({ adapter: base as any });
         const calls: string[] = [];
@@ -33,7 +33,7 @@ describe('wrapAdapter — #18 每层可独立移除', () => {
         expect(ax.defaults.adapter).toBe(base);
     });
 
-    it('重复 remove 无副作用；层闭包状态在重建链后保留', async () => {
+    it('[helper.wrapAdapter] 重复 remove 无副作用；层闭包状态在重建链后保留', async () => {
         const base = vi.fn(async (c: any) => resp('base', c));
         const ax = axios.create({ adapter: base as any });
         let n = 0;
@@ -49,7 +49,7 @@ describe('wrapAdapter — #18 每层可独立移除', () => {
         expect(n).toBe(2);
     });
 
-    it('getBaseAdapter 返回最底层 adapter', () => {
+    it('[helper.getBaseAdapter] getBaseAdapter 返回最底层 adapter', () => {
         const base = vi.fn();
         const ax = axios.create({ adapter: base as any });
         wrapAdapter(ax, (prev) => prev);
@@ -58,7 +58,7 @@ describe('wrapAdapter — #18 每层可独立移除', () => {
 });
 
 describe('cache / share 非 LIFO 卸载（Axp 级）', () => {
-    it('先卸内层 cache，外层 share 仍正常；全摘后不复活 cache', async () => {
+    it('[cache.method.cleanup][share.method.cleanup] 先卸内层 cache，外层 share 仍正常；全摘后不复活 cache', async () => {
         const net = vi.fn(async (c: any) => resp({ n: 1 }, c));
         const ax = axios.create({ adapter: net as any });
         const h1 = Axp.install(ax, { cache: cache() });
@@ -75,7 +75,7 @@ describe('cache / share 非 LIFO 卸载（Axp 级）', () => {
 });
 
 describe('Core.extends — #17 不继承父实例的插件 adapter', () => {
-    it('子实例不命中父缓存', async () => {
+    it('[public.member.Core.extends] 子实例不命中父缓存', async () => {
         const net = vi.fn(async (c: any) => resp({ n: 1 }, c));
         const parent = create(axios.create({ adapter: net as any }));
         cache().install(parent.axios);
@@ -88,7 +88,7 @@ describe('Core.extends — #17 不继承父实例的插件 adapter', () => {
         expect(net).toHaveBeenCalledTimes(3);
     });
 
-    it('overrides.adapter 仍可覆盖', async () => {
+    it('[public.member.Core.extends] overrides.adapter 仍可覆盖', async () => {
         const net = vi.fn(async (c: any) => resp('p', c));
         const mine = vi.fn(async (c: any) => resp('c', c));
         const parent = create(axios.create({ adapter: net as any }));

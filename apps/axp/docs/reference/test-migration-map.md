@@ -43,6 +43,7 @@ A 批（单插件规则/补丁/覆盖文件，共 16 个提交）已迁移完成
 | auth.integration（auth.integration.test） | 待回填 | 24 | 0 | 0 | 0 | 0 | 0 | 24 | 是 |
 | integration（integration.test） | 待回填 | 8 | 0 | 0 | 0 | 0 | 0 | 8 | 是 |
 | attempt（attempt.test） | 待回填 | 5 | 0 | 0 | 0 | 0 | 0 | 5 | 是 |
+| adapter-layers（adapter-layers.test） | 待回填 | 6 | 0 | 0 | 0 | 0 | 0 | 6 | 是 |
 
 ## 判层备注（A 批）
 
@@ -632,3 +633,9 @@ A 批（单插件规则/补丁/覆盖文件，共 16 个提交）已迁移完成
 | test/attempt.test.ts::review #8 — 重发/重放保持请求体与首发一致 > retry：自定义 transformRequest 不被套两层 | boundary/retry.boundary.test.ts::review #8 — 重发/重放保持请求体与首发一致 > [retry.fn.axpRetry][retry.opt.methods] retry：自定义 transformRequest 不被套两层 | rename | 单插件：自定义 transformRequest 下重发请求体不被套两层，属极端输入；review #8 |  |
 | test/attempt.test.ts::review #8 — 重发/重放保持请求体与首发一致 > auth：401 刷新重放不被套两层 | boundary/auth.boundary.test.ts::review #8 — 重发/重放保持请求体与首发一致 > [auth.fn.axpAuth][auth.cb.onRefresh] auth：401 刷新重放不被套两层 | rename | 单插件：自定义 transformRequest 下 401 刷新重放请求体不被套两层，属极端输入；review #8 |  |
 | test/attempt.test.ts::review #P3 — transformRequest 原地改 data 时重发仍用原始快照 > retry 重发的请求体不累加 | boundary/retry.boundary.test.ts::review #P3 — transformRequest 原地改 data 时重发仍用原始快照 > [retry.fn.axpRetry][retry.opt.max] retry 重发的请求体不累加 | rename | 单插件：transformRequest 原地改 data 时重发仍用原始快照，属极端输入；review #P3 |  |
+| test/adapter-layers.test.ts::wrapAdapter — #18 每层可独立移除 > 非 LIFO 移除：先摘 A 不影响 B，再摘 B 不会复活 A | integration/adapter-layers.integration.test.ts::wrapAdapter — #18 每层可独立移除 > [helper.wrapAdapter] 非 LIFO 移除：先摘 A 不影响 B，再摘 B 不会复活 A | rename | 装配/adapter 分层：真实 axios 实例上 wrapAdapter 的层可独立移除（非 LIFO）；#18 |  |
+| test/adapter-layers.test.ts::wrapAdapter — #18 每层可独立移除 > 重复 remove 无副作用；层闭包状态在重建链后保留 | integration/adapter-layers.integration.test.ts::wrapAdapter — #18 每层可独立移除 > [helper.wrapAdapter] 重复 remove 无副作用；层闭包状态在重建链后保留 | rename | 装配/adapter 分层：重复 remove 无副作用，层闭包状态在重建链后保留 |  |
+| test/adapter-layers.test.ts::wrapAdapter — #18 每层可独立移除 > getBaseAdapter 返回最底层 adapter | integration/adapter-layers.integration.test.ts::wrapAdapter — #18 每层可独立移除 > [helper.getBaseAdapter] getBaseAdapter 返回最底层 adapter | rename | 装配/adapter 分层：getBaseAdapter 返回最底层 adapter |  |
+| test/adapter-layers.test.ts::cache / share 非 LIFO 卸载（Axp 级） > 先卸内层 cache，外层 share 仍正常；全摘后不复活 cache | integration/adapter-layers.integration.test.ts::cache / share 非 LIFO 卸载（Axp 级） > [cache.method.cleanup][share.method.cleanup] 先卸内层 cache，外层 share 仍正常；全摘后不复活 cache | rename | 装配/adapter 分层：Axp 级 cache/share 非 LIFO 卸载，先卸内层不影响外层 |  |
+| test/adapter-layers.test.ts::Core.extends — #17 不继承父实例的插件 adapter > 子实例不命中父缓存 | integration/adapter-layers.integration.test.ts::Core.extends — #17 不继承父实例的插件 adapter > [public.member.Core.extends] 子实例不命中父缓存 | rename | 装配/adapter 分层：Core.extends 不继承父实例的插件 adapter；#17 |  |
+| test/adapter-layers.test.ts::Core.extends — #17 不继承父实例的插件 adapter > overrides.adapter 仍可覆盖 | integration/adapter-layers.integration.test.ts::Core.extends — #17 不继承父实例的插件 adapter > [public.member.Core.extends] overrides.adapter 仍可覆盖 | rename | 装配/adapter 分层：Core.extends 的 overrides.adapter 仍可覆盖 |  |
