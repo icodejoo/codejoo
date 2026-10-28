@@ -269,6 +269,8 @@ export default function axpAuth(options: IAuthOptions): Plugin {
           $throwIfCanceled(config);
           if (!refreshed) {
             bag[DENIED] = true;
+            // 与触发刷新失败的请求一致，标记会话过期
+            config.authExpired = true;
             // 附 .config：cancel 插件靠 error.config 释放它的 AbortController，没有会永久泄漏
             //
             // attaches .config: cancel plugin releases its AbortController via error.config; without it, that controller leaks forever

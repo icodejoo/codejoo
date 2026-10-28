@@ -147,7 +147,7 @@ describe('auth — 业务失败的终态标记与原始错误', () => {
         expect((await ax.get('/')).data).toBe('ok');
         expect(predicate).toHaveBeenCalledOnce();
     });
-    it.fails('[auth.cb.onRefresh][auth.cb.onAccessExpired] 刷新窗口内被刷新失败阻断的请求也应标记 authExpired', async () => {
+    it('[auth.cb.onRefresh][auth.cb.onAccessExpired] 刷新窗口内被刷新失败阻断的请求也应标记 authExpired', async () => {
         const tm = new TokenManager();
         tm.set('old');
         const started = deferred<void>();
