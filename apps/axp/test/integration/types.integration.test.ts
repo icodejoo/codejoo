@@ -1,5 +1,5 @@
 import { describe, expect, expectTypeOf, it } from 'vitest';
-import { Axp, type IHttpOptions, type IMethodOptions } from '../src';
+import { Axp, type IHttpOptions, type IMethodOptions } from '../../src';
 import type { AxiosRequestConfig } from 'axios';
 import { readFileSync } from 'node:fs';
 
@@ -20,7 +20,7 @@ function checkGeneratedSchema() {
   const pets = api.get(PETS_BY_STATUS)({ status: 'available' });
   expectTypeOf(pets).toEqualTypeOf<Promise<model.Pet[]>>();
   expectTypeOf(api.get(INVENTORY)()).toEqualTypeOf<Promise<Record<string, number>>>();
-  expectTypeOf(api.get(PET_BY_ID)({ petId: 1 }, { wrap: true })).toEqualTypeOf<Promise<import('../src').AxpResponse<model.Pet>>>();
+  expectTypeOf(api.get(PET_BY_ID)({ petId: 1 }, { wrap: true })).toEqualTypeOf<Promise<import('../../src').AxpResponse<model.Pet>>>();
   expectTypeOf(api.get(PET_BY_ID)({ petId: 1 }, { raw: true })).toEqualTypeOf<Promise<{
     /** 业务状态。 */
     code: number | string;
@@ -74,14 +74,14 @@ function checkLocalSchema() {
 }
 
 describe('Core 类型契约', () => {
-  it('类型回归用例由 tsgo 检查且不会发出网络请求', () => {
+  it('[public.fn.Axp.create] 类型回归用例由 tsgo 检查且不会发出网络请求', () => {
     for (const check of [checkGeneratedSchema, checkLoadingOptions, checkLocalSchema]) {
       expect(check).toBeTypeOf('function');
     }
   });
-  it('本地类型测试使用与模板完全一致的声明', () => {
-    const template = readFileSync(new URL('../types/local/example.d.ts.template', import.meta.url), 'utf8');
-    const fixture = readFileSync(new URL('./helpers/local-schema.d.ts', import.meta.url), 'utf8');
+  it('[public.fn.Axp.create] 本地类型测试使用与模板完全一致的声明', () => {
+    const template = readFileSync(new URL('../../types/local/example.d.ts.template', import.meta.url), 'utf8');
+    const fixture = readFileSync(new URL('../helpers/local-schema.d.ts', import.meta.url), 'utf8');
     expect(fixture).toBe(template);
   });
 });

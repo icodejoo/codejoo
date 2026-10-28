@@ -45,6 +45,7 @@ A 批（单插件规则/补丁/覆盖文件，共 16 个提交）已迁移完成
 | attempt（attempt.test） | 待回填 | 5 | 0 | 0 | 0 | 0 | 0 | 5 | 是 |
 | adapter-layers（adapter-layers.test） | 待回填 | 6 | 0 | 0 | 0 | 0 | 0 | 6 | 是 |
 | axp-install（axp-install.test） | 待回填 | 17 | 0 | 0 | 0 | 0 | 0 | 17 | 是 |
+| types（types.test） | 待回填 | 2 | 0 | 0 | 0 | 0 | 0 | 2 | 是 |
 
 ## 判层备注（A 批）
 
@@ -657,3 +658,5 @@ A 批（单插件规则/补丁/覆盖文件，共 16 个提交）已迁移完成
 | test/axp-install.test.ts::Core — 运行时动词与 adapter 归一化 > HttpPrototype 声明的全部动词运行时都存在，purge/link/unlink 走 params | integration/install-order.integration.test.ts::Core — 运行时动词与 adapter 归一化 > [public.member.Core.purge][public.member.Core.link][public.member.Core.unlink] HttpPrototype 声明的全部动词运行时都存在，purge/link/unlink 走 params | rename | 装配/adapter 分层：Core 运行时动词齐全，purge/link/unlink 走 params |  |
 | test/axp-install.test.ts::Core — 运行时动词与 adapter 归一化 > 裸 axios.create() 构造 Core 后 defaults.adapter 已归一化为函数 | integration/install-order.integration.test.ts::Core — 运行时动词与 adapter 归一化 > [public.member.Core.constructor] 裸 axios.create() 构造 Core 后 defaults.adapter 已归一化为函数 | rename | 装配/adapter 分层：裸 axios.create() 构造 Core 后 adapter 已归一化为函数 |  |
 | test/axp-install.test.ts::Axp.install — 裸 axios.create() 上的 adapter 类插件 > 不经 Core，cache/share/mock/loading 一起装到带数组 adapter 的实例上请求正常 | integration/install-order.integration.test.ts::Axp.install — 裸 axios.create() 上的 adapter 类插件 > [public.fn.Axp.install] 不经 Core，cache/share/mock/loading 一起装到带数组 adapter 的实例上请求正常 | rename | 装配/adapter 分层：不经 Core，adapter 类插件一起装到带数组 adapter 的裸实例上 |  |
+| test/types.test.ts::Core 类型契约 > 类型回归用例由 tsgo 检查且不会发出网络请求 | integration/types.integration.test.ts::Core 类型契约 > [public.fn.Axp.create] 类型回归用例由 tsgo 检查且不会发出网络请求 | rename | 类型回归（expectTypeOf/ts-expect-error）由 tsgo 检查，规范 §1 归 integration |  |
+| test/types.test.ts::Core 类型契约 > 本地类型测试使用与模板完全一致的声明 | integration/types.integration.test.ts::Core 类型契约 > [public.fn.Axp.create] 本地类型测试使用与模板完全一致的声明 | rename | 本地 schema 夹具与模板一致，属类型回归支撑，归 integration |  |
