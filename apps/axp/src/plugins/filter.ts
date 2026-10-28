@@ -30,6 +30,10 @@ export function defaultPredicate([, value]: TDroppedKV): boolean {
 function isEmptyValue(value: unknown): boolean {
   return value == null || Number.isNaN(value) || (typeof value === "string" && value.trim() === "");
 }
+/** 自定义谓词只认严格 true，JS 调用方返回的其他真值不丢弃。 */
+function isStrictTrue(verdict: unknown): boolean {
+  return verdict === true;
+}
 /** 过滤器内置谓词。 */
 const DEFAULTS = { /** 默认空字段规则。 */ predicate: defaultPredicate };
 /** 将豁免列表一次性准备为集合。 */
@@ -46,7 +50,7 @@ function filterFields(source: Record<string, any>, options: ReturnType<typeof pr
   for (const key of Object.keys(source)) {
     const value = source[key];
     let entry: TDroppedKV | undefined;
-    const drop = !options.ignoreKeys.has(key) && !options.ignoreValues.has(value) && (options.predicate === defaultPredicate ? isEmptyValue(value) : options.predicate((entry = [key, value])) === true);
+    const drop = !options.ignoreKeys.has(key) && !options.ignoreValues.has(value) && (options.predicate === defaultPredicate ? isEmptyValue(value) : isStrictTrue(options.predicate((entry = [key, value]))));
     if (drop) {
       if (dropped) dropped.push(entry ?? [key, value]);
     } else entries.push(entry ?? [key, value]);

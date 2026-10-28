@@ -96,7 +96,7 @@ describe("[core.opt.response][core.fn.createAxp] 自定义 R + 全部内置插�
     h.net.on("get", REQUEST_URL, () => traced(401, TRACE.expired));
     send(h);
     const [r] = await finish(h);
-    expectCustom(r!, AXP_KINDS.AUTH, "expired", TRACE.expired);
+    expectCustom(r, AXP_KINDS.AUTH, "expired", TRACE.expired);
     h.dispose();
   });
 
@@ -105,7 +105,7 @@ describe("[core.opt.response][core.fn.createAxp] 自定义 R + 全部内置插�
     h.net.on("get", REQUEST_URL, () => traced(403, TRACE.denied));
     send(h);
     const [r] = await finish(h);
-    expectCustom(r!, AXP_KINDS.AUTH, "denied", TRACE.denied);
+    expectCustom(r, AXP_KINDS.AUTH, "denied", TRACE.denied);
     h.dispose();
   });
 
@@ -114,7 +114,7 @@ describe("[core.opt.response][core.fn.createAxp] 自定义 R + 全部内置插�
     h.settings.tokenManager.clear();
     send(h);
     const [r] = await finish(h);
-    expectCustom(r!, AXP_KINDS.AUTH, "unauthenticated", NO_TRACE);
+    expectCustom(r, AXP_KINDS.AUTH, "unauthenticated", NO_TRACE);
     expect(h.net.totalStarted).toBe(0);
     h.dispose();
   });
@@ -125,8 +125,8 @@ describe("[core.opt.response][core.fn.createAxp] 自定义 R + 全部内置插�
     send(h, { share: true, latency: SLOW } as never);
     send(h, { share: true, latency: SLOW, timeout: FOLLOWER_TIMEOUT, retry: false } as never);
     const [leader, follower] = await finish(h);
-    expectCustom(leader!, AXP_KINDS.OK, undefined, TRACE.ok);
-    expectCustom(follower!, AXP_KINDS.TIMEOUT, undefined, NO_TRACE);
+    expectCustom(leader, AXP_KINDS.OK, undefined, TRACE.ok);
+    expectCustom(follower, AXP_KINDS.TIMEOUT, undefined, NO_TRACE);
     expect(h.net.totalStarted).toBe(1);
     h.dispose();
   });
@@ -140,8 +140,8 @@ describe("[core.opt.response][core.fn.createAxp] 自定义 R + 全部内置插�
     await vi.advanceTimersByTimeAsync(CANCEL_AT);
     follower.abort();
     const [leader, cancelled] = await finish(h);
-    expectCustom(leader!, AXP_KINDS.OK, undefined, TRACE.ok);
-    expectCustom(cancelled!, AXP_KINDS.CANCEL, undefined, NO_TRACE);
+    expectCustom(leader, AXP_KINDS.OK, undefined, TRACE.ok);
+    expectCustom(cancelled, AXP_KINDS.CANCEL, undefined, NO_TRACE);
     h.dispose();
   });
 
@@ -152,7 +152,7 @@ describe("[core.opt.response][core.fn.createAxp] 自定义 R + 全部内置插�
     await vi.advanceTimersByTimeAsync(CANCEL_AT);
     expect(h.api.cancelAll()).toBe(1);
     const [r] = await finish(h);
-    expectCustom(r!, AXP_KINDS.CANCEL, undefined, NO_TRACE);
+    expectCustom(r, AXP_KINDS.CANCEL, undefined, NO_TRACE);
     h.dispose();
   });
 
@@ -187,10 +187,10 @@ describe("[core.opt.response][core.fn.createAxp] 自定义 R + 全部内置插�
     await h.drain();
     send(h, { cache: true });
     const [miss, hit] = await finish(h);
-    expectCustom(miss!, AXP_KINDS.OK, undefined, TRACE.ok);
-    expectCustom(hit!, AXP_KINDS.OK, undefined, TRACE.ok);
+    expectCustom(miss, AXP_KINDS.OK, undefined, TRACE.ok);
+    expectCustom(hit, AXP_KINDS.OK, undefined, TRACE.ok);
     expect(hit).not.toBe(miss);
-    expect(hit!.data).toEqual(miss!.data);
+    expect(hit.data).toEqual(miss.data);
     expect(h.net.totalStarted).toBe(1);
     h.dispose();
   });
@@ -201,7 +201,7 @@ describe("[core.opt.response][core.fn.createAxp] 自定义 R + 全部内置插�
     h.launch({ url: REQUEST_URL });
     await h.drain();
     h.assertAll();
-    const thrown = h.requests[0]!;
+    const thrown = h.requests[0];
     expect(thrown.outcome).toBe("rejected");
     const r = thrown.value as TestResponse;
     expectCustom(r, AXP_KINDS.HTTP, undefined, TRACE.failed);
@@ -218,6 +218,6 @@ it("[core.opt.response] 全插件在成功路径上同样产出自定义 R：服
   }));
   send(h);
   const [r] = await finish(h);
-  expectCustom(r!, AXP_KINDS.OK, undefined, TRACE.ok);
+  expectCustom(r, AXP_KINDS.OK, undefined, TRACE.ok);
   h.dispose();
 });

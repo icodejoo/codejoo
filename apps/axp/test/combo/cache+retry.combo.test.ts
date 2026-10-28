@@ -1,7 +1,6 @@
 import { beforeEach, expect, it, vi } from "vitest";
 import axpCache from "../../src/plugins/cache";
 import axpRetry from "../../src/plugins/retry";
-import type { AxpResponse } from "../../src/response";
 import { failure } from "../helpers/b3";
 import { countingCacheStore, envelope, requestRecorder, settleAll, sourceClient } from "../helpers/source";
 
@@ -30,7 +29,7 @@ beforeEach(() => {
 function client(max: number) {
   const cache = countingCacheStore();
   const attempts = requestRecorder("pre");
-  const h = sourceClient([axpRetry<AxpResponse>({ max, delay: 0 }), axpCache<AxpResponse>({ store: cache.store }), attempts.plugin]);
+  const h = sourceClient([axpRetry({ max, delay: 0 }), axpCache({ store: cache.store }), attempts.plugin]);
   return { ...h, cache, attempts: attempts.seen };
 }
 
@@ -40,7 +39,7 @@ it.each([false, true])(
     const h = client(ONE_RETRY);
     h.net.on("get", URL, /** 首发失败，其后成功。 */ (_config, hit) => (hit <= FAILED_SENDS ? failure(HTTP_ERROR, business) : envelope(DATA)));
     const [first] = await settleAll(h.send({ url: URL, cache: { key: CACHE_KEY } }));
-    expect(first!.ok).toBe(true);
+    expect(first.ok).toBe(true);
     expect(h.net.calls("get", URL)).toBe(SENDS_AFTER_RETRY);
     expect(h.attempts).toHaveLength(SENDS_AFTER_RETRY);
     expect(h.cache.set).toHaveBeenCalledTimes(1);
@@ -63,7 +62,7 @@ it("[retry.opt.max × cache.req.cache] 重试耗尽仍失败：每一轮失败�
   expect(h.cache.entries.size).toBe(0);
   h.net.on("get", URL, /** 服务恢复。 */ () => envelope(DATA));
   const [recovered] = await settleAll(h.send({ url: URL, cache: true }));
-  expect(recovered!.ok).toBe(true);
+  expect(recovered.ok).toBe(true);
   expect(h.net.calls("get", URL)).toBe(TWO_RETRIES + 2);
   expect(h.cache.set).toHaveBeenCalledTimes(1);
 });
@@ -72,7 +71,7 @@ it("[retry.opt.max × cache.req.cache] 请求级 cache:false：每次尝试都�
   const h = client(ONE_RETRY);
   h.net.on("get", URL, /** 首发失败，其后成功。 */ (_config, hit) => (hit <= FAILED_SENDS ? failure(HTTP_ERROR) : envelope(DATA)));
   const [r] = await settleAll(h.send({ url: URL, cache: false }));
-  expect(r!.ok).toBe(true);
+  expect(r.ok).toBe(true);
   expect(h.net.calls("get", URL)).toBe(SENDS_AFTER_RETRY);
   expect(h.cache.set).not.toHaveBeenCalled();
 });

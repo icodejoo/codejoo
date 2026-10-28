@@ -1,7 +1,7 @@
 import { beforeEach, expect, it, vi } from "vitest";
 import axpCache, { clearCache } from "../../src/plugins/cache";
 import axpShare from "../../src/plugins/share";
-import { AXP_KINDS, type AxpResponse } from "../../src/response";
+import { AXP_KINDS } from "../../src/response";
 import { signalAdapter, sourceClient, trackAbortListeners, type IWireCall } from "../helpers/source";
 
 /** 取消时序统一用假时钟。 */
@@ -17,7 +17,7 @@ const CALLERS = 5;
 /** 装好 share（可带 cache）与会响应取消的适配器。 */
 function client(withCache = false) {
   const calls: IWireCall[] = [];
-  const plugins = [axpShare<AxpResponse>(), ...(withCache ? [axpCache<AxpResponse>()] : [])];
+  const plugins = [axpShare(), ...(withCache ? [axpCache()] : [])];
   const h = sourceClient(plugins, {}, signalAdapter(calls));
   return { ...h, calls };
 }
@@ -33,7 +33,7 @@ it("[cancel.fn.cancelAll × share.opt.policy] cancelAll 让同 key 的全部订�
   const results = await Promise.all(pending);
   expect(results.map((r) => r.kind)).toEqual(Array(CALLERS).fill(AXP_KINDS.CANCEL));
   expect(h.calls).toHaveLength(1);
-  expect(h.calls[0]!.signal!.aborted).toBe(true);
+  expect(h.calls[0].signal!.aborted).toBe(true);
   expect(h.api.pending()).toBe(0);
   expect(listeners()).toBe(0);
   const [fresh] = await Promise.all([h.send({ url: URL, share: true }), vi.runAllTimersAsync()]);

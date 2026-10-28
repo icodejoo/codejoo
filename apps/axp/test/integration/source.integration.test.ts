@@ -6,7 +6,6 @@ import type { ICacheOptions, IMockOptions, ISharedOptions, SharePolicy } from ".
 import axpCache, { clearCache, removeCache, type ICacheApi } from "../../src/plugins/cache";
 import axpMock from "../../src/plugins/mock";
 import axpShare from "../../src/plugins/share";
-import type { AxpResponse } from "../../src/response";
 import type { AxpPlugin, AxpRequestOptions } from "../../src/types";
 import { createTestClient, customResponse, TestResponse } from "../helpers/client";
 import { makeNetwork } from "../helpers/network";
@@ -43,28 +42,28 @@ it("[mock.type.options][share.type.options][cache.type.options] 旧入口类型�
         cache,
       ],
     });
-    api.request({ cache: true, share: true, mock: true });
-    api.request({ cache: 60_000, share: "race", mock: { mockUrl: "http://m", enable: false } });
-    api.request({
+    void api.request({ cache: true, share: true, mock: true });
+    void api.request({ cache: 60_000, share: "race", mock: { mockUrl: "http://m", enable: false } });
+    void api.request({
       cache: { expires: null, key: "k", clone: "shallow", shouldCache: (r) => r.ok },
       share: { policy: "end", enable: undefined },
       mock: { fallbackWhen: (r) => r.httpStatus === 404 },
     });
-    api.request({ cache: false, share: null, mock: false });
+    void api.request({ cache: false, share: null, mock: false });
     // @ts-expect-error cache 不接受字符串。
-    api.request({ cache: "yes" });
+    void api.request({ cache: "yes" });
     // @ts-expect-error cache 不接受函数。
-    api.request({ cache: () => true });
+    void api.request({ cache: () => true });
     // @ts-expect-error 显式缓存键必须是字符串。
-    api.request({ cache: { key: 1 } });
+    void api.request({ cache: { key: 1 } });
     // @ts-expect-error share 策略 none 已删除，关闭请用 false。
-    api.request({ share: "none" });
+    void api.request({ share: "none" });
     // @ts-expect-error share 不接受动态函数。
-    api.request({ share: () => "start" });
+    void api.request({ share: () => "start" });
     // @ts-expect-error mock 对象不再有 mock 字段，关闭请用 false 或 enable:false。
-    api.request({ mock: { mock: true } });
+    void api.request({ mock: { mock: true } });
     // @ts-expect-error mock 不接受动态函数。
-    api.request({ mock: () => true });
+    void api.request({ mock: () => true });
     // @ts-expect-error 旧的 storage 预留选项已删除，持久化走 store。
     axpCache({ storage: { getItem: () => null } });
     // @ts-expect-error 旧的 memory 预留选项已删除。
@@ -99,7 +98,7 @@ it("[cache.fn.axpCache][mock.fn.axpMock][share.fn.axpShare] 旧入口仍导出�
 it("[mock.prop.stage][share.prop.stage][cache.prop.stage] source 阶段固定次序 mock → share → cache，与注册顺序无关，自定义 pre/post 包在两侧", () => {
   const pre = requestRecorder("pre");
   const post = requestRecorder("post");
-  const h = sourceClient([axpCache<AxpResponse>(), post.plugin, axpShare<AxpResponse>(), pre.plugin, axpMock<AxpResponse>({ enable: true })]);
+  const h = sourceClient([axpCache(), post.plugin, axpShare(), pre.plugin, axpMock({ enable: true })]);
   expect(h.api.inspect()).toEqual([
     { stage: "source", name: "recorder-pre" },
     { stage: "source", name: "axp:mock" },
@@ -110,8 +109,8 @@ it("[mock.prop.stage][share.prop.stage][cache.prop.stage] source 阶段固定次
 });
 
 it("[cache.method.clients][share.method.clients] 同一个插件对象装到两个客户端、extend 继承的子客户端，各自状态独立", async () => {
-  const cache = axpCache<AxpResponse>();
-  const share = axpShare<AxpResponse>();
+  const cache = axpCache();
+  const share = axpShare();
   const first = createTestClient([share, cache]);
   const second = createTestClient([share, cache]);
   for (const h of [first, second]) {
@@ -157,7 +156,7 @@ it("[cache.fn.axpCache] axios 实例的 adapter 是数组时同样可用，二�
   const net = makeNetwork();
   net.on("get", URL, () => envelope("ok"));
   const axios = createAxios({ adapter: [net.adapter] });
-  const h = createTestClient<AxpResponse>([axpCache<AxpResponse>()], { axios });
+  const h = createTestClient([axpCache()], { axios });
   const options = { url: URL, cache: true, wrap: true } as const;
   await h.api.request(options);
   const hit = await h.api.request(options);
@@ -172,7 +171,7 @@ it("[share.method.lifecycle][cache.method.lifecycle] 任意顺序卸载：剩余
     ["axp:cache", "axp:share"],
     ["axp:share", "axp:cache"],
   ]) {
-    const h = sourceClient([axpShare<AxpResponse>(), axpCache<AxpResponse>()]);
+    const h = sourceClient([axpShare(), axpCache()]);
     h.net.on("get", URL, (_config, hit) => envelope(`hit-${hit}`));
     /** 同时发两个同 key 请求并推进假时钟，返回两次落定的结果。 */
     const burst = async () => {
@@ -183,12 +182,12 @@ it("[share.method.lifecycle][cache.method.lifecycle] 任意顺序卸载：剩余
     // oxlint-disable-next-line no-await-in-loop -- 同一客户端依次卸载并核对网络次数。
     await burst();
     expect(h.net.calls("get", URL)).toBe(1);
-    expect(h.api.eject(order[0]!)).toBe(true);
+    expect(h.api.eject(order[0])).toBe(true);
     // oxlint-disable-next-line no-await-in-loop -- 同上。
     await burst();
     // 先卸 cache：share 仍合并成一次；先卸 share：cache 仍命中，不再触网。
     expect(h.net.calls("get", URL)).toBe(order[0] === "axp:cache" ? 2 : 1);
-    expect(h.api.eject(order[1]!)).toBe(true);
+    expect(h.api.eject(order[1])).toBe(true);
     const before = h.net.calls("get", URL);
     // oxlint-disable-next-line no-await-in-loop -- 同上。
     await burst();

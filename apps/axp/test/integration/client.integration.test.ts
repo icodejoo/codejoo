@@ -20,7 +20,7 @@ it("[core.method.eject][core.method.inspect] 非 LIFO 卸载保持剩余中间�
   const snapshot = api.inspect() as unknown as {
     /** name 字段。 */ name: string;
   }[];
-  snapshot[0]!.name = "mutated";
+  snapshot[0].name = "mutated";
   snapshot.pop();
   expect(api.inspect().map(/** 取当前链的插件名。 */ (row) => row.name)).toEqual(["outer", "inner"]);
   api.eject("outer");
@@ -29,7 +29,7 @@ it("[core.method.eject][core.method.inspect] 非 LIFO 卸载保持剩余中间�
   api.eject("inner");
   await api.get(URL)();
   expect(events).toEqual(["inner"]);
-  expect(api.plugin(plugins[0]!)).toBeUndefined();
+  expect(api.plugin(plugins[0])).toBeUndefined();
   expect(api.eject("outer")).toBe(false);
 });
 it("[core.method.dispose] 逆序尽力清理并抛出第一个错，重复清理不再调用", /** 逆序尽力清理并抛出第一个错，重复清理不再调用。 */ () => {

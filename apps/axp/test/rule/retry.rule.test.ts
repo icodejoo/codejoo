@@ -2,7 +2,6 @@
 import { AxiosError } from "axios";
 import { beforeEach, expect, it, vi } from "vitest";
 import axpRetry, { type IRetryOptions } from "../../src/plugins/retry";
-import type { AxpResponse } from "../../src/response";
 import type { AxpRequestOptions, AxpRequestConfig } from "../../src/types";
 import { b3Client, REQUEST_URL, RETRY_NAME } from "../helpers/b3";
 
@@ -12,7 +11,7 @@ beforeEach(() => {
 });
 
 it("[retry.opt.max][retry.opt.delay][retry.prop.name] 默认两次重试，退避为 300/600 毫秒", /** 默认预算与时序。 */ async () => {
-  const plugin = axpRetry<AxpResponse>();
+  const plugin = axpRetry();
   const h = b3Client([plugin]);
   h.net.fallback(/** 最终一次恢复。 */ (_config, hit) => ({ status: hit < 3 ? 500 : 200 }));
   const pending = h.send({ url: REQUEST_URL });
@@ -200,7 +199,7 @@ it.each(["request", "method"] as const)(
 );
 
 it("[retry.method.cleanup][retry.opt.enable] 禁用、卸载、重名拒绝和跨客户端复用", /** 生命周期沿内核约定。 */ async () => {
-  const plugin = axpRetry<AxpResponse>({ max: 1, delay: 0 });
+  const plugin = axpRetry({ max: 1, delay: 0 });
   const h = b3Client([plugin]);
   expect(() => h.api.use(plugin)).toThrow("Duplicate plugin");
   expect(h.api.eject(RETRY_NAME)).toBe(true);

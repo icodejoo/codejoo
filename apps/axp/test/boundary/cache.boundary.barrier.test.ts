@@ -1,7 +1,6 @@
 import { beforeEach, expect, it, vi } from "vitest";
 import axpCache from "../../src/plugins/cache";
 import type { IAxpFreshnessBarrier } from "../../src/plugins/cache-store";
-import type { AxpResponse } from "../../src/response";
 import { envelope, sourceClient } from "../helpers/source";
 
 /** 记录本文件每个缓存实例创建的屏障，用来白盒检查记录是否收敛。 */
@@ -33,9 +32,9 @@ const PROBE_TICKET = { seq: 1, epoch: 0 };
 
 /** 装好 cache，返回客户端与它的屏障。 */
 function cachedClient(max?: number) {
-  const h = sourceClient([axpCache<AxpResponse>({ max })]);
+  const h = sourceClient([axpCache({ max })]);
   h.net.on("get", URL, (_config, hit) => envelope(`hit-${hit}`));
-  return { ...h, barrier: created.barriers[0]! };
+  return { ...h, barrier: created.barriers[0] };
 }
 /** 发出请求并推进假时钟直到落定。 */
 async function call(h: ReturnType<typeof cachedClient>, config: Record<string, unknown>) {

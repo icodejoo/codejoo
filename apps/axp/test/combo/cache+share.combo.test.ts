@@ -32,7 +32,7 @@ function client(policy: SharePolicy = "start", clone?: "deep") {
       return entries.size;
     },
   };
-  const h = sourceClient([axpShare<AxpResponse>({ policy }), axpCache<AxpResponse>({ store, clone })]);
+  const h = sourceClient([axpShare({ policy }), axpCache({ store, clone })]);
   h.net.on("get", URL, (_config, hit) => envelope({ hit, list: [hit] }));
   return { ...h, set };
 }
@@ -57,11 +57,11 @@ it("[share.opt.policy × cache.cb.shouldCache] 失败结果被共享但不写缓
   const h = client();
   h.net.on("get", URL, (_config, hit) => (hit === 1 ? { status: 500 } : envelope("ok")));
   const failed = await settled(h.send({ url: URL, share: true, cache: true, latency: LATENCY } as never), h.send({ url: URL, share: true, cache: true, latency: LATENCY } as never));
-  expect(failed[0]!.httpStatus).toBe(500);
+  expect(failed[0].httpStatus).toBe(500);
   expect(failed[1]).toBe(failed[0]);
   expect(h.set).not.toHaveBeenCalled();
   const [good] = await settled(h.send({ url: URL, share: true, cache: true }));
-  expect(good!.data).toBe("ok");
+  expect(good.data).toBe("ok");
   expect(h.net.calls("get", URL)).toBe(2);
 });
 
@@ -69,10 +69,10 @@ it("[share.opt.policy × cache.opt.clone] clone:deep 时首发与跟随者共享
   const h = client("start", "deep");
   const [leader, follower] = await settled(h.send({ url: URL, share: true, cache: true, latency: LATENCY } as never), h.send({ url: URL, share: true, cache: true, latency: LATENCY } as never));
   expect(follower).toBe(leader);
-  (leader!.data as { list: unknown[] }).list.push("polluted");
+  (leader.data as { list: unknown[] }).list.push("polluted");
   const [hit] = await settled(h.send({ url: URL, cache: true }));
   expect(hit).not.toBe(leader);
-  expect((hit!.data as { list: unknown[] }).list).toEqual([1]);
+  expect((hit.data as { list: unknown[] }).list).toEqual([1]);
 });
 
 it("[share.opt.policy × cache.fn.axpCache] end：两次都发网络，订阅者与缓存都以最新一次为准，较慢的旧响应不回写", async () => {
@@ -80,9 +80,9 @@ it("[share.opt.policy × cache.fn.axpCache] end：两次都发网络，订阅者
   const [older, newer] = await settled(h.send({ url: URL, share: true, cache: true, latency: SLOW } as never), h.send({ url: URL, share: true, cache: true, latency: LATENCY } as never));
   expect(h.net.calls("get", URL)).toBe(2);
   expect(newer).toBe(older);
-  expect((newer!.data as { hit: number }).hit).toBe(2);
+  expect((newer.data as { hit: number }).hit).toBe(2);
   const [hit] = await settled(h.send({ url: URL, cache: true }));
-  expect((hit!.data as { hit: number }).hit).toBe(2);
+  expect((hit.data as { hit: number }).hit).toBe(2);
   expect(h.net.calls("get", URL)).toBe(2);
 });
 
@@ -91,7 +91,7 @@ it("[share.opt.policy × cache.fn.axpCache] race：先成功的胜出并写缓�
   const [slow, fast] = await settled(h.send({ url: URL, share: true, cache: true, latency: SLOW } as never), h.send({ url: URL, share: true, cache: true, latency: LATENCY } as never));
   expect(slow).toBe(fast);
   const [hit] = await settled(h.send({ url: URL, cache: true }));
-  expect((hit!.data as { hit: number }).hit).toBe(2);
+  expect((hit.data as { hit: number }).hit).toBe(2);
   expect(h.net.calls("get", URL)).toBe(2);
 });
 
@@ -101,15 +101,15 @@ it("[share.opt.policy × cache.fn.clearCache] 共享期间 clear：在途结果�
   await vi.advanceTimersByTimeAsync(1);
   clearCache(h.api);
   const [a, b] = await settled(...pending);
-  expect([a!.ok, b!.ok]).toEqual([true, true]);
+  expect([a.ok, b.ok]).toEqual([true, true]);
   expect(h.set).not.toHaveBeenCalled();
 });
 
 it("[share.opt.policy × cache.cb.shouldCache] 判定抛错：所有订阅者拿到原始异常，共享条目不挂起，下一轮可以继续", async () => {
   const bug = new Error("should-cache bug");
   const h = sourceClient([
-    axpShare<AxpResponse>(),
-    axpCache<AxpResponse>({
+    axpShare(),
+    axpCache({
       shouldCache: () => {
         throw bug;
       },
@@ -122,6 +122,6 @@ it("[share.opt.policy × cache.cb.shouldCache] 判定抛错：所有订阅者拿
   expect(h.net.calls("get", URL)).toBe(1);
   // 条目没有残留：不带 cache 的下一轮请求照常发出并成功。
   const [next] = await settled(h.send({ url: URL, share: true }));
-  expect(next!.ok).toBe(true);
+  expect(next.ok).toBe(true);
   expect(h.net.calls("get", URL)).toBe(2);
 });

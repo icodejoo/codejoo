@@ -255,7 +255,7 @@ it("[core.method.pending][core.req.signal] 配置 getter 抛错后注销请求�
   ).rejects.toBe(bug);
   expect(api.pending()).toBe(0);
   expect(add).toHaveBeenCalledTimes(1);
-  expect(remove).toHaveBeenCalledExactlyOnceWith("abort", add.mock.calls[0]![1]);
+  expect(remove).toHaveBeenCalledExactlyOnceWith("abort", add.mock.calls[0][1]);
 });
 it("[core.method.dispose] 销毁中止在途请求并清理所有实例", /** 销毁中止在途请求并清理所有实例。 */ async () => {
   const wait = gate();

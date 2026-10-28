@@ -23,8 +23,8 @@ export function stateKey<T>(description: string): AxpStateKey<T> {
   return Symbol(description) as AxpStateKey<T>;
 }
 
-/** 复制可枚举头字段，保留 undefined 删除指令和 false 禁用值。 */
-function mergeHeaders(base: AxpRequestConfig["headers"], patch: AxpRequestConfig["headers"]): Record<string, unknown> {
+/** 复制可枚举头字段，保留 undefined 删除指令和 false 禁用值；入参按对象字段读取，AxiosHeaders 的头字段即自有属性。 */
+function mergeHeaders(base: object | undefined, patch: object | undefined): Record<string, unknown> {
   const headers: Record<string, unknown> = { ...base };
   const updates: Record<string, unknown> = { ...patch };
   for (const name of Object.keys(updates)) {
@@ -49,7 +49,7 @@ export function mergePatch(request: Readonly<AxpRequestConfig>, patch: AxpReques
   for (const key of Object.keys(patch)) {
     const value = (patch as Record<string, unknown>)[key];
     if (value === undefined) delete merged[key];
-    else merged[key] = key === "headers" ? mergeHeaders(request.headers, value as AxpRequestConfig["headers"]) : value;
+    else merged[key] = key === "headers" ? mergeHeaders(request.headers, value as object | undefined) : value;
   }
   return merged as AxpRequestConfig;
 }

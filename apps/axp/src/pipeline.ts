@@ -39,8 +39,10 @@ export interface IAxpLayer<R extends IAxpResponse> extends IAxpInspection {
 /** 两个回调都没写的 tap 只占位，直接转交内层。 */
 const passThrough: AxpMiddleware<any> = (_ctx, next) => next();
 
-/** 按实际写了哪些回调选择中间件变体，缺失的回调不 await。 */
-function tapMiddleware<R extends IAxpResponse>({ onRequest, onResponse }: AxpTap<R>): AxpMiddleware<R> {
+/** 按实际写了哪些回调选择中间件变体，缺失的回调不 await；回调绑定到 tap，方法式写法里的 this 指向挂载段自身。 */
+function tapMiddleware<R extends IAxpResponse>(tap: AxpTap<R>): AxpMiddleware<R> {
+  const onRequest = tap.onRequest?.bind(tap);
+  const onResponse = tap.onResponse?.bind(tap);
   if (!onRequest && !onResponse) return passThrough;
   if (!onResponse) {
     return /** 只在进入内层前补丁请求。 */ async (ctx, next) => next((await onRequest!(ctx)) || undefined);
@@ -123,7 +125,7 @@ function guardLayer<R extends IAxpResponse>(handle: AxpMiddleware<R>, inner: (ct
 export function composePipeline<R extends IAxpResponse>(layers: readonly IAxpLayer<R>[], transport: (ctx: AxpContext<R>) => Promise<R>): (ctx: AxpContext<R>) => Promise<R> {
   let run = transport;
   for (let index = layers.length - 1; index >= 0; index--) {
-    run = guardLayer(layers[index]!.handle, run);
+    run = guardLayer(layers[index].handle, run);
   }
   return run;
 }

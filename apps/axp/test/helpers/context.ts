@@ -1,5 +1,5 @@
 import { AxpContext, NO_LOG } from "../../src/context";
-import { DEFAULT_RESPONSE_FACTORY, guardFactory, type AxpResponse, type IAxpResponseFactory } from "../../src/response";
+import { DEFAULT_RESPONSE_FACTORY, guardFactory, type IAxpResponseFactory } from "../../src/response";
 import type { AxpClient, AxpLogger, AxpRequestConfig } from "../../src/types";
 
 /** 创建纯单元层上下文，不构造 axios 实例或假网络。
@@ -9,7 +9,7 @@ import type { AxpClient, AxpLogger, AxpRequestConfig } from "../../src/types";
  * @returns 可直接传给管线或传输的根上下文。
  * @example `const ctx = testContext({ url: '/pets' })`
  */
-export function testContext(request: AxpRequestConfig = {}, factory: IAxpResponseFactory<AxpResponse> = DEFAULT_RESPONSE_FACTORY, log: AxpLogger = NO_LOG) {
+export function testContext(request: AxpRequestConfig = {}, factory: IAxpResponseFactory = DEFAULT_RESPONSE_FACTORY, log: AxpLogger = NO_LOG) {
   return new AxpContext({
     id: 1,
     client: {} as AxpClient,

@@ -1,5 +1,4 @@
 /* eslint-disable no-await-in-loop -- 同一客户端依次核对请求选项和生命周期，避免引入额外并发语义。 */
-import type { AxpResponse } from "../../src/response";
 import { expect, it, vi } from "vitest";
 import axpFilter, { type TPredicate } from "../../src/plugins/filter";
 import { preparedClient } from "../helpers/prepare";
@@ -15,7 +14,7 @@ const SOURCE = Object.freeze({
   nested: { empty: "" },
 });
 it("[filter.fn.axpFilter][filter.req.filter] 装上即生效，布尔和对象关闭，选项不删除且调用方不可变", /** 默认过滤与关闭。 */ async () => {
-  const plugin = axpFilter<AxpResponse>();
+  const plugin = axpFilter();
   const { api } = preparedClient([plugin]);
   expect(plugin.name).toBe("axp:filter");
   for (const filter of [undefined, true, false, { enable: false }, null]) {
@@ -32,7 +31,7 @@ it("[filter.fn.axpFilter][filter.req.filter] 装上即生效，布尔和对象�
 });
 it("[filter.req.predicate][filter.req.ignoreKeys][filter.req.ignoreValues] 字段覆盖插件配置，空数组清空豁免", /** 请求覆盖和 nullish 继承。 */ async () => {
   const predicate = vi.fn<TPredicate>(/** 默认把全部字段视为可丢弃。 */ () => true);
-  const { api } = preparedClient([axpFilter<AxpResponse>({ predicate, ignoreKeys: ["keep"], ignoreValues: [NaN] })]);
+  const { api } = preparedClient([axpFilter({ predicate, ignoreKeys: ["keep"], ignoreValues: [NaN] })]);
   const params = { keep: null, nan: NaN, zero: 0 };
   const configs = [
     { filter: {}, expected: { keep: null, nan: NaN } },

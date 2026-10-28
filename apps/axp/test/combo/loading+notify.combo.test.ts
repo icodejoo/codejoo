@@ -32,7 +32,7 @@ it("[loading.cb.loading][notify.cb.notify] 任意注册顺序仍是一对显示�
   const h = uiClient();
   const notify = vi.fn(notifyRecorder(h.events));
   h.api.use(axpNotify<AxpResponse>({ notify }));
-  h.api.use(axpLoading<AxpResponse>({ loading: loadingRecorder(h.events) }));
+  h.api.use(axpLoading({ loading: loadingRecorder(h.events) }));
   h.net.fallback(/** 最终 HTTP 失败。 */ () => ({ status: 500 }));
   const pending = h.send();
   await vi.runAllTimersAsync();
@@ -65,7 +65,7 @@ it("[loading.cb.loading][notify.cb.stringify][notify.combo.taps] taps 的 outer 
   };
   h.api.use(taps);
   h.api.use(axpNotify<AxpResponse>({ notify }));
-  h.api.use(axpLoading<AxpResponse>({ loading: loadingRecorder(h.events) }));
+  h.api.use(axpLoading({ loading: loadingRecorder(h.events) }));
   h.net.fallback(/** 追踪字段来自假网络响应头。 */ () => ({ status: 500, headers: { "x-trace-id": TRACE_ID } }));
   const pending = h.send();
   await vi.runAllTimersAsync();
@@ -97,7 +97,7 @@ it("[loading.method.snapshot] 等待 outer pre 时卸载 loading，旧快照继�
       return next();
     },
   });
-  h.api.use(axpLoading<AxpResponse>({ loading: loadingRecorder(h.events) }));
+  h.api.use(axpLoading({ loading: loadingRecorder(h.events) }));
   const pending = h.send();
   h.api.eject(LOADING_NAME);
   release();
@@ -109,7 +109,7 @@ it("[loading.method.snapshot] 等待 outer pre 时卸载 loading，旧快照继�
 it("[notify.req.throws][loading.cb.finally] 正常抛出最终失败 R 前，通知一次且 loading 已关闭", /** 落定失败不会重跑 outer。 */ async () => {
   const h = uiClient();
   const notify = vi.fn(notifyRecorder(h.events));
-  h.api.use(axpLoading<AxpResponse>({ loading: loadingRecorder(h.events) }));
+  h.api.use(axpLoading({ loading: loadingRecorder(h.events) }));
   h.api.use(axpNotify<AxpResponse>({ notify }));
   h.net.fallback(/** 最终失败。 */ () => ({ status: 500 }));
   const pending = h.send({ throws: true }).catch(/** 捕获内核直接抛出的 R。 */ (response: unknown) => response);

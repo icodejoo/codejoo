@@ -3,7 +3,7 @@ import { AXP_KINDS, AXP_RESPONSE } from "./brand";
 export { AXP_KINDS, AXP_RESPONSE } from "./brand";
 import type { AxpContext } from "./context";
 import type { AxpRequestConfig, TAxpArgs, TAxpDefaultResponse } from "./types";
-import { isObject } from "./utils";
+import { isObject, toText } from "./utils";
 
 /** 缺少业务消息时的默认值。 */
 const EMPTY_MESSAGE = "";
@@ -115,9 +115,7 @@ export class AxpResponse<D = unknown> implements IAxpResponse<D> {
    * @example `JSON.stringify(response)`
    */
   toJSON(): object {
-    const fields = { ...this } as Record<string, unknown>;
-    delete fields.raw;
-    delete fields.error;
+    const { raw: _raw, error: _error, ...fields } = this;
     return {
       ...fields,
       ok: this.ok,
@@ -254,7 +252,7 @@ export function axpResponse<R extends IAxpResponse = AxpResponse>(...[options = 
     /** 解析信封，保持非信封数据原样。 */
     fromResponse(res, ctx) {
       const body = res.data as unknown;
-      if (options.expectJson && isHttpOk(res.status) && typeof body === "string" && body.trim() !== "" && JSON_CONTENT_TYPE.test(String(res.headers?.["content-type"] ?? ""))) {
+      if (options.expectJson && isHttpOk(res.status) && typeof body === "string" && body.trim() !== "" && JSON_CONTENT_TYPE.test(toText(res.headers?.["content-type"] ?? ""))) {
         return build(
           {
             kind: AXP_KINDS.PARSE,
@@ -268,14 +266,14 @@ export function axpResponse<R extends IAxpResponse = AxpResponse>(...[options = 
           ctx,
         );
       }
-      const wrapped = envelope !== false && isObject(body) && envelope.code in body && envelope.data in body;
-      const record = body as Record<string, unknown>;
+      const record = isObject(body) ? body : undefined;
+      const wrapped = envelope !== false && record !== undefined && envelope.code in record && envelope.data in record;
       return build(
         {
           httpStatus: res.status,
           code: wrapped ? (record[envelope.code] as string | number) : undefined,
           data: wrapped ? record[envelope.data] : body,
-          message: wrapped ? String(record[envelope.message] ?? EMPTY_MESSAGE) : EMPTY_MESSAGE,
+          message: wrapped ? toText(record[envelope.message] ?? EMPTY_MESSAGE) : EMPTY_MESSAGE,
           raw: res,
           request: res.config as AxpRequestConfig,
         },

@@ -38,7 +38,7 @@ export default function axpNotify<R extends IAxpResponse = AxpResponse>(options:
       fireNotice(
         /** 格式化和通知共享异常边界。 */ () => {
           const message = stringify(response, ctx);
-          if (message) return notify(message, response);
+          return message ? notify(message, response) : undefined;
         },
         CALLBACK_ERROR,
       );

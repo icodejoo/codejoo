@@ -141,7 +141,7 @@ describe("管线与上下文", /** 管线与上下文的用例集合。 */ () =>
     expect(seen[0]).toBeInstanceOf(AxpContext);
     expect(seen[0]).not.toBe(ctx);
     expect(seen[1]).toBe(ctx);
-    expect(seen[1]!.request).toBe(ctx.request);
+    expect(seen[1].request).toBe(ctx.request);
   });
   it.each([false, true])(
     "[core.fn.composePipeline] 同步或异步异常转 internal，外层正常收尾 async=%s",
@@ -230,6 +230,37 @@ describe("管线与上下文", /** 管线与上下文的用例集合。 */ () =>
         },
       ]),
     ).toHaveLength(1);
+  });
+  it("[core.fn.composePipeline] tap 的方法式回调以 tap 自身作 this，双边与单边变体一致", /** 三种回调组合都能在方法里读到自身字段。 */ async () => {
+    const seen: string[] = [];
+    const both = {
+      stage: "outer" as const,
+      name: "both",
+      /** 请求侧读取自身字段。 */ onRequest() {
+        seen.push(`${this.name}:req`);
+      },
+      /** 响应侧读取自身字段。 */ onResponse() {
+        seen.push(`${this.name}:res`);
+      },
+    };
+    const onlyRequest = {
+      stage: "attempt" as const,
+      name: "request",
+      /** 只有请求侧，读取自身字段。 */ onRequest() {
+        seen.push(`${this.name}:req`);
+      },
+    };
+    const onlyResponse = {
+      stage: "source" as const,
+      name: "response",
+      /** 只有响应侧，读取自身字段。 */ onResponse() {
+        seen.push(`${this.name}:res`);
+      },
+    };
+    const layers = sort([{ name: "self", taps: [both, onlyRequest, onlyResponse] }]);
+    const response = await composePipeline(layers, /** 传输直接成功。 */ async (inner) => inner.fail({ httpStatus: 200 }))(testContext());
+    expect(response.kind).toBe("ok");
+    expect(seen).toEqual(["both:req", "request:req", "response:res", "both:res"]);
   });
   it("[core.fn.mergePatch] 浅合并、删除字段、头多一层且不改输入", /** 浅合并、删除字段、头多一层且不改输入。 */ () => {
     const original = {

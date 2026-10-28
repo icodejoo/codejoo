@@ -1,7 +1,6 @@
 import { beforeEach, expect, it, vi } from "vitest";
 import axpMock from "../../src/plugins/mock";
 import axpShare from "../../src/plugins/share";
-import type { AxpResponse } from "../../src/response";
 import { envelope, sourceClient } from "../helpers/source";
 
 /** 并发用例统一用假时钟。 */
@@ -20,7 +19,7 @@ const CALLERS = 6;
 
 /** 装好 mock 与 share；mock 默认成功。 */
 function client() {
-  const h = sourceClient([axpMock<AxpResponse>({ enable: true, mockUrl: MOCK }), axpShare<AxpResponse>()]);
+  const h = sourceClient([axpMock({ enable: true, mockUrl: MOCK }), axpShare()]);
   h.net.on("get", PROBE, () => envelope("mock"));
   h.net.on("get", REAL, () => envelope("real"));
   return h;
@@ -47,5 +46,5 @@ it("[mock.req.mock × share.req.share] 同 key 并发且全部回落：探测各
   expect(h.net.calls("get", PROBE)).toBe(CALLERS);
   expect(h.net.calls("get", REAL)).toBe(1);
   expect(new Set(results).size).toBe(1);
-  expect(results[0]!.data).toBe("real");
+  expect(results[0].data).toBe("real");
 });

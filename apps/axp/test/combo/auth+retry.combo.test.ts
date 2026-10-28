@@ -1,6 +1,5 @@
 import { beforeEach, expect, it, vi } from "vitest";
 import axpRetry from "../../src/plugins/retry";
-import type { AxpResponse } from "../../src/response";
 import { authClient, deferred, failure, guarded, POLLUTED_ONCE, pollutingBody, pollutingTransform, REFRESH_TOKEN, REQUEST_URL, run, TOKEN_NEW, TOKEN_OLD } from "../helpers/b3";
 
 /** 一个重试预算，足以证明刷新没有占用它。 */
@@ -17,7 +16,7 @@ beforeEach(() => {
 it.each([false, true])(
   "[auth.cb.onRefresh][retry.opt.max] 500 → 401 → 刷新 → 成功：onRefresh 一次，刷新重放不占重试次数（max=1 仍成功，business=%s）",
   /** 重试里遇 401 先刷新再继续。 */ async (business) => {
-    const h = authClient({}, [axpRetry<AxpResponse>({ max: ONE_RETRY, delay: 0 })]);
+    const h = authClient({}, [axpRetry({ max: ONE_RETRY, delay: 0 })]);
     const route = guarded(() => TOKEN_NEW, business);
     h.net.on("get", REQUEST_URL, /** 首次服务端故障，其后按 token 放行。 */ (config, hit) => (hit === 1 ? failure(500, business) : route(config, hit)));
     expect((await run(h)).ok).toBe(true);
@@ -28,7 +27,7 @@ it.each([false, true])(
 );
 
 it("[auth.cb.onRefresh][retry.opt.delay] 等待重试期间 token 被别的请求刷新：重发带新 token", /** 每次尝试都由 auth 注入最新凭证。 */ async () => {
-  const h = authClient({}, [axpRetry<AxpResponse>({ max: ONE_RETRY, delay: RETRY_WAIT })]);
+  const h = authClient({}, [axpRetry({ max: ONE_RETRY, delay: RETRY_WAIT })]);
   h.net.on("get", REQUEST_URL, /** 首发 500，重发按新 token 放行。 */ (config, hit) => (hit === 1 ? failure(500) : guarded(() => TOKEN_NEW)(config, hit)));
   const pending = h.send({ url: REQUEST_URL });
   await vi.advanceTimersByTimeAsync(REFRESH_AT);
@@ -46,7 +45,7 @@ it.each([
   "[auth.reason.expired][auth.reason.denied][retry.priority.kind] 鉴权失败（%i）落定为 auth：即使状态码在重试表里也不重试，shouldRetry 不被调用",
   /** auth 类别否决重试。 */ async (status, reason, override) => {
     const shouldRetry = vi.fn(/** 不应被调用。 */ () => true);
-    const h = authClient(override, [axpRetry<AxpResponse>({ max: 3, delay: 0, statusCodes: [401, 403], shouldRetry })]);
+    const h = authClient(override, [axpRetry({ max: 3, delay: 0, statusCodes: [401, 403], shouldRetry })]);
     h.net.on("get", REQUEST_URL, () => failure(status));
     expect(await run(h)).toMatchObject({ kind: "auth", reason, status });
     expect(h.net.totalStarted).toBe(1);
@@ -56,7 +55,7 @@ it.each([
 
 it("[auth.const.AuthFailureAction.Others][retry.opt.statusCodes] 无关失败（500）由 auth 透传给 retry：每次尝试都重新走 auth，耗尽后返回最后一次", /** retry 在 auth 之外，每轮重新进入凭证阶段。 */ async () => {
   const onFailure = vi.fn(/** 观察每次尝试都经过路由。 */ () => undefined);
-  const h = authClient({ onFailure }, [axpRetry<AxpResponse>({ max: 2, delay: 0 })]);
+  const h = authClient({ onFailure }, [axpRetry({ max: 2, delay: 0 })]);
   h.net.on("get", REQUEST_URL, () => failure(500));
   expect(await run(h)).toMatchObject({ ok: false, status: 500, kind: "http" });
   expect(h.net.totalStarted).toBe(3);
@@ -66,7 +65,7 @@ it("[auth.const.AuthFailureAction.Others][retry.opt.statusCodes] 无关失败（
 
 it("[auth.cb.onRefresh][retry.opt.methods] 每次尝试请求体一致（I7）：500 → 401 → 刷新 → 成功，三次发送的请求体相同，调用方数据不被改", /** 重试与重放共用同一份请求体基准。 */ async () => {
   const bodies: unknown[] = [];
-  const h = authClient({}, [axpRetry<AxpResponse>({ max: 2, delay: 0, methods: ["post"] })]);
+  const h = authClient({}, [axpRetry({ max: 2, delay: 0, methods: ["post"] })]);
   const route = guarded(() => TOKEN_NEW);
   h.net.on(
     "post",
@@ -93,7 +92,7 @@ it("[auth.cb.onRefresh][retry.opt.max] 并发请求各自重试时共享同一�
         tm.set(TOKEN_NEW, REFRESH_TOKEN);
       },
     },
-    [axpRetry<AxpResponse>({ max: ONE_RETRY, delay: 0 })],
+    [axpRetry({ max: ONE_RETRY, delay: 0 })],
   );
   h.net.on(
     "get",
@@ -111,7 +110,7 @@ it("[auth.cb.onRefresh][retry.opt.max] 并发请求各自重试时共享同一�
 
 it("[auth.cb.onRefresh][retry.opt.statusCodes] 401 先由 auth 刷新重放：retry 只看到最终结果，一轮尝试就成功，不会在旧 token 上白白消耗重试次数", /** auth 在 retry 之内收敛 401。 */ async () => {
   const attempts = vi.fn();
-  const h = authClient({}, [axpRetry<AxpResponse>({ max: ONE_RETRY, delay: 0, statusCodes: [401, 500] })]);
+  const h = authClient({}, [axpRetry({ max: ONE_RETRY, delay: 0, statusCodes: [401, 500] })]);
   h.api.use({
     name: "attempt-count",
     stage: "attempt",

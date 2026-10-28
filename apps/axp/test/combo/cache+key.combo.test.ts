@@ -1,7 +1,6 @@
 import { beforeEach, expect, it, vi } from "vitest";
 import type { IKeyOptions } from "../../src/key";
 import axpCache from "../../src/plugins/cache";
-import type { AxpResponse } from "../../src/response";
 import { envelope, sourceClient } from "../helpers/source";
 
 /** 有效期与时序统一用假时钟。 */
@@ -14,7 +13,7 @@ const URL = "/pets";
 
 /** 装好 cache（GET 与 POST 都缓存），可传 key 服务配置。 */
 function client(key?: IKeyOptions) {
-  const h = sourceClient([axpCache<AxpResponse>({ methods: ["get", "post"] })], { key });
+  const h = sourceClient([axpCache({ methods: ["get", "post"] })], { key });
   h.net.on("get", URL, (_config, hit) => envelope(`get-${hit}`));
   h.net.on("post", URL, (_config, hit) => envelope(`post-${hit}`));
   return h;

@@ -1,5 +1,4 @@
 /* eslint-disable no-await-in-loop -- 同一客户端依次核对请求选项和生命周期，避免引入额外并发语义。 */
-import type { AxpResponse } from "../../src/response";
 import { expect, it } from "vitest";
 import axpRepath from "../../src/plugins/repath";
 import { preparedClient } from "../helpers/prepare";
@@ -28,7 +27,7 @@ const PARAMS = Object.freeze({ id: PARAMS_VALUE, x: X_VALUE, y: Y_VALUE, pid: 2 
 it.each(["/u/{id}", "/u/[id]", "/u/:id", "/users/:id/posts/:pid", "/mix/:id/{x}/[y]"])(
   "[repath.fn.axpRepath] 三种占位符和多段路径 %s",
   /** 各种路径风格。 */ async (url) => {
-    const plugin = axpRepath<AxpResponse>();
+    const plugin = axpRepath();
     const { api } = preparedClient([plugin]);
     const r = await api.request({ url, params: PARAMS, throws: false });
     expect(r.request.url).toBe(
@@ -45,7 +44,7 @@ it.each(["/u/{id}", "/u/[id]", "/u/:id", "/users/:id/posts/:pid", "/mix/:id/{x}/
   },
 );
 it("[repath.opt.removeKey][repath.req.repath] params 优先、空值回退 data、请求关闭和保留来源字段", /** 替换来源与消费规则。 */ async () => {
-  const { api } = preparedClient([axpRepath<AxpResponse>()]);
+  const { api } = preparedClient([axpRepath()]);
   const params = Object.freeze({ id: 0, x: undefined, y: null });
   const data = Object.freeze({ id: UNUSED_VALUE, x: false, y: DATA_VALUE, z: LAST_VALUE });
   const url = "/:id/{x}/[y]/:z";
@@ -60,11 +59,11 @@ it("[repath.opt.removeKey][repath.req.repath] params 优先、空值回退 data�
   api.dispose();
 });
 it("[repath.opt.pattern][repath.method.lifecycle] 自定义模式、插件关闭、卸载重装", /** 新安装契约。 */ async () => {
-  const { api } = preparedClient([axpRepath<AxpResponse>({ enable: false })]);
+  const { api } = preparedClient([axpRepath({ enable: false })]);
   expect(api.inspect()).toEqual([]);
   expect((await api.request({ url: VARIABLE_PATH, params: { id: 1 }, repath: true, throws: false })).request.url).toBe(VARIABLE_PATH);
   api.eject(NAME);
-  const plugin = axpRepath<AxpResponse>({ pattern: /\$([a-z]+)/g });
+  const plugin = axpRepath({ pattern: /\$([a-z]+)/g });
   api.use(plugin);
   expect(/** 重名安装。 */ () => api.use(plugin)).toThrow("Duplicate plugin");
   const r = await api.request({ url: "/$id/$id", params: { id: 1 }, throws: false });

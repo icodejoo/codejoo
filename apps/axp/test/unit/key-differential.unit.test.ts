@@ -50,7 +50,7 @@ function randomSource(): () => number {
 
 /** 选择固定池中的一个样本。 */
 function pick<T>(values: readonly T[], random: () => number): T {
-  return values[Math.floor(random() * values.length)]!;
+  return values[Math.floor(random() * values.length)];
 }
 
 /** 生成嵌套数据，特殊对象与循环引用也作为叶子嵌入。 */

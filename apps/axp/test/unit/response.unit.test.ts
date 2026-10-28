@@ -50,8 +50,8 @@ describe("响应判定", /** 响应判定的用例集合。 */ () => {
     "[core.prop.ok][core.prop.status][core.prop.kind] http=%s code=%s",
     /** HTTP 状态与业务码组合下的 ok、status、kind 判定。 */ (httpStatus, code, ok, status, kind) => {
       const response = new AxpResponse({
-        httpStatus: httpStatus as number,
-        code: code as number | string | undefined,
+        httpStatus,
+        code,
       });
       expect([response.ok, response.status, response.kind]).toEqual([ok, status, kind]);
       for (const name of ["ok", "status", "kind"]) expect(Object.prototype.hasOwnProperty.call(response, name)).toBe(false);
@@ -97,7 +97,7 @@ describe("响应判定", /** 响应判定的用例集合。 */ () => {
   ])(
     "[core.opt.expectJson] expect=%s status=%s type=%s body=%s",
     /** expectJson 在不同状态码、媒体类型与响应体组合下的类别判定。 */ (expectJson, status, contentType, data, kind) => {
-      const response = axpResponse({ expectJson: expectJson as boolean }).fromResponse(raw(data, status as number, { "content-type": contentType }), testContext());
+      const response = axpResponse({ expectJson }).fromResponse(raw(data, status, { "content-type": contentType }), testContext());
       expect(response.kind).toBe(kind);
       expect(response.status).toBe(status);
     },
@@ -134,12 +134,11 @@ describe("响应判定", /** 响应判定的用例集合。 */ () => {
     const factory = axpResponse({
       create: /** 保留完整响应字段并移除类原型。 */ (init) => {
         const response = new AxpResponse(init);
-        return {
-          ...response,
+        return Object.assign({}, response, {
           ok: response.ok,
           status: response.status,
           kind: response.kind,
-        } as AxpResponse;
+        }) as AxpResponse;
       },
     });
     const response = factory.fail({ kind: "auth" }, testContext());

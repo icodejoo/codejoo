@@ -317,6 +317,7 @@ describe("刷新可用性（O4）", () => {
         calls++;
         if (calls === 1 || calls === 3) return false;
         tm.set(server, REFRESH_TOKEN);
+        return undefined;
       },
     });
     h.net.on(

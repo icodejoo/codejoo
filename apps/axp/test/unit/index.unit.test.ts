@@ -154,7 +154,7 @@ it.each(IDENTITIES)(
 it("[index.fn.createAxp] 入口的内置插件可直接装配，inspect 按阶段与内置次序排列", /** 公开面串起一个真实客户端。 */ async () => {
   const tokenManager = new entry.TokenManager();
   tokenManager.set("access");
-  const api = entry.createAxp<unknown>({
+  const api = entry.createAxp({
     axios: createAxios({ adapter }),
     plugins: [
       entry.axpCache(),

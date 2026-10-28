@@ -124,14 +124,14 @@ function client(notify: (message: string, response: AxpResponse) => unknown = ()
   };
   const h = authClient({}, [
     audit,
-    axpLoading<AxpResponse>({ loading: () => undefined }),
+    axpLoading({ loading: () => undefined }),
     axpNotify<AxpResponse>({ notify }),
-    axpRepath<AxpResponse>(),
-    axpFilter<AxpResponse>(),
-    axpRetry<AxpResponse>({ max: 2, delay: 0 }),
-    axpMock<AxpResponse>({ enable: true }),
-    axpShare<AxpResponse>(),
-    axpCache<AxpResponse>(),
+    axpRepath(),
+    axpFilter(),
+    axpRetry({ max: 2, delay: 0 }),
+    axpMock({ enable: true }),
+    axpShare(),
+    axpCache(),
   ]);
   return { ...h, seen };
 }
@@ -166,7 +166,7 @@ it("[core.opt.plugins][retry.opt.max][auth.cb.onRefresh] 500 → 401 → 刷新 
   const h = client();
   h.net.on("get", RESOLVED_URL, /** 第一次 500，第二次旧 token 得到 401，之后按新 token 放行。 */ (config, hit) => (hit === 1 ? failure(500) : guarded(() => TOKEN_NEW)(config, hit)));
   const [result] = await settleAll(h.send({ url: TEMPLATE_URL, params: PARAMS }));
-  expect(result!.ok).toBe(true);
+  expect(result.ok).toBe(true);
   expect(h.net.totalStarted).toBe(3);
   expect(h.settings.onRefresh).toHaveBeenCalledTimes(1);
   // outer：每个逻辑请求一次，响应侧看到的就是调用方拿到的那个对象。
@@ -194,11 +194,11 @@ it("[core.opt.plugins][repath.fn.axpRepath][filter.fn.axpFilter] prepare 前置 
     guarded(() => TOKEN_OLD),
   );
   const [result] = await settleAll(h.send({ url: TEMPLATE_URL, params: PARAMS }));
-  expect(result!.ok).toBe(true);
+  expect(result.ok).toBe(true);
   // 前置 tap 看到的是调用方原样的请求；它补上的 `tail: ""` 随后被 filter 剥离。
   expect(h.seen.prepareBefore).toEqual([{ url: TEMPLATE_URL, params: PARAMS, token: undefined }]);
   expect(h.seen.prepareAfter).toEqual([{ url: RESOLVED_URL, params: SHAPED_PARAMS, token: undefined }]);
-  expect(result!.request.url).toBe(RESOLVED_URL);
+  expect(result.request.url).toBe(RESOLVED_URL);
 });
 
 it("[core.opt.plugins][notify.cb.notify][retry.opt.max] 重试耗尽：outer 段看到的最终响应就是 notify 收到的、也是调用方拿到的那个，各自只触发一次，尽管 credential 段跑了三轮", /** 通知与 outer 响应侧都在重试收敛之后。 */ async () => {

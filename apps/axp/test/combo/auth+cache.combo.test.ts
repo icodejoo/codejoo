@@ -1,6 +1,5 @@
 import { beforeEach, expect, it, vi } from "vitest";
 import axpCache, { clearCache } from "../../src/plugins/cache";
-import type { AxpResponse } from "../../src/response";
 import { authClient, failure, guarded, REFRESH_TOKEN, REQUEST_URL, run, TOKEN_NEW } from "../helpers/b3";
 import { countingCacheStore, settleAll } from "../helpers/source";
 
@@ -22,7 +21,7 @@ beforeEach(() => {
 /** 装好 auth 与带写入计数存储的 cache；服务端只认新 token。 */
 function client(business = false, overrides: Parameters<typeof authClient>[0] = {}) {
   const cache = countingCacheStore();
-  const h = authClient(overrides, [axpCache<AxpResponse>({ store: cache.store })]);
+  const h = authClient(overrides, [axpCache({ store: cache.store })]);
   h.net.on(
     "get",
     REQUEST_URL,
@@ -86,7 +85,7 @@ it("[auth.cb.onRefresh × cache.req.cache] 并发 401（未开 share）：单飞
   expect([...h.cache.entries.values()].every(/** 缓存里没有失败结果。 */ (e) => e.response.ok)).toBe(true);
   const before = h.net.totalStarted;
   const [hit] = await settleAll(h.send({ url: REQUEST_URL, cache: true }));
-  expect(hit!.ok).toBe(true);
+  expect(hit.ok).toBe(true);
   expect(h.net.totalStarted).toBe(before);
 });
 

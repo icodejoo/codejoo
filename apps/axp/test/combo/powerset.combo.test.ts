@@ -108,20 +108,20 @@ const PLUGINS: IPluginEntry[] = [
   {
     name: "loading",
     make: (events) =>
-      axpLoading<AxpResponse>({
+      axpLoading({
         loading: loadingRecorder(events),
         delay: LOADING_DELAY,
         delayClose: LOADING_DELAY,
       }),
   },
   { name: "notify", make: (events) => axpNotify<AxpResponse>(createNotifyRecorder(events)) },
-  { name: "repath", make: () => axpRepath<AxpResponse>() },
-  { name: "filter", make: () => axpFilter<AxpResponse>() },
-  { name: "retry", make: () => axpRetry<AxpResponse>({ max: RETRY_MAX, delay: 0 }) },
+  { name: "repath", make: () => axpRepath() },
+  { name: "filter", make: () => axpFilter() },
+  { name: "retry", make: () => axpRetry({ max: RETRY_MAX, delay: 0 }) },
   {
     name: "auth",
     make: (events) =>
-      axpAuth<AxpResponse>({
+      axpAuth({
         tokenManager: memoryTokens(),
         onRefresh: countRefresh(events, refreshToken),
         onAccessExpired: /** 过期通知不做任何事。 */ () => undefined,
@@ -129,10 +129,10 @@ const PLUGINS: IPluginEntry[] = [
   },
   {
     name: "mock",
-    make: () => axpMock<AxpResponse>({ enable: true, mock: true, mockUrl: MOCK_URL }),
+    make: () => axpMock({ enable: true, mock: true, mockUrl: MOCK_URL }),
   },
-  { name: "share", make: () => axpShare<AxpResponse>() },
-  { name: "cache", make: () => axpCache<AxpResponse>() },
+  { name: "share", make: () => axpShare() },
+  { name: "cache", make: () => axpCache() },
 ];
 
 /** 枚举插件表的全部子集（含空集），剔除不满足 needs 的。

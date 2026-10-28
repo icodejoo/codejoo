@@ -9,7 +9,7 @@ import { createTestClient } from "./client";
  * @example `const { api } = preparedClient([axpFilter()])`
  */
 export function preparedClient(plugins: readonly AxpPlugin<AxpResponse>[], transport?: Parameters<typeof createTestClient>[2]) {
-  return createTestClient<AxpResponse>(
+  return createTestClient(
     plugins,
     {
       response: {

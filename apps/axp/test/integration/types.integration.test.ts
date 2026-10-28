@@ -75,15 +75,15 @@ it("[core.fn.createAxp][core.req.wrap][core.req.throws] Schema/响应泛型/插�
     expectTypeOf(api.request<number>({ url: "/escape" })).toEqualTypeOf<Promise<number>>();
     expectTypeOf(api.request<number>({ wrap: true })).toEqualTypeOf<Promise<WithData<TestResponse, number>>>();
     expectTypeOf(api.request<number>({ throws: false })).toEqualTypeOf<Promise<WithData<TestResponse, number>>>();
-    api.get("/pet")({ id: 1 }, { retry: 2, cache: true });
+    void api.get("/pet")({ id: 1 }, { retry: 2, cache: true });
     // @ts-expect-error 扩展字段仍校验值类型。
-    api.get("/pet")({ id: 1 }, { retry: "twice" });
+    void api.get("/pet")({ id: 1 }, { retry: "twice" });
     // @ts-expect-error Schema 不存在的路径。
     api.get("/missing");
     // @ts-expect-error 缺少必填 payload。
-    api.get("/pet")();
+    void api.get("/pet")();
     // @ts-expect-error NoInfer 阻止错误 payload 被反推为合法。
-    api.get("/pet")({ id: "wrong" });
+    void api.get("/pet")({ id: "wrong" });
     // @ts-expect-error 方法对应的路径表不能串用。
     api.post("/empty");
     // @ts-expect-error 自定义响应必须提供 response。
@@ -117,17 +117,17 @@ it("[core.fn.createAxp][core.req.wrap][core.req.throws] Schema/响应泛型/插�
     expectTypeOf(local.post("/pet/draft")({ name: "draft", photoUrls: [] })).toEqualTypeOf<Promise<model.Pet>>();
     expectTypeOf(local.get("/experimental/whatever")()).toEqualTypeOf<Promise<unknown>>();
     // @ts-expect-error 旧 raw 返回形态已经删除。
-    api.get("/empty")(undefined, { raw: true });
+    void api.get("/empty")(undefined, { raw: true });
     // @ts-expect-error nullable 不再是新请求选项。
-    api.get("/empty")(undefined, { nullable: true });
+    void api.get("/empty")(undefined, { nullable: true });
     // key: true 保留为"自动计算"，兼容旧写法。
-    api.get("/empty")(undefined, { key: true });
+    void api.get("/empty")(undefined, { key: true });
     // @ts-expect-error key 不接受旧数字形式。
-    api.get("/empty")(undefined, { key: 1 });
+    void api.get("/empty")(undefined, { key: 1 });
     // @ts-expect-error key 不接受旧函数形式。
-    api.get("/empty")(undefined, { key: () => "k" });
+    void api.get("/empty")(undefined, { key: () => "k" });
     // @ts-expect-error 新内核不支持 cancelToken。
-    api.request({ cancelToken: {} });
+    void api.request({ cancelToken: {} });
   }
   expect(contracts).toBeTypeOf("function");
 });
@@ -242,14 +242,14 @@ it("[core.fn.createAxp][core.opt.plugins][core.opt.reject] 不写泛型时 R 只
   /** 只编译调用示例，避免发送真实网络请求。 */
   function contracts() {
     const inline = createAxp({ plugins: [axpRetry(), axpCache()] });
-    expectTypeOf(inline.isResponse).guards.toEqualTypeOf<AxpResponse>();
+    expectTypeOf<typeof inline.isResponse>().guards.toEqualTypeOf<AxpResponse>();
     // README 的写法：插件先单独定义，再装进默认客户端。
     const cache = axpCache();
     expectTypeOf(cache).toExtend<AxpPlugin<AxpResponse, any>>();
     createAxp({ plugins: [cache], reject: /** 默认响应。 */ (r) => expectTypeOf(r).toEqualTypeOf<AxpResponse>() });
     // 只给 response 工厂时，R 从工厂推断；自定义 R 的插件回调要靠显式泛型 createAxp<S, MyResponse> 收窄。
     const custom = createAxp({ response: customResponse() });
-    expectTypeOf(custom.isResponse).guards.toEqualTypeOf<TestResponse>();
+    expectTypeOf<typeof custom.isResponse>().guards.toEqualTypeOf<TestResponse>();
     // @ts-expect-error 默认响应的插件不能装进自定义响应的客户端。
     createAxp({ response: customResponse(), plugins: [cache] });
   }

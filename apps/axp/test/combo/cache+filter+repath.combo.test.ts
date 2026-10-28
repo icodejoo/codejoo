@@ -2,7 +2,6 @@ import { expect, it } from "vitest";
 import axpCache from "../../src/plugins/cache";
 import axpFilter from "../../src/plugins/filter";
 import axpRepath from "../../src/plugins/repath";
-import type { AxpResponse } from "../../src/response";
 import { envelope, sourceClient } from "../helpers/source";
 
 /** 带路径变量的接口。 */
@@ -10,7 +9,7 @@ const URL = "/pet/{id}";
 
 /** 按 repath → filter → cache 装配；路由按路径返回命中序号。 */
 function client() {
-  const h = sourceClient([axpCache<AxpResponse>(), axpFilter<AxpResponse>(), axpRepath<AxpResponse>()]);
+  const h = sourceClient([axpCache(), axpFilter(), axpRepath()]);
   h.net.on("get", "/pet/1", (_config, hit) => envelope(`one-${hit}`));
   h.net.on("get", "/pet/2", (_config, hit) => envelope(`two-${hit}`));
   return h;

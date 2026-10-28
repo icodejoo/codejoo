@@ -42,16 +42,16 @@ it("[loading.type.options][notify.type.response][repath.type.options][filter.typ
       repath: false,
       notify: false,
     };
-    api.request({ ...options });
-    api.request({ loading, filter: true, repath: null, notify: true });
+    void api.request({ ...options });
+    void api.request({ loading, filter: true, repath: null, notify: true });
     // @ts-expect-error filter 不接受旧函数写法。
-    api.request({ filter: () => true });
+    void api.request({ filter: () => true });
     // @ts-expect-error loading 不接受数字简写。
-    api.request({ loading: 1 });
+    void api.request({ loading: 1 });
     // @ts-expect-error repath 不接受动态函数。
-    api.request({ repath: () => true });
+    void api.request({ repath: () => true });
     // @ts-expect-error notify 只提供开关，不接受替换回调。
-    api.request({ notify: () => "message" });
+    void api.request({ notify: () => "message" });
     // @ts-expect-error axios 原生配置不再扩展 loading。
     const axiosLoading: AxiosRequestConfig = { loading: true };
     // @ts-expect-error axios 原生配置不再扩展 filter。

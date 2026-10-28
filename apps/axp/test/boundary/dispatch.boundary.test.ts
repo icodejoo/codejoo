@@ -69,7 +69,7 @@ it("[core.method.verbs][core.method.pending] 同一 dispatch 并发乱序成功�
         });
     },
   );
-  expect(net.log[0]!.finishedAt).toBeGreaterThan(net.log[net.log.length - 1]!.finishedAt!);
+  expect(net.log[0].finishedAt).toBeGreaterThan(net.log[net.log.length - 1].finishedAt!);
   expect(api.pending()).toBe(0);
 });
 it("[core.fn.createAxp][core.method.extend] 默认实例独立，保留 axios 引用和 transitional，override adapter 可用", /** 默认实例独立，保留 axios 引用和 transitional，override adapter 可用。 */ async () => {

@@ -1,6 +1,6 @@
 import { beforeEach, expect, it, vi } from "vitest";
 import axpCache from "../../src/plugins/cache";
-import { AXP_KINDS, type AxpResponse } from "../../src/response";
+import { AXP_KINDS } from "../../src/response";
 import { signalAdapter, sourceClient, type IWireCall } from "../helpers/source";
 
 /** 取消时序统一用假时钟。 */
@@ -14,7 +14,7 @@ const URL = "/pets";
 /** 装好 cache 与会响应取消的适配器。 */
 function client() {
   const calls: IWireCall[] = [];
-  const h = sourceClient([axpCache<AxpResponse>()], {}, signalAdapter(calls));
+  const h = sourceClient([axpCache()], {}, signalAdapter(calls));
   return { ...h, calls };
 }
 

@@ -1,7 +1,8 @@
 import { AxiosHeaders } from "axios";
 import { beforeEach, expect, it, vi } from "vitest";
 import axpShare from "../../src/plugins/share";
-import { AXP_KINDS, type AxpResponse } from "../../src/response";
+import { AXP_KINDS } from "../../src/response";
+import { toText } from "../../src/utils";
 import { authClient, failure, guarded, REQUEST_URL, TOKEN_NEW, TOKEN_OLD } from "../helpers/b3";
 import { settleAll } from "../helpers/source";
 
@@ -26,7 +27,7 @@ beforeEach(() => {
 
 /** 装好 auth 与 share；服务端只认新 token。 */
 function client(business = false, overrides: Parameters<typeof authClient>[0] = {}, options: Parameters<typeof authClient>[2] = {}) {
-  const h = authClient(overrides, [axpShare<AxpResponse>()], options);
+  const h = authClient(overrides, [axpShare()], options);
   h.net.on(
     "get",
     REQUEST_URL,
@@ -75,7 +76,7 @@ it("[auth.cb.onRefresh × share.req.share][core.opt.key] scope 不同的请求�
     {
       key: {
         /** 以租户请求头分区，模拟按账号或租户隔离。 */
-        scope: (request) => String(AxiosHeaders.from(request.headers as never).get(TENANT_HEADER) ?? ""),
+        scope: (request) => toText(AxiosHeaders.from(request.headers as never).get(TENANT_HEADER) ?? ""),
       },
     },
   );

@@ -66,7 +66,7 @@ const SAMPLE_WINDOW = 8;
 const KEY_UNSUPPORTED = Symbol("axp:key:unsupported");
 const TAG_DATE = "[object Date]";
 const TAG_URL_SEARCH_PARAMS = "[object URLSearchParams]";
-const toTag = Object.prototype.toString;
+const toTag = (value: unknown): string => Object.prototype.toString.call(value);
 
 /**
  * 非普通对象且没有可枚举字段（Date/Map/Set/Blob/FormData 等）：靠字段无法区分内容，不能当空值处理。
@@ -219,7 +219,7 @@ function hashValue(target: any, h: number, opts: IKeyOptions | undefined, ancest
   if (typeof target.byteLength === "number") {
     return target.byteLength === 0 ? undefined : hash("bin" + target.byteLength, h);
   }
-  const tag = toTag.call(target);
+  const tag = toTag(target);
   if (tag === TAG_DATE) return hash("D" + target.getTime(), h);
   if (tag === TAG_URL_SEARCH_PARAMS) return hash("U" + target.toString(), h);
   if (!Array.isArray(target) && isOpaque(target)) throw KEY_UNSUPPORTED;
@@ -251,11 +251,11 @@ function hashValue(target: any, h: number, opts: IKeyOptions | undefined, ancest
       r = deepHash(target[key], baseH, opts, ancestors);
     } catch (e) {
       // 键名被 ignores 豁免时，其下无法序列化的值按“被忽略”处理
-      if (e === KEY_UNSUPPORTED && hasIgnores && ignores!.includes(key)) r = undefined;
+      if (e === KEY_UNSUPPORTED && hasIgnores && ignores.includes(key)) r = undefined;
       else throw e;
     }
     // ignores 命中键名且 value 判空：注入占位符 '!E'，保证该 key 仍参与最终 hash
-    if (r === undefined && hasIgnores && ignores!.includes(key)) {
+    if (r === undefined && hasIgnores && ignores.includes(key)) {
       r = hash("!E", baseH);
     }
     if (r !== undefined) {

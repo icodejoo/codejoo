@@ -19,7 +19,7 @@ export function envelope(data: unknown, status = 200) {
  * @example `const h = sourceClient([axpCache()]); await h.send({ url: '/a', cache: true })`
  */
 export function sourceClient(plugins: readonly AxpPlugin<AxpResponse, any>[] = [], options: AxpOptions = {}, transport?: Parameters<typeof createTestClient>[2]) {
-  return observeUi(createTestClient<AxpResponse>(plugins, options, transport));
+  return observeUi(createTestClient(plugins, options, transport));
 }
 
 /** 与 sourceClient 相同，但响应类型可自定义；observeUi 只按默认响应声明，这里在边界处收窄。
@@ -100,8 +100,9 @@ export function requestRecorder(enforce: "pre" | "post" = "post") {
 export function trackAbortListeners(): () => number {
   let net = 0;
   const proto = EventTarget.prototype;
-  const add = proto.addEventListener;
-  const remove = proto.removeEventListener;
+  // 经 Reflect.get 取原型方法并按方法类型标注：调用时都用 apply 显式传 this，不依赖当前绑定。
+  const add: EventTarget["addEventListener"] = Reflect.get(proto, "addEventListener");
+  const remove: EventTarget["removeEventListener"] = Reflect.get(proto, "removeEventListener");
   proto.addEventListener = /** 只统计 AbortSignal 的 abort 监听。 */ function (this: EventTarget, ...args: Parameters<typeof add>) {
     if (this instanceof AbortSignal && args[0] === "abort") net++;
     return add.apply(this, args);
