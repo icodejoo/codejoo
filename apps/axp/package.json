@@ -1,34 +1,48 @@
 {
   "name": "@codejoo/axp",
   "version": "0.2.0",
-  "type": "module",
+  "description": "Typed, plugin-based HTTP client built on axios — cache, retry, request dedup/share, auth token-refresh, cancel, loading, mock, path-var substitution, and more, with end-to-end OpenAPI type inference.",
   "keywords": [
+    "abort",
+    "adapter",
+    "auth",
     "axios",
     "axios-plugin",
     "axios-plugins",
+    "cache",
+    "cancel",
+    "dedupe",
     "http",
     "http-client",
-    "plugin",
     "interceptor",
-    "adapter",
-    "cache",
-    "retry",
-    "dedupe",
-    "request-dedup",
-    "share",
-    "auth",
-    "token-refresh",
-    "cancel",
-    "abort",
     "loading",
     "mock",
-    "typescript",
+    "openapi",
+    "plugin",
+    "request-dedup",
+    "retry",
+    "share",
+    "token-refresh",
     "type-safe",
-    "openapi"
+    "typescript"
   ],
-  "description": "Typed, plugin-based HTTP client built on axios — cache, retry, request dedup/share, auth token-refresh, cancel, loading, mock, path-var substitution, and more, with end-to-end OpenAPI type inference.",
+  "homepage": "https://github.com/gapkukb/codejoo/tree/main/apps/axp",
+  "bugs": "https://github.com/gapkukb/codejoo/issues",
   "license": "MIT",
   "author": "Carlos Joo",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/gapkukb/codejoo.git",
+    "directory": "apps/axp"
+  },
+  "files": [
+    "dist",
+    "src",
+    "README.md",
+    "README.zh-CN.md",
+    "LICENSE"
+  ],
+  "type": "module",
   "main": "./dist/esm/index.mjs",
   "module": "./dist/esm/index.mjs",
   "types": "./dist/esm/index.d.mts",
@@ -114,13 +128,9 @@
     },
     "./package.json": "./package.json"
   },
-  "files": [
-    "dist",
-    "src",
-    "README.md",
-    "README.zh-CN.md",
-    "LICENSE"
-  ],
+  "publishConfig": {
+    "access": "public"
+  },
   "scripts": {
     "fmt": "vp fmt -c oxfmt.config.ts",
     "lint": "vp lint -c oxlint.config.ts",
@@ -128,6 +138,7 @@
     "build": "vp pack",
     "dev": "vp pack --watch",
     "test": "vp test",
+    "bench": "vp test bench --run",
     "e2e:dev": "node e2e/dev.mjs",
     "e2e:server": "node e2e/server/mock-server.mjs",
     "e2e:playground": "vp dev e2e/playground --port 5180 --strictPort",
@@ -148,15 +159,5 @@
   },
   "peerDependencies": {
     "axios": "catalog:"
-  },
-  "repository": {
-    "type": "git",
-    "url": "git+https://github.com/gapkukb/codejoo.git",
-    "directory": "apps/axp"
-  },
-  "homepage": "https://github.com/gapkukb/codejoo/tree/main/apps/axp",
-  "bugs": "https://github.com/gapkukb/codejoo/issues",
-  "publishConfig": {
-    "access": "public"
   }
 }
