@@ -392,7 +392,8 @@ export function $shouldRetry(
 ): boolean {
   if ($isDisabled(config)) return false;
   const method = (config.method || "get").toLowerCase();
-  if (!$resolveMethods(config, defaults).includes(method)) return false;
+  if (!$resolveMethods(config, defaults).some((m) => m.toLowerCase() === method))
+    return false;
   const custom = $resolveShouldRetry(config, defaults);
   const status = response?.status ?? err?.status;
   return (
