@@ -1,12 +1,14 @@
 ---
 title: axp 测试用例旧→新映射记录
-status: draft
+status: archived
 updated: 2026-10-28
 summary: 测试迁移到六层结构时，每条用例的旧位置、新位置、动作和依据的审计记录。
 ---
 ## TL;DR
 
-迁移已全部完成：A 批（单插件规则/补丁/覆盖文件，16 个提交，基线冻结于 8c12b94）与 B 批（dioman-coverage、dioman-powerset、auth.integration、integration、attempt、adapter-layers、axp-install、types、e2e，9 个提交）均已落地，`test/` 根目录除 `index.ts`、`openapi.ts`、`mock.json`、`helpers/` 等支撑文件外不再有 `*.test.ts`。B 批共 drop 2 条、N/A 4 条（原 it.skip），无 merge；全量 `vp test run` 为 683 条用例（原 689，减少 6），expected fail 仍为 3，skip 清零。记录规则见 [测试六层分类规范 §4](../guides/test-layers.md)。状态暂保持 `draft`，是否改 `archived` 由负责人定。mirror 列待验收场景 id 对照后统一回填，A、B 批暂空。
+迁移已全部完成：A 批（单插件规则/补丁/覆盖文件，16 个提交，基线冻结于 8c12b94）与 B 批（dioman-coverage、dioman-powerset、auth.integration、integration、attempt、adapter-layers、axp-install、types、e2e，9 个提交）均已落地，`test/` 根目录除 `index.ts`、`openapi.ts`、`mock.json`、`helpers/` 等支撑文件外不再有 `*.test.ts`。B 批共 drop 2 条、N/A 4 条（原 it.skip），无 merge；全量 `vp test run` 为 683 条用例（原 689，减少 6），expected fail 仍为 3，skip 清零。记录规则见 [测试六层分类规范 §4](../guides/test-layers.md)。
+
+2026-10-28 归档：迁移已经收尾，本表冻结为审计记录，以后不再续写。迁移之后补的用例按规范 §4.7 不进本表。mirror 列没有回填，要查验收场景对照，去 testkit 的 `COVERAGE.md`。
 
 ## 基线（迁移开始时冻结）
 

@@ -1,7 +1,7 @@
 ---
 title: axp 测试六层分类、去重与迁移映射规范
-status: draft
-updated: 2026-10-27
+status: active
+updated: 2026-10-28
 summary: 测试用例按单元/规则/边界/组合/集成/验收矩阵六层归档的判定规则、目录命名、去重原则和旧→新映射的记录规则。
 ---
 ## TL;DR
@@ -114,31 +114,13 @@ describe('retry', () => {
 - testkit 的 `COVERAGE.md` 目前只统计**验收场景**对 API 的触达。标题带 `[API id]` 后，台账脚本可再扫描 `test/` 统计单测层覆盖，在明细里分列 `rule / boundary / combo / acceptance` 四列。该脚本扩展不在本规范范围，迁移完成后另做。
 - "100% 覆盖"的口径：**每个 API 至少一条 rule 用例 + 一条 boundary 用例**（或写明"无边界"的理由），再加台账里标出的有交互风险的 combo 对；验收矩阵是在此之上的黑盒复核，不替代下层。
 
-## 6. 迁移顺序
+## 6. 首次迁移（已完成）
 
-1. 等当前 B1~B5 缺陷修复合入，冻结基线。
-2. 起映射文件，按 §3 判定每个现有文件的目标层（初步归属见下，迁移时逐用例复核）。
-3. 先迁**纯搬运**的文件（单插件的 `*.test.ts` → `rule/`），再拆 `*.review`、`dioman-*`，最后处理 integration。
-4. 迁移完成后，再依据台账缺口**补**缺失的 rule/boundary/combo 用例。补用例与迁移分开提交。
+2026-10-28 完成。基线是 8c12b94，分 A、B 两批，每条用例的去向和每批的核对数都在 [映射记录](../reference/test-migration-map.md) 里，该记录已归档。迁移之后按台账补了 rule/boundary 用例，公开 API 只剩 `prop.name` 和纯常量申请了边界豁免。以后再整体迁移时，照 §4 的流程另起一张映射表。
 
-### 现有文件初步归属
-
-| 现有文件 | 初步去向 | 备注 |
-|---|---|---|
-| `auth.test.ts`、`retry.test.ts`、`loading.test.ts`、`share.test.ts`、`cache.test.ts`、`mock.test.ts`、`repath.test.ts`、`filter.test.ts`、`cancel.test.ts`、`normalize.test.ts`、`notify.test.ts`、`envs.test.ts`、`key.test.ts` | `rule/<插件>.rule.test.ts` | 其中的极端/时序用例逐条挑出放 `boundary/` |
-| `cache.review.test.ts`、`key.review.test.ts`、`share.review.test.ts` | 拆进对应插件的 `rule/` 与 `boundary/` | 标题里的 `#11` 等 review 编号保留在注释 |
-| `dioman-coverage.test.ts`（48） | 按内容拆进各插件 `rule/`、`boundary/` | `it.skip` 按 §3.6 处理 |
-| `dioman-powerset.test.ts` | `combo/powerset.combo.test.ts` | |
-| `auth.integration.test.ts`（21） | 拆：单插件行为进 `rule/auth`，`auth+retry`、`auth+cache` 等进 `combo/` | 名叫 integration，实质多是组合 |
-| `integration.test.ts` | 逐条判：多插件语义交互进 `combo/`，装配类进 `integration/` | |
-| `attempt.test.ts`、`adapter-layers.test.ts` | `combo/`（auth+retry）、`integration/`（adapter 分层） | 复核 |
-| `axp-install.test.ts`、`types.test.ts`、`e2e.test.ts` | `integration/` | |
-| `accept/unit/*` | 不动，归"工具自测" | |
-
-## 7. 待你确认的默认值
-
-文档按下面的默认值写，不反对就按此执行：
+## 7. 已定事项
 
 1. `accept/unit` 不计入六层，保持原位。
-2. 映射用 Markdown 表，不上 JSON/生成脚本（量级约 600 行，够用）。
+2. 映射用 Markdown 表，不上 JSON，也不写生成脚本。
 3. 用例标题统一加 `[API id]` 前缀。
+4. combo 文件名里插件按字母序排，可以有多段，比如 `cancel+key+share`。

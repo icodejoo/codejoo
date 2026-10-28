@@ -12,8 +12,8 @@
 
 ## 操作手册（怎么做）
 
-- [测试六层分类、去重与迁移映射规范](guides/test-layers.md) — 单元/规则/边界/组合/集成/验收矩阵的判定、目录命名、去重和映射记录规则。draft。
+- [测试六层分类、去重与迁移映射规范](guides/test-layers.md) — 单元/规则/边界/组合/集成/验收矩阵的判定、目录命名、去重和映射记录规则。现行规范。active。
 
 ## 参考记录
 
-- [测试用例旧→新映射记录](reference/test-migration-map.md) — 迁移到六层结构时每条用例的去向审计表，A、B 两批迁移已全部完成，含每批用例数核对与 drop/N/A 清单。draft。
+- [测试用例旧→新映射记录](reference/test-migration-map.md) — 2026-10-28 首次六层迁移的逐条去向、每批核对数和 drop/N/A 清单，已冻结。archived。
