@@ -1,7 +1,13 @@
 import { create as createAxios, type AxiosAdapter } from "axios";
 import { bench } from "vitest";
 import { createAxp } from "../src/client";
+import axpAuth from "../src/plugins/auth";
 import axpCache from "../src/plugins/cache";
+import axpFilter from "../src/plugins/filter";
+import axpLoading from "../src/plugins/loading";
+import axpNotify from "../src/plugins/notify";
+import axpRepath from "../src/plugins/repath";
+import axpRetry from "../src/plugins/retry";
 import axpShare from "../src/plugins/share";
 import type { AxpResponse } from "../src/response";
 import type { AxpPlugin } from "../src/types";
@@ -96,6 +102,46 @@ const shared = createAxp({
   axios: createAxios({ adapter }),
   plugins: [axpShare({ policy: "start" })],
 });
+/** B3/B6 重试预算，与 B0 同口径。 */
+const RETRY_MAX = 2;
+/** 不执行任何界面副作用。 */
+function noop(): void {}
+/** 成功不出提示。 */
+function silent(): string {
+  return "";
+}
+/** 基准里不应走到刷新。 */
+function unexpectedRefresh(): never {
+  throw new Error("基准不应触发刷新");
+}
+/** 已登录的令牌管理器，不触发刷新。 */
+const tokenManager = { accessToken: "Bearer baseline", refreshToken: "baseline-refresh", set: noop, clear: noop };
+/** B3：与 B0 同口径的全插件客户端；key、取消、归一化已是内核能力，不再装插件。 */
+const full = createAxp({
+  axios: createAxios({ adapter }),
+  plugins: [
+    axpFilter(),
+    axpRepath(),
+    axpAuth({ tokenManager, onRefresh: unexpectedRefresh, onAccessExpired: noop }),
+    axpRetry({ max: RETRY_MAX }),
+    axpNotify({ notify: noop, stringify: silent }),
+    axpLoading({ loading: noop }),
+    axpShare({ policy: "start" }),
+    axpCache(),
+  ],
+});
+/** B6：只装 retry、带 JSON 请求体的 POST 客户端。 */
+const posted = createAxp({ axios: createAxios({ adapter }), plugins: [axpRetry({ max: RETRY_MAX })] });
+/** 单调参数，保证全插件每次都不命中缓存。 */
+let sequence = INITIAL_SENDS;
+/** 全插件、缓存未命中的一次请求。 */
+async function miss(): Promise<void> {
+  await full.get(BENCH_URL)({ sequence: ++sequence }, { share: true, cache: true });
+}
+/** 带新 JSON 请求体的 POST，retry 已装但不触发。 */
+async function post(): Promise<void> {
+  await posted.post(BENCH_URL)({ name: "baseline", items: [VALUE, RETRY_MAX] });
+}
 /** 一次缓存命中请求，显式固定 key。 */
 async function hit(): Promise<void> {
   await cached.get(BENCH_URL)(undefined, { key: CACHE_KEY, cache: true });
@@ -120,6 +166,11 @@ async function verify(): Promise<void> {
     const result = businessValue(await api.get(BENCH_URL)());
     if (sends !== SENDS_PER_SCENARIO || result !== VALUE || api.inspect().length !== count) throw new Error(`B2 基准路径自检失败：${count} 层`);
   }
+  // B3：每次都要触网。
+  sends = INITIAL_SENDS;
+  await miss();
+  await miss();
+  if (sends !== RETRY_MAX) throw new Error("B3 必须每次触网");
   // B4：预先填充后再次请求不得触网。
   await hit();
   sends = INITIAL_SENDS;
@@ -155,5 +206,7 @@ for (const { count, api } of layered) {
     OPTIONS,
   );
 }
+bench("B3 全插件缓存未命中", miss, OPTIONS);
 bench("B4 缓存命中", hit, OPTIONS);
 bench("B5 share start 并发100", concurrent, OPTIONS);
+bench("B6 JSON POST + retry", post, OPTIONS);
