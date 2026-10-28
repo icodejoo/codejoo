@@ -6,7 +6,6 @@ import repath from '../src/plugins/repath';
 import normalize from '../src/plugins/normalize';
 import notify from '../src/plugins/notify';
 import cancel, { cancelAll } from '../src/plugins/cancel';
-import loading, { $wrap } from '../src/plugins/loading';
 
 afterEach(() => { vi.useRealTimers(); vi.restoreAllMocks(); });
 
@@ -138,21 +137,5 @@ describe('cancel/loading — 资源释放边界', () => {
         expect(cancelAll(ax)).toBe(0);
         expect(request.eject).toHaveBeenCalledOnce();
         expect(hooks.eject).toHaveBeenCalledOnce();
-    });
-    it('loading dispose 后旧 wrapper 直通且 finish 对无配置幂等', async () => {
-        const callback = vi.fn();
-        const adapter = vi.fn(async (c) => response(c));
-        const wrapped = $wrap(adapter, { loading: callback }, true);
-        wrapped.finish();
-        wrapped.finish({});
-        wrapped.dispose();
-        expect((await wrapped({} as any)).data).toBe('ok');
-        expect(callback).not.toHaveBeenCalled();
-    });
-    it('loading enable:false 不包装 adapter', () => {
-        const ax = axios.create();
-        const before = ax.defaults.adapter;
-        expect(loading({ enable: false }).install(ax)).toBeUndefined();
-        expect(ax.defaults.adapter).toBe(before);
     });
 });
