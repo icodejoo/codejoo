@@ -65,3 +65,68 @@ describe('notify', () => {
     expect((r.data as any).data.v).toBe(1);
   });
 });
+
+describe('notify — 回调返回值与卸载边界（真实 axios）', () => {
+    /** 成功响应的 axios 实例。 */
+    function okAxios() {
+        return axios.create({ adapter: async (c) => response(c, { v: 1 }) });
+    }
+
+    it.each([undefined, null, 0, false, ''])('[notify.fn.axpNotify][notify.cb.stringify] stringify 返回 %s（falsy）→ 不触发 notify', async (text) => {
+        const ax = okAxios();
+        const notifyFn = vi.fn();
+        notify({ notify: notifyFn, stringify: () => text as any }).install(ax);
+        await ax.get('/');
+        expect(notifyFn).not.toHaveBeenCalled();
+    });
+
+    it('[notify.fn.axpNotify] 纯空白字符串视为非空，照常通知（插件不 trim）', async () => {
+        const ax = okAxios();
+        const notifyFn = vi.fn();
+        notify({ notify: notifyFn, stringify: () => '  ' }).install(ax);
+        await ax.get('/');
+        expect(notifyFn).toHaveBeenCalledWith('  ');
+    });
+
+    it('[notify.method.install] 同一实例重复 install 会各自触发一次 notify（两条独立拦截器）', async () => {
+        const ax = okAxios();
+        const notifyFn = vi.fn();
+        const plugin = notify({ notify: notifyFn, stringify: () => 'x' });
+        plugin.install(ax);
+        plugin.install(ax);
+        await ax.get('/');
+        expect(notifyFn).toHaveBeenCalledTimes(2);
+    });
+
+    it('[notify.method.cleanup] cleanup 重复调用安全；卸载一个不影响另一个已装实例', async () => {
+        const ax = okAxios();
+        const a = vi.fn();
+        const b = vi.fn();
+        const offA = notify({ notify: a, stringify: () => 'a' }).install(ax) as () => void;
+        notify({ notify: b, stringify: () => 'b' }).install(ax);
+        offA();
+        expect(() => offA()).not.toThrow();
+        await ax.get('/');
+        expect(a).not.toHaveBeenCalled();
+        expect(b).toHaveBeenCalledOnce();
+    });
+
+    it.each([false, undefined, null, 'yes', 0])('[notify.req.silent] silent=%s：插件不读取，原样透传到 stringify 的 config 且不影响通知', async (silent) => {
+        const ax = okAxios();
+        const stringify = vi.fn(() => 'x');
+        const notifyFn = vi.fn();
+        notify({ notify: notifyFn, stringify }).install(ax);
+        await ax.get('/', { silent } as any);
+        expect((stringify.mock.calls[0] as any[])[3].silent).toBe(silent);
+        expect(notifyFn).toHaveBeenCalledOnce();
+    });
+
+    it('[notify.req.silent] 错误路径同样透传 silent 到 stringify，错误仍原样 reject', async () => {
+        const err = Object.assign(new Error('net'), { isAxiosError: true });
+        const ax = axios.create({ adapter: async (c) => { throw Object.assign(err, { config: c }); } });
+        const stringify = vi.fn(() => '');
+        notify({ notify: vi.fn(), stringify }).install(ax);
+        await expect(ax.get('/', { silent: true } as any)).rejects.toBe(err);
+        expect((stringify.mock.calls[0] as any[])[3].silent).toBe(true);
+    });
+});

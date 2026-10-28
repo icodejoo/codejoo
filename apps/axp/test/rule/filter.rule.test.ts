@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 import filter from '../../src/plugins/filter';
 import axios from 'axios';
 import { Axp } from '../../src';
@@ -105,5 +105,36 @@ describe('filter', () => {
 
     await api.axios.get('/data', { params: { blank: '' } });
     expect(seenParams).toEqual({ blank: '' });
+  });
+});
+
+/** 构造 adapter 层成功响应。 */
+function okResponse(config: any) {
+  return { config, data: 'ok', status: 200, statusText: '', headers: {} };
+}
+
+describe('filter — 安装、卸载与请求级覆盖（真实 axios）', () => {
+  it("[filter.prop.name] 插件实例 name 为 'axp:filter'", () => {
+    expect(filter().name).toBe('axp:filter');
+  });
+
+  it('[filter.method.install][filter.method.cleanup] install 注册请求拦截器生效，cleanup 后恢复原样不再过滤', async () => {
+    const adapter = vi.fn(async (c) => okResponse(c));
+    const ax = axios.create({ adapter });
+    const off = filter().install(ax) as () => void;
+    expect(typeof off).toBe('function');
+    await ax.get('/a', { params: { x: '', y: 1 }, filter: true });
+    expect(adapter.mock.calls[0][0].params).toEqual({ y: 1 });
+    off();
+    await ax.get('/b', { params: { x: '', y: 1 }, filter: true });
+    expect(adapter.mock.calls[1][0].params).toEqual({ x: '', y: 1 });
+  });
+
+  it('[filter.req.filter.predicate] 请求级 predicate 覆盖插件级 predicate', async () => {
+    const adapter = vi.fn(async (c) => okResponse(c));
+    const ax = axios.create({ adapter });
+    filter({ predicate: ([k]) => k === 'plugin' }).install(ax);
+    await ax.get('/', { params: { plugin: 1, req: 2 }, filter: { predicate: ([k]) => k === 'req' } });
+    expect(adapter.mock.calls[0][0].params).toEqual({ plugin: 1 });
   });
 });

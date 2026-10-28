@@ -170,3 +170,32 @@ describe('repath', () => {
     expect(seenUrl).toBe('/user/{id}');
   });
 });
+
+
+/** 装好 repath 的真实 axios，返回 adapter 收到的 config 列表与 cleanup。 */
+function realAxios(opts?: Parameters<typeof repath>[0]) {
+    const seen: any[] = [];
+    const ax = axios.create({
+        adapter: async (c: any) => { seen.push(c); return { config: c, data: 'ok', status: 200, statusText: '', headers: {} }; },
+    });
+    const off = repath(opts).install(ax) as () => void;
+    return { ax, seen, off };
+}
+
+describe('repath — 安装/卸载（真实 axios）', () => {
+    it("[repath.prop.name] 插件实例 name 为 'axp:repath'", () => {
+        expect(repath().name).toBe('axp:repath');
+    });
+
+    it('[repath.method.install][repath.method.cleanup] install 后 URL 变量被替换，cleanup 后原样发出', async () => {
+        const { ax, seen, off } = realAxios();
+        expect(typeof off).toBe('function');
+        await ax.get('/u/:id', { params: { id: 7 } });
+        expect(seen[0].url).toBe('/u/7');
+        expect(seen[0].params).toEqual({});
+        off();
+        await ax.get('/u/:id', { params: { id: 7 } });
+        expect(seen[1].url).toBe('/u/:id');
+        expect(seen[1].params).toEqual({ id: 7 });
+    });
+});

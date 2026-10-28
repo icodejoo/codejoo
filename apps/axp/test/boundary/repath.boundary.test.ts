@@ -142,3 +142,67 @@ describe('repath', () => {
     expect(seenUrl).toBe('/user/{id}');
   });
 });
+
+
+/** 装好 repath 的真实 axios，返回 adapter 收到的 config 列表与 install 的返回值。 */
+function realAxios(opts?: Parameters<typeof repath>[0]) {
+    const seen: any[] = [];
+    const ax = axios.create({
+        adapter: async (c: any) => { seen.push(c); return response(c); },
+    });
+    const off = repath(opts).install(ax) as (() => void) | undefined;
+    return { ax, seen, off };
+}
+
+describe('repath — 选项与安装/卸载边界（真实 axios）', () => {
+    it('[repath.opt.enable][repath.method.install] enable:false 不装拦截器且无 cleanup；省略/undefined 视为启用', async () => {
+        const off = realAxios({ enable: false });
+        expect(off.off).toBeUndefined();
+        await off.ax.get('/u/:id', { params: { id: 1 } });
+        expect(off.seen[0].url).toBe('/u/:id');
+        const on = realAxios({ enable: undefined });
+        await on.ax.get('/u/:id', { params: { id: 1 } });
+        expect(on.seen[0].url).toBe('/u/1');
+    });
+
+    it('[repath.opt.removeKey] removeKey 省略/undefined 默认删除；false 时 params/data 对象与原始 data 都保留', async () => {
+        const def = realAxios({ removeKey: undefined });
+        await def.ax.get('/u/:id', { params: { id: 1, k: 2 } });
+        expect(def.seen[0].params).toEqual({ k: 2 });
+
+        const keep = realAxios({ removeKey: false });
+        await keep.ax.post('/u/:id/:name', { id: 1, name: 'n' }, { params: { id: 9 } });
+        expect(keep.seen[0].url).toBe('/u/9/n');
+        expect(keep.seen[0].params).toEqual({ id: 9 });
+        expect(JSON.parse(keep.seen[0].data)).toEqual({ id: 1, name: 'n' });
+
+        const prim = realAxios({ removeKey: false });
+        await prim.ax.put('/u/:id', 42);
+        expect(prim.seen[0].url).toBe('/u/42');
+        expect(prim.seen[0].data).toBe(42);
+    });
+
+    it('[repath.opt.removeKey] params 为 undefined/null 且无匹配值：占位符保留，不抛错', async () => {
+        const { ax, seen } = realAxios();
+        await ax.get('/u/:id');
+        await ax.get('/u/:id', { params: null as any });
+        expect(seen.map((c) => c.url)).toEqual(['/u/:id', '/u/:id']);
+    });
+
+    it('[repath.method.cleanup] cleanup 重复调用安全，卸载后可重装', async () => {
+        const { ax, seen, off } = realAxios();
+        off!();
+        expect(() => off!()).not.toThrow();
+        repath().install(ax);
+        await ax.get('/u/:id', { params: { id: 3 } });
+        expect(seen[0].url).toBe('/u/3');
+    });
+
+    it('[repath.method.install] 同一实例重复 install：URL 只替换一次，第二个拦截器无变量可替换', async () => {
+        const { ax, seen } = realAxios();
+        repath().install(ax);
+        await ax.get('/u/:id', { params: { id: 3, k: 1 } });
+        expect(seen[0].url).toBe('/u/3');
+        expect(seen[0].params).toEqual({ k: 1 });
+    });
+});

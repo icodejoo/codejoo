@@ -171,3 +171,37 @@ describe('normalize', () => {
     expect(r.data).toEqual({ code: 0, data: { v: 1 }, message: '' });
   });
 });
+
+describe('normalize — 安装/卸载、预留 nullable 与全局配置（真实 axios）', () => {
+    /** 业务失败（code=1）的 axios 实例。 */
+    function failing() {
+        return axios.create({ adapter: async (c) => response(c, { code: 1, message: 'bad' }) });
+    }
+
+    it('[normalize.method.install][normalize.method.cleanup] install 后业务失败被 reject，cleanup 后恢复为原样 resolve', async () => {
+        const ax = failing();
+        const off = normalize().install(ax) as () => void;
+        await expect(ax.get('/')).rejects.toBeInstanceOf(AxpError);
+        off();
+        await expect(ax.get('/')).resolves.toMatchObject({ status: 200 });
+    });
+
+    it('[normalize.opt.nullable][normalize.req.normalize.nullable] nullable 是预留字段：插件级/请求级设置都不改变校验结果', async () => {
+        for (const nullable of [true, false]) {
+            const ax = failing();
+            normalize({ nullable }).install(ax);
+            await expect(ax.get('/')).rejects.toBeInstanceOf(AxpError);
+            await expect(ax.get('/', { normalize: { nullable } })).rejects.toBeInstanceOf(AxpError);
+        }
+        const ok = axios.create({ adapter: async (c) => response(c, { code: 0, data: null }) });
+        normalize().install(ok);
+        await expect(ok.get('/', { normalize: { nullable: false } })).resolves.toMatchObject({ status: 200 });
+    });
+
+    it('[normalize.global.normalize][normalize.global.normalize.enable][normalize.global.normalize.nullable] 全局 ICommonOptions.normalize 仅为类型声明：Core 构造选项当前预留未消费，传入 enable:false 也不改变校验', async () => {
+        const ax = failing();
+        const api = Axp.create(ax, { normalize: { enable: false, nullable: true } });
+        normalize().install(ax);
+        await expect(api.get('/x')()).rejects.toBeInstanceOf(AxpError);
+    });
+});
