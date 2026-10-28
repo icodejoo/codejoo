@@ -60,10 +60,10 @@ api.get('/pet/{id}')(payload, opts)
 
 ## 3. 一次请求的数据流
 
-1. 动词调用把 `path`、`payload`、方法级配置、调用级配置浅合并成逻辑请求 `AxpRequestConfig`（与现在 `core.ts:91-97` 相同）。
+1. 动词调用把 `path`、`payload`、方法级配置、调用级配置浅合并成逻辑请求 `AxpRequestConfig`（与现在 `core.ts:91-97` 相同），再用 axios 公开的 `mergeConfig` 把实例 `defaults` 合并进来。**各层看到的都是最终生效的配置**，所以 filter、repath、key 都能处理 defaults 里的值，语义与旧版拦截器一致（B2 终审裁决，方案 A）。
 2. 内核（`client.ts` 的 `request`）建逻辑请求级上下文：分配 `id`，建 `AbortController` 并与用户 `signal` 联动，登记到在途集合（`cancelAll` / `pending()` 用）。
 3. 按编译好的链从外到内执行中间件。每层拿到的 `ctx.request` 是外层交给它的版本。
-4. 到达传输层：若有层调用过 `markReplayable()` 且 `data` 是纯对象/数组，先克隆一份再发；调用 `axios.request`，强制 `validateStatus: () => true`。
+4. 到达传输层：若有层调用过 `markReplayable()` 且 `data` 是纯对象/数组，先克隆一份再发；调用**用户的 axios 实例** `axios.request`（保留实例拦截器），强制 `validateStatus: () => true`。axios 会再合并一次 defaults：凡是 `defaults.params` 里有、但已被层删除的键，传输层显式写成 `null`（axios 拼 URL 时跳过），防止被带回；被层删除的默认 header 的处理以 B2 报告结论为准。
 5. 响应工厂把响应（或异常）判定成 `R`，内核给它打上品牌，原路返回；每层可读、可替换、可再次调用 `next()`。
 6. 最外层落定：从在途集合注销，解除 signal 监听，再按 §7 决定返回 data、返回 `R`、抛 `R` 或抛原始异常。
 

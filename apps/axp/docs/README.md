@@ -15,6 +15,7 @@
 
 ## 报告（带日期的结果）
 
+- [2026-10-28 洋葱管线 B2 插件](reports/2026-10-28-pipeline-b2.md) — resolveOption 与 loading/notify/repath/filter/envs 的实现结果、验收、API id、承接的旧行为。active。
 - [2026-10-28 洋葱管线 B1 内核](reports/2026-10-28-pipeline-b1.md) — 内核实现结果、验收数据、API id、bench 对比、终审修复记录。active。
 - [2026-10-28 B1 承接的旧行为](reports/2026-10-28-pipeline-b1-behaviors.md) — B1 覆盖的旧用例清单行与对应新用例。active。
 - [2026-10-28 洋葱管线 B0 基线](reports/2026-10-28-pipeline-baseline.md) — 旧 API 六场景性能、gzip -9 体积、836 处声明审计与 legacy 归档检查。active。

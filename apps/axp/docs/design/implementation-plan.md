@@ -23,7 +23,7 @@ summary: 重构分几批做、每批改哪些文件、交付什么、怎么验�
 |---|---|---|---|
 | B0 基线 ✅ | 量性能、体积、用例数；建行为清单 | `bench/pipeline.bench.ts`、`docs/reference/pipeline-migration/`、`docs/reports/2026-10-28-pipeline-baseline.md` | 836 处声明（执行 1002 条）：keep 346 / change 423 / drop 67；40 条存疑已终审裁决 |
 | B1 内核 ✅ | 归一化响应（含 `isAxpResponse`、判定 getter）、上下文、管线、传输、落定（含 bug 透传、`reject`、调用点 stack）、客户端、key、取消、日志开关 | `src/{client,pipeline,context,transport,response,key,types}.ts` | 测试方案 §3 全部单元用例；客户端与取消的 rule/boundary；类型测试中与插件无关的部分；`vitest.config.ts` 写入内核四文件分支 100% 门槛并达标 |
-| B2 无状态插件 | loading、notify、repath、filter、envs | `src/plugins/{loading,notify,repath,filter,envs}.ts` | 各插件 rule/boundary；loading 与 notify 的 I2、I4 |
+| B2 无状态插件 ✅ | loading、notify、repath、filter、envs | `src/plugins/{loading,notify,repath,filter,envs}.ts` | 各插件 rule/boundary；loading 与 notify 的 I2、I4 |
 | B3 重试与鉴权 | retry、auth、TokenManager（O4） | `src/plugins/{retry,auth}.ts`、`src/objects/TokenManager.ts` | rule/boundary；auth + retry、loading + auth、notify + auth 组合 |
 | B4 结果来源 | mock、share、cache（O3、O6） | `src/plugins/{mock,share,cache}.ts` | rule/boundary；§5.2 余下组合 |
 | B5 测试收尾 | powerset、不变量、类型测试补齐、覆盖率门槛、删 `test/legacy/` 和旧源码 | `test/combo/powerset.combo.test.ts`、`vitest.config.ts`；删除 `src/{core,install,helper,bag}.ts`、`src/objects/Response.ts`、`src/plugins/{cancel,key,logger,normalize}.ts` | 全局覆盖率门槛写入并达标（内核分支 100% 持续保持）；映射核对公式成立；I1–I7 全部生效 |
@@ -31,6 +31,11 @@ summary: 重构分几批做、每批改哪些文件、交付什么、怎么验�
 | B7 验收 | 改造执行器，跑 `npm run accept` | `accept/lib/*`、`accept/mapping.md` | 达到测试方案 §9.3；验收报告；testkit 台账在 api-ws-demo 单独提交 |
 
 批次之间的依赖是线性的；B2 和 B3 都只依赖 B1，但它们共用 `test/helpers/` 和组合用例，**不并行**。
+
+**2026-10-28 提速调整（用户同意）**：
+- B3 与 B4 只依赖 B2 的 `resolveOption`，彼此代码不相交，**并行**，各占一个 worktree 槽位；跨批组合（auth+share、retry+cache、retry+share）合并后在 B5 统一测。
+- **worktree 槽位复用**：`E:\workspaces\codejoo-accept`、`E:\workspaces\codejoo-key` 两个 worktree 已装好依赖，后续任务一律在其中 `git switch -c <新分支> jelon/axp-pipeline` 复用，不再新建（Windows 上新建 + `pnpm install` 约 7 分钟）；锁文件变化时再 `pnpm install --offline`。目录不要改名或移动（pnpm 链接是绝对路径）。
+- **diff-simplify 改为阶段性**：B3、B4 不再逐批跑四代理精简，留到 B5 对全部插件统一做一次。
 
 ## 3. 每批的工作方式
 
@@ -43,6 +48,8 @@ summary: 重构分几批做、每批改哪些文件、交付什么、怎么验�
    - 检查注释是否符合规范（中文、简短，公共 API 写契约、参数、返回和示例）；
    - 检查新增函数是否都有单测。
 4. 终审通过后由主会话提交，格式 `refactor(axp): …` / `test(axp): …`。不通过先写清理由，再决定自己改还是退回重做。
+
+**B7 待办（来自 B2 与 accept 前置）**：删除 classify 的「B7 删除区」与过期常量；`normalize: false` → `throws: false`、`share: 'none'` → `false`；去掉 login 步骤重置 `canRefresh`；换上 `expectJson` 后删 `parseGuard` / `PARSE_MARK`；`reason=missing` 无 refresh 的 401 用自定义 `onFailure` 判 unauthenticated；`accept/tsconfig.json` 的 `@codejoo/axp` 路径从 `dist` 改回 `src`；开工前重新 `vp pack`。
 
 ## 4. Codex 派发约束（每份 prompt 都要写）
 
