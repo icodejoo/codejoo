@@ -1,6 +1,6 @@
 import { AxiosHeaders } from "axios";
 import { expect, it } from "vitest";
-import { cloneAxiosDefaults, cloneAxiosHeaders } from "../../src/client";
+import { cloneAxiosDefaults, cloneAxiosHeaders } from "../../src/utils";
 
 /** 原样透传数据的转换器。 */
 const transform = (data: unknown) => data;

@@ -1,4 +1,9 @@
-import { create as createAxios, type AxiosAdapter, type AxiosRequestConfig } from "axios";
+import {
+  create as createAxios,
+  type AxiosAdapter,
+  type AxiosRequestConfig,
+  type CreateAxiosDefaults,
+} from "axios";
 import { expect } from "vitest";
 import { createAxp } from "../../src/client";
 import { AxpResponse, axpResponse, type IAxpResponse } from "../../src/response";
@@ -50,7 +55,7 @@ export function recordEvents(): ITestEvents {
 export function createTestClient<R extends IAxpResponse = AxpResponse>(
   plugins: readonly AxpPlugin<R, any>[] = [],
   opts: AxpOptions<R> = {} as AxpOptions<R>,
-  transport?: AxiosAdapter | AxiosRequestConfig,
+  transport?: AxiosAdapter | AxiosRequestConfig | CreateAxiosDefaults,
 ) {
   const net = makeNetwork();
   net.on(

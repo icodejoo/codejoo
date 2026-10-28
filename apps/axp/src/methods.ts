@@ -11,3 +11,14 @@ export const NO_BODY_METHODS = ["get", "head", "options", "purge", "link", "unli
 export function isBodyMethod(method: string): boolean {
   return (BODY_METHODS as readonly string[]).includes(method);
 }
+/** 缺少方法时采用 axios 的 GET 语义。 */
+export const DEFAULT_METHOD = "get";
+
+/** 统一请求方法的大小写，空值采用默认方法。
+ * @param method 请求方法。
+ * @returns 小写 HTTP 方法。
+ * @example `normalizeMethod('POST')`
+ */
+export function normalizeMethod(method?: string): string {
+  return (method ?? DEFAULT_METHOD).toLowerCase();
+}

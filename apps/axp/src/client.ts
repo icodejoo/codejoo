@@ -1,6 +1,6 @@
-import { create as createAxios, AxiosHeaders, type AxiosRequestConfig } from "axios";
+import { create as createAxios, mergeConfig, type AxiosRequestConfig } from "axios";
 import { AxpContext, NO_LOG } from "./context";
-import { BODY_METHODS, NO_BODY_METHODS } from "./methods";
+import { BODY_METHODS, NO_BODY_METHODS, normalizeMethod } from "./methods";
 import { composePipeline, sortPipeline, type IAxpRegistration, type IAxpLayer } from "./pipeline";
 import {
   AXP_KINDS,
@@ -20,7 +20,7 @@ import type {
   HttpMethodLower,
   TAxpArgs,
 } from "./types";
-import { isObject } from "./utils";
+import { assignAxiosDefaults, cloneAxiosDefaults, effectiveHeaders } from "./utils";
 
 /** AbortSignal 的标准事件名。 */
 const ABORT_EVENT = "abort";
@@ -58,54 +58,23 @@ export function settle<R extends IAxpResponse>(
   return ctx.request.wrap || !throws ? response : response.data;
 }
 
-/** 克隆 defaults 的头容器，避免父子实例交叉污染。
- * @internal
- * @param headers 待复制的头容器。
- * @returns 独立头容器。
- * @example `cloneAxiosHeaders(defaults.headers)`
- */
-export function cloneAxiosHeaders(
-  headers: AxiosRequestConfig["headers"],
-): AxiosRequestConfig["headers"] {
-  if (headers == null) return headers;
-  if (headers instanceof AxiosHeaders) return new AxiosHeaders(headers);
-  const out: Record<string, unknown> = {};
-  for (const key of Object.keys(headers)) {
-    const value = (headers as Record<string, unknown>)[key];
-    out[key] = isObject(value) ? { ...value } : value;
-  }
-  return out as AxiosRequestConfig["headers"];
-}
-
-/** 复制旧工具的定向克隆逻辑，不引入旧 adapter 包装。
- * @internal
- * @param defaults 父实例的默认配置。
- * @returns 克隆可变容器后的配置。
- * @example `createAxios(cloneAxiosDefaults(parent.defaults))`
- */
-export function cloneAxiosDefaults(defaults: AxiosRequestConfig): AxiosRequestConfig {
-  return {
-    ...defaults,
-    headers: cloneAxiosHeaders(defaults.headers),
-    params: isObject(defaults.params) ? { ...defaults.params } : defaults.params,
-    transformRequest: toArray(defaults.transformRequest),
-    transformResponse: toArray(defaults.transformResponse),
-    transitional: defaults.transitional ? { ...defaults.transitional } : defaults.transitional,
-  };
-}
-
-/** 将 axios 转换器复制为独立数组，保持函数引用。 */
-function toArray<T>(value: T | T[] | undefined): T[] | undefined {
-  return value ? (Array.isArray(value) ? [...value] : [value]) : undefined;
-}
-
 /** 创建自有洋葱管线客户端，不修改 axios 拦截器。
  * @param options 传输实例、响应工厂、插件和内核选项；自定义 R 必须提供 response。
+ * @param overrides 内部用于 extend，在插件 setup 后应用显式覆盖。
  * @returns 具有十个柯里化动词的独立客户端。
  * @example `const api = createAxp(); await api.get('/pets')()`
  */
 export function createAxp<S = unknown, R extends IAxpResponse = AxpResponse>(
-  ...[options = {} as AxpOptions<R>]: TAxpArgs<R, AxpOptions<R>>
+  ...args: TAxpArgs<R, AxpOptions<R>>
+): AxpClient<S, R>;
+/** @internal extend 在插件装配完成后应用显式默认配置。 */
+export function createAxp<S = unknown, R extends IAxpResponse = AxpResponse>(
+  options: AxpOptions<R>,
+  overrides: AxiosRequestConfig,
+): AxpClient<S, R>;
+export function createAxp<S = unknown, R extends IAxpResponse = AxpResponse>(
+  options: AxpOptions<R> = {} as AxpOptions<R>,
+  defaultOverrides?: AxiosRequestConfig,
 ): AxpClient<S, R> {
   const axios = options.axios ?? createAxios();
   const factory = guardFactory(
@@ -162,12 +131,12 @@ export function createAxp<S = unknown, R extends IAxpResponse = AxpResponse>(
     register(plugin, true);
   }
   /** 发起一个逻辑请求，清理完成后才执行落定回调。 */
-  async function dispatch(config: AxpRequestConfig, owned: boolean): Promise<unknown> {
+  async function dispatch(config: AxpRequestConfig): Promise<unknown> {
     assertActive();
     const snapshot = run;
     const callsite = options.debug ? new Error() : undefined;
     const controller = new AbortController();
-    const signal = config.signal;
+    const signal = config.signal ?? (axios.defaults.signal as AbortSignal | undefined);
     let abort: (() => void) | undefined;
     if (signal) {
       /** 有用户 signal 时才创建联动监听。 */
@@ -179,8 +148,11 @@ export function createAxp<S = unknown, R extends IAxpResponse = AxpResponse>(
     let ctx: AxpContext<R>;
     let response: R;
     try {
-      // 动词构造的配置归 dispatch 所有，直接复用；公开 request() 传入的对象不能被改动，先浅拷贝。
-      const view = owned ? config : { ...config };
+      // 逻辑请求只在入口合并一次 defaults，所有阶段和 key 看到同一份有效配置。
+      const view = mergeConfig(axios.defaults as AxiosRequestConfig, config) as AxpRequestConfig;
+      // mergeConfig 的 method 只取请求级；补齐实际发送方法，让各阶段和指纹保持一致。
+      view.method = normalizeMethod(view.method || axios.defaults.method);
+      view.headers = effectiveHeaders(view);
       view.signal = controller.signal;
       ctx = new AxpContext<R>({
         id: ++sequence,
@@ -190,6 +162,7 @@ export function createAxp<S = unknown, R extends IAxpResponse = AxpResponse>(
         log,
         factory,
         key: options.key,
+        origin: config,
       });
       response = controller.signal.aborted
         ? ctx.fail({ kind: AXP_KINDS.CANCEL })
@@ -200,14 +173,9 @@ export function createAxp<S = unknown, R extends IAxpResponse = AxpResponse>(
     }
     return settle(response, ctx, options, callsite);
   }
-  /** 公开 request 复制调用方配置，私有动词配置由 dispatch 直接接管。 */
-  function request(config: AxpRequestConfig): Promise<unknown> {
-    return dispatch(config, false);
-  }
-
   const client = {
     axios,
-    request,
+    request: dispatch,
     /** 克隆 defaults 并重新 setup 默认继承的插件。 */
     extend(
       overrides: AxiosRequestConfig = {},
@@ -217,16 +185,16 @@ export function createAxp<S = unknown, R extends IAxpResponse = AxpResponse>(
     ) {
       assertActive();
       const childAxios = createAxios(cloneAxiosDefaults(axios.defaults as AxiosRequestConfig));
-      const copy = cloneAxiosDefaults(overrides);
-      for (const key of Object.keys(overrides))
-        Object.assign(childAxios.defaults, { [key]: copy[key as keyof AxiosRequestConfig] });
       const plugins =
         opts.plugins === undefined || opts.plugins === "inherit"
           ? registrations.map(
               /** 提取已登记插件定义，供子客户端重新 setup。 */ (entry) => entry.plugin,
             )
           : opts.plugins;
-      return createAxp<S, R>({ ...options, axios: childAxios, plugins } as AxpOptions<R>);
+      return createAxp<S, R>(
+        { ...options, axios: childAxios, plugins } as AxpOptions<R>,
+        overrides,
+      );
     },
     use,
     /** 卸载实例并重编译，在途执行器保持快照。 */
@@ -302,7 +270,7 @@ export function createAxp<S = unknown, R extends IAxpResponse = AxpResponse>(
             if (value === undefined) delete config[flag];
             else config[flag] = value;
           }
-          return dispatch(config, true);
+          return dispatch(config);
         };
       Object.assign(client, { [method]: verb });
     }
@@ -311,6 +279,8 @@ export function createAxp<S = unknown, R extends IAxpResponse = AxpResponse>(
   bindMethods(NO_BODY_METHODS, "params");
   try {
     for (const plugin of options.plugins ?? []) register(plugin, false);
+    if (defaultOverrides)
+      assignAxiosDefaults(axios.defaults as AxiosRequestConfig, defaultOverrides);
     compile();
   } catch (error) {
     client.dispose();

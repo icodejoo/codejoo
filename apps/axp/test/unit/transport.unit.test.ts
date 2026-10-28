@@ -17,7 +17,10 @@ function transport() {
       config: { ...config, headers: new AxiosHeaders() },
     }),
   );
-  const send = createTransport({ request } as unknown as AxiosInstance, axpResponse());
+  const send = createTransport(
+    { request, defaults: {} } as unknown as AxiosInstance,
+    axpResponse(),
+  );
   return { send, request };
 }
 it("[core.fn.createTransport] 强制全状态放行，默认使用逻辑 signal", /** 强制全状态放行，默认使用逻辑 signal。 */ async () => {
@@ -102,4 +105,28 @@ it("[core.fn.createTransport] axios 异常交给响应工厂", /** axios 异常�
   const error = new AxiosError("offline");
   request.mockRejectedValue(error);
   expect(await send(testContext())).toMatchObject({ kind: "network", error });
+});
+it("[core.fn.createTransport] 各层未改动 params / headers 时原样透传，不做二次合并掩码", /** 多数请求只付一次 mergeConfig，不再逐请求比对默认头。 */ async () => {
+  const request = vi.fn(
+    /** 回显请求配置。 */ async (config: AxiosRequestConfig) => ({
+      status: 200,
+      statusText: "",
+      data: 1,
+      headers: {},
+      config: { ...config, headers: new AxiosHeaders() },
+    }),
+  );
+  const send = createTransport(
+    {
+      request,
+      defaults: { params: { tenant: "a" }, headers: { common: { Accept: "json" } } },
+    } as unknown as AxiosInstance,
+    axpResponse(),
+  );
+  const params = { tenant: "a" };
+  const headers = new AxiosHeaders({ Accept: "json" });
+  await send(testContext({ params, headers }));
+  const config = request.mock.calls[0]![0];
+  expect(config.params).toBe(params);
+  expect(config.headers).toBe(headers);
 });

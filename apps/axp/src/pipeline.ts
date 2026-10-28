@@ -120,7 +120,7 @@ function guardLayer<R extends IAxpResponse>(
     const next: AxpNext<R> = (patch) => {
       let target = ctx;
       try {
-        if (patch) target = requestContext(ctx, mergePatch(ctx.request, patch));
+        if (patch) target = requestContext(ctx, mergePatch(ctx.request, patch), patch);
       } catch (error) {
         return Promise.resolve(ctx.fail({ kind: AXP_KINDS.INTERNAL, error }));
       }

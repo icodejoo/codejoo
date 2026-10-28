@@ -29,9 +29,12 @@ function mergeHeaders(
   patch: AxpRequestConfig["headers"],
 ): Record<string, unknown> {
   const headers: Record<string, unknown> = { ...base };
-  for (const [name, value] of Object.entries({ ...patch })) {
+  const updates: Record<string, unknown> = { ...patch };
+  for (const name of Object.keys(updates)) {
+    const value = updates[name];
+    const lowerName = name.toLowerCase();
     for (const existing of Object.keys(headers)) {
-      if (existing.toLowerCase() === name.toLowerCase()) delete headers[existing];
+      if (existing.toLowerCase() === lowerName) delete headers[existing];
     }
     if (value !== undefined) headers[name] = value;
   }
@@ -49,7 +52,8 @@ export function mergePatch(
   patch: AxpRequestPatch,
 ): AxpRequestConfig {
   const merged = { ...request } as Record<string, unknown>;
-  for (const [key, value] of Object.entries(patch)) {
+  for (const key of Object.keys(patch)) {
+    const value = (patch as Record<string, unknown>)[key];
     if (value === undefined) delete merged[key];
     else
       merged[key] =
@@ -76,6 +80,8 @@ export interface IAxpContextInit<R extends IAxpResponse> {
   factory: IAxpResponseFactory<R>;
   /** key 配置。 */
   key?: IKeyOptions;
+  /** 合并 defaults 之前的原始请求级配置；省略时视为与 request 相同。 */
+  origin?: AxpRequestConfig;
 }
 /** 请求各层共享的状态容器。 */
 interface IAxpContextState {
@@ -85,6 +91,10 @@ interface IAxpContextState {
   keys?: WeakMap<object, string | null>;
   /** 是否需要重放保护。 */
   replayable: boolean;
+  /** 补丁触及的字段，包括删除；重放时仍从当前视图取值。 */
+  touched?: Set<string>;
+  /** 合并 defaults 之前的原始请求级配置，传输层以它为底交给 axios。 */
+  readonly origin: Readonly<AxpRequestConfig>;
 }
 
 /** 每层保持固定实例形状，逻辑请求状态通过同一容器共享。
@@ -111,9 +121,14 @@ export class AxpContext<R extends IAxpResponse = IAxpResponse> {
   /** 建立一个逻辑请求的根上下文，或从外层上下文派生请求视图不同的内层上下文。
    * @param init 请求及内核服务；传入既有上下文时沿用其服务与共享状态。
    * @param request 本层请求视图，默认取 init.request。
+   * @param patch 派生本层的补丁，用于记录传输差量。
    * @example `new AxpContext({ id, client, request, signal, log, factory })`
    */
-  constructor(init: IAxpContextInit<R> | AxpContext<R>, request = init.request) {
+  constructor(
+    init: IAxpContextInit<R> | AxpContext<R>,
+    request = init.request,
+    patch?: AxpRequestPatch,
+  ) {
     this.id = init.id;
     this.client = init.client;
     this.request = request;
@@ -123,10 +138,14 @@ export class AxpContext<R extends IAxpResponse = IAxpResponse> {
       this.factory = init.factory;
       this.keyOptions = init.keyOptions;
       this.state = init.state;
+      if (patch) {
+        const touched = (this.state.touched ??= new Set());
+        for (const key of Object.keys(patch)) touched.add(key);
+      }
     } else {
       this.factory = init.factory;
       this.keyOptions = init.key;
-      this.state = { replayable: false };
+      this.state = { replayable: false, origin: init.origin ?? request };
     }
   }
   /** 按当前请求对象惰性缓存指纹。
@@ -175,17 +194,31 @@ export class AxpContext<R extends IAxpResponse = IAxpResponse> {
   get replayable(): boolean {
     return this.state.replayable;
   }
+  /** 传输层只遍历补丁触及的字段。
+   * @internal
+   */
+  get touchedFields(): ReadonlySet<string> | undefined {
+    return this.state.touched;
+  }
+  /** 合并 defaults 之前的原始请求级配置；传输层以它为底组装交给 axios 的差量。
+   * @internal
+   */
+  get originRequest(): Readonly<AxpRequestConfig> {
+    return this.state.origin;
+  }
 }
 
 /** 派生固定形状的内层实例，共享逻辑状态与内核服务。
  * @param context 外层上下文。
  * @param request 内层请求视图。
+ * @param patch 派生本层的补丁；直接替换视图时以新视图的字段为准。
  * @returns request 独立、状态共享的 AxpContext 实例。
  * @example `requestContext(ctx, mergePatch(ctx.request, patch))`
  */
 export function requestContext<R extends IAxpResponse>(
   context: AxpContext<R>,
   request: Readonly<AxpRequestConfig>,
+  patch: AxpRequestPatch = request,
 ): AxpContext<R> {
-  return new AxpContext(context, request);
+  return new AxpContext(context, request, patch);
 }
