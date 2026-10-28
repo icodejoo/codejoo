@@ -1,7 +1,7 @@
-import { resolveOption, type AxpOption, type IPluginSwitch } from "../options";
+import { resolveOption, resolveRequestOption, type AxpOption, type IPluginSwitch } from "../options";
 import type { AxpResponse, IAxpResponse } from "../response";
 import type { AxpPlugin } from "../types";
-import { fireNotice, isPlainObject } from "../utils";
+import { fireNotice } from "../utils";
 
 /** 内置显示插件名称。 */
 const NAME = "axp:loading";
@@ -34,9 +34,9 @@ function clearTimer(state: ILoadingState): void {
   clearTimeout(state.timer);
   state.timer = undefined;
 }
-/** 函数简写仅作为通知回调，不动态求值。 */
-function shorthand(value: unknown): Partial<ILoadingOptions> {
-  return { loading: value as TLoadingFunc };
+/** 函数简写仅作为通知回调，不动态求值；其它类型不认。 */
+function shorthand(value: unknown): Partial<ILoadingOptions> | undefined {
+  return typeof value === "function" ? { loading: value as TLoadingFunc } : undefined;
 }
 /** 按回调汇总逻辑请求，覆盖内层重试和重放。
  * @param options 显示回调、总开关及防闪烁延迟。
@@ -74,9 +74,7 @@ export default function axpLoading<R extends IAxpResponse = AxpResponse>(options
       return {
         /** 每个逻辑请求只增加和释放一次计数。 */
         async handle(ctx, next) {
-          const value = ctx.request.loading;
-          if (!active || value === false || (!base.loading && typeof value !== "function" && (!isPlainObject(value) || !value.loading))) return next();
-          const resolved = isPlainObject(value) || typeof value === "function" ? resolveOption(value, base, DEFAULTS, shorthand) : base;
+          const resolved = active ? resolveRequestOption(ctx.request.loading, base, DEFAULTS, shorthand) : null;
           if (!resolved?.loading) return next();
           const fn = resolved.loading;
           const current = states.get(fn) ?? { count: 0, shown: false };

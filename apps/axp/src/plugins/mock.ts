@@ -1,14 +1,12 @@
-import { resolveOption, type AxpOption, type IPluginSwitch } from "../options";
+import { resolveOption, resolveRequestOption, type AxpOption, type IPluginSwitch } from "../options";
 import { AXP_KINDS, type AxpResponse, type IAxpResponse } from "../response";
 import type { AxpPlugin, AxpRequestPatch } from "../types";
-import { isPlainObject } from "../utils";
+import { ORIGIN_PREFIX } from "../utils";
 
 /** 内置 mock 插件名称。 */
 const NAME = "axp:mock";
 /** mock 服务器上没有这条接口时的 HTTP 状态。 */
 const NOT_FOUND = 404;
-/** 带协议或以双斜杠开头的绝对地址。 */
-const ABSOLUTE_URL = /^([a-z][a-z\d+\-.]*:)?\/\//i;
 /** 开启了 mock 却没有 mockUrl 时的调试提示。 */
 const SKIPPED_MESSAGE = `[${NAME}] 已跳过：没有 mockUrl，直接请求真实接口`;
 /** 探测结果需要回落时的调试提示前缀。 */
@@ -65,24 +63,13 @@ function joinUrl(base: string, relative: string): string {
  */
 export function $rewriteUrl(url: string | undefined, mockUrl: string): AxpRequestPatch {
   if (!url) return { baseURL: mockUrl };
-  if (!ABSOLUTE_URL.test(url)) return { url: joinUrl(mockUrl, url) };
+  if (!ORIGIN_PREFIX.test(url)) return { url: joinUrl(mockUrl, url) };
   try {
     const parsed = new URL(url);
     return { url: joinUrl(mockUrl, parsed.pathname + parsed.search + parsed.hash) };
   } catch {
     return { url: joinUrl(mockUrl, url) };
   }
-}
-
-/** 合并内置默认之后的 mock 配置。 */
-type TMockConfig<R extends IAxpResponse> = IMockOptions<R> & Required<Pick<IMockOptions<R>, "fallbackWhen">>;
-
-/** 本次请求生效的 mock 配置；null 表示这次不走 mock。 */
-function resolveMock<R extends IAxpResponse>(value: unknown, base: TMockConfig<R>): TMockConfig<R> | null {
-  if (value === true) return base;
-  if (isPlainObject(value)) return resolveOption(value, base, DEFAULTS);
-  // 省略、false 以及未声明的值：只看插件级 mock。
-  return value !== false && base.mock ? base : null;
 }
 
 /** 先探测 mock 服务器，mock 不存在时回落真实接口。
@@ -93,13 +80,15 @@ function resolveMock<R extends IAxpResponse>(value: unknown, base: TMockConfig<R
  */
 export default function axpMock<R extends IAxpResponse = AxpResponse>(options: IMockOptions<R> = {}): AxpPlugin<R> {
   const base = resolveOption<IMockOptions<R>, typeof DEFAULTS>(undefined, options, DEFAULTS);
+  // 请求省略或写了不认得的值时只看插件级 mock：未全局开启则不走 mock。
+  const optIn = !base.mock;
   return {
     name: NAME,
     enable: options.enable ?? false,
     stage: "source",
     /** 探测命中直接返回；需要回落时再走一次真实请求。 */
     async handle(ctx, next) {
-      const resolved = resolveMock(ctx.request.mock, base);
+      const resolved = resolveRequestOption(ctx.request.mock, base, DEFAULTS, undefined, optIn);
       if (!resolved) return next();
       const mockUrl = resolved.mockUrl;
       if (!mockUrl) {

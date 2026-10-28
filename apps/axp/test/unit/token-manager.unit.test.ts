@@ -65,6 +65,20 @@ describe("TokenManager — 存储不可用环境", () => {
   });
 });
 
+describe("TokenManager — 明文 token 不外泄", () => {
+  it("[public.member.TokenManager.set] JSON.stringify、Object.keys、展开都拿不到明文 token，读写照常", /** 令牌放在不可枚举属性里。 */ async () => {
+    const { default: Manager } = await import("../../src/objects/TokenManager");
+    const tm = new Manager();
+    tm.set("secret-access", "secret-refresh");
+    expect(JSON.stringify(tm)).not.toMatch(/secret/);
+    expect(Object.keys(tm)).toEqual([]);
+    expect(JSON.stringify(Object.assign({}, tm))).toBe("{}");
+    expect(tm.accessToken).toBe("Bearer secret-access");
+    expect(tm.refreshToken).toBe("secret-refresh");
+    tm.clear();
+  });
+});
+
 describe("TokenManager — 正常持久化路径", () => {
   it("[public.member.TokenManager.constructor][public.member.TokenManager.set][public.member.TokenManager.clear] 恢复裸 token、写入和空值删除均同步存储，实例上没有 canRefresh", /** 持久化往返与已删除成员。 */ async () => {
     const values = new Map([

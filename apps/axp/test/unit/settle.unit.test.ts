@@ -7,6 +7,10 @@ import { testContext } from "../helpers/context";
 const MODES = [{}, { wrap: true }, { throws: false }];
 /** 失败业务码。 */
 const BIZ_FAILURE = 401;
+/** 固定的调用点栈文本。 */
+const CALLSITE_STACK = "callsite";
+/** 带固定栈文本的调用点，不依赖真实栈内容。 */
+const CALLSITE = Object.assign(new Error("callsite"), { stack: CALLSITE_STACK });
 
 it.each(MODES)(
   "[core.fn.settle] 成功九格：%j",
@@ -68,7 +72,7 @@ it("[core.opt.debug][core.cb.reject] 调用点派生工厂抛错时跳过 reject
     },
   );
   const reject = vi.fn();
-  expect(/** 执行失败派生。 */ () => settle(original, ctx, { reject }, "callsite")).toThrow(bug);
+  expect(/** 执行失败派生。 */ () => settle(original, ctx, { reject }, CALLSITE)).toThrow(bug);
   expect(reject).not.toHaveBeenCalled();
   expect(original.stack).toBeUndefined();
 });
@@ -76,10 +80,10 @@ it("[core.opt.debug] debug 失败派生副本，共享原对象不变", /** debu
   const ctx = testContext();
   const original = ctx.fail({ kind: "timeout", data: "shared" });
   try {
-    settle(original, ctx, {}, "callsite");
+    settle(original, ctx, {}, CALLSITE);
   } catch (derived) {
     expect(derived).not.toBe(original);
-    expect(derived).toMatchObject({ stack: "callsite", kind: "timeout", data: "shared" });
+    expect(derived).toMatchObject({ stack: CALLSITE_STACK, kind: "timeout", data: "shared" });
   }
   expect(original.stack).toBeUndefined();
 });

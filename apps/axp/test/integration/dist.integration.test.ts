@@ -2,7 +2,7 @@ import { execFileSync, spawnSync } from "node:child_process";
 import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, realpathSync, rmSync, statSync, symlinkSync, writeFileSync } from "node:fs";
 import { createRequire } from "node:module";
 import { tmpdir } from "node:os";
-import { dirname, join, resolve } from "node:path";
+import { dirname, join, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
@@ -46,6 +46,27 @@ const SLOW_STEP_TIMEOUT = 300_000;
 const DIST_PROBES = ["dist/esm/index.mjs", "dist/esm/index.d.mts", "dist/index.min.js"];
 /** 影响产物内容的构建输入文件（src 目录另行递归比较）。 */
 const BUILD_INPUTS = ["vite.config.ts", "package.json", "tsconfig.build.json"];
+
+/** 运行时 API 底线是 ES2019（构建目标 es2015 只降级语法，不补 API）：产物里不得出现更新的 API 调用。
+ * 规则只匹配调用形态（`.at(`、`Object.hasOwn(` 这类），避免把同名的普通字段误当成调用。 */
+const ES2020_PLUS_APIS: ReadonlyArray<readonly [api: string, pattern: RegExp]> = [
+  ["Array#toSorted / toReversed / toSpliced", /\.(?:toSorted|toReversed|toSpliced)\(/],
+  ["Array#findLast / findLastIndex", /\.findLast(?:Index)?\(/],
+  ["Array#at / String#at", /\.at\(/],
+  ["String#replaceAll", /\.replaceAll\(/],
+  ["String#matchAll", /\.matchAll\(/],
+  ["Object.hasOwn", /\bObject\.hasOwn\(/],
+  ["Object.groupBy / Map.groupBy", /\b(?:Object|Map)\.groupBy\(/],
+  ["Promise.allSettled / Promise.any", /\bPromise\.(?:allSettled|any)\(/],
+  ["Array.fromAsync", /\bArray\.fromAsync\(/],
+  ["globalThis", /\bglobalThis\b/],
+  ["BigInt / WeakRef / FinalizationRegistry / AggregateError", /\b(?:BigInt|WeakRef|FinalizationRegistry|AggregateError)\b/],
+];
+
+/** 去掉块注释与行注释，只扫真正会执行的代码；行注释要求 // 前是行首或空白，避开正则字面量里的 \/\/。 */
+function stripComments(code: string): string {
+  return code.replace(/\/\*[\s\S]*?\*\//g, "").replace(/(^|\s)\/\/.*$/gm, "$1");
+}
 
 /** 解析后的 package.json 的最小形状。 */
 interface IPackageJson {
@@ -394,6 +415,44 @@ describe("dist 产物", () => {
     expect(mixed.clientSeesOther).toEqual([true, true]);
     expect(mixed.rejectsNonResponses).toEqual([false, false, false]);
     expect(mixed.kinds).toEqual(["ok", "network", "ok", "network"]);
+  });
+
+  it("[dist.const.es2019] 产物不含 ES2020 及以上的 API 调用：min 版与 esm 逐文件扫描", /** 回归：toSorted（ES2023）曾混进源码，类型库是 ES2023 看不出来。 */ () => {
+    const esmRoot = join(PKG_ROOT, "dist", "esm");
+    const esmFiles = readdirSync(esmRoot, { recursive: true, encoding: "utf8" })
+      .filter((file) => file.endsWith(".mjs"))
+      .map((file) => join(esmRoot, file));
+    const files = [join(PKG_ROOT, "dist", "index.min.js"), ...esmFiles];
+    expect(esmFiles.length).toBeGreaterThan(PLUGIN_NAMES.length);
+    const offenders: string[] = [];
+    for (const file of files) {
+      const code = stripComments(readFileSync(file, "utf8"));
+      for (const [api, pattern] of ES2020_PLUS_APIS) if (pattern.test(code)) offenders.push(`${relative(PKG_ROOT, file)}: ${api}`);
+    }
+    expect(offenders).toEqual([]);
+  });
+
+  it("[dist.const.es2019] 检测规则本身有效：每条规则都命中它要拦的调用，注释里的提及与同名字段不算", /** 规则失灵会让上一条变成假绿。 */ () => {
+    const samples = [
+      "list.toSorted(cmp)",
+      "list.toReversed()",
+      "list.toSpliced(0, 1)",
+      "list.findLast(fn)",
+      "list.findLastIndex(fn)",
+      "list.at(-1)",
+      'text.replaceAll("a", "b")',
+      "text.matchAll(re)",
+      "Object.hasOwn(a, k)",
+      "Object.groupBy(a, f)",
+      "Promise.allSettled(a)",
+      "Promise.any(a)",
+      "Array.fromAsync(a)",
+      "const g = globalThis;",
+      "new WeakRef(a)",
+    ];
+    expect(samples.map((sample) => ES2020_PLUS_APIS.filter(([, pattern]) => pattern.test(sample)).length)).toEqual(samples.map(() => 1));
+    const harmless = ["const re = /\\/\\/x/; const url = 'http://host/a';", "obj.format(1); date.at = 1; x.cat(2); Object.fromEntries(a);", "// list.toSorted(cmp)", "/* globalThis */"].join("\n");
+    expect(ES2020_PLUS_APIS.filter(([, pattern]) => pattern.test(stripComments(harmless)))).toEqual([]);
   });
 
   it("[dist.const.augmentation] 声明产物里 declare module 的相对说明符都指向真实存在的 .d.mts", /** 回归：说明符曾缺 .mjs，类型增强整体失效。 */ () => {

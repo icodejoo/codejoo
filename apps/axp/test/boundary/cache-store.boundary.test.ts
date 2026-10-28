@@ -17,6 +17,8 @@ const NOW = 100;
 const RESPONSE = "response";
 /** 默认容量。 */
 const CAPACITY = 500;
+/** 有限有效期条目触发全表清扫的写入次数。 */
+const SWEEP_INTERVAL = 64;
 
 it.each([0, -1, NaN])("[cache.fn.createMemoryStore] max=%s 回退 500", (max) => {
   const store = createMemoryStore<string>({ max });
@@ -27,14 +29,50 @@ it.each([0, -1, NaN])("[cache.fn.createMemoryStore] max=%s 回退 500", (max) =>
   expect(store.get("0")).toBeUndefined();
 });
 
-it("[cache.fn.createMemoryStore] Infinity 不限容量且未溢出不调用时钟", () => {
+it("[cache.fn.createMemoryStore] Infinity 不限容量，永不过期的条目不触发清扫也不调用时钟", () => {
   const now = vi.fn(() => NOW);
   const store = createMemoryStore<string>({ max: Infinity, now });
   for (let index = 0; index <= CAPACITY; index++) {
-    store.set(String(index), { response: RESPONSE, expiresAt: NOW });
+    store.set(String(index), { response: RESPONSE, expiresAt: Infinity });
   }
   expect(store.size).toBe(CAPACITY + 1);
   expect(now).not.toHaveBeenCalled();
+});
+
+it("[cache.fn.createMemoryStore] 容量不限时有限有效期的条目每写入 64 次清扫一次过期项，不会无界增长", () => {
+  const now = vi.fn(() => NOW);
+  const store = createMemoryStore<string>({ max: Infinity, now });
+  const writes = SWEEP_INTERVAL * 3;
+  for (let index = 0; index < writes; index++) {
+    // 偶数条目已过期，奇数条目仍有效
+    store.set(String(index), { response: RESPONSE, expiresAt: index % 2 ? NOW + 1 : NOW });
+    // 清扫之前不读时钟，过期项按写入累积
+    if (index < SWEEP_INTERVAL - 1) expect(now).not.toHaveBeenCalled();
+  }
+  expect(now).toHaveBeenCalledTimes(3);
+  // 每个窗口末尾清扫一次：只留下还有效的条目和窗口内最后一次写入之后的新条目
+  expect(store.size).toBe(writes / 2);
+  expect(store.get("1")?.response).toBe(RESPONSE);
+  expect(store.get("0")).toBeUndefined();
+});
+
+it("[cache.fn.createMemoryStore] 容量不限且条目都还有效时，清扫间隔随条目数翻倍，插入总代价保持线性", () => {
+  const now = vi.fn(() => NOW);
+  const store = createMemoryStore<string>({ max: Infinity, now });
+  const writes = SWEEP_INTERVAL * 64;
+  for (let index = 0; index < writes; index++) store.set(String(index), { response: RESPONSE, expiresAt: NOW + 1 });
+  expect(store.size).toBe(writes);
+  // 固定间隔会清扫 writes / SWEEP_INTERVAL 次、每次全表扫描；按条目数翻倍只需 log2(writes / SWEEP_INTERVAL) + 1 次
+  expect(now.mock.calls.length).toBeLessThanOrEqual(Math.log2(writes / SWEEP_INTERVAL) + 1);
+});
+
+it("[cache.fn.createMemoryStore] 清扫重置两个节流计数：刚清扫过的窗口内不再重复读时钟", () => {
+  const now = vi.fn(() => NOW);
+  const store = createMemoryStore<string>({ max: Infinity, now });
+  for (let index = 0; index < SWEEP_INTERVAL; index++) store.set(String(index), { response: RESPONSE, expiresAt: NOW + 1 });
+  expect(now).toHaveBeenCalledTimes(1);
+  for (let index = 0; index < SWEEP_INTERVAL - 1; index++) store.set(`next-${index}`, { response: RESPONSE, expiresAt: NOW + 1 });
+  expect(now).toHaveBeenCalledTimes(1);
 });
 
 it("[cache.fn.createMemoryStore] get 命中和 set 替换都提升 LRU 顺序", () => {
@@ -113,13 +151,14 @@ it("[cache.fn.createFreshnessBarrier] R2-2：新响应写入后被 LRU 淘汰，
   store.set(KEY, { response: "fresh", expiresAt: Infinity });
   barrier.markWritten(KEY, fresh);
   barrier.end(KEY);
+  // 容量为 1，另一个 key 的写入把 KEY 淘汰出缓存；旧请求仍在途，屏障记录必须保留
   store.set(OTHER_KEY, { response: RESPONSE, expiresAt: Infinity });
-  barrier.reclaim(KEY, store.get(KEY) !== undefined);
+  expect(store.get(KEY)).toBeUndefined();
   expect(barrier.canWrite(KEY, old)).toBe(false);
   barrier.markWritten(KEY, old);
   expect(barrier.canWrite(KEY, fresh)).toBe(false);
+  // 全部在途结束，记录回收
   barrier.end(KEY);
-  barrier.reclaim(KEY, false);
   expect(barrier.canWrite(KEY, fresh)).toBe(true);
 });
 
@@ -137,27 +176,35 @@ it("[cache.fn.createFreshnessBarrier] 老请求先返回可写，新请求随后
   expect(barrier.canWrite(OTHER_KEY, first)).toBe(true);
 });
 
-it("[cache.fn.createFreshnessBarrier] clear 使旧票据失效，旧请求结束不回收新代次仍在途的记录", () => {
+it("[cache.fn.createFreshnessBarrier] clear 使旧票据失效，旧请求结束不回收新下界之后仍在途的记录", () => {
   const barrier = createFreshnessBarrier();
   const old = barrier.begin(KEY);
   barrier.clear();
   barrier.clear();
   const fresh = barrier.begin(KEY);
-  expect(fresh.epoch).toBe(old.epoch + 2);
-  expect(fresh.seq).toBeGreaterThan(old.seq);
+  expect(fresh).toBeGreaterThan(old);
   expect(barrier.canWrite(KEY, old)).toBe(false);
+  // 作废票据登记写入不抬高新票据的门槛
   barrier.markWritten(KEY, old);
   expect(barrier.canWrite(KEY, fresh)).toBe(true);
   barrier.markWritten(KEY, fresh);
-  barrier.end(KEY);
-  barrier.reclaim(KEY, false);
   expect(barrier.canWrite(KEY, fresh)).toBe(false);
+  // 旧请求先结束：新请求仍在途，记录保留
   barrier.end(KEY);
+  expect(barrier.canWrite(KEY, fresh)).toBe(false);
+  // 新请求也结束：在途归零，记录回收；旧票据仍被下界挡住
   barrier.end(KEY);
-  barrier.reclaim(KEY, false);
   expect(barrier.canWrite(KEY, fresh)).toBe(true);
   expect(barrier.canWrite(KEY, old)).toBe(false);
-  barrier.markWritten(KEY, fresh);
+  // 多余的 end 对已回收的键是空操作
   barrier.end(KEY);
-  barrier.reclaim(KEY, false);
+});
+
+it("[cache.fn.createFreshnessBarrier] clear 之后新发起的票据可正常写入，作废只针对 clear 当时已发出的票据", () => {
+  const barrier = createFreshnessBarrier();
+  const before = barrier.begin(KEY);
+  barrier.clear();
+  const after = barrier.begin(OTHER_KEY);
+  expect(barrier.canWrite(KEY, before)).toBe(false);
+  expect(barrier.canWrite(OTHER_KEY, after)).toBe(true);
 });

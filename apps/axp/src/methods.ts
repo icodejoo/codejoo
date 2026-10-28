@@ -22,3 +22,15 @@ export const DEFAULT_METHOD = "get";
 export function normalizeMethod(method?: string): string {
   return (method ?? DEFAULT_METHOD).toLowerCase();
 }
+
+/** 不改变服务端状态的方法，share 与 cache 默认只处理它们。 */
+export const SAFE_METHODS = ["get", "head"];
+
+/** 把方法列表规范成小写集合，供请求期按方法 O(1) 判定。
+ * @param list 方法列表，大小写不敏感。
+ * @returns 小写方法集合。
+ * @example `methodSet(['GET', 'Head']).has('get') // true`
+ */
+export function methodSet(list: readonly string[]): Set<string> {
+  return new Set(list.map(normalizeMethod));
+}

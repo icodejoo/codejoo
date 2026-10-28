@@ -1,9 +1,8 @@
 import type { AxpContext } from "../context";
-import { normalizeMethod } from "../methods";
-import { resolveOption, type AxpOption, type IPluginSwitch } from "../options";
+import { methodSet, normalizeMethod, SAFE_METHODS } from "../methods";
+import { resolveOption, resolveRequestOption, type AxpOption, type IPluginSwitch } from "../options";
 import type { AxpResponse, IAxpResponse } from "../response";
 import type { AxpClient, AxpPlugin } from "../types";
-import { isPlainObject } from "../utils";
 import { createFreshnessBarrier, createMemoryStore, type IAxpCacheStore } from "./cache-store";
 
 export type { IAxpCacheEntry, IAxpCacheStore } from "./cache-store";
@@ -12,8 +11,6 @@ export type { IAxpCacheEntry, IAxpCacheStore } from "./cache-store";
 const NAME = "axp:cache";
 /** 默认有效期：一分钟。 */
 const DEFAULT_EXPIRES = 60_000;
-/** 默认只缓存不改变服务端状态的方法。 */
-const DEFAULT_METHODS = ["get", "head"];
 /** 环境缺少 structuredClone 时，deep 拷贝宁可报错也不悄悄共享数据。 */
 const DEEP_UNSUPPORTED = `[${NAME}] clone:"deep" 需要 structuredClone（当前环境不可用）；请改用 clone: (data) => ... 自定义深拷贝`;
 
@@ -74,7 +71,7 @@ export function $defaultShouldCache(response: IAxpResponse): boolean {
 /** 内置默认：一分钟、GET 与 HEAD、只缓存成功。 */
 const DEFAULTS = {
   /** 默认有效期。 */ expires: DEFAULT_EXPIRES,
-  /** 默认方法。 */ methods: DEFAULT_METHODS,
+  /** 默认方法。 */ methods: SAFE_METHODS,
   /** 默认写入判定。 */ shouldCache: $defaultShouldCache,
 };
 
@@ -104,16 +101,9 @@ export function $resolveCloneFn(clone: TCloneStrategy | undefined): TCloneFn | n
   return typeof clone === "function" ? clone : null;
 }
 
-/** 数字简写即有效期；resolveCache 只放行数字和对象，所以这里只会收到数字。 */
-function expiresShorthand(value: unknown): { /** 有效期（毫秒）。 */ expires: number } {
-  return { expires: value as number };
-}
-
-/** 本次请求生效的缓存配置；null 表示这次不缓存（cache 必须由请求开启）。 */
-function resolveCache<R extends IAxpResponse>(value: unknown, base: TCacheConfig<R>): TCacheConfig<R> | null {
-  if (value === true) return base;
-  if (typeof value === "number" || isPlainObject(value)) return resolveOption<TCacheConfig<R>, typeof DEFAULTS>(value, base, DEFAULTS, expiresShorthand);
-  return null;
+/** 数字简写即有效期，其它类型不认。 */
+function expiresShorthand(value: unknown): { /** 有效期（毫秒）。 */ expires: number } | undefined {
+  return typeof value === "number" ? { expires: value } : undefined;
 }
 
 /** 按拷贝策略派生响应，data 为拷贝，其余字段沿用来源。 */
@@ -129,7 +119,7 @@ function cloneResponse<R extends IAxpResponse>(ctx: AxpContext<R>, response: R, 
  */
 export default function axpCache<R extends IAxpResponse = AxpResponse>(options: ICacheOptions<R> = {}): AxpPlugin<R, ICacheApi> {
   const base = resolveOption<TCacheConfig<R>, typeof DEFAULTS>(undefined, options, DEFAULTS);
-  const methods = new Set(base.methods.map(/** 方法名统一小写。 */ (method) => method.toLowerCase()));
+  const methods = methodSet(base.methods);
   return {
     name: NAME,
     enable: options.enable,
@@ -142,7 +132,7 @@ export default function axpCache<R extends IAxpResponse = AxpResponse>(options: 
       return {
         /** 命中直接返回；未命中放行并按发起顺序决定是否写回。 */
         async handle(ctx, next) {
-          const config = resolveCache(ctx.request.cache, base);
+          const config = resolveRequestOption(ctx.request.cache, base, DEFAULTS, expiresShorthand, true);
           if (!config || !methods.has(normalizeMethod(ctx.request.method))) return next();
           const key = (typeof config.key === "string" && config.key) || ctx.key();
           if (key === null) return next();
@@ -162,9 +152,8 @@ export default function axpCache<R extends IAxpResponse = AxpResponse>(options: 
               barrier.markWritten(key, ticket);
             }
           } finally {
+            // 该 key 没有在途请求时，屏障记录随之回收。
             barrier.end(key);
-            // 没有在途请求时记录无需保留：之后发起的票据序号必然更大。
-            barrier.reclaim(key, false);
           }
           return cloneFn && response.ok ? cloneResponse(ctx, response, cloneFn) : response;
         },

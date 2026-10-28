@@ -1,7 +1,7 @@
-import { resolveOption, type AxpOption, type IPluginSwitch } from "../options";
+import { resolveOption, resolveRequestOption, type AxpOption, type IPluginSwitch } from "../options";
 import type { AxpResponse, IAxpResponse } from "../response";
 import type { AxpPlugin } from "../types";
-import { isPlainObject } from "../utils";
+import { isEmptyScalar, isPlainObject } from "../utils";
 
 /** 内置空字段过滤插件名称。 */
 const NAME = "axp:filter";
@@ -24,11 +24,7 @@ export interface IFilterOptions extends IPluginSwitch {
  * @example `defaultPredicate(['name', '  ']) // true`
  */
 export function defaultPredicate([, value]: TDroppedKV): boolean {
-  return isEmptyValue(value);
-}
-/** 默认规则直接判断值，避免为谓词分配键值对。 */
-function isEmptyValue(value: unknown): boolean {
-  return value == null || Number.isNaN(value) || (typeof value === "string" && value.trim() === "");
+  return isEmptyScalar(value);
 }
 /** 自定义谓词只认严格 true，JS 调用方返回的其他真值不丢弃。 */
 function isStrictTrue(verdict: unknown): boolean {
@@ -50,12 +46,21 @@ function filterFields(source: Record<string, any>, options: ReturnType<typeof pr
   for (const key of Object.keys(source)) {
     const value = source[key];
     let entry: TDroppedKV | undefined;
-    const drop = !options.ignoreKeys.has(key) && !options.ignoreValues.has(value) && (options.predicate === defaultPredicate ? isEmptyValue(value) : isStrictTrue(options.predicate((entry = [key, value]))));
+    const drop = !options.ignoreKeys.has(key) && !options.ignoreValues.has(value) && (options.predicate === defaultPredicate ? isEmptyScalar(value) : isStrictTrue(options.predicate((entry = [key, value]))));
     if (drop) {
       if (dropped) dropped.push(entry ?? [key, value]);
     } else entries.push(entry ?? [key, value]);
   }
   return Object.fromEntries(entries);
+}
+/** 默认规则下是否有字段会被丢弃，找到第一个就停；自定义谓词可能有副作用，不预扫，一律视为可能丢弃。 */
+function mayDrop(source: Record<string, any>, options: ReturnType<typeof prepareOptions>): boolean {
+  if (options.predicate !== defaultPredicate) return true;
+  for (const key of Object.keys(source)) {
+    const value = source[key];
+    if (!options.ignoreKeys.has(key) && !options.ignoreValues.has(value) && isEmptyScalar(value)) return true;
+  }
+  return false;
 }
 /** 过滤自有可枚举字段，不修改来源对象或嵌套数据。
  * @param source 字段字典。
@@ -87,14 +92,16 @@ export default function axpFilter<R extends IAxpResponse = AxpResponse>(options:
       const filterParams = isPlainObject(params);
       const filterData = isPlainObject(data);
       if (!filterParams && !filterData) return next();
-      const value = ctx.request.filter;
-      if (value === false) return next();
-      const resolved = isPlainObject(value) ? resolveOption(value, base, DEFAULTS) : base;
+      const resolved = resolveRequestOption(ctx.request.filter, base, DEFAULTS);
       if (!resolved) return next();
       const config = resolved === base ? prepared : prepareOptions(resolved);
+      // 没有字段要丢就不打补丁，省掉一次合并、一个新上下文和传输层的掩码。
+      const dropParams = filterParams && mayDrop(params, config);
+      const dropData = filterData && mayDrop(data, config);
+      if (!dropParams && !dropData) return next();
       return next({
-        params: filterParams ? filterFields(params, config) : params,
-        data: filterData ? filterFields(data, config) : data,
+        params: dropParams ? filterFields(params, config) : params,
+        data: dropData ? filterFields(data, config) : data,
       });
     },
   };

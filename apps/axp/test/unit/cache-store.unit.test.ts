@@ -43,15 +43,16 @@ it("[cache.fn.createFreshnessBarrier] 独立屏障分配全局递增票据并登
   const other = createFreshnessBarrier();
   const first = barrier.begin(KEY);
   const second = barrier.begin("other");
-  expect(second.seq).toBe(first.seq + 1);
-  expect(second.epoch).toBe(first.epoch);
-  expect(other.begin(KEY)).toEqual(first);
+  expect(second).toBe(first + 1);
+  expect(other.begin(KEY)).toBe(first);
   expect(barrier.canWrite(KEY, first)).toBe(true);
   barrier.markWritten(KEY, first);
   expect(barrier.canWrite(KEY, first)).toBe(false);
+  // 该键仍有在途请求时记录保留，下界不丢
+  barrier.begin(KEY);
   barrier.end(KEY);
-  barrier.reclaim(KEY, true);
   expect(barrier.canWrite(KEY, first)).toBe(false);
-  barrier.reclaim(KEY, false);
+  // 在途归零即回收记录，之后发起的票据序号必然更大，无需下界
+  barrier.end(KEY);
   expect(barrier.canWrite(KEY, first)).toBe(true);
 });

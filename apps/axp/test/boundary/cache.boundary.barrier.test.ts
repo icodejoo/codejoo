@@ -27,8 +27,8 @@ beforeEach(() => {
 
 /** 被缓存的接口。 */
 const URL = "/cached";
-/** 探测用票据：序号最小、代次未变。记录不存在时可写，残留任何已写入记录时不可写。 */
-const PROBE_TICKET = { seq: 1, epoch: 0 };
+/** 探测用票据：序号最小、没有经历过清理。记录不存在时可写，残留任何已写入记录时不可写。 */
+const PROBE_TICKET = 1;
 
 /** 装好 cache，返回客户端与它的屏障。 */
 function cachedClient(max?: number) {
