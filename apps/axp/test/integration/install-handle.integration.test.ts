@@ -1,10 +1,10 @@
 import { describe, expect, it, vi } from 'vitest';
 import axios from 'axios';
-import { Axp } from '../src/install';
-import type { Plugin } from '../src/types';
+import { Axp } from '../../src/install';
+import type { Plugin } from '../../src/types';
 
 describe('AxpHandle — 快照与无 cleanup 插件', () => {
-    it('空 handle 支持查询、重复 dispose 以及 dispose 后重新 append', () => {
+    it('[public.handle.plugins][public.handle.plugin][public.handle.dispose][public.handle.append] 空 handle 支持查询、重复 dispose 以及 dispose 后重新 append', () => {
         const ax = axios.create();
         const handle = Axp.install(ax, {});
         expect(handle.plugins).toEqual([]);
@@ -17,7 +17,7 @@ describe('AxpHandle — 快照与无 cleanup 插件', () => {
         handle.dispose();
         expect(handle.plugins).toEqual([]);
     });
-    it('plugins 每次返回新快照，修改快照不会改变查询及拆卸顺序', () => {
+    it('[public.handle.plugins][public.handle.plugin][public.handle.dispose] plugins 每次返回新快照，修改快照不会改变查询及拆卸顺序', () => {
         const events: string[] = [];
         /** 创建可追踪安装和卸载顺序的插件。 */
         function plugin(name: string): Plugin {

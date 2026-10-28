@@ -37,6 +37,7 @@ A 批（单插件规则/补丁/覆盖文件）迁移进行中，基线冻结于 
 | cancel（cancel.test 全部 + lifecycle.coverage 余下 1 条，该文件至此清空） | 本批提交 | 16 | 0 | 0 | 0 | 0 | 0 | 16 | 是 |
 | helper+logger（helper.coverage、logger.coverage） | 本批提交 | 38 | 0 | 0 | 0 | 0 | 0 | 38 | 是 |
 | core（core.coverage） | 本批提交 | 22 | 0 | 0 | 0 | 0 | 0 | 22 | 是 |
+| install（install.coverage） | 本批提交 | 2 | 0 | 0 | 0 | 0 | 0 | 2 | 是 |
 
 ## 映射
 
@@ -527,3 +528,5 @@ A 批（单插件规则/补丁/覆盖文件）迁移进行中，基线冻结于 
 | test/core.coverage.test.ts::Core — 合并优先级与返回形状 > 请求选项覆盖方法选项和 payload，raw 优先于 wrap | integration/core.integration.test.ts::Core — 合并优先级与返回形状 > [public.member.Core.get][public.member.Core.axios] 请求选项覆盖方法选项和 payload，raw 优先于 wrap | rename | 用真实 axios 实例装配 Core 并发请求，属装配层 |  |
 | test/core.coverage.test.ts::Core — 合并优先级与返回形状 > 非完整信封 %s 原样返回（each） | integration/core.integration.test.ts::Core — 合并优先级与返回形状 > [public.member.Core.get] 非完整信封 %s 原样返回 | rename | 同上（each） |  |
 | test/core.coverage.test.ts::Core — 合并优先级与返回形状 > 默认 create 创建独立 axios，构造保留既有 transitional 配置 | integration/core.integration.test.ts::Core — 合并优先级与返回形状 > [public.fn.Axp.create][public.member.Core.constructor][public.member.Core.axios] 默认 create 创建独立 axios，构造保留既有 transitional 配置 | rename | create 与 axios 实例的装配 |  |
+| test/install.coverage.test.ts::AxpHandle — 快照与无 cleanup 插件 > 空 handle 支持查询、重复 dispose 以及 dispose 后重新 append | integration/install-handle.integration.test.ts::AxpHandle — 快照与无 cleanup 插件 > [public.handle.plugins][public.handle.plugin][public.handle.dispose][public.handle.append] 空 handle 支持查询、重复 dispose 以及 dispose 后重新 append | rename | Axp.install 句柄装配，属集成层 |  |
+| test/install.coverage.test.ts::AxpHandle — 快照与无 cleanup 插件 > plugins 每次返回新快照，修改快照不会改变查询及拆卸顺序 | integration/install-handle.integration.test.ts::AxpHandle — 快照与无 cleanup 插件 > [public.handle.plugins][public.handle.plugin][public.handle.dispose] plugins 每次返回新快照，修改快照不会改变查询及拆卸顺序 | rename | 同上：快照与拆卸顺序 |  |
