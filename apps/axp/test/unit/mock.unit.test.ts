@@ -1,34 +1,22 @@
 import { describe, it, expect } from 'vitest';
 import mock, {
-    $shouldMock,
     $resolveMock,
     $rewriteUrl,
     $shouldFallback,
-    type IMockOptions,
 } from '../../src/plugins/mock';
 
-describe('$shouldMock — runWhen 守卫', () => {
-    const d: IMockOptions = { mock: false, mockUrl: 'http://m' };
-
-    it('[mock.fn.$shouldMock][mock.req.mock] config.mock === true → true', () => {
-        expect($shouldMock({ mock: true } as any, d)).toBe(true);
-    });
-    it('[mock.fn.$shouldMock][mock.req.mock] config.mock === false → false', () => {
-        expect($shouldMock({ mock: false } as any, d)).toBe(false);
-    });
-    it('[mock.fn.$shouldMock][mock.req.mock] config.mock 对象含 mockUrl → true', () => {
-        expect($shouldMock({ mock: { mockUrl: 'http://x' } } as any, d)).toBe(true);
-    });
-    it('[mock.fn.$shouldMock][mock.req.mock] config.mock 对象 mock=false → false', () => {
-        expect($shouldMock({ mock: { mock: false, mockUrl: 'x' } } as any, d)).toBe(false);
-    });
-    it('[mock.fn.$shouldMock][mock.req.mock] config 未指定 → 插件级 mock 值', () => {
-        expect($shouldMock({} as any, { mock: true })).toBe(true);
-        expect($shouldMock({} as any, { mock: false })).toBe(false);
-    });
-});
-
 describe('$resolveMock', () => {
+    it.each([
+        [{ mock: true }, { mock: false, mockUrl: 'http://m' }, { mockUrl: 'http://m' }],
+        [{ mock: false }, { mock: false, mockUrl: 'http://m' }, null],
+        [{ mock: { mockUrl: 'http://x' } }, { mock: false, mockUrl: 'http://m' }, { mockUrl: 'http://x' }],
+        [{ mock: { mock: false, mockUrl: 'x' } }, { mock: false, mockUrl: 'http://m' }, null],
+        [{}, { mock: true }, {}],
+        [{}, { mock: false }, null],
+        [{ mock: {} }, { mock: false, mockUrl: 'http://m' }, { mockUrl: 'http://m' }],
+    ] as const)('[mock.fn.$resolveMock][mock.req.mock] 请求 %j 与默认 %j → %j', (config, defaults, expected) => {
+        expect($resolveMock(config as any, defaults)).toEqual(expected);
+    });
     it('[mock.fn.$resolveMock][mock.req.mock][mock.opt.mockUrl] false → null', () => {
         expect($resolveMock({ mock: false } as any, { mockUrl: 'http://m' })).toBe(null);
     });
