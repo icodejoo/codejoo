@@ -1,11 +1,20 @@
 import { readFileSync } from "node:fs";
 import { expect, expectTypeOf, it } from "vitest";
 import { createAxp } from "../../src/client";
-import { stateKey } from "../../src/context";
-import { AxpResponse, isAxpResponse, type IAxpResponse } from "../../src/response";
-import type { ICacheRequestOptions } from "../../src/plugins/cache";
-import type { IRetryOptions } from "../../src/plugins/retry";
+import { stateKey, type AxpContext } from "../../src/context";
+import type { ITokenManager } from "../../src/objects/TokenManager";
+import axpAuth from "../../src/plugins/auth";
+import axpCache, { type ICacheRequestOptions } from "../../src/plugins/cache";
+import axpRetry, { type IRetryOptions } from "../../src/plugins/retry";
 import type { AxpOption } from "../../src/options";
+import {
+  AxpResponse,
+  axpResponse,
+  isAxpResponse,
+  type AxpKind,
+  type IAxpResponse,
+  type IAxpResponseFactory,
+} from "../../src/response";
 import type { AxpPlugin, AxpRequestOptions, WithData } from "../../src/types";
 import { customResponse, TestResponse } from "../helpers/client";
 
@@ -22,6 +31,17 @@ interface ISchema {
   post: {
     /** 创建接口。 */ "/pet": readonly [boolean, readonly [string]];
   };
+}
+/** 覆盖 ok、status getter 的响应子类：成功码是 200，令牌过期码按 401 处理。 */
+class CodeResponse<D = unknown> extends AxpResponse<D> {
+  /** 业务成功码是 200。 */
+  get ok(): boolean {
+    return this.httpStatus < 300 && this.code === 200;
+  }
+  /** 令牌过期码映射为 401，其余沿用默认规则。 */
+  get status(): number {
+    return this.code === "TOKEN_EXPIRED" ? 401 : super.status;
+  }
 }
 /** 假泛型插件验证工厂调用时的上下文推断。 */
 function axpGeneric<R extends IAxpResponse = IAxpResponse>(options: {
@@ -201,4 +221,101 @@ it("[core.fn.createAxp] 本地 Schema 扩展夹具与现有模板完全一致", 
   );
   const fixture = readFileSync(new URL("../helpers/local-schema.d.ts", import.meta.url), "utf8");
   expect(fixture).toBe(template);
+});
+
+it("[retry.cb.shouldRetry][retry.opt.delay][auth.cb.onRefresh][auth.cb.onFailure][cache.cb.shouldCache] 内置插件的判定回调内联在 createAxp<S, MyResponse> 里时推断为 MyResponse，单独定义时手写泛型", /** 编译期契约：R 沿 plugins 数组的上下文流入每个回调。 */ () => {
+  /** 只编译调用示例，避免发送真实网络请求。 */
+  function contracts() {
+    const tokens = {} as ITokenManager;
+    const api = createAxp<ISchema, TestResponse>({
+      response: customResponse(),
+      plugins: [
+        axpRetry({
+          shouldRetry: /** 判定回调的第一个参数是自定义响应。 */ (r, attempt, ctx) => {
+            expectTypeOf(r).toEqualTypeOf<TestResponse>();
+            expectTypeOf(attempt).toEqualTypeOf<number>();
+            expectTypeOf(ctx).toEqualTypeOf<AxpContext<TestResponse>>();
+            return r.traceId === "";
+          },
+          delay: /** 延迟函数的第三个参数同样是自定义响应。 */ (attempt, max, r) => {
+            expectTypeOf(r).toEqualTypeOf<TestResponse>();
+            return r.traceId ? attempt : max;
+          },
+        }),
+        axpAuth({
+          tokenManager: tokens,
+          onRefresh: /** 刷新回调收到自定义响应与会话管理器。 */ (r, tm) => {
+            expectTypeOf(r).toEqualTypeOf<TestResponse>();
+            expectTypeOf(tm).toEqualTypeOf<ITokenManager>();
+            return r.traceId;
+          },
+          onAccessExpired: /** 过期通知收到自定义响应。 */ (r) => {
+            expectTypeOf(r).toEqualTypeOf<TestResponse>();
+          },
+          onAccessDenied: /** 拒绝通知收到自定义响应。 */ (r) => {
+            expectTypeOf(r).toEqualTypeOf<TestResponse>();
+          },
+          onFailure: /** 路由回调收到自定义响应与上下文。 */ (r, _tm, ctx) => {
+            expectTypeOf(r).toEqualTypeOf<TestResponse>();
+            expectTypeOf(ctx).toEqualTypeOf<AxpContext<TestResponse>>();
+            return r.traceId ? "refresh" : undefined;
+          },
+        }),
+        axpCache({
+          shouldCache: /** 写入判定收到自定义响应。 */ (r) => {
+            expectTypeOf(r).toEqualTypeOf<TestResponse>();
+            return r.traceId !== "";
+          },
+        }),
+      ],
+    });
+    // 单独定义成变量时手写泛型，回调参数就是自定义响应。
+    const retry = axpRetry<TestResponse>({
+      shouldRetry: /** 手写泛型后的判定回调。 */ (r) => r.traceId !== "",
+    });
+    expectTypeOf(retry).toEqualTypeOf<AxpPlugin<TestResponse>>();
+    api.use(retry);
+    // 单独定义却不写泛型：R 退回契约接口，装进自定义响应的客户端会报错。
+    const bare = axpRetry({
+      shouldRetry: /** 没有上下文可推断，参数只是契约接口。 */ (r) => {
+        expectTypeOf(r).toEqualTypeOf<IAxpResponse>();
+        return false;
+      },
+    });
+    // @ts-expect-error 单独定义的插件必须手写泛型。
+    api.use(bare);
+  }
+  expect(contracts).toBeTypeOf("function");
+});
+
+it("[core.fn.axpResponse][core.prop.ok][core.prop.status] 子类覆盖 ok / status getter 后仍满足 IAxpResponse，工厂与客户端按子类推断", /** 编译期契约：判定的开放点是 getter 本身。 */ () => {
+  /** 只编译类型调用。 */
+  function contracts() {
+    expectTypeOf<CodeResponse>().toExtend<IAxpResponse>();
+    expectTypeOf<CodeResponse["ok"]>().toEqualTypeOf<boolean>();
+    expectTypeOf<CodeResponse["status"]>().toEqualTypeOf<number>();
+    expectTypeOf<CodeResponse["kind"]>().toEqualTypeOf<AxpKind>();
+    expectTypeOf<CodeResponse<string>["data"]>().toEqualTypeOf<string>();
+    const factory = axpResponse<CodeResponse>({
+      create: /** 由初始化字段构造子类。 */ (init) => new CodeResponse(init),
+    });
+    expectTypeOf(factory).toEqualTypeOf<IAxpResponseFactory<CodeResponse>>();
+    const api = createAxp<ISchema, CodeResponse>({ response: factory });
+    expectTypeOf(api.get("/empty", { wrap: true })()).toEqualTypeOf<
+      Promise<WithData<CodeResponse, number>>
+    >();
+    const error: unknown = {};
+    if (api.isResponse(error)) expectTypeOf(error).toEqualTypeOf<CodeResponse>();
+    // 不满足契约的形状不是响应。
+    expectTypeOf<{ /** 仅有 ok。 */ readonly ok: boolean }>().not.toExtend<IAxpResponse>();
+    class BadResponse extends AxpResponse {
+      /** 把成功判定写成字符串，违反契约。 */
+      // @ts-expect-error getter 的类型必须与契约一致。
+      get ok(): string {
+        return "yes";
+      }
+    }
+    void BadResponse;
+  }
+  expect(contracts).toBeTypeOf("function");
 });

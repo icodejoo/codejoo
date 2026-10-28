@@ -1,5 +1,6 @@
 import { CanceledError, type AxiosAdapter } from "axios";
-import { onTestFinished } from "vitest";
+import { onTestFinished, vi } from "vitest";
+import type { IAxpCacheEntry, IAxpCacheStore } from "../../src/plugins/cache";
 import type { AxpResponse, IAxpResponse } from "../../src/response";
 import type { AxpOptions, AxpPlugin, AxpRequestConfig } from "../../src/types";
 import { createTestClient } from "./client";
@@ -41,6 +42,41 @@ export function customSourceClient<R extends IAxpResponse>(
     /** 发出一个逻辑请求，落定为自定义响应。 */
     send(config?: AxpRequestConfig): Promise<R>;
   };
+}
+
+/** 带写入计数的内存缓存存储，用来确认哪几次响应真的写进了缓存。
+ * @returns 可交给 axpCache 的存储、写入 spy 与底层条目表。
+ * @example `const { store, set } = countingCacheStore(); axpCache({ store }); expect(set).toHaveBeenCalledOnce()`
+ */
+export function countingCacheStore() {
+  const entries = new Map<string, IAxpCacheEntry<AxpResponse>>();
+  const set = vi.fn(
+    /** 记录一次写入。 */ (key: string, entry: IAxpCacheEntry<AxpResponse>) => {
+      entries.set(key, entry);
+    },
+  );
+  const store: IAxpCacheStore<AxpResponse> = {
+    /** 读取条目。 */ get: (key) => entries.get(key),
+    set,
+    /** 删除条目。 */ delete: (key) => entries.delete(key),
+    /** 清空条目。 */ clear: () => entries.clear(),
+    /** 当前条目数。 */ get size() {
+      return entries.size;
+    },
+  };
+  return { store, set, entries };
+}
+
+/** 推进假时钟直到全部请求落定，再按传入顺序返回结果。
+ * @param pending 已发出、尚未落定的请求。
+ * @returns 各请求的落定结果。
+ * @example `const [a, b] = await settleAll(h.send(config), h.send(config))`
+ */
+export async function settleAll<T>(...pending: Promise<T>[]): Promise<T[]> {
+  // 先标记为已观察，避免推进时钟期间失败的请求被当成未处理拒绝。
+  for (const item of pending) item.catch(/** 仅标记已观察。 */ () => undefined);
+  await vi.runAllTimersAsync();
+  return Promise.all(pending);
 }
 
 /** 记录每次经过 source 阶段的请求视图，用来确认内层实际看到的开关与地址。

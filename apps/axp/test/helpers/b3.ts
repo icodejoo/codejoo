@@ -90,7 +90,7 @@ export function authSettings(
  * @example `b3Client([axpRetry()])`
  */
 export function b3Client(
-  plugins: readonly AxpPlugin<AxpResponse>[] = [],
+  plugins: readonly AxpPlugin<AxpResponse, any>[] = [],
   options: AxpOptions = {},
 ) {
   const h = uiClient(plugins, options);
@@ -134,7 +134,7 @@ export function b3Client(
  */
 export function authClient(
   overrides: Partial<IAuthOptions<AxpResponse>> = {},
-  plugins: readonly AxpPlugin<AxpResponse>[] = [],
+  plugins: readonly AxpPlugin<AxpResponse, any>[] = [],
   options: AxpOptions = {},
 ) {
   const h = b3Client(plugins, options);

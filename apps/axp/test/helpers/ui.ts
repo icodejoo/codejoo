@@ -20,7 +20,7 @@ const fixtures: {
  * @example `const h = uiClient([axpLoading()]); await h.send()`
  */
 export function uiClient(
-  plugins: readonly AxpPlugin<AxpResponse>[] = [],
+  plugins: readonly AxpPlugin<AxpResponse, any>[] = [],
   options: AxpOptions = {},
   transport?: Parameters<typeof createTestClient>[2],
 ) {
