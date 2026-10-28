@@ -1,6 +1,6 @@
 ---
 title: axp 洋葱管线重构实施计划（Codex 实现、Claude 终审）
-status: draft
+status: active
 updated: 2026-10-28
 summary: 重构分几批做、每批改哪些文件、交付什么、怎么验收，以及 Codex 派发约束和评审关卡
 ---
@@ -22,7 +22,7 @@ summary: 重构分几批做、每批改哪些文件、交付什么、怎么验�
 | 批次 | 内容 | 主要文件 | 交付与验收 |
 |---|---|---|---|
 | B0 基线 ✅ | 量性能、体积、用例数；建行为清单 | `bench/pipeline.bench.ts`、`docs/reference/pipeline-migration/`、`docs/reports/2026-10-28-pipeline-baseline.md` | 836 处声明（执行 1002 条）：keep 346 / change 423 / drop 67；40 条存疑已终审裁决 |
-| B1 内核 | 归一化响应（含 `isAxpResponse`、判定 getter）、上下文、管线、传输、落定（含 bug 透传、`reject`、调用点 stack）、客户端、key、取消、日志开关 | `src/{client,pipeline,context,transport,response,key,types}.ts` | 测试方案 §3 全部单元用例；客户端与取消的 rule/boundary；类型测试中与插件无关的部分；`vitest.config.ts` 写入内核四文件分支 100% 门槛并达标 |
+| B1 内核 ✅ | 归一化响应（含 `isAxpResponse`、判定 getter）、上下文、管线、传输、落定（含 bug 透传、`reject`、调用点 stack）、客户端、key、取消、日志开关 | `src/{client,pipeline,context,transport,response,key,types}.ts` | 测试方案 §3 全部单元用例；客户端与取消的 rule/boundary；类型测试中与插件无关的部分；`vitest.config.ts` 写入内核四文件分支 100% 门槛并达标 |
 | B2 无状态插件 | loading、notify、repath、filter、envs | `src/plugins/{loading,notify,repath,filter,envs}.ts` | 各插件 rule/boundary；loading 与 notify 的 I2、I4 |
 | B3 重试与鉴权 | retry、auth、TokenManager（O4） | `src/plugins/{retry,auth}.ts`、`src/objects/TokenManager.ts` | rule/boundary；auth + retry、loading + auth、notify + auth 组合 |
 | B4 结果来源 | mock、share、cache（O3、O6） | `src/plugins/{mock,share,cache}.ts` | rule/boundary；§5.2 余下组合 |

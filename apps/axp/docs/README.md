@@ -8,13 +8,15 @@
 
 ## 设计（洋葱管线重构）
 
-- [核心架构方案](design/core-architecture.md) — 新内核结构、数据流、阶段排序、上下文、归一化响应与错误、插件接口、客户端 API、性能设计。draft。
-- [内置插件与内核服务规格](design/plugin-spec.md) — 10 个插件和 4 项内核服务的选项、行为、相对现状的变化汇总。draft。
-- [测试方案](design/test-plan.md) — 六层用例要点、组合不变量、覆盖率与台账、性能门槛、验收矩阵、旧用例迁移。draft。
-- [实施计划](design/implementation-plan.md) — B0–B7 批次、Codex 派发约束、评审关卡与风险。draft。
+- [核心架构方案](design/core-architecture.md) — 新内核结构、数据流、阶段排序、上下文、归一化响应与错误、插件接口、客户端 API、性能设计。active。
+- [内置插件与内核服务规格](design/plugin-spec.md) — 10 个插件和 4 项内核服务的选项、行为、相对现状的变化汇总。active。
+- [测试方案](design/test-plan.md) — 六层用例要点、组合不变量、覆盖率与台账、性能门槛、验收矩阵、旧用例迁移。active。
+- [实施计划](design/implementation-plan.md) — B0–B7 批次、Codex 派发约束、评审关卡与风险。active。
 
 ## 报告（带日期的结果）
 
+- [2026-10-28 洋葱管线 B1 内核](reports/2026-10-28-pipeline-b1.md) — 内核实现结果、验收数据、API id、bench 对比、终审修复记录。active。
+- [2026-10-28 B1 承接的旧行为](reports/2026-10-28-pipeline-b1-behaviors.md) — B1 覆盖的旧用例清单行与对应新用例。active。
 - [2026-10-28 洋葱管线 B0 基线](reports/2026-10-28-pipeline-baseline.md) — 旧 API 六场景性能、gzip -9 体积、836 处声明审计与 legacy 归档检查。active。
 - [2026-10-27 Codex 全量 review：终审与修复记录](reports/2026-10-27-codex-full-review.md) — 30 条问题的终审结论、修复方式、对外行为变化；「待优化」O1–O6 由上面的重构解决。active。
 

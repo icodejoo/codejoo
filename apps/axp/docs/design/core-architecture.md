@@ -1,6 +1,6 @@
 ---
 title: axp 核心架构方案（洋葱管线 + 归一化响应）
-status: draft
+status: active
 updated: 2026-10-28
 summary: 新内核的结构、数据流、阶段排序、上下文、归一化响应与错误模型、插件接口、客户端 API 和性能设计
 ---
@@ -43,7 +43,8 @@ api.get('/pet/{id}')(payload, opts)
 
 | 文件 | 职责 |
 |---|---|
-| `client.ts` | `createAxp`、动词分发、`request`、`extend`、`use/eject`、`cancelAll`、`inspect` |
+| `client.ts` | `createAxp`、动词分发、`request`（建逻辑请求上下文、登记在途、落定）、`extend`、`use/eject`、`cancelAll`、`inspect` |
+| `options.ts` | `resolveOption`：请求级四种写法的统一解析（B2 实现，供所有插件使用） |
 | `pipeline.ts` | 插件排序、taps 编译、链组合、`next(patch)`、异常兜底 |
 | `context.ts` | `AxpContext`：请求视图、signal、状态键、`key()`、`fail()`、`markReplayable()` |
 | `transport.ts` | 调 `axios.request`、按需克隆请求体、交给响应工厂判定 |
@@ -55,10 +56,12 @@ api.get('/pet/{id}')(payload, opts)
 
 删除：`core.ts`、`install.ts`、`helper.ts` 中的 adapter 链与单次尝试机制、`bag.ts`、`objects/Response.ts`、`plugins/{cancel,key,logger,normalize}.ts`。
 
+入口：`index.ts` 导出新 API（`createAxp`、响应与类型、10 个插件工厂、`TokenManager` 等）；子路径保留 10 个插件各自的 `./<name>` 与 `./min`，删除 `./cancel`、`./key`、`./logger`、`./normalize`（B6 落地）。
+
 ## 3. 一次请求的数据流
 
 1. 动词调用把 `path`、`payload`、方法级配置、调用级配置浅合并成逻辑请求 `AxpRequestConfig`（与现在 `core.ts:91-97` 相同）。
-2. 内核建逻辑请求级上下文：分配 `id`，建 `AbortController` 并与用户 `signal` 联动，登记到在途集合（`cancelAll` / `pending()` 用）。
+2. 内核（`client.ts` 的 `request`）建逻辑请求级上下文：分配 `id`，建 `AbortController` 并与用户 `signal` 联动，登记到在途集合（`cancelAll` / `pending()` 用）。
 3. 按编译好的链从外到内执行中间件。每层拿到的 `ctx.request` 是外层交给它的版本。
 4. 到达传输层：若有层调用过 `markReplayable()` 且 `data` 是纯对象/数组，先克隆一份再发；调用 `axios.request`，强制 `validateStatus: () => true`。
 5. 响应工厂把响应（或异常）判定成 `R`，内核给它打上品牌，原路返回；每层可读、可替换、可再次调用 `next()`。
@@ -161,7 +164,7 @@ const response = axpResponse<MyResponse>({
 const api = createAxp<Schema, MyResponse>({ response, plugins: [axpRetry({ shouldRetry: (r) => r.traceId !== '' })] })
 ```
 
-**默认工厂 `axpResponse(options?)` 的分类规则**（顺序即优先级；前五行在构造时写死，后两行交给 getter）：
+**默认工厂 `axpResponse(options?)` 的分类规则**（顺序即优先级；前六行在构造时写死为实例自有属性，最后一行交给 getter）：
 
 | 输入 | kind | status |
 |---|---|---|
@@ -191,10 +194,13 @@ axp 没有错误类。落定规则：
 | 可预期的失败 | `throw r` | `throw r` | resolve `WithData<R, D>`（`ok: false`） |
 | 程序 bug（`kind: 'internal'`） | 抛原始异常 | 抛原始异常 | 抛原始异常 |
 
-- `throws` 的默认值可在 `createAxp({ throws })` 上改。
+- `throws` **只有请求级**，默认 true。客户端级默认值已取消：`createAxp<S, R>` 显式写泛型时 TS 不会再推断第三个泛型，返回类型无法如实反映客户端级开关（B1 终审裁决）。
+- 返回类型按"调用级 ?? 方法级"的有效 `wrap` / `throws` 推断。
+- `throws: false` 失败时 `data` 的取值：收到响应时是信封 data 或原始 body；没收到响应（network/timeout/cancel/auth 等）时是 `undefined`。
 - **bug 不伪装成请求失败**：中间件、判定类用户回调（见 N13）、用户拦截器或 `transformResponse` 抛出的非 AxiosError，链内临时包成 `internal` 交给外层，保证 `next()` 不 reject、外层的计数和注销照常完成；
   落定时抛出 `r.error` 本身，stack 完整，`throws: false` 也不吞。
-- **调用点**：`debug` 开启时，内核在发起请求那一刻 `new Error()` 记下调用点；失败落定时用 `factory.fail({ from: r, stack })` 派生一个带 `stack` 的副本抛出，不改被 share/cache 共享的原对象。生产环境不记录，零开销。
+- **调用点**：`debug` 开启时，内核在发起请求那一刻 `new Error()` 记下调用点；失败落定时用 `factory.fail({ from: r, stack })` 派生一个带 `stack` 的副本抛出，不改被 share/cache 共享的原对象。派生出的结果若变成 internal（自定义工厂抛错），按 bug 抛原始异常。生产环境不记录，零开销。
+- **工厂兜底**：自定义响应工厂自身抛错时，内核用内置工厂构造 internal 并保留首次异常，保证外层收尾；此时无法带上自定义 R 的扩展字段，落定照样抛原始异常。
 - **适配需要 `Error` 的生态**：`createAxp({ reject: (r) => unknown })`，默认原样返回 `r`；接 Sentry、TanStack Query 时可以在这里包成 `Error`。只作用于可预期的失败。
 - **区分**：`catch (e) { if (api.isResponse(e)) … else throw e }`；`api.isResponse` 与 `isAxpResponse` 同一判断，类型收窄到该客户端的 `R`。
 
@@ -229,6 +235,8 @@ interface AxpPlugin<R extends IAxpResponse = IAxpResponse, A = void> {
 ```
 
 约定：
+- `handle` / `taps` 可以写在插件对象上（无状态插件），也可以由 `setup` 返回（有状态插件）；两处都写时以 `setup` 返回的为准。`handle` 与 `taps` 同时存在时各自参与排序，taps 的段名从 `<name>#0` 起编号。
+- 插件名 `axp:` 前缀保留给内置插件，内核按名字把内置插件放到固定位置。
 - **状态必须建在 `setup` 里**，不能放在工厂闭包。这样同一个插件对象可以装到多个客户端（`extend` 默认继承插件就靠这个），各自一份状态。
 - 内置插件工厂写成泛型 `axpRetry<R extends IAxpResponse = IAxpResponse>(opts?: IRetryOptions<R>)`，只透传 `R`、不构造 `R`，所以对任意 `R` 都成立。
 - 插件只有 `setup` 没有中间件（如 envs）时不进链，只在装卸时执行。
@@ -268,9 +276,8 @@ interface AxpOptions<R> {
   plugins?: readonly AxpPlugin<R, any>[]
   response?: IAxpResponseFactory<R>       // R 不是 AxpResponse 时类型上必填
   key?: IKeyOptions                   // key 服务配置：scope、ignores、sample
-  throws?: boolean                    // 默认 true
   reject?: (r: R) => unknown          // 可预期失败抛出前的转换，默认原样抛 r
-  debug?: boolean | AxpLogger         // 取代 axpLogger 插件；开启时还记录调用点 stack
+  debug?: boolean | AxpLogger         // 取代 axpLogger 插件；true 用 console；AxpLogger = { log, warn, error }；开启时还记录调用点 stack
 }
 
 interface AxpClient<S, R> extends HttpVerbs<S, R> {   // axios 全部 10 个小写动词（含 purge/link/unlink），柯里化形态与 data/params 分派不变
@@ -289,12 +296,13 @@ interface AxpClient<S, R> extends HttpVerbs<S, R> {   // axios 全部 10 个小�
 ```
 
 `extend()` 克隆 axios defaults（沿用 `cloneAxiosDefaults`），默认继承插件列表并各自重新 `setup`，状态不共享。
+`dispose()` 先 `cancelAll()`，再按注册的逆序调用各插件实例的 `dispose`（尽力执行，最后抛第一个异常）；之后拒绝新的 `request` / `use` / `extend`，在途请求沿原链收到取消后落定。
 使用方式示例：
 
 ```ts
 const api = createAxp<Schema>({
   axios: axios.create({ baseURL: '/api' }),
-  plugins: [axpRetry({ max: 2 }), axpAuth({ tokenManager, onRefresh, onAccessExpired }), axpCache()],
+  plugins: [axpRepath(), axpRetry({ max: 2 }), axpAuth({ tokenManager, onRefresh, onAccessExpired }), axpCache()],
 })
 const pet = await api.get('/pet/{id}')({ id: 1 })                    // Pet
 const out = await api.get('/pet/{id}')({ id: 1 }, { wrap: true })   // WithData<AxpResponse, Pet>
@@ -356,5 +364,5 @@ const res = await api.post('/pet')(body, { throws: false })        // 不写 try
 | N9 | 缓存存判定后的响应，命中不再重跑 `transformResponse` | 更快，也更好理解 | 是 |
 | N10 | loading 从逻辑请求一开始显示，包括等待 token 刷新的时间 | 洋葱最外层的自然结果，体验更好 | 时序变化 |
 | N11 | 删返回形态 `raw: true`，改用 `wrap: true` 后读 `r.raw`；同时删除只影响类型的 `nullable` 选项（data 为 null/undefined 时照常原样返回） | 三种形态收成两个开关 | 是 |
-| N12 | `extend()` 默认继承插件（各自新状态） | 状态建在 `setup` 里之后，继承变得安全 | 与 #17 相反 |
+| N12 | `extend()` 默认继承插件（各自新状态） | 状态建在 `setup` 里之后，继承变得安全 | 与 2026-10-27 review #17（`extends` 不带插件）相反 |
 | N13 | 判定类回调（`shouldRetry`、retry 的 `delay` / `jitter` 函数、`onFailure`、`isProtected`、`fallbackWhen`、`shouldCache`、`ready`）抛错按 bug 处理，抛原始异常；通知类回调（`loading`、`notify`、`stringify`、`onAccessExpired`、`onAccessDenied`）仍隔离，但用 `console.error` 输出，不受 debug 开关控制 | bug 不伪装成请求失败，也不悄悄吞掉 | 判定类回调以前被吞 |

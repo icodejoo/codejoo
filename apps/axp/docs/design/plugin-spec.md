@@ -1,6 +1,6 @@
 ---
 title: axp 内置插件与内核服务规格（新架构）
-status: draft
+status: active
 updated: 2026-10-28
 summary: 10 个内置插件和 4 项内核服务在洋葱管线下的阶段、选项、请求级写法、行为与相对现状的变化
 ---
@@ -29,6 +29,8 @@ summary: 10 个内置插件和 4 项内核服务在洋葱管线下的阶段、�
 - 插件只读请求选项，不 `delete`；需要给内层改请求时用 `next(patch)`。
 - 请求选项类型通过 `declare module '@codejoo/axp' { interface AxpRequestOptions {…} }` 扩展。
 - 内核自带的请求选项：`wrap`、`throws`、`silent`、`key`、`signal`。
+- 统一解析函数 `resolveOption` 放在 `src/options.ts`，B2 实现。
+- 命名：内置插件工厂一律 `axpXxx()`，插件 `name` 一律 `'axp:xxx'`（`axp:` 前缀保留给内置插件）：loading、notify、repath、filter、retry、auth、mock、share、cache、envs。
 
 **用户回调抛错**（N13）：
 - 通知类（`loading`、`notify`、`stringify`、`onAccessExpired`、`onAccessDenied`）：隔离，不影响请求结果和插件状态，用 `console.error` 输出，不受 debug 开关控制。
@@ -46,8 +48,8 @@ summary: 10 个内置插件和 4 项内核服务在洋葱管线下的阶段、�
 - 来源：`plugins/key.ts` 的 FNV 哈希算法整体迁到 `src/key.ts`，算法和"不可哈希值返回 null"的规则不变。
 - 计算时机：`ctx.key()` 首次调用时惰性计算，按 request 对象缓存。cache、share 在 source 阶段调用，此时 repath、filter 已经生效，所以"filter 必须在 key 前"的约束自然满足。
 - 内容：method + url + params，有请求体的方法再加 data（N2）。旧版 `key: true` 只哈希 method+url，同一路径不同参数会命中同一条缓存，这是正确性问题。
-- 客户端配置 `createAxp({ key: { scope, ignores, sample } })`：`scope` 并入每个 key（防跨账号串数据），其余两项语义不变。
-- 请求级 `key`：省略 = 需要时自动算；`string` = 显式 key；`false` = 本请求不参与 cache/share。
+- 客户端配置 `createAxp({ key: { scope, ignores, sample } })`：`scope` 并入每个 key（防跨账号串数据），可以是值，也可以是 `() => string | number | null | undefined`（每次计算 key 时取当前用户，切换账号无需重建客户端；N5 只限制请求级选项）；其余两项语义不变。
+- 请求级 `key`：省略或 `true` = 需要时自动算（保留 `true` 兼容旧写法）；`string` = 显式 key；`false` = 本请求不参与 cache/share。
 - 删除：`fastMode`、`before/after` 钩子、`'deep'` / 数字等写法。
 
 ### 1.3 取消
@@ -59,7 +61,7 @@ summary: 10 个内置插件和 4 项内核服务在洋葱管线下的阶段、�
 
 ### 1.4 日志开关
 
-`createAxp({ debug: true | AxpLogger })`，插件通过 `ctx.log` 输出，关闭时零开销（`log` 方法是空函数）。
+`createAxp({ debug: true | AxpLogger })`，`true` 用 `console`，`AxpLogger` 形状是 `{ log, warn, error }`；插件通过 `ctx.log` 输出，关闭时零开销（三个方法都是空函数）。
 
 ## 2. outer 阶段
 
@@ -115,7 +117,7 @@ summary: 10 个内置插件和 4 项内核服务在洋葱管线下的阶段、�
 | `delay` | `attempt => 300 * 2 ** (attempt - 1)`（旧 3000） | 数字或函数 `(attempt, max, r) => number` |
 | `jitter` | — | `true` 或 `(delay) => number` |
 | `delayMax` | 10_000（旧 Infinity） | 只封顶自己算出的 delay |
-| `respectRetryAfter` | true | — |
+| `respectRetryAfter` | true | 命中 `afterStatusCodes` 时按 `Retry-After`（数字秒或 HTTP-date）等待，上限 `retryAfterMax`；**不叠加** jitter、**不受** `delayMax` 限制（沿用旧行为）；头缺失或非法时回退到 `delay` |
 | `afterStatusCodes` | `[413, 429, 503]` | 对照 `r.status`；business 风格的 429 也能用 |
 | `retryAfterMax` | Infinity | — |
 
@@ -202,7 +204,7 @@ switch onFailure(r, tm, ctx):
 |---|---|---|
 | `enable` | false | 通常写 `import.meta.env.DEV` |
 | `mock` | false | 全部请求走 mock |
-| `mockUrl` | — | mock 服务器基址 |
+| `mockUrl` | — | mock 服务器基址；请求开启了 mock 但没有 mockUrl 时跳过 mock、直接走真实接口（debug 下 warn） |
 | `fallbackWhen(r)` | `r.httpStatus === 404 \|\| r.kind === 'network'` | 判定回落真实接口 |
 
 - 行为：探测 `next({ url: <改写到 mockUrl>, cache: false, share: false })`；`fallbackWhen(r)` 为真时再 `next()` 走真实接口。探测不写缓存、不占共享条目（沿用现有规则）。
@@ -222,6 +224,7 @@ switch onFailure(r, tm, ctx):
 - **race**：每个调用都发送，第一个 `r.ok` 的胜出；全部失败时用最后一个。
 - 跟随者拿到的是同一个 `R`（只读，`r.request` 是首发那次的请求，URL 与参数和跟随者一致）；不再需要 `$rebindResponse` / `$rebindError`。各调用方自己的请求在各自的 `ctx.request` 上。
 - 跟随者超时用 `ctx.fail({ kind: 'timeout' })`；取消用 `kind: 'cancel'`。
+- 共享以"一次尝试"为单位：retry 在 share 外层，每次重试都会重新经过 share。同 key 的并发调用在每一轮尝试里只发一次网络请求，失败后各调用方由自己外层的 retry 决定是否重试，重试时又会合并到新一轮共享里。
 - 变化：策略 `'none'` 删除（用 `false`）；race 的胜负判定从 `$defaultShouldCache` 改为 `r.ok`；新增 `methods`。
 
 ### 6.3 cache（source，内置次序 3）
@@ -236,6 +239,7 @@ switch onFailure(r, tm, ctx):
 | `store` | 内存 LRU | `IAxpCacheStore<R>`，持久化实现留给以后 |
 
 - 开启：请求级 `cache: true`；数字 = `expires`；对象 `{ expires, key, clone, shouldCache }`，其中 `key` 是显式缓存键。
+- `ctx.key()` 为 null（不可哈希）且没有显式 key 时，直接 `next()`，既不读也不写缓存（与 share 一致）。
 - 命中：直接返回缓存的 `R`（按 `clone` 拷贝 data），不触网，不重跑 `transformResponse`（N9）。
 - 新旧顺序：较早发起、较晚返回的响应不覆盖较新的结果；`clear()` 之后在途请求返回也不写回。语义沿用现状。
 - 表收敛（O3）：`written` 和 `inflight` 合并为 `Map<key, { latestSeq, pending }>`；`epoch` 保留；条目被淘汰且没有在途请求时回收这个 key 的记录。
@@ -259,7 +263,7 @@ interface IAxpCacheEntry<R> { response: R; expiresAt: number }
 
 ## 7. envs
 
-- 只有 `setup`：装上时按规则选第一个命中的配置，写进 `client.axios.defaults`；不进中间件链。
+- 只有 `setup`：装上时按规则选第一个命中的配置，写进 `client.axios.defaults`；不进中间件链。卸载（`eject` / `dispose`）不还原已写入的配置。
 - 选项不变：`axpEnvs([{ rule, config }])`。
 
 ## 8. TokenManager
@@ -275,7 +279,7 @@ interface IAxpCacheEntry<R> { response: R; expiresAt: number }
 | 错误 | 没有错误类：可预期的失败直接抛 `R`（不是 `Error`），类别看 `r.kind` / `r.reason`；bug 抛原始异常；用 `isAxpResponse` / `api.isResponse` 区分；需要 `Error` 时用 `reject` 适配。`ApiError` 删除；旧 `AxpResponse` 重写为新的默认实现（静态 `isSuccessful`、`fromResponse` 删除） |
 | 成功判定 | `AxpResponse.isSuccessful` 静态钩子 → 子类覆盖 `ok` / `status` getter |
 | 回调抛错 | 判定类回调抛错不再被吞，抛原始异常（N13） |
-| 返回 | `raw: true` 删除；`wrap: true` 返回 `R`；新增 `throws: false` |
+| 返回 | `raw: true` 删除；`wrap: true` 成功时返回 `WithData<R, D>`、失败照常抛出；新增请求级 `throws: false`（没有客户端级默认值） |
 | 插件 | 删除 `axpCancel`、`axpKey`、`axpLogger`、`axpNormalize`，能力并入内核 |
 | 请求选项 | 不再接受函数形式；`normalize: false` → `throws: false`；`key: true` 包含参数 |
 | 默认值 | filter 装上即生效；retry `max: 2`、指数退避、`delayMax: 10_000`；cache 只缓存 GET/HEAD |
