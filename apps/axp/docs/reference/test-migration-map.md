@@ -25,6 +25,7 @@ A 批（单插件规则/补丁/覆盖文件）迁移进行中，基线冻结于 
 | auth（auth.test、auth.coverage） | 本批提交 | 42 | 0 | 0 | 0 | 0 | 0 | 42 | 是 |
 | retry（retry.test、retry.coverage） | 本批提交 | 74 | 0 | 0 | 0 | 0 | 0 | 74 | 是 |
 | share（share.test、share.review、share.coverage） | 本批提交 | 56 | 0 | 0 | 0 | 0 | 0 | 56 | 是 |
+| cache（cache.test、cache.review、cache.coverage） | 本批提交 | 60 | 0 | 0 | 0 | 0 | 0 | 60 | 是 |
 
 ## 映射
 
@@ -193,3 +194,53 @@ A 批（单插件规则/补丁/覆盖文件）迁移进行中，基线冻结于 
 | test/share.coverage.test.ts::share — 订阅清理与错误属性 > 所有订阅者 timeout 后也应退出共享轮次并 abort 底层 | boundary/share.boundary.test.ts::share — 订阅清理与错误属性 > [share.opt.policy][share.fn.$follow] 所有订阅者 timeout 后也应退出共享轮次并 abort 底层 | rename | 全订阅者 timeout，已知缺陷，原样保留 it.fails |  |
 | test/share.coverage.test.ts::share — 关闭与清理边界 > 未提供 key 不计算动态 policy，none 则删除 share 并直接转发 | boundary/share.boundary.test.ts::share — 关闭与清理边界 > [share.req.share.callback][share.req.share] 未提供 key 不计算动态 policy，none 则删除 share 并直接转发 | rename | 缺 key 时不计算动态 policy |  |
 | test/share.coverage.test.ts::share — 关闭与清理边界 > enable:false 不包装 adapter | rule/share.rule.test.ts::share — 关闭与清理边界 > [share.opt.enable] enable:false 不包装 adapter | rename | 总开关 |  |
+| test/cache.test.ts::$resolveCache > false / 未指定 → null | unit/cache.unit.test.ts::$resolveCache > [cache.fn.$resolveCache][cache.req.cache] false / 未指定 → null | rename | 纯函数 |  |
+| test/cache.test.ts::$resolveCache > true → 启用，用插件级 expires | unit/cache.unit.test.ts::$resolveCache > [cache.fn.$resolveCache][cache.req.cache] true → 启用，用插件级 expires | rename | 纯函数 |  |
+| test/cache.test.ts::$resolveCache > 对象 → 取请求级 expires/key，缺失时回退插件级 | unit/cache.unit.test.ts::$resolveCache > [cache.fn.$resolveCache][cache.req.cache.expires][cache.req.cache.key] 对象 → 取请求级 expires/key，缺失时回退插件级 | rename | 纯函数 |  |
+| test/cache.test.ts::$resolveKey > 请求级字符串 key 优先 | unit/cache.unit.test.ts::$resolveKey > [cache.fn.$resolveKey][cache.req.cache.key] 请求级字符串 key 优先 | rename | 纯函数 |  |
+| test/cache.test.ts::$resolveKey > 请求级函数次之 | unit/cache.unit.test.ts::$resolveKey > [cache.fn.$resolveKey][cache.req.cache.key] 请求级函数次之 | rename | 纯函数 |  |
+| test/cache.test.ts::$resolveKey > 插件级函数再次之 | unit/cache.unit.test.ts::$resolveKey > [cache.fn.$resolveKey][cache.cb.key] 插件级函数再次之 | rename | 单元层（unit） |  |
+| test/cache.test.ts::$resolveKey > 回退到 config.key（key 兜底） | unit/cache.unit.test.ts::$resolveKey > [cache.fn.$resolveKey][cache.cb.key] 回退到 config.key（key 兜底） | rename | 单元层（unit） |  |
+| test/cache.test.ts::$resolveKey > 全部缺失 → undefined | unit/cache.unit.test.ts::$resolveKey > [cache.fn.$resolveKey][cache.cb.key] 全部缺失 → undefined | rename | 单元层（unit） |  |
+| test/cache.test.ts::cache 集成 — adapter 包装 > 未启用缓存：直接走原 adapter | rule/cache.rule.test.ts::cache 集成 — adapter 包装 > [cache.req.cache] 未启用缓存：直接走原 adapter | rename | 未启用缓存时直通 |  |
+| test/cache.test.ts::cache 集成 — adapter 包装 > 首次：未命中 → 调原 adapter；二次同 key：命中 → 不调 adapter | rule/cache.rule.test.ts::cache 集成 — adapter 包装 > [cache.fn.axpCache] 首次：未命中 → 调原 adapter；二次同 key：命中 → 不调 adapter | rename | 命中与未命中 |  |
+| test/cache.test.ts::cache 集成 — adapter 包装 > TTL 过期 → 重新发起请求 | rule/cache.rule.test.ts::cache 集成 — adapter 包装 > [cache.opt.expires] TTL 过期 → 重新发起请求 | rename | TTL 过期 |  |
+| test/cache.test.ts::cache 集成 — adapter 包装 > 请求级 expires 覆盖插件级 | rule/cache.rule.test.ts::cache 集成 — adapter 包装 > [cache.req.cache.expires] 请求级 expires 覆盖插件级 | rename | 请求级 TTL |  |
+| test/cache.test.ts::cache 集成 — adapter 包装 > config.cache 在拦截后被 delete（避免污染下游） | rule/cache.rule.test.ts::cache 集成 — adapter 包装 > [cache.fn.axpCache] config.cache 在拦截后被 delete（避免污染下游） | rename | 拦截后清理 config.cache |  |
+| test/cache.test.ts::$resolveCloneFn / $shallowClone — 拷贝策略解析 > 缺省 / true（resolved.clone undefined） → null（共享引用） | unit/cache.unit.test.ts::$resolveCloneFn / $shallowClone — 拷贝策略解析 > [cache.fn.$resolveCloneFn][cache.opt.clone] 缺省 / true（resolved.clone undefined） → null（共享引用） | rename | 纯函数 |  |
+| test/cache.test.ts::$resolveCloneFn / $shallowClone — 拷贝策略解析 > 'shallow' → 浅拷贝函数（仅顶层） | unit/cache.unit.test.ts::$resolveCloneFn / $shallowClone — 拷贝策略解析 > [cache.fn.$resolveCloneFn][cache.opt.clone] 'shallow' → 浅拷贝函数（仅顶层） | rename | 纯函数 |  |
+| test/cache.test.ts::$resolveCloneFn / $shallowClone — 拷贝策略解析 > 'deep' → structuredClone 深拷贝（完整隔离） | unit/cache.unit.test.ts::$resolveCloneFn / $shallowClone — 拷贝策略解析 > [cache.fn.$resolveCloneFn][cache.opt.clone] 'deep' → structuredClone 深拷贝（完整隔离） | rename | 纯函数 |  |
+| test/cache.test.ts::$resolveCloneFn / $shallowClone — 拷贝策略解析 > function → 原样作为自定义拷贝 | unit/cache.unit.test.ts::$resolveCloneFn / $shallowClone — 拷贝策略解析 > [cache.fn.$resolveCloneFn][cache.opt.clone] function → 原样作为自定义拷贝 | rename | 纯函数 |  |
+| test/cache.test.ts::$resolveCloneFn / $shallowClone — 拷贝策略解析 > $shallowClone：数组复制顶层、原始值原样返回 | unit/cache.unit.test.ts::$resolveCloneFn / $shallowClone — 拷贝策略解析 > [cache.fn.$shallowClone] $shallowClone：数组复制顶层、原始值原样返回 | rename | 纯函数 |  |
+| test/cache.test.ts::cache 集成 — clone 策略 > 默认 / cache:true → 命中返回共享引用，就地改会污染后续命中 | rule/cache.rule.test.ts::cache 集成 — clone 策略 > [cache.opt.clone][cache.req.cache.clone] 默认 / cache:true → 命中返回共享引用，就地改会污染后续命中 | rename | 拷贝策略 |  |
+| test/cache.test.ts::cache 集成 — clone 策略 > clone:'shallow' → 顶层隔离，嵌套仍共享 | rule/cache.rule.test.ts::cache 集成 — clone 策略 > [cache.opt.clone][cache.req.cache.clone] clone:'shallow' → 顶层隔离，嵌套仍共享 | rename | 拷贝策略 |  |
+| test/cache.test.ts::cache 集成 — clone 策略 > clone:'deep' → 完整隔离，就地改任意层都不污染缓存 | rule/cache.rule.test.ts::cache 集成 — clone 策略 > [cache.opt.clone][cache.req.cache.clone] clone:'deep' → 完整隔离，就地改任意层都不污染缓存 | rename | 拷贝策略 |  |
+| test/cache.test.ts::cache 集成 — clone 策略 > clone:function → 调用自定义拷贝 | rule/cache.rule.test.ts::cache 集成 — clone 策略 > [cache.cb.clone][cache.req.cache.clone.callback] clone:function → 调用自定义拷贝 | rename | 自定义拷贝函数 |  |
+| test/cache.test.ts::removeCache / clearCache > removeCache 删除单条 | rule/cache.rule.test.ts::removeCache / clearCache > [cache.fn.removeCache] removeCache 删除单条 | rename | 规则层（rule） |  |
+| test/cache.test.ts::removeCache / clearCache > clearCache 清空全部 | rule/cache.rule.test.ts::removeCache / clearCache > [cache.fn.clearCache] clearCache 清空全部 | rename | 规则层（rule） |  |
+| test/cache.test.ts::removeCache / clearCache > 对未安装实例：返回 0/false | boundary/cache.boundary.test.ts::removeCache / clearCache > [cache.fn.removeCache][cache.fn.clearCache] 对未安装实例：返回 0/false | rename | 对未安装实例的返回值 |  |
+| test/cache.test.ts::cache — 裸 axios.create()（非函数 adapter） > defaults.adapter 是数组时安装不崩，二次同 key 命中缓存 | boundary/cache.boundary.test.ts::cache — 裸 axios.create()（非函数 adapter） > [cache.fn.axpCache] defaults.adapter 是数组时安装不崩，二次同 key 命中缓存 | rename | 裸 axios.create() 的数组 adapter |  |
+| test/cache.test.ts::cache — 命中响应的 config 是本次请求的 > 命中时 response.config 换成本次 config，data 仍共享引用 | rule/cache.rule.test.ts::cache — 命中响应的 config 是本次请求的 > [cache.fn.axpCache] 命中时 response.config 换成本次 config，data 仍共享引用 | rename | 命中响应换成本次 config |  |
+| test/cache.review.test.ts::cache — #11 较晚完成的旧响应不覆盖新结果 > A 先发后到、B 后发先到 → 缓存保留 B | boundary/cache.boundary.test.ts::cache — 较晚完成的旧响应不覆盖新结果 > [cache.fn.axpCache] A 先发后到、B 后发先到 → 缓存保留 B | rename | 较晚完成的旧响应不覆盖新结果（竞态），review #11 |  |
+| test/cache.review.test.ts::cache — #12 缓存原始快照，命中不被 transformResponse 二次改写 > 每次命中都只转换一次 | rule/cache.rule.test.ts::cache — 缓存原始快照，命中不被 transformResponse 二次改写 > [cache.fn.axpCache] 每次命中都只转换一次 | rename | 缓存原始快照，review #12 |  |
+| test/cache.review.test.ts::cache — #12 缓存原始快照，命中不被 transformResponse 二次改写 > 命中返回独立外壳（改 headers/status 不影响缓存） | rule/cache.rule.test.ts::cache — 缓存原始快照，命中不被 transformResponse 二次改写 > [cache.fn.axpCache] 命中返回独立外壳（改 headers/status 不影响缓存） | rename | 命中返回独立外壳，review #12 |  |
+| test/cache.review.test.ts::cache — #14 max 容量 / LRU / 写入清理过期 > 超出 max 淘汰最久未使用项 | rule/cache.rule.test.ts::cache — max 容量 / LRU / 写入清理过期 > [cache.opt.max] 超出 max 淘汰最久未使用项 | rename | LRU 淘汰，文档声明行为，review #14 |  |
+| test/cache.review.test.ts::cache — #14 max 容量 / LRU / 写入清理过期 > 写入时顺带清理过期项 | rule/cache.rule.test.ts::cache — max 容量 / LRU / 写入清理过期 > [cache.opt.max] 写入时顺带清理过期项 | rename | 写入顺带清理过期项，review #14 |  |
+| test/cache.review.test.ts::cache — #15 shouldCache > 默认不缓存业务失败信封（code 非 0/"0000"） | rule/cache.rule.test.ts::cache — shouldCache > [cache.cb.shouldCache][cache.fn.$defaultShouldCache] 默认不缓存业务失败信封（code 非 0/"0000"） | rename | 默认不缓存业务失败信封，review #15 |  |
+| test/cache.review.test.ts::cache — #15 shouldCache > 未解析的 JSON 字符串信封同样识别 | boundary/cache.boundary.test.ts::cache — shouldCache > [cache.fn.$defaultShouldCache] 未解析的 JSON 字符串信封同样识别 | rename | 未解析 JSON 字符串信封，review #15 |  |
+| test/cache.review.test.ts::cache — #15 shouldCache > 无信封的普通响应照常缓存 | rule/cache.rule.test.ts::cache — shouldCache > [cache.fn.$defaultShouldCache] 无信封的普通响应照常缓存 | rename | 无信封响应照常缓存，review #15 |  |
+| test/cache.review.test.ts::cache — #15 shouldCache > 插件级 / 请求级 shouldCache 覆盖默认（请求级优先） | rule/cache.rule.test.ts::cache — shouldCache > [cache.cb.shouldCache][cache.req.cache.shouldCache] 插件级 / 请求级 shouldCache 覆盖默认（请求级优先） | rename | 请求级覆盖插件级，review #15 |  |
+| test/cache.review.test.ts::cache — #1 clearCache 与在途请求 > clearCache 之前发出的请求落定后不回写 | boundary/cache.boundary.test.ts::cache — clearCache 与在途请求 > [cache.fn.clearCache] clearCache 之前发出的请求落定后不回写 | rename | 与在途请求的竞态，review #1 |  |
+| test/cache.review.test.ts::cache — 条目被 LRU 淘汰后旧响应仍不回写 > A 先发、B 后发先到，其他 key 淘汰 B 后 A 到达不得写入 | boundary/cache.boundary.test.ts::cache — 条目被 LRU 淘汰后旧响应仍不回写 > [cache.opt.max] A 先发、B 后发先到，其他 key 淘汰 B 后 A 到达不得写入 | rename | LRU 淘汰后旧响应不回写（竞态） |  |
+| test/cache.review.test.ts::cache — 条目被 LRU 淘汰后旧响应仍不回写 > 在途请求结束后 key 的 seq 表被清理 | boundary/cache.boundary.test.ts::cache — 条目被 LRU 淘汰后旧响应仍不回写 > [cache.fn.axpCache] 在途请求结束后 key 的 seq 表被清理 | rename | 在途请求结束后清理 seq 表 |  |
+| test/cache.coverage.test.ts::cache — 解析与错误边界 > 成功 HTTP 原始 body %s 可缓存，非法 JSON 退回文本语义（each） | unit/cache.unit.test.ts::cache — 解析与错误边界 > [cache.fn.$defaultShouldCache] 成功 HTTP 原始 body %s 可缓存，非法 JSON 退回文本语义 | rename | 纯函数 |  |
+| test/cache.coverage.test.ts::cache — 解析与错误边界 > HTTP %i 即使业务 code=0 也不缓存（each） | unit/cache.unit.test.ts::cache — 解析与错误边界 > [cache.fn.$defaultShouldCache] HTTP %i 即使业务 code=0 也不缓存 | rename | 纯函数 |  |
+| test/cache.coverage.test.ts::cache — 解析与错误边界 > 空 key 函数显式禁用缓存，不回退 config.key；空字符串可回退 | unit/cache.unit.test.ts::cache — 解析与错误边界 > [cache.fn.$resolveKey][cache.cb.key] 空 key 函数显式禁用缓存，不回退 config.key；空字符串可回退 | rename | 纯函数，空 key 边缘 |  |
+| test/cache.coverage.test.ts::cache — 解析与错误边界 > 非法运行时配置不启用缓存，非法 clone 策略返回共享模式 | unit/cache.unit.test.ts::cache — 解析与错误边界 > [cache.fn.$resolveCache][cache.fn.$resolveCloneFn] 非法运行时配置不启用缓存，非法 clone 策略返回共享模式 | rename | 纯函数，非法配置 |  |
+| test/cache.coverage.test.ts::cache — 解析与错误边界 > structuredClone 不可用时 deep 明确抛错且不发送请求 | boundary/cache.boundary.test.ts::cache — 解析与错误边界 > [cache.opt.clone][cache.req.cache.clone] structuredClone 不可用时 deep 明确抛错且不发送请求 | rename | 环境缺 structuredClone |  |
+| test/cache.coverage.test.ts::cache — 解析与错误边界 > shouldCache 抛错后同 key 后续仍能缓存 | boundary/cache.boundary.test.ts::cache — 解析与错误边界 > [cache.cb.shouldCache][cache.req.cache.shouldCache] shouldCache 抛错后同 key 后续仍能缓存 | rename | 异常回调 |  |
+| test/cache.coverage.test.ts::cache — 解析与错误边界 > 拒绝不会入缓存，后续成功可正常写入 | boundary/cache.boundary.test.ts::cache — 解析与错误边界 > [cache.fn.axpCache] 拒绝不会入缓存，后续成功可正常写入 | rename | 拒绝不入缓存 |  |
+| test/cache.coverage.test.ts::cache — 卸载、代次与 TTL 边界 > 卸载时在途请求仍返回，但旧响应不写入重新安装后的缓存 | boundary/cache.boundary.test.ts::cache — 卸载、代次与 TTL 边界 > [cache.method.cleanup] 卸载时在途请求仍返回，但旧响应不写入重新安装后的缓存 | rename | 卸载时有在途请求 |  |
+| test/cache.coverage.test.ts::cache — 卸载、代次与 TTL 边界 > TTL=%i 不命中，即使时间未推进（each） | boundary/cache.boundary.test.ts::cache — 卸载、代次与 TTL 边界 > [cache.opt.expires] TTL=%i 不命中，即使时间未推进 | rename | TTL 为零/负 |  |
+| test/cache.coverage.test.ts::cache — 卸载、代次与 TTL 边界 > TTL 恰好到期时重新发送，max=0 回退默认容量 | boundary/cache.boundary.test.ts::cache — 卸载、代次与 TTL 边界 > [cache.opt.expires][cache.opt.max] TTL 恰好到期时重新发送，max=0 回退默认容量 | rename | TTL 恰好到期、max=0 |  |
+| test/cache.coverage.test.ts::cache — 卸载、代次与 TTL 边界 > enable:false 保持 adapter 身份且不创建缓存仓 | rule/cache.rule.test.ts::cache — 卸载、代次与 TTL 边界 > [cache.opt.enable] enable:false 保持 adapter 身份且不创建缓存仓 | rename | 总开关 |  |
