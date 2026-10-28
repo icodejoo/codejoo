@@ -13,7 +13,7 @@ beforeEach(() => {
 });
 
 it.each([true, false])(
-  "[auth.cb.onRefresh][cancel.fn.cancelAll] 刷新期间 cancelAll：等待者全部以 cancel 结束且不重放，loading 成对隐藏、cancel 不通知（刷新结果 %s）",
+  "[auth.cb.onRefresh][core.method.cancelAll] 刷新期间 cancelAll：等待者全部以 cancel 结束且不重放，loading 成对隐藏、cancel 不通知（刷新结果 %s）",
   /** I1/I2/I3/I4 在取消 + 刷新下成立。 */ async (success) => {
     const gate = deferred<boolean>();
     const h = authClient({

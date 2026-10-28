@@ -65,7 +65,7 @@ api.get('/pet/{id}')(payload, opts)
 
 ## 3. 一次请求的数据流
 
-1. 动词调用把 `path`、`payload`、方法级配置、调用级配置浅合并成逻辑请求 `AxpRequestConfig`（与现在 `core.ts:91-97` 相同），再用 axios 公开的 `mergeConfig` 把实例 `defaults` 合并进来。**各层看到的都是最终生效的配置**，所以 filter、repath、key 都能处理 defaults 里的值，语义与旧版拦截器一致（B2 终审裁决，方案 A）。
+1. 动词调用把 `path`、`payload`、方法级配置、调用级配置浅合并成逻辑请求 `AxpRequestConfig`（调用级值为 `undefined` 的键不覆盖方法级，与 axios `mergeConfig` 一致），再用 axios 公开的 `mergeConfig` 把实例 `defaults` 合并进来。**各层看到的都是最终生效的配置**，所以 filter、repath、key 都能处理 defaults 里的值，语义与旧版拦截器一致（B2 终审裁决，方案 A）。
 2. 内核（`client.ts` 的 `request`）建逻辑请求级上下文：分配 `id`，建 `AbortController` 并与用户 `signal` 联动，登记到在途集合（`cancelAll` / `pending()` 用）。
 3. 按编译好的链从外到内执行中间件。每层拿到的 `ctx.request` 是外层交给它的版本。
 4. 到达传输层：若有层调用过 `markReplayable()` 且 `data` 是纯对象/数组，先克隆一份再发；调用**用户的 axios 实例** `axios.request`（保留实例拦截器），强制 `validateStatus: () => true`。axios 会再合并一次 defaults：凡是 `defaults.params` 里有、但已被层删除的键，传输层显式写成 `null`（axios 拼 URL 时跳过），防止被带回；被层删除的默认 header 的处理以 B2 报告结论为准。
@@ -113,7 +113,7 @@ function stateKey<T>(description: string): AxpStateKey<T>; // 基于 Symbol 的�
 **请求不可变**：中间件不改 `ctx.request`，而是 `next(patch)`。内核把 patch 浅合并成新请求交给内层，`headers` 多合并一层。
 同一层两次调用 `next()` 拿到的是同一个基准请求，所以重发天然"干净"，不再需要原始请求体快照和 `axp:share`、`axp:cache` 这类保活键（O1）。
 
-**signal**：传输层用 `request.signal ?? ctx.signal`。share 用 patch 换成共享 controller 的 signal，实现"首发取消不连累跟随者"。
+**signal**：传输层用 `request.signal ?? ctx.signal`。share 用 patch 换成共享 controller 的 signal，实现"首发取消不连累跟随者"；内核派生内层上下文时 `ctx.signal` 同样取 patch 里的 signal（没有则沿用外层），内层插件与传输层看到的是同一个 signal。
 
 ## 6. 归一化响应
 

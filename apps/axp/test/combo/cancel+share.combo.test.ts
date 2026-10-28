@@ -23,7 +23,7 @@ function client(withCache = false) {
   return { ...h, calls };
 }
 
-it("[cancel.fn.cancelAll × share.opt.policy] cancelAll 让同 key 的全部订阅者以 cancel 告终，底层被中止，pending 与监听归零", async () => {
+it("[core.method.cancelAll × share.opt.policy] cancelAll 让同 key 的全部订阅者以 cancel 告终，底层被中止，pending 与监听归零", async () => {
   const listeners = trackAbortListeners();
   const h = client();
   const pending = Array.from({ length: CALLERS }, () => h.send({ url: URL, share: true }));
@@ -42,7 +42,7 @@ it("[cancel.fn.cancelAll × share.opt.policy] cancelAll 让同 key 的全部订�
   expect(h.calls).toHaveLength(2);
 });
 
-it("[cancel.fn.cancelAll × share.opt.policy] 共享结果已落定后 cancelAll 返回 0，不影响已拿到的结果", async () => {
+it("[core.method.cancelAll × share.opt.policy] 共享结果已落定后 cancelAll 返回 0，不影响已拿到的结果", async () => {
   const h = client();
   const pending = [h.send({ url: URL, share: true }), h.send({ url: URL, share: true })];
   await vi.runAllTimersAsync();
@@ -52,7 +52,7 @@ it("[cancel.fn.cancelAll × share.opt.policy] 共享结果已落定后 cancelAll
   expect(results[1]).toBe(results[0]);
 });
 
-it("[cancel.fn.cancelAll × share.opt.policy × cache.req.cache] 被取消的共享结果不进缓存，之后的请求重新发送", async () => {
+it("[core.method.cancelAll × share.opt.policy × cache.req.cache] 被取消的共享结果不进缓存，之后的请求重新发送", async () => {
   const h = client(true);
   const pending = Array.from({ length: 3 }, () => h.send({ url: URL, share: true, cache: true }));
   await vi.advanceTimersByTimeAsync(1);

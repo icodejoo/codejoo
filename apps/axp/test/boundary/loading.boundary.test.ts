@@ -65,7 +65,7 @@ it.each([SYNC_FAILURE, "reject"])(
 );
 
 it.each([SHOW_WINDOW, HIDE_WINDOW, "inflight"])(
-  "[loading.method.dispose] 卸载取消 %s 窗口，旧请求完成不再回调",
+  "[loading.method.lifecycle] 卸载取消 %s 窗口，旧请求完成不再回调",
   /** 清理两个计时器和在途请求。 */ async (window) => {
     const h = uiClient();
     h.api.use(
@@ -118,7 +118,7 @@ it.each([ADAPTER_FAILURE, "transform"])(
   },
 );
 
-it("[loading.method.setup] 同一定义装在父子客户端各自计数", /** extend 重新建立状态。 */ async () => {
+it("[loading.method.lifecycle] 同一定义装在父子客户端各自计数", /** extend 重新建立状态。 */ async () => {
   const parent = uiClient();
   const shared = loadingRecorder(parent.events);
   parent.api.use(axpLoading({ loading: shared }));

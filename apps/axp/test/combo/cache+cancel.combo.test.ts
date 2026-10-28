@@ -18,7 +18,7 @@ function client() {
   return { ...h, calls };
 }
 
-it("[cancel.fn.cancelAll × cache.req.cache] 命中缓存的请求不留下在途登记：pending 与 cancelAll 都是 0", async () => {
+it("[core.method.cancelAll × cache.req.cache] 命中缓存的请求不留下在途登记：pending 与 cancelAll 都是 0", async () => {
   const h = client();
   const first = h.send({ url: URL, cache: true });
   await vi.runAllTimersAsync();
@@ -30,7 +30,7 @@ it("[cancel.fn.cancelAll × cache.req.cache] 命中缓存的请求不留下在�
   expect(h.calls).toHaveLength(1);
 });
 
-it("[cancel.fn.cancelAll × cache.req.cache] 取消在途的未命中请求：以 cancel 告终，不写缓存，之后重新发送", async () => {
+it("[core.method.cancelAll × cache.req.cache] 取消在途的未命中请求：以 cancel 告终，不写缓存，之后重新发送", async () => {
   const h = client();
   const pending = h.send({ url: URL, cache: true });
   await vi.advanceTimersByTimeAsync(1);

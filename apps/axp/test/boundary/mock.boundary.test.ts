@@ -165,7 +165,7 @@ it("[mock.method.lifecycle] eject 重复调用安全，卸载后可用同一个�
   expect((await h.send({ url: REAL, mock: true })).data).toBe(MOCK_DATA);
 });
 
-it("[mock.opt.fallbackWhen] 探测后回落真实接口，两次发送的请求体相互独立，原地修改的 transformRequest 不会叠加", async () => {
+it("[mock.cb.fallbackWhen] 探测后回落真实接口，两次发送的请求体相互独立，原地修改的 transformRequest 不会叠加", async () => {
   const sent: unknown[] = [];
   const h = sourceClient(
     [axpMock({ enable: true, mockUrl: MOCK })],

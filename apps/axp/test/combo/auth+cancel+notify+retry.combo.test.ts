@@ -14,7 +14,7 @@ it.each([
   [401, { kind: "auth", reason: "expired" }, 2],
   [500, { ok: false, status: 500 }, 3],
 ] as const)(
-  "[auth.cb.onAccessExpired][retry.opt.max][cancel.fn.cancelAll][notify.cb.notify] 重放返回 %i：只通知一次、重试预算至多用一次，之后逻辑请求全部释放",
+  "[auth.cb.onAccessExpired][retry.opt.max][core.method.cancelAll][notify.cb.notify] 重放返回 %i：只通知一次、重试预算至多用一次，之后逻辑请求全部释放",
   /** 刷新重放不占预算，重放后的失败交给 retry 或 auth 收敛。 */ async (replayStatus, expected, sends) => {
     const h = authClient({}, [axpRetry({ max: 1, delay: 0 })]);
     const notify = vi.fn(notifyRecorder(h.events));
