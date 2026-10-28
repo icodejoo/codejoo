@@ -316,3 +316,21 @@ it("[share.fn.subscribe] 首发在订阅前被内层同步取消，以 cancel �
   await vi.runAllTimersAsync();
   expect((await response).kind).toBe(AXP_KINDS.CANCEL);
 });
+
+it("[share.fn.subscribe] 订阅者超时的文案沿用请求的 timeoutErrorMessage，没写时用与 axios 一致的默认文案", async () => {
+  const h = signalClient();
+  const [custom, plain] = await settled(h.send({ url: URL, share: true, timeout: SHORT, timeoutErrorMessage: "too slow" }), h.send({ url: URL, share: true, timeout: SHORT }));
+  expect([custom.kind, plain.kind]).toEqual([AXP_KINDS.TIMEOUT, AXP_KINDS.TIMEOUT]);
+  expect(custom.message).toBe("too slow");
+  expect(plain.message).toBe(`timeout of ${SHORT}ms exceeded`);
+});
+
+it("[share.fn.subscribe] 取消与超时同时成立时按取消告终，不会被误判成超时", async () => {
+  const h = signalClient();
+  const cancel = new AbortController();
+  const pending = h.send({ url: URL, share: true, timeout: SHORT, signal: cancel.signal });
+  await vi.advanceTimersByTimeAsync(SHORT - 1);
+  cancel.abort();
+  const [result] = await settled(pending);
+  expect(result.kind).toBe(AXP_KINDS.CANCEL);
+});

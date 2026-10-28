@@ -1,23 +1,10 @@
 /* eslint-disable no-await-in-loop -- 重试必须按序等待与发送，不能并行。 */
-import type { AxpContext } from "../context";
-import { normalizeMethod } from "../methods";
-import { isEnabled, resolveOption, type AxpOption, type IPluginSwitch } from "../options";
+import { cancelIfAborted, type AxpContext } from "../context";
+import { methodSet, normalizeMethod } from "../methods";
+import { resolveOption, resolveRequestOption, type AxpOption, type IPluginSwitch } from "../options";
 import { AXP_KINDS, type AxpKind, type AxpResponse, type IAxpResponse } from "../response";
 import type { AxpPlugin } from "../types";
-import { isPlainObject } from "../utils";
-import {
-  applyJitter,
-  computeDelay,
-  defaultDelay,
-  DEFAULT_AFTER_STATUS_CODES,
-  DEFAULT_DELAY_MAX,
-  isRetryAfterEligible,
-  retryAfterMs,
-  waitFor,
-  type IRetryAfterHeaders,
-  type TRetryDelay as TimingDelay,
-  type TRetryJitter,
-} from "./retry-timing";
+import { applyJitter, computeDelay, defaultDelay, DEFAULT_AFTER_STATUS_CODES, DEFAULT_DELAY_MAX, retryAfterMs, waitFor, type IRetryAfterHeaders, type TRetryDelay as TimingDelay, type TRetryJitter } from "./retry-timing";
 
 /** 内置重试插件名。 */
 const NAME = "axp:retry";
@@ -65,9 +52,9 @@ const DEFAULTS = {
   afterStatusCodes: DEFAULT_AFTER_STATUS_CODES,
   retryAfterMax: Infinity,
 };
-/** 数字简写只覆盖重试预算；调用方只把数字交给它。 */
-function shorthand(value: unknown): Pick<IRetryOptions, "max"> {
-  return { max: value as number };
+/** 数字简写只覆盖重试预算，其它类型不认。 */
+function shorthand(value: unknown): Pick<IRetryOptions, "max"> | undefined {
+  return typeof value === "number" ? { max: value } : undefined;
 }
 /** 在 attempt 阶段重跑 credential/source，返回最后一次真实响应。
  * @param options 重试预算、判定和等待策略。
@@ -79,18 +66,17 @@ export default function axpRetry<R extends IAxpResponse = AxpResponse>(options: 
   base.methods = base.methods.slice();
   base.statusCodes = base.statusCodes.slice();
   base.afterStatusCodes = base.afterStatusCodes.slice();
-  const methods = new Set(base.methods.map(normalizeMethod));
+  const methods = methodSet(base.methods);
   return {
     name: NAME,
     enable: options.enable,
     stage: "attempt",
     /** 通知与落定留给外层，每轮只调用内层链。 */
     async handle(ctx, next) {
-      const value = ctx.request.retry;
-      if (!isEnabled(value)) return next();
-      const config = typeof value === "number" || isPlainObject(value) ? resolveOption<IRetryOptions<R>, typeof DEFAULTS>(value, base, DEFAULTS, shorthand)! : base;
-      const allowed =
-        config === base ? methods.has(normalizeMethod(ctx.request.method)) : config.methods.some(/** 请求级列表仍按小写方法比较。 */ (method) => normalizeMethod(method) === normalizeMethod(ctx.request.method));
+      const config = resolveRequestOption(ctx.request.retry, base, DEFAULTS, shorthand);
+      if (!config) return next();
+      const method = normalizeMethod(ctx.request.method);
+      const allowed = config === base ? methods.has(method) : config.methods.some(/** 请求级列表仍按小写方法比较。 */ (candidate) => normalizeMethod(candidate) === method);
       if (!allowed) return next();
       ctx.markReplayable();
       let response = await next();
@@ -99,10 +85,11 @@ export default function axpRetry<R extends IAxpResponse = AxpResponse>(options: 
         const decision = config.shouldRetry?.(response, attempt, ctx);
         const retry = typeof decision === "boolean" ? decision : response.kind === AXP_KINDS.NETWORK || response.kind === AXP_KINDS.TIMEOUT || config.statusCodes.includes(response.status);
         if (!retry) return response;
-        const after = isRetryAfterEligible(response.status, config.afterStatusCodes, config.respectRetryAfter) ? retryAfterMs(response.raw?.headers as IRetryAfterHeaders | undefined, config.retryAfterMax) : undefined;
+        const after = config.respectRetryAfter && config.afterStatusCodes.includes(response.status) ? retryAfterMs(response.raw?.headers as IRetryAfterHeaders | undefined, config.retryAfterMax) : undefined;
         const ms = after ?? applyJitter(computeDelay(config.delay, attempt, config.max, response), config.jitter, config.delayMax);
         await waitFor(ms, ctx.signal);
-        if (ctx.signal.aborted) return ctx.fail({ kind: AXP_KINDS.CANCEL });
+        const cancelled = cancelIfAborted(ctx);
+        if (cancelled) return cancelled;
         response = await next();
       }
       return response;

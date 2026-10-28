@@ -1,12 +1,14 @@
-import { resolveOption, type AxpOption, type IPluginSwitch } from "../options";
+import { resolveRequestOption, resolveOption, type AxpOption, type IPluginSwitch } from "../options";
 import type { AxpResponse, IAxpResponse } from "../response";
 import type { AxpPlugin } from "../types";
-import { isObject, isPlainObject, toText } from "../utils";
+import { isObject, ORIGIN_PREFIX, toTag, toText } from "../utils";
 
 /** 内置路径替换插件名称。 */
 const NAME = "axp:repath";
 /** 三种路径变量，冒号变量仅匹配单个路径段。 */
 const DEFAULT_PATTERN = /{([^}]+)}|\[([^\]]+)]|:([^/\s]+)/g;
+/** 普通对象的类型标签，只有它的字段才可能提供路径变量。 */
+const PLAIN_TAG = "[object Object]";
 /** 路径变量的内置配置。 */
 const DEFAULTS = {
   /** 三种路径变量语法。 */ pattern: DEFAULT_PATTERN,
@@ -41,7 +43,7 @@ function readParams(params: unknown, key: string, used: IConsumedFields): unknow
 /** 请求体沿用对象标签和标量的原判定方式。 */
 function readData(data: unknown, key: string, used: IConsumedFields): unknown {
   if (data == null) return undefined;
-  if (Object.prototype.toString.call(data) === "[object Object]") {
+  if (toTag(data) === PLAIN_TAG) {
     const source = data as Record<string, unknown>;
     if (!(key in source)) return undefined;
     (used.data ??= new Set()).add(key);
@@ -65,12 +67,10 @@ export default function axpRepath<R extends IAxpResponse = AxpResponse>(options:
     stage: "prepare",
     /** 替换完毕后统一移除字段，重复变量仍可读取同一来源。 */
     async handle(ctx, next) {
-      const requestOption = ctx.request.repath;
-      if (requestOption === false) return next();
-      const resolved = isPlainObject(requestOption) ? resolveOption(requestOption, base, DEFAULTS) : base;
+      const resolved = resolveRequestOption(ctx.request.repath, base, DEFAULTS);
       const { url, params, data } = ctx.request;
       if (!resolved || !url) return next();
-      const prefix = url.match(/^(?:[a-z][a-z\d+.-]*:)?\/\/[^/?#]*/i)?.[0] ?? "";
+      const prefix = url.match(ORIGIN_PREFIX)?.[0] ?? "";
       const rest = url.slice(prefix.length);
       const suffixAt = rest.search(/[?#]/);
       const pathname = suffixAt < 0 ? rest : rest.slice(0, suffixAt);
@@ -78,7 +78,7 @@ export default function axpRepath<R extends IAxpResponse = AxpResponse>(options:
       const suffix = rest.slice(pathname.length);
       const used: IConsumedFields = {};
       // 不向共享正则写 lastIndex；无捕获组时不把 replace 的 offset 当变量名。
-      const pattern = isPlainObject(requestOption) && requestOption.pattern != null ? new RegExp(resolved.pattern.source, resolved.pattern.flags) : basePattern;
+      const pattern = resolved.pattern === base.pattern ? basePattern : new RegExp(resolved.pattern.source, resolved.pattern.flags);
       pattern.lastIndex = 0;
       const replaced = pathname.replace(
         pattern,

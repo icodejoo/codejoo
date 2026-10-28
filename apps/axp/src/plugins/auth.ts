@@ -1,25 +1,21 @@
 /* eslint-disable no-await-in-loop -- 刷新后的重放必须按序执行。 */
-import { stateKey, type AxpContext } from "../context";
+import { cancelIfAborted, stateKey, type AxpContext } from "../context";
 import { normalizeMethod } from "../methods";
 import type { ITokenManager } from "../objects/TokenManager";
 import { resolveOption, type IPluginSwitch } from "../options";
 import { AXP_KINDS, type AxpResponse, type IAxpResponse } from "../response";
 import type { AxpPlugin, AxpRequestConfig, AxpRequestPatch } from "../types";
-import { fireNotice } from "../utils";
-import { compileMethods, compileUrlPatterns, pathnameOf } from "./auth-match";
+import { fireNotice, waitAbortable } from "../utils";
+import { compileMethods, compileUrlPatterns, pathnameOf, WILDCARD } from "./auth-match";
 
 /** 内置鉴权插件名。 */
 const NAME = "axp:auth";
 /** token 快照独立于自定义凭证头名。 */
 const INJECTED_TOKEN = stateKey<string | undefined>("auth:injected-token");
-/** 默认保护全部方法与路径。 */
-const WILDCARD = "*";
 /** 鉴权通知异常的统一输出。 */
 const CALLBACK_ERROR = `[${NAME}] 鉴权通知回调失败`;
 /** 刷新实现抛错时的调试日志，仅 debug 开启才输出。 */
 const REFRESH_ERROR = `[${NAME}] onRefresh 抛错，按刷新失败处理`;
-/** 逻辑请求取消事件。 */
-const ABORT_EVENT = "abort";
 /** 标准鉴权失败的逻辑状态。 */
 const UNAUTHORIZED = 401;
 /** 越权的逻辑状态。 */
@@ -84,21 +80,9 @@ export function defaultAuthFailure<R extends IAxpResponse>(response: R, tm: ITok
   }
   return response.status === FORBIDDEN ? AuthFailureAction.Deny : AuthFailureAction.Others;
 }
-/** 等待共享刷新时只取消当前等待者，始终释放监听。 */
-async function waitRefresh(pending: Promise<boolean>, signal: AbortSignal): Promise<boolean | undefined> {
-  if (signal.aborted) return undefined;
-  let cancel!: () => void;
-  const cancelled = new Promise<undefined>(
-    /** 独立的取消承诺不会中断其他请求的刷新。 */ (resolve) => {
-      cancel = () => resolve(undefined);
-      signal.addEventListener(ABORT_EVENT, cancel, { once: true });
-    },
-  );
-  try {
-    return await Promise.race([pending, cancelled]);
-  } finally {
-    signal.removeEventListener(ABORT_EVENT, cancel);
-  }
+/** 构造过期失败；from 为触发它的原响应，没有原响应时省略。 */
+function expiredFailure<R extends IAxpResponse>(ctx: AxpContext<R>, from?: R): R {
+  return ctx.fail({ kind: AXP_KINDS.AUTH, reason: AuthFailureAction.Expired, from });
 }
 /** 在每个客户端维护单飞刷新，凭证层至多重放一次。
  * @param options 会话管理器、刷新实现和通知回调。
@@ -160,13 +144,19 @@ export default function axpAuth<R extends IAxpResponse = AxpResponse>(options: I
       }
       /** 准备凭证并记下实际使用的 token：异步 ready 期间 token 若被替换，就用新 token 重做，保证快照与注入一致。 */
       async function prepare(request: Readonly<AxpRequestConfig>) {
-        let token = tm.accessToken;
-        let patch = await base.ready(tm, request);
-        for (let attempt = 1; token !== tm.accessToken && attempt < READY_STABLE_ATTEMPTS; attempt++) {
+        let token: string | undefined;
+        let patch: AxpRequestPatch | void;
+        let attempt = 0;
+        do {
           token = tm.accessToken;
           patch = await base.ready(tm, request);
-        }
+        } while (token !== tm.accessToken && ++attempt < READY_STABLE_ATTEMPTS);
         return { token, patch };
+      }
+      /** 等待刷新结束：调用方取消返回 cancel 响应（只取消自己这一路，不中断别人的刷新），刷新失败返回过期失败，成功返回 undefined。 */
+      async function joinRefresh(pending: Promise<boolean>, ctx: AxpContext<R>, from?: R): Promise<R | undefined> {
+        const success = await waitAbortable(pending, ctx.signal);
+        return cancelIfAborted(ctx) ?? (success ? undefined : expiredFailure(ctx, from));
       }
       return {
         /** 公开请求不受刷新阻塞，保护判定只在当前尝试入口求值。 */
@@ -178,9 +168,8 @@ export default function axpAuth<R extends IAxpResponse = AxpResponse>(options: I
           if (!protectedRequest) return next();
           ctx.markReplayable();
           if (refreshing) {
-            const success = await waitRefresh(refreshing, ctx.signal);
-            if (success === undefined) return ctx.fail({ kind: AXP_KINDS.CANCEL });
-            if (!success) return ctx.fail({ kind: AXP_KINDS.AUTH, reason: AuthFailureAction.Expired });
+            const failure = await joinRefresh(refreshing, ctx);
+            if (failure) return failure;
           }
           let replayed = false;
           while (true) {
@@ -196,27 +185,18 @@ export default function axpAuth<R extends IAxpResponse = AxpResponse>(options: I
             if (response.ok || response.kind === AXP_KINDS.INTERNAL || response.kind === AXP_KINDS.CANCEL) return response;
             const action = base.onFailure ? await base.onFailure(response, tm, ctx) : defaultAuthFailure(response, tm, ctx);
             // 异步路由期间调用方已取消：以取消落定，不再按鉴权失败处理（避免为取消的请求弹提示）
-            if (ctx.signal.aborted) return ctx.fail({ kind: AXP_KINDS.CANCEL });
+            const cancelled = cancelIfAborted(ctx);
+            if (cancelled) return cancelled;
             switch (action) {
               case AuthFailureAction.Refresh:
               case AuthFailureAction.Replay: {
                 if (replayed || isExpired()) {
                   expire(response);
-                  return ctx.fail({
-                    kind: AXP_KINDS.AUTH,
-                    reason: AuthFailureAction.Expired,
-                    from: response,
-                  });
+                  return expiredFailure(ctx, response);
                 }
                 if (action === AuthFailureAction.Refresh) {
-                  const success = await waitRefresh(refresh(response, ctx), ctx.signal);
-                  if (success === undefined) return ctx.fail({ kind: AXP_KINDS.CANCEL });
-                  if (!success)
-                    return ctx.fail({
-                      kind: AXP_KINDS.AUTH,
-                      reason: AuthFailureAction.Expired,
-                      from: response,
-                    });
+                  const failure = await joinRefresh(refresh(response, ctx), ctx, response);
+                  if (failure) return failure;
                 }
                 replayed = true;
                 break;
@@ -226,7 +206,7 @@ export default function axpAuth<R extends IAxpResponse = AxpResponse>(options: I
                 return ctx.fail({ kind: AXP_KINDS.AUTH, reason: "denied", from: response });
               case AuthFailureAction.Expired:
                 expire(response);
-                return ctx.fail({ kind: AXP_KINDS.AUTH, reason: action, from: response });
+                return expiredFailure(ctx, response);
               default:
                 return response;
             }

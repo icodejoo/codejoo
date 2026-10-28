@@ -1,3 +1,5 @@
+import { waitAbortable } from "../utils";
+
 /** 默认首轮退避毫秒数。 */
 const BASE_DELAY = 300;
 /** 指数退避倍数。 */
@@ -6,10 +8,6 @@ const BACKOFF_FACTOR = 2;
 const MS_PER_SECOND = 1000;
 /** Retry-After 头名。 */
 const RETRY_AFTER = "retry-after";
-/** 取消事件名。 */
-const ABORT_EVENT = "abort";
-/** setTimeout 可接受的最大毫秒数，超出会被运行时当作溢出立即触发。 */
-const MAX_TIMEOUT = 2_147_483_647;
 /** 默认计算延迟上限（毫秒）。 */
 export const DEFAULT_DELAY_MAX = 10_000;
 /** 默认采信 Retry-After 的逻辑状态。 */
@@ -82,18 +80,6 @@ export function applyJitter(ms: number, jitter?: TRetryJitter, delayMax = DEFAUL
 }
 
 /**
- * 仅判断逻辑状态是否允许采信 Retry-After，不读取响应头。
- * @param status 逻辑状态码。
- * @param afterStatusCodes 允许的状态列表，默认 413/429/503。
- * @param respect 是否采信，默认 true。
- * @returns 是否允许解析服务端延迟。
- * @example isRetryAfterEligible(429); // true
- */
-export function isRetryAfterEligible(status: number | undefined, afterStatusCodes: readonly number[] = DEFAULT_AFTER_STATUS_CODES, respect = true): boolean {
-  return respect && typeof status === "number" && afterStatusCodes.includes(status);
-}
-
-/**
  * 解析数字秒或 HTTP-date，沿用旧版 Number/Date.parse 兼容行为。
  * @param headers 普通头对象或提供 get 的头对象；缺省表示无头。
  * @param cap 服务端延迟上限，与 delayMax 独立。
@@ -103,7 +89,6 @@ export function isRetryAfterEligible(status: number | undefined, afterStatusCode
  */
 export function retryAfterMs(headers: IRetryAfterHeaders | null | undefined, cap: number, now = Date.now): number | undefined {
   const raw = typeof headers?.get === "function" ? headers.get(RETRY_AFTER) : headers?.[RETRY_AFTER];
-  if (raw == null) return undefined;
   if (typeof raw !== "string" && typeof raw !== "number") return undefined;
   const seconds = Number(raw);
   if (Number.isFinite(seconds)) return Math.min(cap, Math.max(0, seconds * MS_PER_SECOND));
@@ -120,16 +105,5 @@ export function retryAfterMs(headers: IRetryAfterHeaders | null | undefined, cap
  * @example await waitFor(300, controller.signal);
  */
 export function waitFor(ms: number, signal?: AbortSignal): Promise<void> {
-  if (signal?.aborted) return Promise.resolve();
-  return new Promise((resolve) => {
-    /** 计时器与取消共用收尾逻辑。 */
-    const finish = () => {
-      clearTimeout(timer);
-      signal?.removeEventListener(ABORT_EVENT, finish);
-      // oxlint-disable-next-line promise/no-multiple-resolved -- 定时器与 abort 共用收尾；已清理两个触发源，不会重复落定。
-      resolve();
-    };
-    const timer = setTimeout(finish, Math.min(ms, MAX_TIMEOUT));
-    signal?.addEventListener(ABORT_EVENT, finish, { once: true });
-  });
+  return waitAbortable<void>(undefined, signal, ms);
 }

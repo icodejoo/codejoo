@@ -1,3 +1,5 @@
+import { ORIGIN_PREFIX } from "../utils";
+
 /**
  * 已归一化输入的匹配谓词。
  * @example const match: TAuthPredicate = compileMethods('get'); match('get');
@@ -8,11 +10,13 @@ const TRUE: TAuthPredicate = () => true;
 /** 恒假谓词。 */
 const FALSE: TAuthPredicate = () => false;
 /** 全匹配通配符。 */
-const WILDCARD = "*";
+export const WILDCARD = "*";
 /** 空输入及被剥离的 URL 片段。 */
 const EMPTY_INPUT = "";
-/** 占位符替换必须覆盖所有出现位置。 */
-const GLOBAL_REGEX_FLAGS = "g";
+/** 规范化不会改动的路径：只含字母数字、下划线、连字符与斜杠。URLPattern 对其余输入会先折叠点段、转义字符再匹配，这类输入只能交给原生判定。 */
+const STABLE_PATH = /^[\w\-/]*$/;
+/** 模式串里需要改写的片段：命名参数、通配符，或需转义的正则元字符。 */
+const PATTERN_TOKEN = /:[A-Za-z_$][\w$]*|\*|[.+?^${}()|[\]\\]/g;
 
 /**
  * 提取 pathname，剥离主机、查询和片段；空路径返回根路径。
@@ -21,7 +25,7 @@ const GLOBAL_REGEX_FLAGS = "g";
  * @example pathnameOf('https://example.com/me?q=1'); // '/me'
  */
 export function pathnameOf(url: string): string {
-  return url.replace(/^([a-z][a-z\d+\-.]*:)?\/\/[^/?#]*/i, EMPTY_INPUT).replace(/[?#].*$/, EMPTY_INPUT) || "/";
+  return url.replace(ORIGIN_PREFIX, EMPTY_INPUT).replace(/[?#].*$/, EMPTY_INPUT) || "/";
 }
 
 /**
@@ -64,8 +68,7 @@ export function compileUrlPatterns(p: string | readonly string[] | undefined): T
   for (const raw of arr) {
     if (typeof raw !== "string" || raw.length === 0) continue;
     const isNeg = raw.charCodeAt(0) === 33; // '!'
-    const m = compileOne(Ctor, isNeg ? raw.slice(1) : raw);
-    if (m) (isNeg ? excludes : includes).push(m);
+    (isNeg ? excludes : includes).push(compileOne(Ctor, isNeg ? raw.slice(1) : raw));
   }
 
   if (includes.length === 0 && excludes.length === 0) return FALSE;
@@ -80,8 +83,23 @@ export function compileUrlPatterns(p: string | readonly string[] | undefined): T
   };
 }
 
-/** 编译单个模式串：优先 URLPattern，失败或不可用时回退正则。 */
-function compileOne(Ctor: typeof URLPattern | null, pat: string): TAuthPredicate | null {
+/** 编译单个模式串：纯字面量与"字面量前缀 + 结尾星号"走字符串比较，其余优先 URLPattern，失败或不可用时回退正则。 */
+function compileOne(Ctor: typeof URLPattern | null, pat: string): TAuthPredicate {
+  const native = compileNative(Ctor, pat);
+  const prefixOnly = pat.endsWith(WILDCARD);
+  const literal = prefixOnly ? pat.slice(0, -1) : pat;
+  if (!STABLE_PATH.test(literal)) return native;
+  // 星号可匹配空串，所以前缀等于整个路径也算命中，与 URLPattern 一致。
+  // 字面量按当前运行时的语义比较：原生 URLPattern 要求完全相等，正则回退允许可选尾斜杠。
+  const exact: TAuthPredicate = Ctor ? (url) => url === literal : (url) => url === literal || url === `${literal}/`;
+  /** 稳定输入的字符串判定。 */
+  const fast: TAuthPredicate = prefixOnly ? (url) => url.startsWith(literal) : exact;
+  /** 不稳定的输入（点段、转义、非 ASCII 等）必须按 URLPattern 规范化后判定，字符串比较会漏判。 */
+  return (url) => (STABLE_PATH.test(url) ? fast(url) : native(url));
+}
+
+/** 原生 URLPattern 判定；构造失败或不可用时回退正则，原生 test 抛错按不匹配处理。 */
+function compileNative(Ctor: typeof URLPattern | null, pat: string): TAuthPredicate {
   if (Ctor) {
     try {
       const p = new Ctor({ pathname: pat });
@@ -98,31 +116,22 @@ function compileOne(Ctor: typeof URLPattern | null, pat: string): TAuthPredicate
     }
   }
   const re = patternToRegex(pat);
-  /** 编译失败时忽略当前模式。 */
-  return re ? (url) => re.test(url) : null;
+  /** 正则回退的判定。 */
+  return (url) => re.test(url);
 }
 
 /**
  * URLPattern pathname 子集转正则：'*'⇒.*，':name'⇒[^/]+，其余转义为字面量。
- * @example patternToRegex('/users/:id')?.test('/users/1'); // true
+ * @example patternToRegex('/users/:id').test('/users/1'); // true
  * @param pat URLPattern pathname 子集模式串。
- * @returns 锚定并允许可选尾斜杠的正则，解析失败返回 null。
+ * @returns 锚定并允许可选尾斜杠的正则。
  */
-export function patternToRegex(pat: string): RegExp | null {
-  try {
-    const NAMED = " NAMED ",
-      STAR = " STAR ";
-    const tokenized = pat.replace(/:[A-Za-z_$][\w$]*/g, NAMED).replace(/\*/g, STAR);
-    const escaped = tokenized.replace(/[.+?^${}()|[\]\\]/g, "\\$&");
-    const body = escaped.replace(new RegExp(NAMED, GLOBAL_REGEX_FLAGS), "[^/]+").replace(new RegExp(STAR, GLOBAL_REGEX_FLAGS), ".*");
-    return new RegExp(`^${body}/?$`);
-  } catch {
-    return null;
-  }
+export function patternToRegex(pat: string): RegExp {
+  const body = pat.replace(PATTERN_TOKEN, /** 命名参数匹配单段，星号匹配任意，元字符转义。 */ (token) => (token === WILDCARD ? ".*" : token[0] === ":" ? "[^/]+" : `\\${token}`));
+  return new RegExp(`^${body}/?$`);
 }
 
 /** 探测当前运行时是否提供原生 URLPattern。 */
 function getURLPattern(): typeof URLPattern | null {
-  const G = (globalThis as { URLPattern?: typeof URLPattern }).URLPattern;
-  return typeof G === "function" ? G : null;
+  return typeof URLPattern === "function" ? URLPattern : null;
 }

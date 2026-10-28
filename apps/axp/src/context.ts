@@ -1,3 +1,4 @@
+import { AXP_KINDS } from "./brand";
 import { requestKey, type IKeyOptions } from "./key";
 import { type AxpResponseInit, type IAxpResponse, type IAxpResponseFactory } from "./response";
 import type { AxpClient, AxpLogger, AxpRequestConfig, AxpRequestPatch } from "./types";
@@ -77,8 +78,6 @@ export interface IAxpContextInit<R extends IAxpResponse> {
 interface IAxpContextState {
   /** 类型化插件状态。 */
   values?: Map<symbol, unknown>;
-  /** 请求视图对应的惰性指纹。 */
-  keys?: WeakMap<object, string | null>;
   /** 是否需要重放保护。 */
   replayable: boolean;
   /** 补丁触及的字段，包括删除；重放时仍从当前视图取值。 */
@@ -97,7 +96,7 @@ export class AxpContext<R extends IAxpResponse = IAxpResponse> {
   readonly client: AxpClient<unknown, R>;
   /** 本层请求视图。 */
   readonly request: Readonly<AxpRequestConfig>;
-  /** 用户取消与 cancelAll 的合并信号。 */
+  /** 本层的取消信号：根层是用户取消与 cancelAll 的合并信号，派生层若被补丁换了 signal 则以补丁为准。 */
   readonly signal: AbortSignal;
   /** debug 关闭时所有方法为空函数。 */
   readonly log: AxpLogger;
@@ -107,18 +106,20 @@ export class AxpContext<R extends IAxpResponse = IAxpResponse> {
   private readonly keyOptions: IKeyOptions | undefined;
   /** 同一逻辑请求的各层共享的可变状态。 */
   private readonly state: IAxpContextState;
+  /** 本层请求视图的惰性指纹；undefined 表示尚未计算，null 表示不可哈希。 */
+  private keyValue: string | null | undefined;
 
   /** 建立一个逻辑请求的根上下文，或从外层上下文派生请求视图不同的内层上下文。
    * @param init 请求及内核服务；传入既有上下文时沿用其服务与共享状态。
    * @param request 本层请求视图，默认取 init.request。
-   * @param patch 派生本层的补丁，用于记录传输差量。
+   * @param patch 派生本层的补丁，用于记录传输差量；补丁带 signal 时本层取消信号以它为准。
    * @example `new AxpContext({ id, client, request, signal, log, factory })`
    */
   constructor(init: IAxpContextInit<R> | AxpContext<R>, request = init.request, patch?: AxpRequestPatch) {
     this.id = init.id;
     this.client = init.client;
     this.request = request;
-    this.signal = init.signal;
+    this.signal = patch?.signal ?? init.signal;
     this.log = init.log;
     if (init instanceof AxpContext) {
       this.factory = init.factory;
@@ -134,17 +135,13 @@ export class AxpContext<R extends IAxpResponse = IAxpResponse> {
       this.state = { replayable: false, origin: init.origin ?? request };
     }
   }
-  /** 按当前请求对象惰性缓存指纹。
+  /** 按本层请求视图惰性缓存指纹；有补丁必派生新层，指纹随新层重算。
    * @returns 指纹或不可哈希时的 null。
    * @example `const key = ctx.key()`
    */
   key(): string | null {
-    const keys = (this.state.keys ??= new WeakMap());
-    const cached = keys.get(this.request);
-    if (cached !== undefined) return cached;
-    const key = requestKey(this.request, this.keyOptions);
-    keys.set(this.request, key);
-    return key;
+    if (this.keyValue === undefined) this.keyValue = requestKey(this.request, this.keyOptions);
+    return this.keyValue;
   }
   /** 读取同一逻辑请求的类型化状态。
    * @param key 状态键。
@@ -192,6 +189,16 @@ export class AxpContext<R extends IAxpResponse = IAxpResponse> {
   get originRequest(): Readonly<AxpRequestConfig> {
     return this.state.origin;
   }
+}
+
+/** 逻辑请求已中止时派生 cancel 响应，否则返回 undefined；各层在 await 之后必须重查，别让已取消的请求继续往下走。
+ * @internal
+ * @param ctx 当前层上下文。
+ * @returns cancel 响应；未中止为 undefined。
+ * @example `const cancelled = cancelIfAborted(ctx); if (cancelled) return cancelled`
+ */
+export function cancelIfAborted<R extends IAxpResponse>(ctx: AxpContext<R>): R | undefined {
+  return ctx.signal.aborted ? ctx.fail({ kind: AXP_KINDS.CANCEL }) : undefined;
 }
 
 /** 派生固定形状的内层实例，共享逻辑状态与内核服务。

@@ -1,10 +1,8 @@
 import { expect, it, vi } from "vitest";
-import { applyJitter, computeDelay, defaultDelay, DEFAULT_DELAY_MAX, DEFAULT_AFTER_STATUS_CODES, isRetryAfterEligible, retryAfterMs } from "../../src/plugins/retry-timing";
+import { applyJitter, computeDelay, defaultDelay, DEFAULT_DELAY_MAX, DEFAULT_AFTER_STATUS_CODES, retryAfterMs } from "../../src/plugins/retry-timing";
 
 /** 限流逻辑状态。 */
 const RATE_LIMIT_STATUS = 429;
-/** 非默认采信头的状态。 */
-const SERVER_ERROR_STATUS = 500;
 /** 测试延迟。 */
 const DELAY = 300;
 /** 延迟上限。 */
@@ -44,14 +42,8 @@ it("[retry.fn.applyJitter] 缺省不抖动，true 使用注入或默认随机源
   expect(applyJitter(DELAY, undefined, CAP)).toBe(DELAY);
 });
 
-it("[retry.fn.isRetryAfterEligible] 默认逻辑状态、自定义集合与总开关", () => {
+it("[retry.fn.retryAfterMs] 默认采信的逻辑状态是 413、429、503", () => {
   expect(DEFAULT_AFTER_STATUS_CODES).toEqual([413, RATE_LIMIT_STATUS, 503]);
-  for (const status of DEFAULT_AFTER_STATUS_CODES) expect(isRetryAfterEligible(status)).toBe(true);
-  expect(isRetryAfterEligible(SERVER_ERROR_STATUS)).toBe(false);
-  expect(isRetryAfterEligible(undefined)).toBe(false);
-  expect(isRetryAfterEligible(RESPONSE.status, [])).toBe(false);
-  expect(isRetryAfterEligible(RESPONSE.status, [RESPONSE.status], false)).toBe(false);
-  expect(isRetryAfterEligible(SERVER_ERROR_STATUS, [SERVER_ERROR_STATUS])).toBe(true);
 });
 
 it("[retry.fn.retryAfterMs] 普通头与 get 访问器解析数字秒并独立封顶", () => {

@@ -36,8 +36,21 @@ function getStorage(): TokenStorage | null {
   }
 }
 
+/** 裸 token 的内存副本 / in-memory bare tokens. */
+interface ITokenState {
+  /** 裸 access token。 */
+  access?: string;
+  /** 裸 refresh token。 */
+  refresh?: string;
+}
+
 /** 模块加载时探测一次的存储 / storage probed once at module load. */
 const storage: TokenStorage | null = getStorage();
+
+/** access token 的存储键。 */
+const ACCESS_KEY = "axp:token:access";
+/** refresh token 的存储键。 */
+const REFRESH_KEY = "axp:token:refresh";
 
 /** 读存储，异常（配额/隐私模式等）当作无值 / reads storage; any error (quota/privacy mode, etc.) counts as no value. */
 function readItem(key: string): string | undefined {
@@ -72,12 +85,9 @@ export default class TokenManager implements ITokenManager {
    *  避免旧实现“存入已带 Bearer 的值 → 重新加载再次加前缀 → Bearer Bearer”的问题。
    *
    *  Stores the "bare" token (no `Bearer` prefix); the prefix is added on read,
-   *  avoiding the old bug of double-prefixing into `Bearer Bearer`. */
-  #accessToken?: string;
-  #refreshToken?: string;
-
-  static #key1 = "axp:token:access";
-  static #key2 = "axp:token:refresh";
+   *  avoiding the old bug of double-prefixing into `Bearer Bearer`.
+   *  令牌放在不可枚举属性里，JSON.stringify、Object.keys 不会带出明文 token。 */
+  declare private readonly state: ITokenState;
 
   /**
    * 构造时尝试从 localStorage 恢复上次会话的 access/refresh token；SSR/非浏览器
@@ -87,30 +97,29 @@ export default class TokenManager implements ITokenManager {
    * undefined in SSR/non-browser environments or when there was no prior login.
    */
   constructor() {
-    this.#accessToken = readItem(TokenManager.#key1);
-    this.#refreshToken = readItem(TokenManager.#key2);
+    Object.defineProperty(this, "state", { value: { access: readItem(ACCESS_KEY), refresh: readItem(REFRESH_KEY) } });
   }
 
   /** 直接可用于 Authorization 头：裸 token 存在时返回 `Bearer <token>` / returns `Bearer <token>` when present, else undefined. */
   get accessToken(): string | undefined {
-    return this.#accessToken ? `Bearer ${this.#accessToken}` : undefined;
+    return this.state.access ? `Bearer ${this.state.access}` : undefined;
   }
 
   /** 写入新 access token，空值归一化为 undefined 并同步持久化 / writes a new access token, normalizing falsy to undefined and syncing to localStorage. */
   set accessToken(value: string | undefined | null) {
-    this.#accessToken = value || undefined;
-    TokenManager.#cache(this.#accessToken, TokenManager.#key1);
+    this.state.access = value || undefined;
+    writeItem(ACCESS_KEY, this.state.access);
   }
 
   /** 当前的 refresh token，未登录为 undefined / undefined when not logged in. */
   get refreshToken(): string | undefined {
-    return this.#refreshToken;
+    return this.state.refresh;
   }
 
   /** 写入新 refresh token，空值归一化为 undefined 并同步持久化 / writes a new refresh token, normalizing falsy to undefined and syncing to localStorage. */
   set refreshToken(value: string | undefined | null) {
-    this.#refreshToken = value || undefined;
-    TokenManager.#cache(this.#refreshToken, TokenManager.#key2);
+    this.state.refresh = value || undefined;
+    writeItem(REFRESH_KEY, this.state.refresh);
   }
 
   /**
@@ -132,14 +141,6 @@ export default class TokenManager implements ITokenManager {
    * Clears both the in-memory tokens and their persisted copies in localStorage.
    */
   clear(): void {
-    this.#accessToken = undefined;
-    this.#refreshToken = undefined;
-    writeItem(TokenManager.#key1, undefined);
-    writeItem(TokenManager.#key2, undefined);
-  }
-
-  /** 把 value 写入 localStorage（若存在），空值时移除该键 / writes value to localStorage, or removes the key when falsy. */
-  static #cache(value: string | undefined | null, key: string) {
-    writeItem(key, value);
+    this.set();
   }
 }

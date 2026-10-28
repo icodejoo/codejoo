@@ -277,3 +277,38 @@ it("[core.method.dispose] 销毁中止在途请求并清理所有实例", /** �
   expect(dispose).toHaveBeenCalledTimes(1);
   expect(api.pending()).toBe(0);
 });
+
+it("[core.method.extend] 覆盖项在子客户端装配完成后才应用；应用时抛错就销毁子客户端并原样抛出，父客户端不受影响", () => {
+  const dispose = vi.fn();
+  const tracked: AxpPlugin<AxpResponse> = { name: "tracked", setup: () => ({ dispose }) };
+  const { api } = createTestClient([tracked]);
+  expect(dispose).not.toHaveBeenCalled();
+  const boom = new Error("bad overrides");
+  const overrides = {
+    get baseURL(): string {
+      throw boom;
+    },
+  };
+  expect(() => api.extend(overrides)).toThrow(boom);
+  // 只有子客户端里重新 setup 出来的实例被销毁
+  expect(dispose).toHaveBeenCalledTimes(1);
+  expect(api.pending()).toBe(0);
+  api.dispose();
+  expect(dispose).toHaveBeenCalledTimes(2);
+});
+
+it("[core.method.extend] 显式覆盖压过插件 setup 写入的 defaults，没有覆盖的字段保留插件写入的值", () => {
+  const envs: AxpPlugin<AxpResponse> = {
+    name: "writes-defaults",
+    setup(client) {
+      Object.assign(client.axios.defaults, { baseURL: "/from-plugin", timeout: 111 });
+    },
+  };
+  const { api } = createTestClient([]);
+  const child = api.extend({ baseURL: "/explicit" }, { plugins: [envs] });
+  expect(child.axios.defaults.baseURL).toBe("/explicit");
+  expect(child.axios.defaults.timeout).toBe(111);
+  expect(api.axios.defaults.baseURL).not.toBe("/explicit");
+  child.dispose();
+  api.dispose();
+});

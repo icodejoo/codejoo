@@ -2,7 +2,7 @@ import type { AxiosInstance, AxiosResponse } from "axios";
 import { normalizeMethod } from "./methods";
 import type { AxpContext } from "./context";
 import { AXP_KINDS, type IAxpResponse, type IAxpResponseFactory } from "./response";
-import { effectiveHeaders, HEADER_GROUPS, isPlainObject } from "./utils";
+import { effectiveHeaders, hasOwn, HEADER_GROUPS, isPlainObject } from "./utils";
 import type { AxpRequestConfig } from "./types";
 
 /** 克隆失败的 debug 提示。 */
@@ -11,14 +11,10 @@ const CLONE_WARNING = "[axp] 请求体无法克隆，回退原引用";
 /** 所有 HTTP 状态均交给归一化响应判定。 */
 const ACCEPT_HTTP_STATUS = () => true;
 
-/** 按需复制请求体；缺少或失败的 structuredClone 回退原引用。 */
+/** 按需复制请求体；环境没有 structuredClone（调用抛 ReferenceError）或克隆失败都回退原引用。 */
 function cloneData<R extends IAxpResponse>(data: unknown, ctx: AxpContext<R>): unknown {
   try {
-    if (typeof globalThis.structuredClone !== "function") {
-      ctx.log.warn(CLONE_WARNING);
-      return data;
-    }
-    return globalThis.structuredClone(data);
+    return structuredClone(data);
   } catch (error) {
     ctx.log.warn(CLONE_WARNING, error);
     return data;
@@ -31,7 +27,7 @@ function maskParams(params: unknown, defaults: unknown): unknown {
   const current = params ?? {};
   const masked: Record<string, unknown> = { ...current };
   for (const key of Object.keys(defaults)) {
-    masked[key] = Object.prototype.hasOwnProperty.call(current, key) ? maskParams(current[key], defaults[key]) : null;
+    masked[key] = hasOwn(current, key) ? maskParams(current[key], defaults[key]) : null;
   }
   return masked;
 }

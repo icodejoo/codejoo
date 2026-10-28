@@ -92,7 +92,9 @@ export function sortPipeline<R extends IAxpResponse>(registrations: readonly IAx
       });
     }
   }
-  return layers.toSorted(/** 阶段优先，同位置保持注册次序。 */ (a, b) => a.stageOrder - b.stageOrder || a.order - b.order);
+  // layers 是本函数的局部数组，原地排序即可；同位置保持注册次序，依赖 ES2019 起规范保证的稳定排序（也是运行时底线）。
+  // oxlint-disable-next-line unicorn/no-array-sort -- toSorted 是 ES2023，运行时底线是 ES2019。
+  return layers.sort(/** 阶段优先，阶段内按位置。 */ (a, b) => a.stageOrder - b.stageOrder || a.order - b.order);
 }
 
 /** 给一层中间件加上异常边界：同步抛错与异步拒绝都转为 internal 响应。 */

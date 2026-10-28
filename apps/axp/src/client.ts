@@ -1,16 +1,11 @@
 import { create as createAxios, mergeConfig, type AxiosRequestConfig } from "axios";
-import { AxpContext, NO_LOG } from "./context";
+import { AxpContext, cancelIfAborted, NO_LOG } from "./context";
 import { BODY_METHODS, NO_BODY_METHODS, normalizeMethod } from "./methods";
 import { composePipeline, sortPipeline, type IAxpRegistration, type IAxpLayer } from "./pipeline";
 import { AXP_KINDS, AxpResponse, DEFAULT_RESPONSE_FACTORY, guardFactory, isAxpResponse, type IAxpResponse, type IAxpResponseFactory } from "./response";
 import { createTransport } from "./transport";
 import type { AxpClient, AxpOptions, AxpPlugin, AxpRequestConfig, HttpMethodLower, TAxpArgs } from "./types";
-import { assignAxiosDefaults, cloneAxiosDefaults, effectiveHeaders } from "./utils";
-
-/** AbortSignal 的标准事件名。 */
-const ABORT_EVENT = "abort";
-/** 调用级为空时继承方法级配置的两个开关。 */
-const INHERITED_FLAGS = ["wrap", "throws"] as const;
+import { ABORT_EVENT, assignAxiosDefaults, cloneAxiosDefaults, effectiveHeaders } from "./utils";
 
 /** 落定时使用的客户端开关。 */
 export interface IAxpSettleOptions<R extends IAxpResponse> {
@@ -26,11 +21,11 @@ export interface IAxpSettleOptions<R extends IAxpResponse> {
  * @returns 业务数据或响应，失败时抛出约定对象。
  * @example `settle(response, ctx, {})`
  */
-export function settle<R extends IAxpResponse>(response: R, ctx: AxpContext<R>, options: IAxpSettleOptions<R>, callsite?: Error | string): unknown {
+export function settle<R extends IAxpResponse>(response: R, ctx: AxpContext<R>, options: IAxpSettleOptions<R>, callsite?: Error): unknown {
   if (response.kind === AXP_KINDS.INTERNAL) throw response.error;
   const throws = ctx.request.throws ?? true;
   if (!response.ok && throws) {
-    const stack = typeof callsite === "string" ? callsite : callsite?.stack;
+    const stack = callsite?.stack;
     const failure = stack === undefined ? response : ctx.fail({ from: response, stack });
     if (failure.kind === AXP_KINDS.INTERNAL) throw failure.error;
     throw options.reject ? options.reject(failure) : failure;
@@ -39,15 +34,12 @@ export function settle<R extends IAxpResponse>(response: R, ctx: AxpContext<R>, 
 }
 
 /** 创建自有洋葱管线客户端，不修改 axios 拦截器。
- * @param options 传输实例、响应工厂、插件和内核选项；自定义 R 必须提供 response。
- * @param overrides 内部用于 extend，在插件 setup 后应用显式覆盖。
+ * @param args 传输实例、响应工厂、插件和内核选项；自定义 R 必须提供 response。
  * @returns 具有十个柯里化动词的独立客户端。
  * @example `const api = createAxp(); await api.get('/pets')()`
  */
-export function createAxp<S = unknown, R extends IAxpResponse = AxpResponse>(...args: TAxpArgs<R, AxpOptions<R>>): AxpClient<S, R>;
-/** @internal extend 在插件装配完成后应用显式默认配置。 */
-export function createAxp<S = unknown, R extends IAxpResponse = AxpResponse>(options: AxpOptions<R>, overrides: AxiosRequestConfig): AxpClient<S, R>;
-export function createAxp<S = unknown, R extends IAxpResponse = AxpResponse>(options: AxpOptions<R> = {} as AxpOptions<R>, defaultOverrides?: AxiosRequestConfig): AxpClient<S, R> {
+export function createAxp<S = unknown, R extends IAxpResponse = AxpResponse>(...args: TAxpArgs<R, AxpOptions<R>>): AxpClient<S, R> {
+  const options = (args[0] ?? {}) as AxpOptions<R>;
   const axios = options.axios ?? createAxios();
   const factory = guardFactory((options.response ?? DEFAULT_RESPONSE_FACTORY) as IAxpResponseFactory<R>);
   const log = options.debug ? (typeof options.debug === "boolean" ? console : options.debug) : NO_LOG;
@@ -72,8 +64,8 @@ export function createAxp<S = unknown, R extends IAxpResponse = AxpResponse>(opt
   function assertActive(): void {
     if (disposed) throw new Error("Axp client is disposed");
   }
-  /** 校验并登记插件、建立独立实例；compiling 为 false 时由调用方统一编译。 */
-  function register(plugin: AxpPlugin<R, any>, compiling: boolean): void {
+  /** 校验并登记插件、建立独立实例，立即按完整候选链重新编译；安装期会多编译几次，换来 use 与启动同一条路径。 */
+  function register(plugin: AxpPlugin<R, any>): void {
     assertActive();
     // 先用静态信息校验重名与阶段，非法插件不会触发 setup 副作用。
     sortPipeline([...registrations, { plugin, instance: {} }]);
@@ -83,15 +75,11 @@ export function createAxp<S = unknown, R extends IAxpResponse = AxpResponse>(opt
       // 再用真实实例校验 setup 动态返回的 handle / taps，失败则清理刚建立的实例。
       const sorted = sortPipeline([...registrations, registration]);
       registrations.push(registration);
-      if (compiling) compile(sorted);
+      compile(sorted);
     } catch (error) {
       instance.dispose?.();
       throw error;
     }
-  }
-  /** 动态安装插件，并立即按完整候选链重新编译。 */
-  function use(plugin: AxpPlugin<R, any>): void {
-    register(plugin, true);
   }
   /** 发起一个逻辑请求，清理完成后才执行落定回调。 */
   async function dispatch(config: AxpRequestConfig): Promise<unknown> {
@@ -100,12 +88,13 @@ export function createAxp<S = unknown, R extends IAxpResponse = AxpResponse>(opt
     const callsite = options.debug ? new Error() : undefined;
     const controller = new AbortController();
     const signal = config.signal ?? (axios.defaults.signal as AbortSignal | undefined);
-    let abort: (() => void) | undefined;
+    let detach: (() => void) | undefined;
     if (signal) {
       /** 有用户 signal 时才创建联动监听。 */
-      abort = () => controller.abort(signal.reason);
+      const abort = () => controller.abort(signal.reason);
       if (signal.aborted) abort();
       else signal.addEventListener(ABORT_EVENT, abort, { once: true });
+      detach = /** 请求落定后解绑联动监听。 */ () => signal.removeEventListener(ABORT_EVENT, abort);
     }
     pending.add(controller);
     let ctx: AxpContext<R>;
@@ -127,10 +116,10 @@ export function createAxp<S = unknown, R extends IAxpResponse = AxpResponse>(opt
         key: options.key,
         origin: config,
       });
-      response = controller.signal.aborted ? ctx.fail({ kind: AXP_KINDS.CANCEL }) : await snapshot(ctx);
+      response = cancelIfAborted(ctx) ?? (await snapshot(ctx));
     } finally {
       pending.delete(controller);
-      if (signal && abort) signal.removeEventListener(ABORT_EVENT, abort);
+      detach?.();
     }
     return settle(response, ctx, options, callsite);
   }
@@ -147,9 +136,17 @@ export function createAxp<S = unknown, R extends IAxpResponse = AxpResponse>(opt
       assertActive();
       const childAxios = createAxios(cloneAxiosDefaults(axios.defaults as AxiosRequestConfig));
       const plugins = opts.plugins === undefined || opts.plugins === "inherit" ? registrations.map(/** 提取已登记插件定义，供子客户端重新 setup。 */ (entry) => entry.plugin) : opts.plugins;
-      return createAxp<S, R>({ ...options, axios: childAxios, plugins } as AxpOptions<R>, overrides);
+      const child = createAxp<S, R>({ ...options, axios: childAxios, plugins } as AxpOptions<R>);
+      try {
+        // 插件 setup（如 envs）写完 defaults 之后再应用显式覆盖，覆盖项优先。
+        assignAxiosDefaults(childAxios.defaults, overrides);
+      } catch (error) {
+        child.dispose();
+        throw error;
+      }
+      return child;
     },
-    use,
+    use: register,
     /** 卸载实例并重编译，在途执行器保持快照。 */
     eject(name: string): boolean {
       const entry = findRegistration(name);
@@ -207,20 +204,17 @@ export function createAxp<S = unknown, R extends IAxpResponse = AxpResponse>(opt
         (url: string, methodConfig?: AxpRequestConfig) =>
         /** 调用配置最后覆盖方法配置及 payload。 */
         (payload?: unknown, callConfig?: AxpRequestConfig) => {
-          const config: AxpRequestConfig = {
+          const config: Record<string, unknown> = {
             url,
             method,
             [field]: payload,
             ...methodConfig,
-            ...callConfig,
           };
-          // 两个开关“调用级优先、为空继承方法级”，两级都没写就不留键。
-          for (const flag of INHERITED_FLAGS) {
-            const value = callConfig?.[flag] ?? methodConfig?.[flag];
-            if (value === undefined) delete config[flag];
-            else config[flag] = value;
+          // 调用级覆盖方法级，但 undefined 不覆盖，与 axios mergeConfig 对 undefined 的处理一致。
+          for (const [key, value] of Object.entries(callConfig ?? {})) {
+            if (value !== undefined) config[key] = value;
           }
-          return dispatch(config);
+          return dispatch(config as AxpRequestConfig);
         };
       Object.assign(client, { [method]: verb });
     }
@@ -228,9 +222,7 @@ export function createAxp<S = unknown, R extends IAxpResponse = AxpResponse>(opt
   bindMethods(BODY_METHODS, "data");
   bindMethods(NO_BODY_METHODS, "params");
   try {
-    for (const plugin of options.plugins ?? []) register(plugin, false);
-    if (defaultOverrides) assignAxiosDefaults(axios.defaults, defaultOverrides);
-    compile();
+    for (const plugin of options.plugins ?? []) register(plugin);
   } catch (error) {
     client.dispose();
     throw error;

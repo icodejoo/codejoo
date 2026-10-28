@@ -1,7 +1,8 @@
 import { describe, expect, it, vi } from "vitest";
 import { createAxp } from "../../src/client";
 import { axpResponse, type AxpResponse } from "../../src/response";
-import type { AxpPlugin, HttpMethodLower } from "../../src/types";
+import axpRetry from "../../src/plugins/retry";
+import type { AxpPlugin, AxpRequestConfig, HttpMethodLower } from "../../src/types";
 import { assertInvariants, createTestClient } from "../helpers/client";
 
 /** 无状态层。 */
@@ -207,5 +208,54 @@ describe("客户端", /** 客户端的用例集合。 */ () => {
     expect(reject).toHaveBeenCalledTimes(1);
     await api.get(URL)(undefined, { throws: false });
     expect(reject).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe("方法级与调用级合并", /** 调用级覆盖方法级，undefined 不覆盖。 */ () => {
+  /** 记录最外层看到的有效请求视图。 */
+  function observer() {
+    const seen: AxpRequestConfig[] = [];
+    const plugin: AxpPlugin<AxpResponse> = {
+      name: "observer",
+      stage: "outer",
+      async handle(ctx, next) {
+        seen.push(ctx.request);
+        return next();
+      },
+    };
+    return { plugin, seen };
+  }
+
+  it("[core.req.merge] 调用级 undefined 不覆盖方法级，任何键都一样；明确的值（含 false 与 0）照常覆盖", async () => {
+    const { plugin, seen } = observer();
+    const { api, net } = createTestClient([plugin]);
+    net.fallback(/** 返回业务数据。 */ () => ({ data: { code: 0, data: 1 } }));
+    await api.get(URL, { timeout: 5000, silent: true, key: "method-key", retry: false })(undefined, { timeout: undefined, silent: undefined, key: undefined, retry: undefined });
+    expect(seen[0]).toMatchObject({ timeout: 5000, silent: true, key: "method-key", retry: false });
+    await api.get(URL, { timeout: 5000, silent: true, retry: 3 })(undefined, { timeout: 0, silent: false, retry: false });
+    expect(seen[1]).toMatchObject({ timeout: 0, silent: false, retry: false });
+    // 两级都没写：不留键
+    await api.get(URL)(undefined, { silent: undefined });
+    expect("silent" in seen[2]).toBe(false);
+  });
+
+  it("[core.req.merge] 方法级 retry:false 加调用级 { retry: undefined } 仍然不重试", async () => {
+    const { api, net } = createTestClient([axpRetry({ max: 2, delay: 0 })]);
+    net.fallback(/** 总是 500。 */ () => ({ status: 500 }));
+    await api.get(URL, { retry: false, throws: false })(undefined, { retry: undefined });
+    expect(net.totalStarted).toBe(1);
+    await api.get(URL, { throws: false })(undefined, { retry: undefined });
+    expect(net.totalStarted).toBe(4);
+    api.dispose();
+  });
+
+  it("[core.req.merge] 调用级 undefined 同样不抹掉 payload 对应的 params 或 data", async () => {
+    const { plugin, seen } = observer();
+    const { api, net } = createTestClient([plugin]);
+    net.fallback(/** 返回业务数据。 */ () => ({ data: { code: 0, data: 1 } }));
+    await api.get(URL)({ id: 1 }, { params: undefined });
+    await api.post(URL)({ id: 2 }, { data: undefined });
+    expect(seen[0].params).toEqual({ id: 1 });
+    expect(seen[1].data).toEqual({ id: 2 });
   });
 });

@@ -122,31 +122,93 @@ it("[auth.fn.compileUrlPatterns][auth.fn.patternToRegex] 原生构造失败回�
   const match = compileUrlPatterns("/v1.0/:id");
   expect(match("/v1.0/2")).toBe(true);
   expect(match("/v1X0/2")).toBe(false);
-  expect(patternToRegex("/a.+?^${}()|[]\\/:id")?.test("/a.+?^${}()|[]\\/x")).toBe(true);
+  expect(patternToRegex("/a.+?^${}()|[]\\/:id").test("/a.+?^${}()|[]\\/x")).toBe(true);
 });
 
 it("[auth.fn.patternToRegex] 命名参数仅一段，星号任意深度，锚定且允许可选尾斜杠", () => {
-  const named = patternToRegex(NAMED)!;
+  const named = patternToRegex(NAMED);
   expect(named.test(USER)).toBe(true);
   expect(named.test(`${USER}/`)).toBe(true);
   expect(named.test("/user/")).toBe(false);
   expect(named.test(`${USER}/2`)).toBe(false);
   expect(named.test(`/prefix${USER}`)).toBe(false);
-  expect(patternToRegex(USER_PATTERN)?.test(DEEP_USER)).toBe(true);
-  expect(patternToRegex("/:a/:$b/:_c")?.test("/a/b/c")).toBe(true);
+  expect(patternToRegex(USER_PATTERN).test(DEEP_USER)).toBe(true);
+  expect(patternToRegex("/:a/:$b/:_c").test("/a/b/c")).toBe(true);
 });
 
-it("[auth.fn.patternToRegex][auth.fn.compileUrlPatterns] 防御性非法输入使正则编译失败并忽略该模式", () => {
-  expect(patternToRegex(null as unknown as string)).toBeNull();
-  vi.stubGlobal(URL_PATTERN, undefined);
-  const replace = vi.spyOn(String.prototype, "replace").mockImplementationOnce(() => {
-    throw new Error("replace");
-  });
-  try {
-    expect(compileUrlPatterns(NAMED)(USER)).toBe(false);
-  } finally {
-    replace.mockRestore();
+it("[auth.fn.patternToRegex] 一次替换完成：字面量里恰好长得像占位符的文本原样保留，不会被误当成通配或参数", () => {
+  const regex = patternToRegex("/ NAMED / STAR /:id/*");
+  expect(regex.test("/ NAMED / STAR /1/x/y")).toBe(true);
+  expect(regex.test("/ NAMED / STAR /")).toBe(false);
+});
+
+/** 构造器可用时才有意义的原生对照；运行时没有 URLPattern 时跳过。 */
+const HAS_NATIVE = typeof URLPattern === "function";
+/** 字面量与前缀通配的快路径对照模式。 */
+const FAST_PATTERNS = ["/me", "/me/", "/api/*", "/api*", "/a-b_c/*", "*", "/a b", "/a%20b", "/café", "/v1.0/x", "/v1.0/*", "/"];
+/** 稳定、含点段、转义、空格、非 ASCII、尾斜杠与大小写差异的路径。 */
+const FAST_URLS = [
+  "/me",
+  "/me/",
+  "/mex",
+  "/api",
+  "/api/",
+  "/apix",
+  "/api/a/b",
+  "/api/../admin",
+  "/api/./x",
+  "/admin/../api/x",
+  "/me/../me",
+  "/a b",
+  "/a%20b",
+  "/a%2Fb",
+  "/café",
+  "/caf%C3%A9",
+  "/v1.0/x",
+  "/v1X0/x",
+  "/ME",
+  "/",
+  "",
+  "/a-b_c/d",
+];
+
+it.skipIf(!HAS_NATIVE)("[auth.fn.compileUrlPatterns] 字面量与前缀通配的字符串快路径与原生 URLPattern 逐一等价，含点段、转义、非 ASCII 等需规范化的输入", () => {
+  for (const pattern of FAST_PATTERNS) {
+    const native = new URLPattern({ pathname: pattern });
+    const match = compileUrlPatterns([pattern, "!/never-match-anything"]);
+    for (const url of FAST_URLS) expect(match(url), `${pattern} <= ${JSON.stringify(url)}`).toBe(native.test({ pathname: url }));
   }
+});
+
+it("[auth.fn.compileUrlPatterns] 稳定路径走字符串比较不触碰原生匹配，含点段或转义的输入才交给原生判定", () => {
+  const test = vi.fn((_options: { pathname: string }) => false);
+  /** 记录 test 调用的原生替身。 */
+  class NativePattern {
+    /** 代理匹配调用。 */
+    test(options: { pathname: string }): boolean {
+      return test(options);
+    }
+  }
+  vi.stubGlobal(URL_PATTERN, NativePattern);
+  const exact = compileUrlPatterns(ME_PATH);
+  const prefix = compileUrlPatterns(USER_PATTERN);
+  expect(exact(ME_PATH)).toBe(true);
+  expect(exact(`${ME_PATH}/`)).toBe(false);
+  expect(prefix("/user/")).toBe(true);
+  expect(prefix("/user")).toBe(false);
+  expect(prefix(DEEP_USER)).toBe(true);
+  expect(test).not.toHaveBeenCalled();
+  expect(exact("/x/../me")).toBe(false);
+  expect(prefix("/user/../x")).toBe(false);
+  expect(test).toHaveBeenCalledTimes(2);
+});
+
+it("[auth.fn.compileUrlPatterns] 含参数、正则元字符或点号的模式不走字符串快路径，统一交给原生或正则回退", () => {
+  vi.stubGlobal(URL_PATTERN, undefined);
+  expect(compileUrlPatterns("/v1.0/*")("/v1.0/x")).toBe(true);
+  expect(compileUrlPatterns("/v1.0/*")("/v1X0/x")).toBe(false);
+  expect(compileUrlPatterns("/a/:id")("/a/1")).toBe(true);
+  expect(compileUrlPatterns("/a/:id")("/a/1/2")).toBe(false);
 });
 
 it.each([
@@ -170,4 +232,17 @@ it("[auth.fn.pathnameOf][auth.fn.compileUrlPatterns] pathname 匹配绝对与带
   expect(match(pathnameOf("https://host/me?q=1"))).toBe(true);
   expect(match(pathnameOf("/me#hash"))).toBe(true);
   expect(match(pathnameOf("/other?q=/me"))).toBe(false);
+});
+
+it("[auth.fn.compileUrlPatterns] 没有原生 URLPattern 时，字面量与前缀通配的快路径与正则回退逐一等价（含尾斜杠容忍）", () => {
+  vi.stubGlobal(URL_PATTERN, undefined);
+  for (const pattern of FAST_PATTERNS) {
+    const reference = patternToRegex(pattern);
+    const match = compileUrlPatterns([pattern, "!/never-match-anything"]);
+    for (const url of FAST_URLS) expect(match(url), `${pattern} <= ${JSON.stringify(url)}`).toBe(reference.test(url));
+  }
+  // 字面量容忍一个尾斜杠，前缀通配本身就能吞掉它
+  expect(compileUrlPatterns(ME_PATH)(`${ME_PATH}/`)).toBe(true);
+  expect(compileUrlPatterns(ME_PATH)(`${ME_PATH}//`)).toBe(false);
+  expect(compileUrlPatterns(USER_PATTERN)("/user")).toBe(false);
 });
