@@ -1,6 +1,8 @@
 import { create as createAxios, type AxiosAdapter } from "axios";
 import { bench } from "vitest";
 import { createAxp } from "../src/client";
+import axpCache from "../src/plugins/cache";
+import axpShare from "../src/plugins/share";
 import type { AxpResponse } from "../src/response";
 import type { AxpPlugin } from "../src/types";
 
@@ -18,6 +20,14 @@ const INITIAL_SENDS = 0;
 const SENDS_PER_SCENARIO = 1;
 /** 直通中间件的层数梯度；0 层即无插件的对照。 */
 const LAYER_COUNTS = [0, 3, 8] as const;
+/** 固定缓存键，避免过期和散列干扰命中场景（与 B0 的 B4 相同）。 */
+const CACHE_KEY = "baseline-cache";
+/** 固定共享键（与 B0 的 B5 相同）。 */
+const SHARE_KEY = "baseline-share";
+/** 每组共享请求的并发数（与 B0 的 B5 相同）。 */
+const CONCURRENCY = 100;
+/** 单组共享请求的底层发送数。 */
+const SHARED_SENDS = 1;
 /** 与旧基线相同的发送计数。 */
 let sends = INITIAL_SENDS;
 /** 测量配置保持与 B0 一致。 */
@@ -76,6 +86,31 @@ const layered = LAYER_COUNTS.map(
   }),
 );
 
+/** B4：只装 cache，有效期无限，预先填充后只测命中。 */
+const cached = createAxp<unknown, AxpResponse>({
+  axios: createAxios({ adapter }),
+  plugins: [axpCache({ expires: Infinity })],
+});
+/** B5：只装 share，start 策略。 */
+const shared = createAxp<unknown, AxpResponse>({
+  axios: createAxios({ adapter }),
+  plugins: [axpShare({ policy: "start" })],
+});
+/** 一次缓存命中请求，显式固定 key。 */
+async function hit(): Promise<void> {
+  await cached.get(BENCH_URL)(undefined, { key: CACHE_KEY, cache: true });
+}
+/** 启动一百个同 key 的 start 共享请求，等整组落定。 */
+async function concurrent(): Promise<void> {
+  await Promise.all(
+    Array.from(
+      { length: CONCURRENCY },
+      /** 每个订阅者使用相同的显式 key。 */ () =>
+        shared.get(BENCH_URL)(undefined, { key: SHARE_KEY, share: true }),
+    ),
+  );
+}
+
 /** 取出信封解包后的业务值。 */
 function businessValue(result: unknown): number {
   return (result as { /** value 字段。 */ value: number }).value;
@@ -92,6 +127,15 @@ async function verify(): Promise<void> {
     if (sends !== SENDS_PER_SCENARIO || result !== VALUE || api.inspect().length !== count)
       throw new Error(`B2 基准路径自检失败：${count} 层`);
   }
+  // B4：预先填充后再次请求不得触网。
+  await hit();
+  sends = INITIAL_SENDS;
+  await hit();
+  if (sends !== INITIAL_SENDS) throw new Error("B4 必须命中缓存");
+  // B5：一整组并发只触网一次。
+  sends = INITIAL_SENDS;
+  await concurrent();
+  if (sends !== SHARED_SENDS) throw new Error("B5 每组必须只触网一次");
 }
 await verify();
 
@@ -118,3 +162,5 @@ for (const { count, api } of layered) {
     OPTIONS,
   );
 }
+bench("B4 缓存命中", hit, OPTIONS);
+bench("B5 share start 并发100", concurrent, OPTIONS);
