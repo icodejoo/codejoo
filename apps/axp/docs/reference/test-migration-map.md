@@ -30,6 +30,7 @@ A 批（单插件规则/补丁/覆盖文件）迁移进行中，基线冻结于 
 | loading（loading.test 全部 + lifecycle.coverage 的 2 条 + mock.test 的 1 条） | 本批提交 | 53 | 0 | 0 | 0 | 0 | 0 | 53 | 是 |
 | mock（mock.test 余下、mock.coverage） | 本批提交 | 29 | 0 | 0 | 0 | 0 | 0 | 29 | 是 |
 | repath（repath.test 全部 + lifecycle.coverage 的 2 条） | 本批提交 | 23 | 0 | 0 | 0 | 0 | 0 | 23 | 是 |
+| filter（filter.test 全部 + lifecycle.coverage 的 2 条） | 本批提交 | 19 | 0 | 0 | 0 | 0 | 0 | 19 | 是 |
 
 ## 映射
 
@@ -426,3 +427,22 @@ A 批（单插件规则/补丁/覆盖文件）迁移进行中，基线冻结于 
 | test/repath.test.ts::repath — review #22 路径边界 > 绝对 URL 的协议和端口保持原样 | boundary/repath.boundary.test.ts::repath — 路径边界 > [repath.fn.axpRepath] 绝对 URL 的协议和端口保持原样 | rename | 路径边界，review #22 |  |
 | test/lifecycle.coverage.test.ts::envs/filter/repath — 次要分支与卸载 > repath 无 url 与无捕获组模式原样返回，卸载后不替换 | boundary/repath.boundary.test.ts::envs/filter/repath — 次要分支与卸载 > [repath.opt.pattern][repath.method.cleanup] repath 无 url 与无捕获组模式原样返回，卸载后不替换 | rename | 无 url / 无捕获组 / 卸载 |  |
 | test/lifecycle.coverage.test.ts::envs/filter/repath — 次要分支与卸载 > repath 原始请求体 %s 应可用于路径变量（each） | boundary/repath.boundary.test.ts::envs/filter/repath — 次要分支与卸载 > [repath.fn.axpRepath] repath 原始请求体 %s 应可用于路径变量 | rename | 原始请求体为 0/false/空串（each） |  |
+| test/filter.test.ts::defaultPredicate — 默认丢弃判定 > null / undefined / NaN / 空串 / 全空白 → 丢弃 | unit/filter.unit.test.ts::defaultPredicate — 默认丢弃判定 > [filter.fn.defaultPredicate][filter.cb.predicate] null / undefined / NaN / 空串 / 全空白 → 丢弃 | rename | 纯函数 |  |
+| test/filter.test.ts::defaultPredicate — 默认丢弃判定 > 0 / false / 非空串 / 对象 → 保留 | unit/filter.unit.test.ts::defaultPredicate — 默认丢弃判定 > [filter.fn.defaultPredicate][filter.cb.predicate] 0 / false / 非空串 / 对象 → 保留 | rename | 纯函数 |  |
+| test/filter.test.ts::$filter — 条目级过滤 > 丢弃空字段，保留有效字段 | unit/filter.unit.test.ts::$filter — 条目级过滤 > [filter.fn.$filter] 丢弃空字段，保留有效字段 | rename | 纯函数 |  |
+| test/filter.test.ts::$filter — 条目级过滤 > ignoreKeys：命中 key 即使空也保留 | unit/filter.unit.test.ts::$filter — 条目级过滤 > [filter.fn.$filter][filter.opt.ignoreKeys] ignoreKeys：命中 key 即使空也保留 | rename | 单元层（unit） |  |
+| test/filter.test.ts::$filter — 条目级过滤 > ignoreValues：命中 value 即使该丢也保留（NaN 特例） | unit/filter.unit.test.ts::$filter — 条目级过滤 > [filter.fn.$filter][filter.opt.ignoreValues] ignoreValues：命中 value 即使该丢也保留（NaN 特例） | rename | 单元层（unit） |  |
+| test/filter.test.ts::$filter — 条目级过滤 > 自定义 predicate：丢弃所有数字 | unit/filter.unit.test.ts::$filter — 条目级过滤 > [filter.fn.$filter][filter.cb.predicate] 自定义 predicate：丢弃所有数字 | rename | 单元层（unit） |  |
+| test/filter.test.ts::$filter — 条目级过滤 > dropped 出参：收集被丢弃条目 | unit/filter.unit.test.ts::$filter — 条目级过滤 > [filter.fn.$filter] dropped 出参：收集被丢弃条目 | rename | 单元层（unit） |  |
+| test/filter.test.ts::$resolveOptions — 请求级/插件级合并 > 请求级函数被调用解包 | unit/filter.unit.test.ts::$resolveOptions — 请求级/插件级合并 > [filter.fn.$resolveOptions][filter.req.filter.callback] 请求级函数被调用解包 | rename | 纯函数 |  |
+| test/filter.test.ts::$resolveOptions — 请求级/插件级合并 > 请求级对象覆盖插件级 | unit/filter.unit.test.ts::$resolveOptions — 请求级/插件级合并 > [filter.fn.$resolveOptions][filter.req.filter] 请求级对象覆盖插件级 | rename | 单元层（unit） |  |
+| test/filter.test.ts::$resolveOptions — 请求级/插件级合并 > 请求级缺失 → 用插件级；都缺 → defaultPredicate | unit/filter.unit.test.ts::$resolveOptions — 请求级/插件级合并 > [filter.fn.$resolveOptions][filter.req.filter][filter.cb.predicate] 请求级缺失 → 用插件级；都缺 → defaultPredicate | rename | 单元层（unit） |  |
+| test/filter.test.ts::$resolveOptions — 请求级/插件级合并 > ignoreKeys / ignoreValues 请求级优先回退插件级 | unit/filter.unit.test.ts::$resolveOptions — 请求级/插件级合并 > [filter.fn.$resolveOptions][filter.req.filter.ignoreKeys][filter.req.filter.ignoreValues] ignoreKeys / ignoreValues 请求级优先回退插件级 | rename | 单元层（unit） |  |
+| test/filter.test.ts::filter — 集成（拦截器 + runWhen） > 过滤 params 与 data，并 delete config.filter | rule/filter.rule.test.ts::filter — 集成（拦截器 + runWhen） > [filter.fn.axpFilter][filter.req.filter] 过滤 params 与 data，并 delete config.filter | rename | 规则层（rule） |  |
+| test/filter.test.ts::filter — 集成（拦截器 + runWhen） > runWhen：enable:false → 恒不运行 | rule/filter.rule.test.ts::filter — 集成（拦截器 + runWhen） > [filter.opt.enable] runWhen：enable:false → 恒不运行 | rename | 规则层（rule） |  |
+| test/filter.test.ts::filter — 集成（拦截器 + runWhen） > runWhen：config.filter 为假值 → 不运行 | rule/filter.rule.test.ts::filter — 集成（拦截器 + runWhen） > [filter.req.filter] runWhen：config.filter 为假值 → 不运行 | rename | 规则层（rule） |  |
+| test/filter.test.ts::filter — 函数形式解出 falsy / enable:false → 跳过过滤 > $resolveOptions：函数返回 false / undefined / enable:false 对象 → null；其余照常解析 | unit/filter.unit.test.ts::filter — 函数形式解出 falsy / enable:false → 跳过过滤 > [filter.fn.$resolveOptions][filter.req.filter.callback][filter.req.filter.enable] $resolveOptions：函数返回 false / undefined / enable:false 对象 → null；其余照常解析 | rename | 单元层（unit） |  |
+| test/filter.test.ts::filter — 函数形式解出 falsy / enable:false → 跳过过滤 > config.filter = () => false：不过滤 params/data，仍 delete config.filter | rule/filter.rule.test.ts::filter — 函数形式解出 falsy / enable:false → 跳过过滤 > [filter.req.filter.callback] config.filter = () => false：不过滤 params/data，仍 delete config.filter | rename | 规则层（rule） |  |
+| test/filter.test.ts::filter — 函数形式解出 falsy / enable:false → 跳过过滤 > config.filter = () => ({ enable:false })：同样跳过 | rule/filter.rule.test.ts::filter — 函数形式解出 falsy / enable:false → 跳过过滤 > [filter.req.filter.enable] config.filter = () => ({ enable:false })：同样跳过 | rename | 规则层（rule） |  |
+| test/lifecycle.coverage.test.ts::envs/filter/repath — 次要分支与卸载 > filter 忽略继承属性，收集 dropped，ignoreValues 支持 NaN | unit/filter.unit.test.ts::envs/filter/repath — 次要分支与卸载 > [filter.fn.$filter][filter.opt.ignoreValues] filter 忽略继承属性，收集 dropped，ignoreValues 支持 NaN | rename | 纯函数：继承属性、dropped、NaN |  |
+| test/lifecycle.coverage.test.ts::envs/filter/repath — 次要分支与卸载 > filter 函数解析为 false 时删除配置，数组与文本保持原值 | boundary/filter.boundary.test.ts::envs/filter/repath — 次要分支与卸载 > [filter.req.filter.callback][filter.fn.axpFilter] filter 函数解析为 false 时删除配置，数组与文本保持原值 | rename | 函数解析为 false，数组与文本 params 保持原值 |  |

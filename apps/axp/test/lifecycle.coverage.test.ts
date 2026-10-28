@@ -1,7 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import axios, { AxiosError } from 'axios';
 import envs from '../src/plugins/envs';
-import filter, { $filter } from '../src/plugins/filter';
 import normalize from '../src/plugins/normalize';
 import notify from '../src/plugins/notify';
 import cancel, { cancelAll } from '../src/plugins/cancel';
@@ -35,26 +34,6 @@ describe('envs/filter/repath — 次要分支与卸载', () => {
         const before = ax.defaults.baseURL;
         expect(() => envs([{ rule: () => { throw new Error('rule'); }, config: { baseURL: '/new' } }]).install(ax)).toThrow('rule');
         expect(ax.defaults.baseURL).toBe(before);
-    });
-    it('filter 忽略继承属性，收集 dropped，ignoreValues 支持 NaN', () => {
-        const data = Object.assign(Object.create({ inherited: 1 }), { n: NaN, empty: null, keep: 0 });
-        const dropped: any[] = [];
-        expect($filter(data, { predicate: ([, v]) => v == null || Number.isNaN(v), ignoreValues: [NaN] }, dropped))
-            .toEqual({ n: NaN, keep: 0 });
-        expect(dropped).toEqual([['empty', null]]);
-    });
-    it('filter 函数解析为 false 时删除配置，数组与文本保持原值', async () => {
-        const adapter = vi.fn(async (c) => response(c));
-        const ax = axios.create({ adapter });
-        const off = filter().install(ax);
-        await ax.post('/', 'body', { params: [1, null], filter: () => false });
-        const config = adapter.mock.calls[0][0];
-        expect(config).not.toHaveProperty('filter');
-        expect(config.params).toEqual([1, null]);
-        expect(config.data).toBe('body');
-        off?.();
-        await ax.get('/', { params: { empty: null }, filter: true });
-        expect(adapter.mock.calls[1][0].params).toEqual({ empty: null });
     });
 });
 
