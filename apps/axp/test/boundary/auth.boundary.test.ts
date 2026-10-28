@@ -676,7 +676,7 @@ describe("异步回调期间的会话变化", () => {
     expect(h.settings.onAccessExpired).not.toHaveBeenCalled();
   });
 
-  it("[auth.opt.ready] 异步 ready 期间 token 被替换：按实际注入的新 token 记快照，401 走刷新而非重放后判过期", /** 快照与注入保持一致。 */ async () => {
+  it("[auth.cb.ready] 异步 ready 期间 token 被替换：按实际注入的新 token 记快照，401 走刷新而非重放后判过期", /** 快照与注入保持一致。 */ async () => {
     const fresh = "token-fresh";
     const gate = deferred<void>();
     let calls = 0;

@@ -125,11 +125,11 @@ export type WithData<R, D> = Omit<R, "data"> & { /** 当前接口的业务数据
 /** 从外到内的固定阶段。 */
 export type AxpStage = keyof typeof STAGE_BUILTINS;
 /** next 永远 resolve，程序异常临时归类为 internal。 */
-export type AxpNext<R extends IAxpResponse = IAxpResponse> = (patch?: AxpRequestPatch) => Promise<R>;
+export type AxpNext<R extends IAxpResponse = AxpResponse> = (patch?: AxpRequestPatch) => Promise<R>;
 /** 请求不可变的洋葱中间件。 */
-export type AxpMiddleware<R extends IAxpResponse = IAxpResponse> = (ctx: AxpContext<R>, next: AxpNext<R>) => Promise<R>;
+export type AxpMiddleware<R extends IAxpResponse = AxpResponse> = (ctx: AxpContext<R>, next: AxpNext<R>) => Promise<R>;
 /** 一个独立参与排序的请求/响应挂载段。 */
-export interface AxpTap<R extends IAxpResponse = IAxpResponse> {
+export interface AxpTap<R extends IAxpResponse = AxpResponse> {
   /** 挂载阶段。 */
   stage: AxpStage;
   /** 自定义段默认在内置段之后。 */
@@ -140,7 +140,7 @@ export interface AxpTap<R extends IAxpResponse = IAxpResponse> {
   onResponse?(response: R, ctx: AxpContext<R>): void | R | Promise<void | R>;
 }
 /** 每个客户端独立的插件实例。 */
-export interface AxpPluginInstance<R extends IAxpResponse = IAxpResponse, A = void> {
+export interface AxpPluginInstance<R extends IAxpResponse = AxpResponse, A = void> {
   /** 有状态中间件。 */
   handle?: AxpMiddleware<R>;
   /** 有状态挂载段。 */
@@ -153,7 +153,7 @@ export interface AxpPluginInstance<R extends IAxpResponse = IAxpResponse, A = vo
 /** 具名插件，状态必须在 setup 中建立以支持 extend。
  * @example `{ name: 'timing', async handle(ctx, next) { return next() } }`
  */
-export interface AxpPlugin<R extends IAxpResponse = IAxpResponse, A = void> {
+export interface AxpPlugin<R extends IAxpResponse = AxpResponse, A = void> {
   /** 客户端内唯一名称。 */
   readonly name: string;
   /** false 时不 setup、不进链。 */

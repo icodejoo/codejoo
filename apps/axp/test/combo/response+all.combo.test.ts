@@ -131,7 +131,7 @@ describe("[core.opt.response][core.fn.createAxp] 自定义 R + 全部内置插�
     h.dispose();
   });
 
-  it("[share.req.share][cancel.fn.cancelAll] 跟随者取消自己的 signal：由 share 合成 cancel 响应，首发仍成功", async () => {
+  it("[share.req.share][core.method.cancelAll] 跟随者取消自己的 signal：由 share 合成 cancel 响应，首发仍成功", async () => {
     const h = fullClient();
     h.net.on("get", REQUEST_URL, () => traced(200, TRACE.ok, "ok"));
     const follower = new AbortController();
@@ -145,7 +145,7 @@ describe("[core.opt.response][core.fn.createAxp] 自定义 R + 全部内置插�
     h.dispose();
   });
 
-  it("[retry.opt.delay][cancel.fn.cancelAll] 重试等待期间 cancelAll：由 retry 合成 cancel 响应", async () => {
+  it("[retry.opt.delay][core.method.cancelAll] 重试等待期间 cancelAll：由 retry 合成 cancel 响应", async () => {
     const h = fullClient();
     h.net.on("get", REQUEST_URL, () => failure(500));
     send(h);
@@ -156,7 +156,7 @@ describe("[core.opt.response][core.fn.createAxp] 自定义 R + 全部内置插�
     h.dispose();
   });
 
-  it("[auth.cb.onRefresh][cancel.fn.cancelAll] 等待刷新的请求被 cancelAll：由 auth 合成 cancel 响应，两个请求都是自定义 R", async () => {
+  it("[auth.cb.onRefresh][core.method.cancelAll] 等待刷新的请求被 cancelAll：由 auth 合成 cancel 响应，两个请求都是自定义 R", async () => {
     const gate = deferred<boolean>();
     const h = fullClient({
       onRefresh: /** 等门打开再换 token。 */ async (_r, tm) => {

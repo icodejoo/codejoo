@@ -258,7 +258,7 @@ switch action:
 - `ctx.key()` 为 null（不可哈希）且没有显式 key 时，直接 `next()`，既不读也不写缓存（与 share 一致）。
 - 命中：直接返回缓存的 `R`（按 `clone` 拷贝 data），不触网，不重跑 `transformResponse`（N9）。
 - 新旧顺序：较早发起、较晚返回的响应不覆盖较新的结果；`clear()` 之后在途请求返回也不写回。语义沿用现状。
-- 表收敛（O3）：`written` 和 `inflight` 合并为 `Map<key, { latestSeq, pending }>`；`epoch` 保留；条目被淘汰且没有在途请求时回收这个 key 的记录。
+- 表收敛（O3）：`written` 和 `inflight` 合并为 `Map<key, { latestSeq, pending }>`；票据是递增的序号，`clear()` 记下当前序号作为下界（取代 `epoch`），下界以前的票据一律不写回；同一 key 的在途数归零就回收它的记录。
 - 过期：读时惰性删除；写入超过容量时清扫，不再每次写入全表扫描（O6）。
 - 操作：`client.plugin(cachePlugin)` 返回 `{ remove(key): boolean, clear(): number }`；另导出 `removeCache(client, key): boolean`、`clearCache(client): number`，客户端没装 cache 时返回 `false` / `0`。
 - 删除旧版只有类型、从未生效的 `storage`、`memory` 选项，持久化统一走 `store`。

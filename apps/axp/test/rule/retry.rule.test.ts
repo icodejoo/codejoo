@@ -198,7 +198,7 @@ it.each(["request", "method"] as const)(
   },
 );
 
-it("[retry.method.cleanup][retry.opt.enable] 禁用、卸载、重名拒绝和跨客户端复用", /** 生命周期沿内核约定。 */ async () => {
+it("[retry.method.lifecycle][retry.opt.enable] 禁用、卸载、重名拒绝和跨客户端复用", /** 生命周期沿内核约定。 */ async () => {
   const plugin = axpRetry({ max: 1, delay: 0 });
   const h = b3Client([plugin]);
   expect(() => h.api.use(plugin)).toThrow("Duplicate plugin");

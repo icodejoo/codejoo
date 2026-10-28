@@ -352,7 +352,7 @@ describe("插件生命周期", () => {
     expect(enabled.api.inspect()).toContainEqual({ name: AUTH_NAME, stage: "credential" });
   });
 
-  it("[auth.method.cleanup] eject 之后请求不再注入、也不走 401 路由；重名安装被拒绝", /** 卸载即停止所有行为。 */ async () => {
+  it("[auth.method.lifecycle] eject 之后请求不再注入、也不走 401 路由；重名安装被拒绝", /** 卸载即停止所有行为。 */ async () => {
     const h = authClient();
     expect(() => h.api.use(axpAuth({ tokenManager: memoryTokens(), onRefresh: () => true, onAccessExpired: () => {} }))).toThrow("Duplicate plugin");
     expect(h.api.eject(AUTH_NAME)).toBe(true);

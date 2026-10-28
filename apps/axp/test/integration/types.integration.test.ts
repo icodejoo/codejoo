@@ -238,7 +238,7 @@ it("[retry.cb.shouldRetry][retry.opt.delay][auth.cb.onRefresh][auth.cb.onFailure
   expect(contracts).toBeTypeOf("function");
 });
 
-it("[core.fn.createAxp][core.opt.plugins][core.opt.reject] 不写泛型时 R 只由 response 工厂决定：内联与单独定义的插件都按默认响应装配", /** 编译期契约：plugins 与 reject 不参与推断 R。 */ () => {
+it("[core.fn.createAxp][core.opt.plugins][core.cb.reject] 不写泛型时 R 只由 response 工厂决定：内联与单独定义的插件都按默认响应装配", /** 编译期契约：plugins 与 reject 不参与推断 R。 */ () => {
   /** 只编译调用示例，避免发送真实网络请求。 */
   function contracts() {
     const inline = createAxp({ plugins: [axpRetry(), axpCache()] });
@@ -252,6 +252,27 @@ it("[core.fn.createAxp][core.opt.plugins][core.opt.reject] 不写泛型时 R 只
     expectTypeOf<typeof custom.isResponse>().guards.toEqualTypeOf<TestResponse>();
     // @ts-expect-error 默认响应的插件不能装进自定义响应的客户端。
     createAxp({ response: customResponse(), plugins: [cache] });
+  }
+  expect(contracts).toBeTypeOf("function");
+});
+
+it("[core.opt.plugins][core.method.use] 不写泛型的自定义插件按默认响应声明，能直接装进默认客户端", /** 编译期契约：AxpPlugin 等插件作者类型的默认 R 与客户端一致。 */ () => {
+  /** 只编译调用示例，避免发送真实网络请求。 */
+  function contracts() {
+    const timing: AxpPlugin = {
+      name: "timing",
+      /** 透传内层结果，响应类型是默认响应。 */
+      async handle(ctx, next) {
+        expectTypeOf(ctx.request.url).toEqualTypeOf<string | undefined>();
+        const response = await next();
+        expectTypeOf(response).toEqualTypeOf<AxpResponse>();
+        return response;
+      },
+    };
+    const api = createAxp({ plugins: [timing] });
+    api.use(timing);
+    // @ts-expect-error 默认响应的自定义插件不能装进自定义响应的客户端。
+    createAxp<unknown, TestResponse>({ response: customResponse(), plugins: [timing] });
   }
   expect(contracts).toBeTypeOf("function");
 });

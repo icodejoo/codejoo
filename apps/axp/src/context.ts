@@ -1,6 +1,6 @@
 import { AXP_KINDS } from "./brand";
 import { requestKey, type IKeyOptions } from "./key";
-import { type AxpResponseInit, type IAxpResponse, type IAxpResponseFactory } from "./response";
+import { type AxpResponse, type AxpResponseInit, type IAxpResponse, type IAxpResponseFactory } from "./response";
 import type { AxpClient, AxpLogger, AxpRequestConfig, AxpRequestPatch } from "./types";
 
 /** debug 关闭时丢弃日志，不为每个客户端创建闭包。 */
@@ -89,7 +89,7 @@ interface IAxpContextState {
 /** 每层保持固定实例形状，逻辑请求状态通过同一容器共享。
  * @example `ctx.set(key, 1); return next({ headers: { Authorization: 'token' } })`
  */
-export class AxpContext<R extends IAxpResponse = IAxpResponse> {
+export class AxpContext<R extends IAxpResponse = AxpResponse> {
   /** 逻辑请求序号。 */
   readonly id: number;
   /** 所属客户端。 */

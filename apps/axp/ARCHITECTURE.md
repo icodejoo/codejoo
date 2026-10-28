@@ -147,7 +147,7 @@ api.get('/pet/{id}')(payload, opts)        一次调用 = 一个逻辑请求
 
 **请求不可变**：中间件不改 `ctx.request`，要给内层换请求就调 `next(patch)`。内核把 patch 浅合并成新请求交给内层，`headers` 多合并一层；patch 里某个字段写 `undefined`，表示把它从请求里删掉。同一层连续调两次 `next()`，拿到的是同一个基准请求，所以重发天然是"干净"的，不用再保存原始请求体快照，也不用 `axp:share`、`axp:cache` 那类保活键。
 
-**signal**：传输层用 `request.signal ?? ctx.signal`。share 的 `start` 策略用 patch 换成共享的 controller signal，这样首发请求被取消时不会连累跟随者；`end`、`race` 每个调用各发各的请求，不换 signal。
+**signal**：传输层用 `request.signal ?? ctx.signal`。share 的 `start` 策略用 patch 换成共享的 controller signal，这样首发请求被取消时不会连累跟随者；`end`、`race` 每个调用各发各的请求，不换 signal。内核派生内层上下文时，`ctx.signal` 也跟着 patch 里的 signal 走，内层插件和传输层看到的是同一个。
 
 ## 6. 归一化响应
 

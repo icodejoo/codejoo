@@ -96,7 +96,7 @@ it.each([
   // 第二轮在途时取消：首发调用方已进入第二轮，所以每个调用方都是两轮。
   ["第二轮共享在途时", DELAY + 1, CALLERS * ROUNDS_AFTER_RETRY],
 ] as const)(
-  "[retry.opt.max × share.req.share][cancel.fn.cancelAll] %s首发调用方取消：只有它以 cancel 告终，其余调用方照常合并到同一轮并成功",
+  "[retry.opt.max × share.req.share][core.method.cancelAll] %s首发调用方取消：只有它以 cancel 告终，其余调用方照常合并到同一轮并成功",
   /** 取消只离开自己，不连累共享，也不影响别人的重试。 */ async (_label, abortAfter, attempts) => {
     const h = client(ONE_RETRY);
     h.net.on("get", URL, /** 第一轮失败，第二轮成功。 */ (_config, hit) => (hit <= FAILED_SENDS ? failure(HTTP_ERROR) : envelope(DATA)));

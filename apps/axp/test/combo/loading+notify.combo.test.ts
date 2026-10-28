@@ -106,7 +106,7 @@ it("[loading.method.snapshot] 等待 outer pre 时卸载 loading，旧快照继�
   expect(h.events.loading.get(LOADING_LABEL)).toEqual([]);
 });
 
-it("[notify.req.throws][loading.cb.finally] 正常抛出最终失败 R 前，通知一次且 loading 已关闭", /** 落定失败不会重跑 outer。 */ async () => {
+it("[core.req.throws][loading.cb.finally] 正常抛出最终失败 R 前，通知一次且 loading 已关闭", /** 落定失败不会重跑 outer。 */ async () => {
   const h = uiClient();
   const notify = vi.fn(notifyRecorder(h.events));
   h.api.use(axpLoading({ loading: loadingRecorder(h.events) }));

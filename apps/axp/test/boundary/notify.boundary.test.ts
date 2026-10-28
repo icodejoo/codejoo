@@ -119,7 +119,7 @@ it("[notify.cb.missing] 无 config、message、response 的网络错误使用默
   expect(response).toMatchObject({ kind: "network", status: 0, message: EMPTY_TEXT });
   expect(notify).toHaveBeenCalledExactlyOnceWith("network 0", response);
 });
-it("[notify.method.clients] 同一插件定义复用时，卸载一个客户端不影响另一个", /** 客户端注册和副作用隔离。 */ async () => {
+it("[notify.method.lifecycle] 同一插件定义复用时，卸载一个客户端不影响另一个", /** 客户端注册和副作用隔离。 */ async () => {
   const first = uiClient();
   const second = uiClient();
   const notify = vi.fn(notifyRecorder(first.events));

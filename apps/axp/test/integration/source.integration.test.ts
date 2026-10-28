@@ -108,7 +108,7 @@ it("[mock.prop.stage][share.prop.stage][cache.prop.stage] source 阶段固定次
   ]);
 });
 
-it("[cache.method.clients][share.method.clients] 同一个插件对象装到两个客户端、extend 继承的子客户端，各自状态独立", async () => {
+it("[cache.method.lifecycle][share.method.lifecycle] 同一个插件对象装到两个客户端、extend 继承的子客户端，各自状态独立", async () => {
   const cache = axpCache();
   const share = axpShare();
   const first = createTestClient([share, cache]);
