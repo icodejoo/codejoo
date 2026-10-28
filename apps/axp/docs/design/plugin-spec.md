@@ -131,6 +131,8 @@ summary: 10 个内置插件和 4 项内核服务在洋葱管线下的阶段、�
 5. `r.kind` 为 `network` / `timeout` → 重试；
 6. 否则 `statusCodes.includes(r.status)`。
 
+**成功响应也进判定**：判定顺序里没有 `r.ok` 这一级，`shouldRetry` 会收到成功响应（`r.ok` 为真时同样调用）。默认规则下成功不重试：既不是 `network` / `timeout`，状态也不在 `statusCodes` 里。自定义的 `shouldRetry` 返回 `true`，就会对成功响应重试，例如业务上判为异常的成功。旧版有这个能力，保留。
+
 **行为**：
 - 先调 `ctx.markReplayable()`，再在循环里调 `next()`。
 - 等待期间监听 `ctx.signal`，取消立即结束等待。
@@ -151,8 +153,8 @@ summary: 10 个内置插件和 4 项内核服务在洋葱管线下的阶段、�
 |---|---|---|
 | `tokenManager` | **必填** | `ITokenManager`（不再有 `canRefresh`） |
 | `onRefresh(r, tm)` | **必填** | 返回 `false` 或抛错算失败；同一时刻只跑一个 |
-| `onAccessExpired(r, tm)` | **必填** | 会话过期，每轮只通知一次 |
-| `onAccessDenied(r, tm)` | → `onAccessExpired` | 越权或本地无 token |
+| `onAccessExpired(r, tm)` | **必填** | 会话过期；401 / 刷新失败那条路径每轮只通知一次（见下「本地无 token 的通知」） |
+| `onAccessDenied(r, tm)` | → `onAccessExpired` | 越权或本地无 token；本地无 token 时每个受保护请求调一次，不去重 |
 | `onFailure(r, tm, ctx)` | `defaultAuthFailure` | 返回 `AuthFailureAction` 五动作之一 |
 | `methods` / `urlPattern` | `'*'` | 受保护判定，语义不变（URLPattern，`!` 否定） |
 | `isProtected(request)` | — | 布尔即终值 |
@@ -164,11 +166,13 @@ summary: 10 个内置插件和 4 项内核服务在洋葱管线下的阶段、�
 未受保护 → return next()
 ctx.markReplayable()
 正在刷新 → 等刷新结果；失败 → onAccessExpired（每轮一次），返回 ctx.fail({ kind: 'auth', reason: 'expired' })
+循环（首发与每次重放前都走一遍）：
 本地无 token → onAccessDenied，返回 ctx.fail({ kind: 'auth', reason: 'unauthenticated' })
-patch = ready(tm, request)；记下本次注入的 token（状态键）
+patch = ready(tm, request)；ready 期间 token 被替换就用新 token 重做（最多 3 次），记下实际注入的 token（状态键）
 r = await next(patch)
-r.ok → return r
-switch onFailure(r, tm, ctx):
+r.ok / kind 为 internal 或 cancel → return r（不进 onFailure）
+action = await onFailure(r, tm, ctx)；等待期间调用方已取消 → 返回 fail({ kind: 'cancel' })，不再通知
+switch action:
   refresh → 加入或发起刷新；成功则带新 token 再 next() 一次；失败按 expired 处理
   replay  → 带当前 token 再 next() 一次
   deny    → onAccessDenied；返回 fail({ kind: 'auth', reason: 'denied', from: r })
@@ -176,6 +180,8 @@ switch onFailure(r, tm, ctx):
   others  → return r
 重放后仍判 refresh / replay → 按 expired 处理（防循环，沿用现有规则）
 ```
+
+**本地无 token 的通知**：本地无 token 被拒绝时，每个受保护请求都会调用一次 `onAccessDenied`（缺省回退 `onAccessExpired`），不去重。所以没配 `onAccessDenied` 的使用方，在会话过期之后、重新登录之前，每发一个受保护请求就会再触发一次 `onAccessExpired`。"每轮只通知一次"只约束 401 / 刷新失败那条路径（过期状态的去重）。这与旧版一致；要对本地拒绝也去重，需要先改规格。
 
 **默认路由 `defaultAuthFailure`**：
 - `r.status === 401`：tm 无 token → expired；本次注入的 token ≠ 当前 token → replay（已被并发刷新）；否则 → refresh。
@@ -186,7 +192,7 @@ switch onFailure(r, tm, ctx):
 
 **刷新可用性（O4）**：
 - `canRefresh` 从 `ITokenManager` 删除，收进插件状态。
-- 判定过期时记下当时的 token 快照；token 没变之前不再刷新、不再重复通知过期；登录写入新 token 后自动恢复，登录流程不用再手动改 `canRefresh = true`。
+- 判定过期时先 `tm.clear()`，再记下清空后的 token 状态作为快照；这个状态没变之前不再刷新、不再重复通知过期；登录写入新 token 后自动恢复，登录流程不用再手动改 `canRefresh = true`。
 
 **单飞刷新**：状态建在 `setup` 里（每个客户端一份），不再挂 `WeakMap<AxiosInstance>`。
 

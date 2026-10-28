@@ -294,14 +294,21 @@ api.get('/search')(undefined, { params: { q: 'x', page: '' } });   // 发出 ?q=
 | `max` | `2` | 最多重试次数 |
 | `methods` | `get put head delete options trace` | 硬性否决：方法不在表里一律不重试，`shouldRetry` 说了也不算 |
 | `statusCodes` | `[408, 429, 500, 502, 503, 504]` | 对照 `r.status`（逻辑状态） |
-| `shouldRetry(r, attempt, ctx)` | — | 返回布尔值即采用，`undefined` 则继续往下判断 |
-| `delay` | `attempt => 300 * 2 ** (attempt - 1)` | 数字，或函数 `(attempt, max, r) => number` |
-| `jitter` | — | `true`，或 `(delay) => number` |
-| `delayMax` | `10_000` | 只封顶插件自己算出来的 delay |
+| `shouldRetry(r, attempt, ctx)` | — | 返回布尔值即采用，其它返回值（含 `undefined`）则继续往下判断 |
+| `delay` | `attempt => 300 * 2 ** (attempt - 1)` | 数字，或函数 `(attempt, max, r) => number`，返回非数字按 0 算 |
+| `jitter` | — | `true`（在 0 到 delay 之间均匀随机），或 `(delay) => number`（返回负数、`NaN`、`Infinity` 时沿用原 delay） |
+| `delayMax` | `10_000` | 只封顶插件自己算出来的 delay，抖动之后再封顶 |
 | `respectRetryAfter` | `true` | 是否采用响应里的 `Retry-After` |
 | `afterStatusCodes` | `[413, 429, 503]` | 只有这些状态码才信 `Retry-After`，对照 `r.status` |
 | `retryAfterMax` | `Infinity` | 从 `Retry-After` 换算出的等待时间的上限 |
-<!-- TODO: 待实现确认：Retry-After 的具体行为（优先级、与 delayMax、jitter 的关系）设计只列了选项和默认值，下面的描述沿用旧版行为 -->
+
+`Retry-After` 的规则：
+
+- 决定重试之后才会去看它。`respectRetryAfter` 为真，且 `r.status`（逻辑状态）在 `afterStatusCodes` 里，才会读响应头。头取自原始的 HTTP 响应，所以 HTTP 200 加业务码 429 的接口，只要响应头带了 `Retry-After` 也适用。
+- 值可以是秒数，也可以是 HTTP 日期（按当前时钟算出还要等多久）。缺失或解析不了，就回退到本地的 `delay`。
+- 能解析时它优先：直接用头给出的时间，不再调用 `delay`，也不叠加 `jitter`，`delayMax` 管不到它，只受 `retryAfterMax` 封顶。
+- 头里是负数，或日期已经过了，等待时间按 0 算，立即重发，不会回退到 `delay`。
+- 回退到本地时，顺序是：先算 `delay`，再套 `jitter`，最后用 `delayMax` 封顶。
 
 请求级：数字表示 `max`；`false` 关闭；`true` 用插件级配置；对象按字段覆盖。
 
@@ -313,6 +320,8 @@ api.get('/search')(undefined, { params: { q: 'x', page: '' } });   // 发出 ?q=
 4. `shouldRetry` 返回布尔值：采用它。
 5. `r.kind` 是 `network` 或 `timeout`：重试。
 6. 否则看 `statusCodes.includes(r.status)`。
+
+判定里没有 `r.ok` 这一级：成功的响应同样会交给 `shouldRetry`。默认规则下成功不重试；自定义的 `shouldRetry` 返回 `true`，就会对成功响应重试，比如业务上判为异常的成功。
 
 运行时的行为：
 
@@ -336,23 +345,24 @@ api.get('/flaky')(undefined, { retry: false });                                 
 | --- | --- | --- |
 | `tokenManager` | **必填** | `ITokenManager` 实例 |
 | `onRefresh(r, tm)` | **必填** | 返回 `false` 或抛错即刷新失败。同一时刻只跑一个刷新 |
-| `onAccessExpired(r, tm)` | **必填** | 会话过期。每一轮只通知一次 |
-| `onAccessDenied(r, tm)` | 同 `onAccessExpired` | 越权（403），或本地没有 token |
+| `onAccessExpired(r, tm)` | **必填** | 会话过期。401、刷新失败这条路径上，每一轮只通知一次 |
+| `onAccessDenied(r, tm)` | 同 `onAccessExpired` | 越权（403），或本地没有 token。本地没有 token 时，每个受保护请求都会调用一次，不去重 |
 | `onFailure(r, tm, ctx)` | `defaultAuthFailure` | 返回 `AuthFailureAction` 之一 |
-| `methods` / `urlPattern` | `'*'` | 判断是否受保护。`urlPattern` 使用 URLPattern 语法，`!` 表示否定 |
-| `isProtected(request)` | — | 返回布尔值即为最终结果 |
+| `methods` / `urlPattern` | `'*'` | 判断是否受保护。`urlPattern` 只匹配 pathname，使用 URLPattern 语法，`!` 表示否定 |
+| `isProtected(request)` | — | 返回布尔值即为最终结果。每次尝试入口求一次值，重试的每一轮都会重新判断，刷新后的重放不再判断 |
 | `ready(tm, request)` | 写入 `Authorization` 头 | 返回一个 `AxpRequestPatch` |
-<!-- TODO: 待实现确认：AuthFailureAction 的五个动作里，除 refresh、replay、deny、expired 外，第五个的名称未写明（设计里只说"其它则原样返回"） -->
 
-请求级：`protected: boolean`。
+`AuthFailureAction` 是一个常量对象，有五个动作：`Refresh`（`'refresh'`）、`Replay`（`'replay'`）、`Deny`（`'deny'`）、`Expired`（`'expired'`）、`Others`（`'others'`，与鉴权无关的失败，原样返回）。`onFailure` 返回 `null`、`undefined` 或不认识的值，效果和 `Others` 一样。
+
+请求级：`protected: boolean`，优先于 `isProtected`、`methods` 和 `urlPattern`。
 
 主流程：
 
 1. 不受保护的请求直接放行。
-2. 本地没有 token：调用 `onAccessDenied`，返回 `kind: 'auth'`、`reason: 'unauthenticated'` 的结果。
-3. 正在刷新：等刷新结果。刷新失败就按会话过期处理。
-4. 注入 token，发出请求。成功直接返回。
-5. 失败时由 `onFailure` 决定：`refresh` 刷新后重放一次；`replay` 用当前 token 重放一次；`deny` 调用 `onAccessDenied`；`expired` 清空 token，调用 `onAccessExpired`；其它情况原样返回。
+2. 正在刷新：等刷新结果。刷新失败就按会话过期处理，返回 `reason: 'expired'`；等待期间调用方取消，只结束它自己。
+3. 本地没有 token：调用 `onAccessDenied`，返回 `kind: 'auth'`、`reason: 'unauthenticated'` 的结果。每个受保护请求都会走一遍，不去重。没配 `onAccessDenied` 时调用的就是 `onAccessExpired`，所以过期之后、重新登录之前，每发一个受保护请求都会通知一次。
+4. 注入 token，发出请求。成功直接返回；`internal`（程序错误）和 `cancel` 也不进 `onFailure`，原样返回。
+5. 失败时由 `onFailure` 决定：`refresh` 刷新后重放一次；`replay` 用当前 token 重放一次；`deny` 调用 `onAccessDenied`，返回 `reason: 'denied'`；`expired` 清空 token，调用 `onAccessExpired`，返回 `reason: 'expired'`；其它情况原样返回。`onFailure` 可以是异步的，等它的期间调用方取消了，以取消落定，不再通知。
 6. 重放之后仍然要求刷新或重放的，按会话过期处理，防止死循环。
 
 默认的 `defaultAuthFailure` 只看逻辑状态：
@@ -363,9 +373,11 @@ api.get('/flaky')(undefined, { retry: false });                                 
 
 因为读的是 `r.status`，HTTP 200 加业务码 401 的接口同样适用。
 
-刷新的可用性不需要手动维护。判定过期时会记下当时的 token，token 没变之前不再刷新、不再重复通知过期。登录写入新 token 后自动恢复，登录流程不用改任何标记。
+刷新的可用性不需要手动维护。判定过期时会清空 token，并记下清空后的状态。这个状态没变之前，不再刷新，也不再重复通知过期。登录写入新 token 后自动恢复，登录流程不用改任何标记。
 
-`TokenManager` 实现 `ITokenManager`：`accessToken`（getter，返回 `Bearer <token>`）、`refreshToken`、`set(access?, refresh?)`、`clear()`。默认实现持久化到 `localStorage`。
+刷新是单飞的：同一时刻只跑一个，其它请求排队等它的结果。取消只结束发起或排队的那一个请求，刷新本身会跑完。`onRefresh` 抛错按刷新失败处理，不会往外抛；开了 `debug` 才会输出一条 warn。
+
+`ITokenManager` 要求 `accessToken`（getter）、`refreshToken`（getter）、`set(access?, refresh?)`、`clear()`。默认实现 `TokenManager` 的 `accessToken` 返回 `Bearer <token>`，没有 token 时为 `undefined`；`set` 收的是不带 `Bearer ` 的裸 token，省略或空值等于清空。它会持久化到 `localStorage`，构造时恢复上次会话；存储不可用时只在内存里生效，不抛错。
 
 ```ts
 axpAuth({
@@ -385,13 +397,14 @@ api.get('/public/banner')(undefined, { protected: false });   // 本次不做鉴
 | --- | --- | --- |
 | `enable` | `false` | 通常写成 `import.meta.env.DEV` |
 | `mock` | `false` | `true` 时全部请求走 mock |
-| `mockUrl` | — | mock 服务器的基址 |
+| `mockUrl` | — | mock 服务器的基址。没配置（或是空串）时跳过 mock，直接请求真实接口 |
 | `fallbackWhen(r)` | `r.httpStatus === 404 \|\| r.kind === 'network'` | 为真时回落到真实接口 |
-<!-- TODO: 待实现确认：mockUrl 没有配置时的行为未写明 -->
 
-请求级：`false` 或 `{ enable: false }` 关闭；`true` 只为这次请求开启；对象可以覆盖 `mockUrl` 和 `fallbackWhen`。
+请求级：`false` 或 `{ enable: false }` 关闭；`true` 或任意对象（含空对象）为这次请求开启，对象可以覆盖 `mockUrl` 和 `fallbackWhen`。前提是插件级 `enable` 为真，请求级打不开关着的插件。
 
-运行时的行为：先把请求改写到 `mockUrl` 上探测一次（`cache: false`、`share: false`，探测结果不写入缓存，也不占用共享条目）。如果 `fallbackWhen(r)` 为真，再走真实接口。
+没有 `mockUrl` 时（插件级和请求级都没给，或者给的是空串，请求级的空串不会回退到插件级），这次请求不探测，原样发往真实接口；开了 `debug` 会输出一条 warn。
+
+运行时的行为：先把请求改写到 `mockUrl` 上探测一次（`cache: false`、`share: false`，探测结果不写入缓存，也不占用共享条目）。如果 `fallbackWhen(r)` 为真，再走真实接口。改写规则：相对地址拼在 `mockUrl` 后面；绝对地址去掉原来的 origin，保留路径、query 和 hash；请求没有 `url` 时改写 `baseURL`。
 
 ```ts
 axpMock({ enable: import.meta.env.DEV, mockUrl: 'http://localhost:4000' });
@@ -429,19 +442,20 @@ api.get('/list')(undefined, { share: 'race' });
 | 选项 | 默认 | 说明 |
 | --- | --- | --- |
 | `expires` | `60_000` | 过期时间，单位毫秒 |
-| `max` | `500` | LRU 容量。`Infinity` 表示不限，小于 1 时回退为 500 |
+| `max` | `500` | LRU 容量。`Infinity` 表示不限，小于 1 时回退为 500。注入 `store` 后不再生效 |
 | `methods` | `['get', 'head']` | 其它方法即使请求级开启也不缓存 |
-| `clone` | — | `'shallow'`、`'deep'`，或 `(data) => data`，作用于 `r.data` |
+| `clone` | — | `'shallow'`、`'deep'`，或 `(data) => data`，作用于 `r.data`。默认不拷贝，共享同一个引用 |
 | `shouldCache(r)` | `r.ok` | 决定哪些结果写入缓存 |
 | `store` | 内存 LRU | 实现 `IAxpCacheStore<R>`（同步的 `get`、`set`、`delete`、`clear`、`size`）。持久化实现以后再做 |
 
-请求级：`true`；数字表示 `expires`；对象 `{ expires, key, clone, shouldCache }`，其中 `key` 是显式缓存键；`false` 关闭。
+请求级：`true`；数字表示 `expires`；对象 `{ expires, key, clone, shouldCache }`，其中 `key` 是显式缓存键；`false` 关闭。显式键不经过 key 服务，所以不带 `scope`，也优先于请求级 `key: false`；空串或非字符串的键会退回 key 服务。
 
 - 命中时直接返回缓存的 `R`（按 `clone` 拷贝 `data`），不触网，也不会重跑 `transformResponse`。缓存的是判定之后的结果。
+- 未命中、请求成功返回时，同样按 `clone` 拷贝 `data`；失败的结果原样返回，不经过 `clone`。`clone: 'deep'` 依赖 `structuredClone`，环境里没有会在发请求前直接抛错，不会悄悄退成浅拷贝。
 - 较早发起、较晚返回的响应不会覆盖较新的结果。调用 `clear()` 之后，在途请求返回也不会写回。
 - 过期的条目在读取时惰性删除。写入超过容量时才清扫。
 - 默认只缓存 GET 和 HEAD。POST 即使请求级写了 `cache: true`，也不会被缓存，要缓存需要在插件级把 `methods` 改掉。
-<!-- TODO: 待实现确认：缓存键为 null（参数里有 FormData 等不可哈希值）时 cache 是否直通。设计只对 share 写明了直通 -->
+- 缓存键为 `null` 时（请求级 `key: false`，或参数里有 `FormData` 等不可哈希的值，见 key 一节）cache 直通：直接发出请求，不读也不写缓存。请求级 `cache: { key }` 给了显式键的话不受影响，照常缓存。
 
 操作方法：
 

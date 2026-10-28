@@ -10,7 +10,7 @@ summary: 旧写法到新写法的逐项对照：入口、错误、返回形态�
 - 失败不再是 `ApiError` 或 `AxiosError`，而是抛出归一化响应 `IAxpResponse`。判断用 `api.isResponse(e)`，需要 `Error` 时用 `reject` 适配。
 - `raw: true` 改为 `wrap: true` 后读 `r.raw`；`normalize: false` 改为 `throws: false`。
 - `axpCancel`、`axpKey`、`axpLogger`、`axpNormalize` 删除，能力并入内核。retry、filter、cache 的默认值变了，升级后要复查这几个插件的行为。
-- 下面按"旧代码 → 新代码"逐项对照。标了 TODO 的地方（auth、子路径）要等对应实现落地后再校对。
+- 下面按"旧代码 → 新代码"逐项对照。标了 TODO 的地方（子路径、根入口导出）要等 B6 打包后再校对。
 
 ## 1. 入口
 
@@ -229,13 +229,15 @@ axpAuth({
 要点：
 
 - 回调参数统一为 `(r, tm)`。`onFailure` 收到的是 `R`，不再是 `AxiosResponse`。
-- `canRefresh` 删除。`tokenManager.canRefresh` 不存在了，`TokenManager` 上也没有这个属性。判定过期后，插件会记下当时的 token，token 没变之前不再刷新、不再重复通知过期。登录写入新 token 后自动恢复，登录流程不需要再手动改标记。
+- `canRefresh` 删除。`tokenManager.canRefresh` 不存在了，`TokenManager` 上也没有这个属性。判定过期后，插件会清空 token 并记下清空后的状态，这个状态没变之前不再刷新、不再重复通知过期。登录写入新 token 后自动恢复，登录流程不需要再手动改标记。
 - `config.authExpired` 标记删除，改为看 `r.reason === 'expired'`。
 - 没有 token 时，不再合成 `data.code === 'ACCESS_DENIED'` 的响应。改为判断 `r.kind === 'auth' && r.reason === 'unauthenticated'`。`accessDeniedCode` 选项和 `ACCESS_DENIED_CODE` 常量删除。
 - `ready` 返回一个 `AxpRequestPatch`，不再直接修改 `config`。
 - `authFailureFactory` 删除，默认路由改为 `defaultAuthFailure`，按状态键识别携带的 token，不再解析请求头。原来的 `DEFAULT_ON_AUTH_FAILURE` 由它取代。
 - 尝试钩子 `registerAttemptHook` 删除。retry 的每次尝试本来就会经过 auth。
-<!-- TODO: 待实现确认：AuthFailureAction 的第五个动作名称未定；defaultAuthFailure 是否作为公共导出也未写明 -->
+- `AuthFailureAction` 有五个动作：`Refresh`、`Replay`、`Deny`、`Expired`、`Others`。第五个 `Others`（值为 `'others'`）表示与鉴权无关的失败，原样返回；`onFailure` 返回 `null`、`undefined` 或不认识的值时效果相同。
+- 本地没有 token 时，每个受保护请求都会调用一次 `onAccessDenied`，没配就回退到 `onAccessExpired`，不去重。旧版也是这样；"每一轮只通知一次"只管 401、刷新失败那条路径。
+<!-- TODO: 待实现确认：根入口是否导出 defaultAuthFailure，待 B6 确认 -->
 
 ## 8. 请求选项不再接受函数
 
