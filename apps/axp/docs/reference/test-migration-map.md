@@ -36,6 +36,7 @@ A 批（单插件规则/补丁/覆盖文件）迁移进行中，基线冻结于 
 | notify（notify.test 全部 + lifecycle.coverage 的 2 条） | 本批提交 | 10 | 0 | 0 | 0 | 0 | 0 | 10 | 是 |
 | cancel（cancel.test 全部 + lifecycle.coverage 余下 1 条，该文件至此清空） | 本批提交 | 16 | 0 | 0 | 0 | 0 | 0 | 16 | 是 |
 | helper+logger（helper.coverage、logger.coverage） | 本批提交 | 38 | 0 | 0 | 0 | 0 | 0 | 38 | 是 |
+| core（core.coverage） | 本批提交 | 22 | 0 | 0 | 0 | 0 | 0 | 22 | 是 |
 
 ## 映射
 
@@ -518,3 +519,11 @@ A 批（单插件规则/补丁/覆盖文件）迁移进行中，基线冻结于 
 | test/helper.coverage.test.ts::helper — 原始请求体与单次尝试钩子 > structuredClone 缺失或失败均回退原引用 | unit/helper.unit.test.ts::helper — 原始请求体与单次尝试钩子 > [helper.withRawRequest] structuredClone 缺失或失败均回退原引用 | rename | 纯函数，台账无 id |  |
 | test/helper.coverage.test.ts::helper — 原始请求体与单次尝试钩子 > 钩子按登记顺序运行且注销幂等，运行中注销不改变本次快照 | integration/helper.integration.test.ts::helper — 原始请求体与单次尝试钩子 > [helper.registerAttemptHook][helper.runAttempt] 钩子按登记顺序运行且注销幂等，运行中注销不改变本次快照 | rename | 以 axios 实例为键的尝试钩子装配，台账无 id |  |
 | test/helper.coverage.test.ts::helper — 原始请求体与单次尝试钩子 > 请求准备失败不发送网络，错误钩子可恢复并交给后续响应钩子 | integration/helper.integration.test.ts::helper — 原始请求体与单次尝试钩子 > [helper.registerAttemptHook][helper.runAttempt] 请求准备失败不发送网络，错误钩子可恢复并交给后续响应钩子 | rename | 以 axios 实例为键的尝试钩子装配，台账无 id |  |
+| test/core.coverage.test.ts::Response — 状态边界与信封形状 > status=%i code=%s successful=%s（each） | unit/response.unit.test.ts::Response — 状态边界与信封形状 > [public.member.AxpResponse.isSuccessful][public.member.AxpResponse.successful] status=%i code=%s successful=%s | rename | 纯函数（each） |  |
+| test/core.coverage.test.ts::Response — 状态边界与信封形状 > 缺失响应字段 %s 使用安全默认值（each） | unit/response.unit.test.ts::Response — 状态边界与信封形状 > [public.member.AxpResponse.fromResponse][public.member.AxpResponse.constructor] 缺失响应字段 %s 使用安全默认值 | rename | 纯函数（each） |  |
+| test/core.coverage.test.ts::Response — 状态边界与信封形状 > 信封中空串、false 和 0 不被默认值吞掉，数组即使带 code 也视为原始 body | unit/response.unit.test.ts::Response — 状态边界与信封形状 > [public.member.AxpResponse.fromResponse][public.member.AxpResponse.data][public.member.AxpResponse.message] 信封中空串、false 和 0 不被默认值吞掉，数组即使带 code 也视为原始 body | rename | 纯函数 |  |
+| test/core.coverage.test.ts::Response — 状态边界与信封形状 > AxpError 保留响应身份和空消息，缺省消息包含状态与业务码 | unit/response.unit.test.ts::Response — 状态边界与信封形状 > [public.export.ApiError][public.member.ApiError.response][public.member.ApiError.constructor] AxpError 保留响应身份和空消息，缺省消息包含状态与业务码 | rename | 单个类 |  |
+| test/core.coverage.test.ts::Response — 状态边界与信封形状 > 构造与 fromResponse 都使用可覆盖的成功判定 | unit/response.unit.test.ts::Response — 状态边界与信封形状 > [public.member.AxpResponse.isSuccessful][public.member.AxpResponse.fromResponse][public.member.AxpResponse.constructor] 构造与 fromResponse 都使用可覆盖的成功判定 | rename | 单个类 |  |
+| test/core.coverage.test.ts::Core — 合并优先级与返回形状 > 请求选项覆盖方法选项和 payload，raw 优先于 wrap | integration/core.integration.test.ts::Core — 合并优先级与返回形状 > [public.member.Core.get][public.member.Core.axios] 请求选项覆盖方法选项和 payload，raw 优先于 wrap | rename | 用真实 axios 实例装配 Core 并发请求，属装配层 |  |
+| test/core.coverage.test.ts::Core — 合并优先级与返回形状 > 非完整信封 %s 原样返回（each） | integration/core.integration.test.ts::Core — 合并优先级与返回形状 > [public.member.Core.get] 非完整信封 %s 原样返回 | rename | 同上（each） |  |
+| test/core.coverage.test.ts::Core — 合并优先级与返回形状 > 默认 create 创建独立 axios，构造保留既有 transitional 配置 | integration/core.integration.test.ts::Core — 合并优先级与返回形状 > [public.fn.Axp.create][public.member.Core.constructor][public.member.Core.axios] 默认 create 创建独立 axios，构造保留既有 transitional 配置 | rename | create 与 axios 实例的装配 |  |
