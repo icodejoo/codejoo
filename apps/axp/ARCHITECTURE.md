@@ -4,7 +4,7 @@
 
 这是导读，不是规格。字段级细节、选项表、行为变化都在 [docs/design](docs/design/)，文中遇到会给链接，不在这里重抄。
 
-<!-- TODO: 待实现确认：§2 的内核文件已对照 src/ 核对（B1、B2）；plugins/ 下的 retry、auth、mock、share、cache，objects/TokenManager.ts，以及 index.ts 和子路径入口，等 B3、B4、B6 落地后复核。旧实现（core.ts、install.ts、helper.ts、bag.ts 等）B5 才删除，目前与新内核并存。 -->
+<!-- TODO: 待实现确认：§2 的内核文件（B1、B2）、plugins/ 下的 retry、auth、mock、share、cache 与三个算法模块、objects/TokenManager.ts（B3、B4）已对照 src/ 核对；index.ts 和子路径入口等 B6 落地后复核。旧实现（core.ts、install.ts、helper.ts、bag.ts、objects/Response.ts，以及 plugins/ 下的 cancel.ts、key.ts、logger.ts、normalize.ts）B5 才删除，目前与新内核并存。 -->
 
 ## 1. 一段话概述
 
@@ -29,11 +29,14 @@
 | `response.ts` | `IAxpResponse`、`AxpResponse`、`IAxpResponseFactory`、`axpResponse()`、`isAxpResponse` |
 | `brand.ts` | 响应品牌 `AXP_RESPONSE` 和类别常量 `AXP_KINDS`。零导入的叶子模块，验收执行器可以直接用 Node 原生加载 |
 | `key.ts` | key 服务（哈希算法从旧的 `plugins/key.ts` 迁来） |
-| `methods.ts` | 十个动词按 payload 去向（`data` 或 `params`）分组，client 和 key 共用 |
+| `methods.ts` | 十个动词按 payload 去向（`data` 或 `params`）分组，`normalizeMethod` 统一方法大小写；client、key 和按方法判断的插件（retry、auth、share、cache）共用 |
 | `utils.ts` | 共用小件：纯对象判断、`defaults` 克隆与写回、默认头展平、通知回调隔离 |
 | `types.ts` | Schema 推断（沿用现有机制）、请求选项、插件类型、`AxpLogger` |
-| `plugins/*.ts` | 10 个内置插件 |
-| `objects/TokenManager.ts` | 令牌管理，保留，去掉了 `canRefresh` |
+| `plugins/*.ts` | 10 个内置插件，一个插件一个文件 |
+| `plugins/retry-timing.ts` | retry 的纯算法：默认退避、抖动与封顶、`Retry-After` 解析（秒数或 HTTP 日期）、可取消的等待 |
+| `plugins/auth-match.ts` | auth 的纯算法：`methods`、`urlPattern` 的编译与匹配（优先 URLPattern，不可用时回退正则） |
+| `plugins/cache-store.ts` | cache 的纯算法：同步内存 LRU 仓、`IAxpCacheStore` 接口、防止旧响应覆盖新结果的新鲜度屏障 |
+| `objects/TokenManager.ts` | 令牌管理：`ITokenManager` 接口和默认实现 `TokenManager`（内存存放，镜像到 `localStorage`），去掉了 `canRefresh` |
 | `index.ts` | 包入口，见下 |
 
 `debug` 没有独立的文件：`createAxp` 按选项挑日志器（`true` 用 `console`，对象原样用，关闭时用 `context.ts` 里共享的空实现 `NO_LOG`），插件经 `ctx.log` 使用。
@@ -126,7 +129,7 @@ api.get('/pet/{id}')(payload, opts)        一次调用 = 一个逻辑请求
 
 **请求不可变**：中间件不改 `ctx.request`，要给内层换请求就调 `next(patch)`。内核把 patch 浅合并成新请求交给内层，`headers` 多合并一层；patch 里某个字段写 `undefined`，表示把它从请求里删掉。同一层连续调两次 `next()`，拿到的是同一个基准请求，所以重发天然是"干净"的，不用再保存原始请求体快照，也不用 `axp:share`、`axp:cache` 那类保活键。
 
-**signal**：传输层用 `request.signal ?? ctx.signal`。share 用 patch 换成共享的 controller signal，这样首发请求被取消时不会连累跟随者。
+**signal**：传输层用 `request.signal ?? ctx.signal`。share 的 `start` 策略用 patch 换成共享的 controller signal，这样首发请求被取消时不会连累跟随者；`end`、`race` 每个调用各发各的请求，不换 signal。
 
 ## 6. 归一化响应
 

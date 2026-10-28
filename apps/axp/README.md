@@ -294,14 +294,21 @@ Stage: `attempt`. Active as soon as it is installed; retries up to 2 times by de
 | `max` | `2` | Maximum number of retries |
 | `methods` | `get put head delete options trace` | Hard veto: a method not in this list is never retried, even if `shouldRetry` says yes |
 | `statusCodes` | `[408, 429, 500, 502, 503, 504]` | Checked against `r.status` (the logical status) |
-| `shouldRetry(r, attempt, ctx)` | — | A boolean is final; `undefined` falls through to the next check |
-| `delay` | `attempt => 300 * 2 ** (attempt - 1)` | A number, or a function `(attempt, max, r) => number` |
-| `jitter` | — | `true`, or `(delay) => number` |
-| `delayMax` | `10_000` | Caps only the delay the plugin computes itself |
+| `shouldRetry(r, attempt, ctx)` | — | A boolean is final; any other return value (including `undefined`) falls through to the next check |
+| `delay` | `attempt => 300 * 2 ** (attempt - 1)` | A number, or a function `(attempt, max, r) => number`; a non-number result counts as 0 |
+| `jitter` | — | `true` (uniform random between 0 and the delay), or `(delay) => number` (a negative, `NaN` or `Infinity` result keeps the original delay) |
+| `delayMax` | `10_000` | Caps only the delay the plugin computes itself, applied after jitter |
 | `respectRetryAfter` | `true` | Whether to honor the `Retry-After` header |
 | `afterStatusCodes` | `[413, 429, 503]` | Only these statuses honor `Retry-After`; checked against `r.status` |
 | `retryAfterMax` | `Infinity` | Upper bound for a wait derived from `Retry-After` |
-<!-- TODO: 待实现确认：Retry-After 的具体行为（优先级、与 delayMax、jitter 的关系）设计只列了选项和默认值，下面的描述沿用旧版行为 -->
+
+How `Retry-After` works:
+
+- It is only consulted after the decision to retry has been made. The header is read only if `respectRetryAfter` is on and `r.status` (the logical status) is in `afterStatusCodes`. The header comes from the raw HTTP response, so an HTTP 200 with a business code of 429 works too, as long as the response carries `Retry-After`.
+- The value can be a number of seconds or an HTTP date (converted to a wait using the current clock). If it is missing or can't be parsed, the plugin falls back to the local `delay`.
+- When it can be parsed, it wins: the wait is exactly what the header says. `delay` is not called, `jitter` is not applied, `delayMax` does not limit it, and only `retryAfterMax` caps it.
+- A negative value, or a date already in the past, counts as 0: the retry goes out immediately, without falling back to `delay`.
+- When it falls back to the local delay, the order is: compute `delay`, apply `jitter`, then cap with `delayMax`.
 
 Per request: a number sets `max`; `false` turns it off; `true` uses the plugin configuration; an object overrides fields.
 
@@ -313,6 +320,8 @@ Decision order. Each step can end the decision early:
 4. `shouldRetry` returns a boolean: use it.
 5. `r.kind` is `network` or `timeout`: retry.
 6. Otherwise: `statusCodes.includes(r.status)`.
+
+There is no `r.ok` step in this order: successful responses are passed to `shouldRetry` too. Under the default rules a success is not retried; if a custom `shouldRetry` returns `true`, a successful response is retried, for example a success that your business logic treats as an error.
 
 At runtime:
 
@@ -336,23 +345,24 @@ Stage: `credential`. Handles token guarding, single-flight refresh on 401/403, a
 | --- | --- | --- |
 | `tokenManager` | **required** | An `ITokenManager` instance |
 | `onRefresh(r, tm)` | **required** | Return `false` or throw to fail the refresh. Only one refresh runs at a time |
-| `onAccessExpired(r, tm)` | **required** | The session has expired. Notified once per round |
-| `onAccessDenied(r, tm)` | same as `onAccessExpired` | Forbidden (403), or no token locally |
+| `onAccessExpired(r, tm)` | **required** | The session has expired. On the 401 / refresh-failure path, notified once per round |
+| `onAccessDenied(r, tm)` | same as `onAccessExpired` | Forbidden (403), or no token locally. With no token locally, called once for every protected request, with no de-duplication |
 | `onFailure(r, tm, ctx)` | `defaultAuthFailure` | Returns one of the `AuthFailureAction` values |
-| `methods` / `urlPattern` | `'*'` | Decides whether a request is protected. `urlPattern` uses URLPattern syntax; `!` negates |
-| `isProtected(request)` | — | A boolean is the final answer |
+| `methods` / `urlPattern` | `'*'` | Decides whether a request is protected. `urlPattern` only matches the pathname, uses URLPattern syntax; `!` negates |
+| `isProtected(request)` | — | A boolean is the final answer. Evaluated once at the start of each attempt: every retry round evaluates it again, a replay after a refresh does not |
 | `ready(tm, request)` | writes the `Authorization` header | Returns an `AxpRequestPatch` |
-<!-- TODO: 待实现确认：AuthFailureAction 的五个动作里，除 refresh、replay、deny、expired 外，第五个的名称未写明（设计里只说"其它则原样返回"） -->
 
-Per request: `protected: boolean`.
+`AuthFailureAction` is a constant object with five actions: `Refresh` (`'refresh'`), `Replay` (`'replay'`), `Deny` (`'deny'`), `Expired` (`'expired'`) and `Others` (`'others'`, a failure unrelated to auth, returned as-is). If `onFailure` returns `null`, `undefined` or an unknown value, it behaves like `Others`.
+
+Per request: `protected: boolean`, which takes precedence over `isProtected`, `methods` and `urlPattern`.
 
 Main flow:
 
 1. An unprotected request goes straight through.
-2. No token locally: call `onAccessDenied` and return a result with `kind: 'auth'` and `reason: 'unauthenticated'`.
-3. A refresh is already running: wait for its result. If it fails, treat the session as expired.
-4. Inject the token and send the request. On success, return it.
-5. On failure, `onFailure` decides: `refresh` refreshes and replays once; `replay` replays once with the current token; `deny` calls `onAccessDenied`; `expired` clears the token and calls `onAccessExpired`; anything else is returned as-is.
+2. A refresh is already running: wait for its result. If it fails, treat the session as expired and return `reason: 'expired'`. If the caller cancels while waiting, only that caller ends.
+3. No token locally: call `onAccessDenied` and return a result with `kind: 'auth'` and `reason: 'unauthenticated'`. Every protected request goes through this, with no de-duplication. If `onAccessDenied` isn't set, `onAccessExpired` is what gets called, so between expiry and the next login, every protected request notifies once.
+4. Inject the token and send the request. On success, return it; `internal` (a programming error) and `cancel` results also skip `onFailure` and are returned as-is.
+5. On failure, `onFailure` decides: `refresh` refreshes and replays once; `replay` replays once with the current token; `deny` calls `onAccessDenied` and returns `reason: 'denied'`; `expired` clears the token, calls `onAccessExpired` and returns `reason: 'expired'`; anything else is returned as-is. `onFailure` may be async; if the caller cancels while it is running, the call settles as cancelled and nothing is notified.
 6. If the replay still asks for a refresh or a replay, treat the session as expired. This prevents loops.
 
 The default `defaultAuthFailure` only looks at the logical status:
@@ -363,9 +373,11 @@ The default `defaultAuthFailure` only looks at the logical status:
 
 Because it reads `r.status`, an HTTP 200 response with a business code of 401 is handled the same way.
 
-You don't have to manage refresh availability yourself. When an expiry is detected, the plugin records the token at that moment. It won't refresh or re-notify about expiry until the token changes. Writing a new token on login re-enables everything automatically, so the login flow doesn't need to flip any flag.
+You don't have to manage refresh availability yourself. When an expiry is detected, the plugin clears the token and records the cleared state. Until that state changes, it won't refresh or re-notify about expiry. Writing a new token on login re-enables everything automatically, so the login flow doesn't need to flip any flag.
 
-`TokenManager` implements `ITokenManager`: `accessToken` (a getter that returns `Bearer <token>`), `refreshToken`, `set(access?, refresh?)` and `clear()`. The default implementation persists to `localStorage`.
+Refresh is single-flight: only one runs at a time, and other requests queue for its result. Cancelling only ends the request that started or queued, and the refresh itself runs to completion. If `onRefresh` throws, it counts as a failed refresh and is not rethrown; a warning is logged only when `debug` is on.
+
+`ITokenManager` requires `accessToken` (getter), `refreshToken` (getter), `set(access?, refresh?)` and `clear()`. The default `TokenManager` returns `Bearer <token>` from `accessToken` (or `undefined` when there is no token); `set` takes the bare token without the `Bearer ` prefix, and omitting a value or passing an empty one clears it. It persists to `localStorage` and restores the previous session when constructed; if storage is unavailable it works in memory only and doesn't throw.
 
 ```ts
 axpAuth({
@@ -385,13 +397,14 @@ Stage: `source` (built-in order 1). Off by default.
 | --- | --- | --- |
 | `enable` | `false` | Usually set to `import.meta.env.DEV` |
 | `mock` | `false` | `true` sends every request to the mock |
-| `mockUrl` | — | Base URL of the mock server |
+| `mockUrl` | — | Base URL of the mock server. When it is not set (or is an empty string), mock is skipped and the request goes straight to the real endpoint |
 | `fallbackWhen(r)` | `r.httpStatus === 404 \|\| r.kind === 'network'` | When true, falls back to the real endpoint |
-<!-- TODO: 待实现确认：mockUrl 没有配置时的行为未写明 -->
 
-Per request: `false` or `{ enable: false }` turns it off; `true` turns it on for this call only; an object can override `mockUrl` and `fallbackWhen`.
+Per request: `false` or `{ enable: false }` turns it off; `true` or any object (including an empty one) turns it on for this call, and an object can override `mockUrl` and `fallbackWhen`. This requires the plugin-level `enable` to be true: a per-request switch can't turn on a plugin that is off.
 
-At runtime, the request is first rewritten to `mockUrl` as a probe (`cache: false`, `share: false`). The probe result is not written to the cache and doesn't take a share slot. If `fallbackWhen(r)` is true, the request then goes to the real endpoint.
+Without a `mockUrl` (none at plugin level or per request, or an empty string; a per-request empty string does not fall back to the plugin level), the call is not probed and is sent to the real endpoint as-is. With `debug` on, one warning is logged.
+
+At runtime, the request is first rewritten to `mockUrl` as a probe (`cache: false`, `share: false`). The probe result is not written to the cache and doesn't take a share slot. If `fallbackWhen(r)` is true, the request then goes to the real endpoint. Rewrite rules: a relative URL is appended to `mockUrl`; an absolute URL loses its original origin but keeps its path, query and hash; a request with no `url` has its `baseURL` rewritten.
 
 ```ts
 axpMock({ enable: import.meta.env.DEV, mockUrl: 'http://localhost:4000' });
@@ -429,19 +442,20 @@ Stage: `source` (built-in order 3). Off by default; opted in per request.
 | Option | Default | Description |
 | --- | --- | --- |
 | `expires` | `60_000` | Time to live, in milliseconds |
-| `max` | `500` | LRU capacity. `Infinity` means no limit; values below 1 fall back to 500 |
+| `max` | `500` | LRU capacity. `Infinity` means no limit; values below 1 fall back to 500. Ignored once you inject a `store` |
 | `methods` | `['get', 'head']` | Other methods are never cached, even if opted in per request |
-| `clone` | — | `'shallow'`, `'deep'`, or `(data) => data`, applied to `r.data` |
+| `clone` | — | `'shallow'`, `'deep'`, or `(data) => data`, applied to `r.data`. No copy by default: the caller shares the same reference |
 | `shouldCache(r)` | `r.ok` | Decides which results are written to the cache |
 | `store` | in-memory LRU | Implements `IAxpCacheStore<R>` (synchronous `get`, `set`, `delete`, `clear`, `size`). A persistent store will come later |
 
-Per request: `true`; a number sets `expires`; an object `{ expires, key, clone, shouldCache }`, where `key` is an explicit cache key; `false` turns it off.
+Per request: `true`; a number sets `expires`; an object `{ expires, key, clone, shouldCache }`, where `key` is an explicit cache key; `false` turns it off. An explicit key doesn't go through the key service, so it carries no `scope`, and it takes precedence over a per-request `key: false`; an empty string or a non-string key falls back to the key service.
 
 - A hit returns the cached `R` directly (its `data` is copied according to `clone`). It doesn't touch the network and doesn't run `transformResponse` again. What is cached is the result after the check.
+- On a miss, a successful result is also copied according to `clone` before it is returned; a failed result is returned as-is, without going through `clone`. `clone: 'deep'` relies on `structuredClone`; if the environment doesn't have it, the call throws before the request is sent instead of silently degrading to a shallow copy.
 - A response that started earlier but returned later doesn't overwrite a newer result. After `clear()`, requests still in flight won't write their results back.
 - Expired entries are removed lazily, when they are read. Sweeping only happens when a write exceeds capacity.
 - Only GET and HEAD are cached by default. A POST with `cache: true` on the request is still not cached; to cache POST, change `methods` at the plugin level.
-<!-- TODO: 待实现确认：缓存键为 null（参数里有 FormData 等不可哈希值）时 cache 是否直通。设计只对 share 写明了直通 -->
+- When the cache key is `null` (a per-request `key: false`, or params with an unhashable value such as `FormData`; see the key section), cache passes through: the request is sent as-is, and the cache is neither read nor written. A per-request `cache: { key }` with an explicit key is unaffected and caches as usual.
 
 Operations:
 
