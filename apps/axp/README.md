@@ -325,7 +325,7 @@ Strips empty `params`/`data` fields before send.
 
 | option | type | default |
 | --- | --- | --- |
-| `predicate` | `(kv: [key, value]) => boolean` | drops `null`/`undefined`/`NaN`/blank string |
+| `predicate` | `(kv: [key, value]) => boolean` | drops `null`/`undefined`/`NaN`/blank string; an entry is dropped only when it returns exactly `true` |
 | `ignoreKeys` / `ignoreValues` | `array` | — |
 
 Request field `filter`: `false` \| `true` \| `IFilterOptions` \| `(config) => …`.

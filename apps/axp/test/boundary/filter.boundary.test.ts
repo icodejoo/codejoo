@@ -67,7 +67,7 @@ describe('filter — 插件选项边界', () => {
         expect(adapter).not.toHaveBeenCalled();
     });
 
-    it.fails('[filter.cb.predicate] 期望（源码注释声明 === true 才丢弃）：返回 1 / Promise 视为保留；现状是真值即丢弃', async () => {
+    it('[filter.cb.predicate] 仅返回 === true 才丢弃：返回 1 / Promise 视为保留', async () => {
         const { ax, sent } = setup({ predicate: (([k]: [string, any]) => (k === 'n' ? 1 : Promise.resolve(true))) as any });
         await ax.get('/', { params: { n: 'x', p: 'y' }, filter: true });
         expect(sent().params).toEqual({ n: 'x', p: 'y' });
