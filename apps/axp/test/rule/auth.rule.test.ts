@@ -3,6 +3,10 @@ import auth, { AuthFailureAction as Action } from '../../src/plugins/auth';
 import type { ITokenManager } from '../../src/objects/TokenManager';
 import axios, { AxiosError } from 'axios';
 import TokenManager from '../../src/objects/TokenManager';
+import { Axp } from '../../src';
+import { makeNetwork } from '../helpers/network';
+import { use } from '../helpers/install';
+import { FakeTokenManager } from '../helpers/auth';
 
 /** 极简 TokenManager 替身：accessToken getter 加 Bearer 前缀（与真实实现一致） */
 function makeTM(token?: string): ITokenManager {
@@ -182,4 +186,63 @@ describe('auth — 业务失败的终态标记与原始错误', () => {
         await ax.get('/', { protected: predicate });
         expect(predicate).toHaveBeenCalledOnce();
     });
+});
+
+/** 装好网络仿真的 Core 工厂 */
+function mkApi() {
+  const net = makeNetwork();
+  const api = Axp.create(axios.create({ adapter: net.adapter }));
+  return { net, api };
+}
+
+describe('auth: additional realistic branches', () => {
+  it('[auth.cb.onAccessDenied][auth.cb.onAccessExpired] a custom onAccessDenied callback is used (instead of falling back to onAccessExpired) when a protected request has no token', async () => {
+    const { net, api } = mkApi();
+    net.fallback(() => ({ data: { code: 0, data: null } }));
+    const tm = new FakeTokenManager(undefined);
+    let denied = 0;
+    let expired = 0;
+    use(api, [auth({
+      tokenManager: tm as any,
+      onRefresh: async () => {},
+      onAccessExpired: async () => { expired++; },
+      onAccessDenied: async () => { denied++; },
+    })]);
+
+    await expect(api.axios.get('/data')).rejects.toBeTruthy();
+    expect(denied).toBe(1);
+    expect(expired).toBe(0);
+  });
+
+  it('[auth.cb.onFailure][auth.cb.onAccessDenied] a custom onFailure callback can force the deny or expired action directly, regardless of the default classification', async () => {
+    const { net, api } = mkApi();
+    net.fallback(() => ({ status: 401, data: { code: 1, data: null } }));
+    const tm1 = new FakeTokenManager('t0');
+    let denied = 0;
+    use(api, [auth({
+      tokenManager: tm1 as any,
+      onRefresh: async () => {},
+      onAccessExpired: async () => {},
+      onAccessDenied: async () => { denied++; },
+      onFailure: () => Action.Deny,
+    })]);
+    await expect(api.axios.get('/data')).rejects.toBeTruthy();
+    expect(denied).toBe(1);
+  });
+
+  it('[auth.cb.isProtected] isProtected decides per-request whether auth applies at all', async () => {
+    const { net, api } = mkApi();
+    net.fallback(() => ({ data: { code: 0, data: null } }));
+    const tm = new FakeTokenManager(undefined);
+    use(api, [auth({
+      tokenManager: tm as any,
+      onRefresh: async () => {},
+      onAccessExpired: async () => {},
+      isProtected: (config) => config.url?.startsWith('/protected') ?? false,
+    })]);
+
+    const r = await api.axios.get('/public');
+    expect(r.status).toBe(200);
+    await expect(api.axios.get('/protected/x')).rejects.toBeTruthy();
+  });
 });

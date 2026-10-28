@@ -1,5 +1,9 @@
 import { describe, it, expect } from 'vitest';
 import repath from '../../src/plugins/repath';
+import axios from 'axios';
+import { Axp } from '../../src';
+import { makeNetwork } from '../helpers/network';
+import { use } from '../helpers/install';
 
 /** 捕获 request 拦截器的极简 axios */
 function makeMockAxios() {
@@ -111,4 +115,58 @@ describe('repath — enable 开关', () => {
         run(config);
         expect(config.url).toBe('/u/8');
     });
+});
+
+/** 装好网络仿真的 Core 工厂 */
+function mkApi() {
+  const net = makeNetwork();
+  const api = Axp.create(axios.create({ adapter: net.adapter }));
+  return { net, api };
+}
+
+describe('repath', () => {
+  it('[repath.fn.axpRepath][repath.opt.removeKey] {id}/:id placeholders are substituted from params, and removed from it by default', async () => {
+    const { net, api } = mkApi();
+    let seenUrl = '';
+    net.on('GET', '/user/42/posts/7', (config) => { seenUrl = config.url ?? ''; return { data: { code: 0, data: null } }; });
+    use(api, [repath()]);
+
+    const r = await api.axios.get('/user/{id}/posts/:postId', { params: { id: 42, postId: 7, page: 1 } });
+    expect(seenUrl).toBe('/user/42/posts/7');
+    expect(r.config.params).toEqual({ page: 1 });
+  });
+
+  it('[repath.fn.axpRepath][repath.opt.removeKey] falls back to the data map when a placeholder is not in params, and removeKey:false keeps the source key', async () => {
+    const { net, api } = mkApi();
+    let seenUrl = '';
+    net.on('POST', '/user/99', (config) => { seenUrl = config.url ?? ''; return { data: { code: 0, data: null } }; });
+    use(api, [repath({ removeKey: false })]);
+
+    const r = await api.axios.post('/user/{id}', { id: 99 });
+    expect(seenUrl).toBe('/user/99');
+    // r.config.data reflects the post-transformRequest value (axios's
+    // default JSON.stringify runs between repath's interceptor and here).
+    expect(JSON.parse(r.config.data as string)).toEqual({ id: 99 });
+  });
+
+  it('[repath.fn.axpRepath][repath.opt.removeKey] the default removeKey:true also removes a data-map substitution', async () => {
+    const { net, api } = mkApi();
+    let seenUrl = '';
+    net.on('POST', '/user/99', (config) => { seenUrl = config.url ?? ''; return { data: { code: 0, data: null } }; });
+    use(api, [repath()]);
+
+    const r = await api.axios.post('/user/{id}', { id: 99 });
+    expect(seenUrl).toBe('/user/99');
+    expect(JSON.parse(r.config.data as string)).toEqual({});
+  });
+
+  it('[repath.opt.enable] a constructor-level disabled repath never substitutes', async () => {
+    const { net, api } = mkApi();
+    let seenUrl = '';
+    net.fallback((config) => { seenUrl = config.url ?? ''; return { data: { code: 0, data: null } }; });
+    use(api, [repath({ enable: false })]);
+
+    await api.axios.get('/user/{id}', { params: { id: 42 } });
+    expect(seenUrl).toBe('/user/{id}');
+  });
 });

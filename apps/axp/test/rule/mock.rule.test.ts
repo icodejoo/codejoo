@@ -1,6 +1,9 @@
 import { describe, expect, it, vi } from 'vitest';
 import axios from 'axios';
 import mock from '../../src/plugins/mock';
+import { Axp } from '../../src';
+import { makeNetwork } from '../helpers/network';
+import { use } from '../helpers/install';
 
 /** 构造指定状态和路径的 adapter 响应。 */
 function response(config: any, status = 200) {
@@ -26,4 +29,44 @@ describe('mock — 回落决策与 adapter 配置隔离', () => {
         expect(global).not.toHaveBeenCalled();
         expect(local).toHaveBeenCalledOnce();
     });
+});
+
+/** 装好网络仿真的 Core 工厂 */
+function mkApi() {
+  const net = makeNetwork();
+  const api = Axp.create(axios.create({ adapter: net.adapter }));
+  return { net, api };
+}
+
+describe('mock: mockUrl redirect path', () => {
+  it('[mock.opt.mockUrl][mock.cb.fallbackWhen] a successful mock-server response is returned directly, and a fallback-triggering one instead falls back to the real API', async () => {
+    const { net, api } = mkApi();
+    net.on('GET', '/mockbase/data', () => ({ data: { code: 0, data: { v: 'mocked' } } }));
+    net.on('GET', '/data', () => ({ data: { code: 0, data: { v: 'real' } } }));
+    use(api, [mock({ enable: true, mockUrl: '/mockbase' })]);
+
+    const r1: any = await api.axios.get('/data', { mock: true } as any);
+    expect(r1.data.data.v).toBe('mocked');
+
+    const { net: net2, api: api2 } = mkApi();
+    net2.on('GET', '/mockbase/data', () => ({ data: { code: 0, data: { v: 'mocked' } } }));
+    net2.on('GET', '/data', () => ({ data: { code: 0, data: { v: 'real' } } }));
+    use(api2, [mock({ enable: true, mockUrl: '/mockbase', fallbackWhen: () => true })]);
+    const r2: any = await api2.axios.get('/data', { mock: true } as any);
+    expect(r2.data.data.v).toBe('real');
+  });
+
+  it('[mock.cb.fallbackWhen][mock.opt.mockUrl] a mock server that errors outright falls back to the real API when fallbackWhen says so, and rejects otherwise', async () => {
+    const { net, api } = mkApi();
+    net.on('GET', '/data', () => ({ data: { code: 0, data: { v: 'real' } } }));
+    net.on('GET', '/deadmock/data', () => { throw new Error('ECONNREFUSED'); });
+    use(api, [mock({ enable: true, mockUrl: '/deadmock', fallbackWhen: () => true })]);
+    const r1: any = await api.axios.get('/data', { mock: true } as any);
+    expect(r1.data.data.v).toBe('real');
+
+    const { net: net2, api: api2 } = mkApi();
+    net2.on('GET', '/deadmock/data', () => { throw new Error('ECONNREFUSED'); });
+    use(api2, [mock({ enable: true, mockUrl: '/deadmock', fallbackWhen: () => false })]);
+    await expect(api2.axios.get('/data', { mock: true } as any)).rejects.toBeTruthy();
+  });
 });

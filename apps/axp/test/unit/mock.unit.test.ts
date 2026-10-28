@@ -117,3 +117,13 @@ describe('$shouldFallback — 默认“mock 不存在”判定', () => {
         expect($shouldFallback({ error: { name: 'CanceledError' } })).toBe(false);
     });
 });
+
+describe('mock: mockUrl redirect path', () => {
+  it('[mock.fn.$shouldFallback][mock.cb.fallbackWhen] $shouldFallback: 404 or a non-cancel network error triggers fallback; a cancel or any other status does not', () => {
+    expect($shouldFallback({ response: { status: 404 } as any })).toBe(true);
+    expect($shouldFallback({ response: { status: 200 } as any })).toBe(false);
+    expect($shouldFallback({ error: { code: 'ECONNREFUSED' } })).toBe(true);
+    expect($shouldFallback({ error: { code: 'ERR_CANCELED' } })).toBe(false);
+    expect($shouldFallback({})).toBe(false);
+  });
+});

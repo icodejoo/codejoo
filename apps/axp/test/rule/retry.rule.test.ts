@@ -277,3 +277,23 @@ describe('retry — 循环终止与 Header 边界', () => {
         expect(adapter).toHaveBeenCalledOnce();
     });
 });
+
+describe('retry: business-failure loop exhaustion and error-path behavior', () => {
+  it('[retry.opt.enable] a constructor-disabled retry never intercepts a network error at all', async () => {
+    const { net, api } = mkApi();
+    let attempts = 0;
+    net.fallback(() => { attempts++; return { status: 500, data: { code: 1, data: null } }; });
+    use(api, [retry({ max: 2, delay: 0, enable: false })]);
+    await expect(api.axios.get('/data', { retry: 2 } as any)).rejects.toBeTruthy();
+    expect(attempts).toBe(1);
+  });
+
+  it('[retry.opt.statusCodes] aligned with Dio\'s default retryIf (which excludes 404): the default shouldRetry only retries >=500, so a 404 is never retried', async () => {
+    const { net, api } = mkApi();
+    let attempts = 0;
+    net.fallback(() => { attempts++; return { status: 404, data: { code: 1, data: null } }; });
+    use(api, [retry({ max: 2, delay: 0 })]);
+    await expect(api.axios.get('/data', { retry: 2 } as any)).rejects.toBeTruthy();
+    expect(attempts).toBe(1); // default shouldRetry excludes 404 — no retries fired
+  });
+});

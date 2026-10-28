@@ -10,6 +10,7 @@ import {
     AuthFailureAction as Action,
 } from '../../src/plugins/auth';
 import type { ITokenManager } from '../../src/objects/TokenManager';
+import { FakeTokenManager } from '../helpers/auth';
 
 /** 极简 TokenManager 替身：accessToken getter 加 Bearer 前缀（与真实实现一致） */
 function makeTM(token?: string): ITokenManager {
@@ -152,4 +153,18 @@ describe('auth — URLPattern 原生与回退路径', () => {
             status: 401, config: { headers: { 'x-token': 't' } },
         })).toBe(Action.Refresh);
     });
+});
+
+describe('auth: authFailureFactory classification', () => {
+  const factory = authFailureFactory('Authorization');
+
+  it('[auth.fn.authFailureFactory][auth.const.AuthFailureAction.Replay] no carried header at all classifies as replay (someone else already refreshed before this request even went out)', () => {
+    const tm = new FakeTokenManager('t0');
+    expect(factory(tm as any, { status: 401, config: {} })).toBe(AuthFailureAction.Replay);
+  });
+
+  it('[auth.fn.authFailureFactory][auth.const.AuthFailureAction.Others] a non-401/403 status classifies as Others', () => {
+    const tm = new FakeTokenManager('t0');
+    expect(factory(tm as any, { status: 500 })).toBe(AuthFailureAction.Others);
+  });
 });

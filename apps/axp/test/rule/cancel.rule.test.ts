@@ -1,6 +1,10 @@
 import { describe, it, expect, vi } from 'vitest';
 import cancel, { cancelAll } from '../../src/plugins/cancel';
 import { getInternal } from '../../src/bag';
+import axios from 'axios';
+import { Axp } from '../../src';
+import { makeNetwork } from '../helpers/network';
+import { use } from '../helpers/install';
 
 function makeMockCtx() {
     const reqHandlers: Array<(config: any) => any> = [];
@@ -104,4 +108,32 @@ describe('cancel — enable:false', () => {
         cancel({ enable: false }).install(ax);
         expect(reqHandlers).toHaveLength(0);
     });
+});
+
+/** 装好网络仿真的 Core 工厂 */
+function mkApi() {
+  const net = makeNetwork();
+  const api = Axp.create(axios.create({ adapter: net.adapter }));
+  return { net, api };
+}
+
+describe('cancel: cancelAll bookkeeping', () => {
+  it('[cancel.fn.cancelAll] cancelAll() genuinely aborts an in-flight request and clears its own bookkeeping', async () => {
+    // axios enforces `signal.aborted` in dispatchRequest's own
+    // throwIfCancellationRequested — independent of whether the adapter
+    // itself listens for it — so cancelAll() actually rejects the pending
+    // call even though makeNetwork()'s fake adapter never checks the signal.
+    const { net, api } = mkApi();
+    const { cancelAll } = await import('../../src/plugins/cancel');
+    net.fallback(() => ({ data: { code: 0, data: null } }));
+    use(api, [cancel()]);
+
+    const p = api.axios.get('/data', { latency: 200 } as any); // still in flight below
+    await new Promise((r) => setTimeout(r, 10));
+    const cancelled = cancelAll(api.axios, 'test');
+    expect(cancelled).toBeGreaterThanOrEqual(1);
+    const cancelledAgain = cancelAll(api.axios, 'test');
+    expect(cancelledAgain).toBe(0); // already cleared, nothing left to report
+    await expect(p).rejects.toMatchObject({ code: 'ERR_CANCELED' });
+  });
 });

@@ -1,5 +1,9 @@
 import { describe, it, expect } from 'vitest';
 import filter from '../../src/plugins/filter';
+import axios from 'axios';
+import { Axp } from '../../src';
+import { makeNetwork } from '../helpers/network';
+import { use } from '../helpers/install';
 
 function makeMockAxios() {
     const reqHandlers: Array<(config: any) => any> = [];
@@ -65,4 +69,41 @@ describe('filter — 函数形式解出 falsy / enable:false → 跳过过滤', 
         reqHandlers[0](config);
         expect(config.params).toEqual({ b: '' });
     });
+});
+
+/** 装好网络仿真的 Core 工厂 */
+function mkApi() {
+  const net = makeNetwork();
+  const api = Axp.create(axios.create({ adapter: net.adapter }));
+  return { net, api };
+}
+
+describe('filter', () => {
+  it('[filter.fn.axpFilter][filter.fn.defaultPredicate][filter.req.filter] the default predicate drops empty/whitespace-only strings, null and NaN, and filters both params and data the same way', async () => {
+    const { net, api } = mkApi();
+    let seenParams: any;
+    let seenData: any;
+    net.on('GET', '/data', (config) => { seenParams = config.params; return { data: { code: 0, data: null } }; });
+    net.on('POST', '/data', (config) => { seenData = config.data; return { data: { code: 0, data: null } }; });
+    use(api, [filter()]);
+
+    await api.axios.get('/data', { params: { keep: 'x', blank: '   ', empty: '' }, filter: true } as any);
+    expect(seenParams).toEqual({ keep: 'x' });
+
+    await api.axios.post('/data', { keep: 1, dropMe: null, blank: '  ' }, { filter: true } as any);
+    // axios's default transformRequest JSON.stringifies the body between
+    // filter's request interceptor and the adapter — the mock route
+    // handler sees the post-transform string, not the live object.
+    expect(JSON.parse(seenData)).toEqual({ keep: 1 });
+  });
+
+  it('[filter.req.filter] without config.filter:true, filter is a no-op (per-request opt-in, unlike Dio\'s always-on DiomanFilter)', async () => {
+    const { net, api } = mkApi();
+    let seenParams: any;
+    net.on('GET', '/data', (config) => { seenParams = config.params; return { data: { code: 0, data: null } }; });
+    use(api, [filter()]);
+
+    await api.axios.get('/data', { params: { blank: '' } });
+    expect(seenParams).toEqual({ blank: '' });
+  });
 });

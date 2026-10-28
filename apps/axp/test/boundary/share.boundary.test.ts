@@ -2,6 +2,9 @@ import { describe, it, expect, vi, afterEach } from 'vitest';
 import type { AxiosAdapter, AxiosRequestConfig, AxiosResponse, InternalAxiosRequestConfig } from 'axios';
 import share, { $createEntry, $end, $race, $start, $follow, $rebindError } from '../../src/plugins/share';
 import axios, { AxiosError, CanceledError } from 'axios';
+import { Axp } from '../../src';
+import { makeNetwork } from '../helpers/network';
+import { use } from '../helpers/install';
 
 // ───────────────────────────────────────────────────────────────────────────
 //  共用：可控 mock adapter
@@ -311,4 +314,22 @@ describe('share — 关闭与清理边界', () => {
         expect(policy).toHaveBeenCalledOnce();
         expect(adapter.mock.calls[1][0]).not.toHaveProperty('share');
     });
+});
+
+/** 装好网络仿真的 Core 工厂 */
+function mkApi() {
+  const net = makeNetwork();
+  const api = Axp.create(axios.create({ adapter: net.adapter }));
+  return { net, api };
+}
+
+describe('share: none policy and no-key no-op', () => {
+  it('[share.fn.axpShare] without key installed, share is a no-op — every call is independent', async () => {
+    const { net, api } = mkApi();
+    let calls = 0;
+    net.on('GET', '/data', () => { calls++; return { data: { code: 0, data: null } }; });
+    use(api, [share({ policy: 'start' })]);
+    await Promise.all([api.axios.get('/data'), api.axios.get('/data')]);
+    expect(calls).toBe(2);
+  });
 });

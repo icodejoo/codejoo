@@ -1,5 +1,9 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import repath from '../../src/plugins/repath';
+import axios from 'axios';
+import { Axp } from '../../src';
+import { makeNetwork } from '../helpers/network';
+import { use } from '../helpers/install';
 
 afterEach(() => { vi.useRealTimers(); vi.restoreAllMocks(); });
 
@@ -118,4 +122,23 @@ describe('repath — 路径边界', () => {
         run(config);
         expect(config.url).toBe('http://localhost:4570/u/5?view=1');
     });
+});
+
+/** 装好网络仿真的 Core 工厂 */
+function mkApi() {
+  const net = makeNetwork();
+  const api = Axp.create(axios.create({ adapter: net.adapter }));
+  return { net, api };
+}
+
+describe('repath', () => {
+  it('[repath.fn.axpRepath] a placeholder with no match in either params or data is left as-is in the path', async () => {
+    const { net, api } = mkApi();
+    let seenUrl = '';
+    net.fallback((config) => { seenUrl = config.url ?? ''; return { data: { code: 0, data: null } }; });
+    use(api, [repath()]);
+
+    await api.axios.get('/user/{id}');
+    expect(seenUrl).toBe('/user/{id}');
+  });
 });

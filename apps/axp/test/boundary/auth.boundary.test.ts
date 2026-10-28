@@ -3,6 +3,10 @@ import auth from '../../src/plugins/auth';
 import type { ITokenManager } from '../../src/objects/TokenManager';
 import axios, { AxiosError } from 'axios';
 import TokenManager from '../../src/objects/TokenManager';
+import { Axp } from '../../src';
+import { makeNetwork } from '../helpers/network';
+import { use } from '../helpers/install';
+import { FakeTokenManager } from '../helpers/auth';
 
 /** 极简 TokenManager 替身：accessToken getter 加 Bearer 前缀（与真实实现一致） */
 function makeTM(token?: string): ITokenManager {
@@ -167,4 +171,67 @@ describe('auth — 业务失败的终态标记与原始错误', () => {
         expect(expired).toHaveBeenCalledOnce();
         expect(b.config.authExpired).toBe(true);
     });
+});
+
+/** 装好网络仿真的 Core 工厂 */
+function mkApi() {
+  const net = makeNetwork();
+  const api = Axp.create(axios.create({ adapter: net.adapter }));
+  return { net, api };
+}
+
+describe('auth: additional realistic branches', () => {
+  it('[auth.cb.onRefresh] a second request arriving while a first request\'s refresh is already in flight awaits the SAME refresh, and is rejected the same way when it fails', async () => {
+    const { net, api } = mkApi();
+    net.fallback(() => ({ status: 401, data: { code: 1, data: null } }));
+    const tm = new FakeTokenManager('t0');
+    let refreshCalls = 0;
+    use(api, [auth({
+      tokenManager: tm as any,
+      onRefresh: async () => { refreshCalls++; await new Promise((r) => setTimeout(r, 20)); throw new Error('refresh failed'); },
+      onAccessExpired: async () => {},
+    })]);
+
+    const [ra, rb] = await Promise.allSettled([
+      api.axios.get('/data'),
+      api.axios.get('/data'),
+    ]);
+    expect(ra.status).toBe('rejected');
+    expect(rb.status).toBe('rejected');
+    expect(refreshCalls).toBe(1); // single-flight refresh — second caller awaited the same one
+  });
+
+  it('[auth.fn.axpAuth] a network-level error with no HTTP response at all is passed through, not misclassified', async () => {
+    const { net, api } = mkApi();
+    net.fallback(() => { throw new Error('ECONNREFUSED'); });
+    const tm = new FakeTokenManager('t0');
+    use(api, [auth({ tokenManager: tm as any, onRefresh: async () => {}, onAccessExpired: async () => {} })]);
+    await expect(api.axios.get('/data')).rejects.toBeTruthy();
+  });
+
+  it('[auth.cb.onRefresh][auth.cb.onAccessExpired][auth.const.AuthFailureAction.Replay] a replay that ALSO fails hits the "already replayed once" guard and gives up immediately rather than refreshing again', async () => {
+    // axios's own `.request()` re-merges a fresh config from defaults each
+    // top-level call (mergeConfig produces a NEW object) — the REFRESHED
+    // bag flag never survives across two SEPARATE `.request()` calls by an
+    // external caller. It only persists across the PLUGIN's own internal
+    // replay (`ctx.axios.request(config)` reusing the same, already-merged
+    // config reference mid-chain), so the guard is only observable within
+    // ONE top-level call whose replay also fails.
+    const { net, api } = mkApi();
+    let attempts = 0;
+    net.fallback(() => { attempts++; return { status: 401, data: { code: 1, data: null } }; });
+    const tm = new FakeTokenManager('t0');
+    let refreshCalls = 0;
+    let expiredCalls = 0;
+    use(api, [auth({
+      tokenManager: tm as any,
+      onRefresh: async () => { refreshCalls++; tm.set('t1'); },
+      onAccessExpired: async () => { expiredCalls++; },
+    })]);
+
+    await expect(api.axios.get('/data')).rejects.toBeTruthy();
+    expect(attempts).toBe(2); // original 401 + one replay, both fail
+    expect(refreshCalls).toBe(1); // guard skipped a second refresh attempt
+    expect(expiredCalls).toBe(1);
+  });
 });

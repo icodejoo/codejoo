@@ -1,5 +1,8 @@
 import { describe, it, expect, vi } from 'vitest';
 import envs from '../../src/plugins/envs';
+import axios from 'axios';
+import { Axp } from '../../src';
+import { use } from '../helpers/install';
 
 function makeAx(): any {
     return { defaults: { baseURL: '', headers: {} } };
@@ -49,4 +52,39 @@ describe('envs', () => {
         expect(ax.defaults.headers).toEqual({ 'X-B': '2' });
         expect(ax.defaults.headers['X-A']).toBeUndefined();
     });
+});
+
+describe('envs', () => {
+  it('[envs.fn.axpEnvs][envs.cb.rules[].rule][envs.opt.rules[].config] the first matching rule wins and its config is shallow-merged into axios.defaults; a later, also-matching rule is never even evaluated', () => {
+    const ax = axios.create();
+    const api = Axp.create(ax);
+    let secondRuleEvaluated = false;
+    use(api, envs([
+      { rule: () => true, config: { baseURL: 'https://prod.example.com', timeout: 5000, headers: { 'X-Env': 'prod' } } },
+      { rule: () => { secondRuleEvaluated = true; return true; }, config: { baseURL: 'https://staging.example.com' } },
+    ]));
+
+    expect(ax.defaults.baseURL).toBe('https://prod.example.com');
+    expect(ax.defaults.timeout).toBe(5000);
+    // envs.ts applies via a flat Object.assign(defaults, config) — no axios
+    // header normalization, so this lands exactly where it was given.
+    expect((ax.defaults.headers as any)['X-Env']).toBe('prod');
+    expect(secondRuleEvaluated).toBe(false);
+  });
+
+  it('[envs.fn.axpEnvs] no matching rule leaves axios.defaults untouched', () => {
+    const ax = axios.create({ baseURL: 'https://default.example.com' });
+    const api = Axp.create(ax);
+    use(api, envs([{ rule: () => false, config: { baseURL: 'https://x' } }]));
+    expect(ax.defaults.baseURL).toBe('https://default.example.com');
+  });
+
+  it('[envs.method.cleanup][envs.fn.axpEnvs] the cleanup install() returns reverts the applied config snapshot', () => {
+    const ax = axios.create({ baseURL: 'https://default.example.com' });
+    const api = Axp.create(ax);
+    const cleanup = envs([{ rule: () => true, config: { baseURL: 'https://x' } }]).install(api.axios);
+    expect(ax.defaults.baseURL).toBe('https://x');
+    cleanup?.();
+    expect(ax.defaults.baseURL).toBe('https://default.example.com');
+  });
 });

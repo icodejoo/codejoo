@@ -4,6 +4,8 @@ import normalize from '../../src/plugins/normalize';
 import AxpResponse, { AxpError } from '../../src/objects/Response';
 import { Axp } from '../../src/install';
 import { makeNetwork } from '../helpers/network';
+import { ApiError } from '../../src';
+import { use } from '../helpers/install';
 
 afterEach(() => { vi.useRealTimers(); vi.restoreAllMocks(); });
 
@@ -137,4 +139,35 @@ describe('normalize — 元信息', () => {
     it("[normalize.prop.name] 工厂 .name 对齐插件名 'axp:normalize'", () => {
         expect(normalize.name).toBe('axp:normalize');
     });
+});
+
+/** 装好网络仿真的 Core 工厂 */
+function mkApi() {
+  const net = makeNetwork();
+  const api = Axp.create(axios.create({ adapter: net.adapter }));
+  return { net, api };
+}
+
+describe('normalize', () => {
+  it('[normalize.fn.axpNormalize][public.export.ApiError] a business failure (code !== 0) rejects with an ApiError carrying a structured ApiResponse', async () => {
+    const { net, api } = mkApi();
+    net.fallback(() => ({ data: { code: 1, data: null, message: 'boom' } }));
+    use(api, [normalize()]);
+    await expect(api.axios.get('/data')).rejects.toThrow('boom');
+    try {
+      await api.axios.get('/data');
+      expect.unreachable();
+    } catch (e) {
+      expect(e).toBeInstanceOf(ApiError);
+      expect((e as InstanceType<typeof ApiError>).response.code).toBe(1);
+    }
+  });
+
+  it('[normalize.fn.axpNormalize] a successful envelope passes through untouched — normalize does not unwrap (Core.dispatch does that unconditionally, independent of this plugin)', async () => {
+    const { net, api } = mkApi();
+    net.fallback(() => ({ data: { code: 0, data: { v: 1 }, message: '' } }));
+    use(api, [normalize()]);
+    const r = await api.axios.get('/data');
+    expect(r.data).toEqual({ code: 0, data: { v: 1 }, message: '' });
+  });
 });

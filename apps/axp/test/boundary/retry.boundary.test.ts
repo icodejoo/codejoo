@@ -142,3 +142,18 @@ describe('retry — 循环终止与 Header 边界', () => {
         expect(adapter).toHaveBeenCalledOnce();
     });
 });
+
+describe('retry: business-failure loop exhaustion and error-path behavior', () => {
+  it('[retry.opt.max][retry.cb.shouldRetry] when every retry attempt still looks like a business failure (shouldRetry), the loop exhausts and RESOLVES with the LAST attempt as-is', async () => {
+    // Same as Dio: gives up and resolves with the last, still-failing attempt,
+    // so downstream normalize turns it into the usual failure (same as without retry).
+    const { net, api } = mkApi();
+    let attempts = 0;
+    net.fallback(() => { attempts++; return { data: { code: 1, data: { attempt: attempts } } }; });
+    use(api, [retry({ max: 2, delay: 0, shouldRetry: (r) => (r?.data as any)?.code !== 0 })]);
+
+    const resp: any = await api.axios.get('/data', { retry: { max: 2, shouldRetry: (r: any) => r?.data?.code !== 0 } } as any);
+    expect(attempts).toBe(3);
+    expect(resp.data.code).toBe(1);
+  });
+});
