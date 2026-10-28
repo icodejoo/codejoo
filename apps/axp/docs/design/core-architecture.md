@@ -323,7 +323,7 @@ const res = await api.post('/pet')(body, { throws: false })        // 不写 try
 | # | 做法 | 解决 |
 |---|---|---|
 | P1 | 链在增删插件时编译，请求时不排序、不查表 | — |
-| P2 | 每层上下文用原型继承逻辑请求级字段，只新建 `request` 视图 | — |
+| P2 | 每层上下文是固定形状的实例，拷贝逻辑请求级字段与共享状态引用，只换 `request` 视图；没有 patch 时直接复用外层上下文 | — |
 | P3 | `key()` 惰性计算并按 request 对象缓存；不用 cache/share 的请求不算 key | — |
 | P4 | 只有 `markReplayable()` 且 data 是纯对象/数组时才 `structuredClone`；克隆失败或环境没有 `structuredClone` 时回退原引用（debug 下 warn），不让请求失败 | O6、R2-1 |
 | P5 | 传输强制 `validateStatus` 全放行，HTTP 错误不构造 AxiosError（省掉调用栈捕获） | — |

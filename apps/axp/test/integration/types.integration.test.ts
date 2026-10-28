@@ -128,8 +128,12 @@ it("[core.fn.createAxp][core.req.wrap][core.req.throws] Schema/响应泛型/插�
     api.get("/empty")(undefined, { raw: true });
     // @ts-expect-error nullable 不再是新请求选项。
     api.get("/empty")(undefined, { nullable: true });
-    // @ts-expect-error key 不接受旧 true/数字/函数形式。
+    // key: true 保留为"自动计算"，兼容旧写法。
     api.get("/empty")(undefined, { key: true });
+    // @ts-expect-error key 不接受旧数字形式。
+    api.get("/empty")(undefined, { key: 1 });
+    // @ts-expect-error key 不接受旧函数形式。
+    api.get("/empty")(undefined, { key: () => "k" });
     // @ts-expect-error 新内核不支持 cancelToken。
     api.request({ cancelToken: {} });
   }

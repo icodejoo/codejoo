@@ -4,7 +4,7 @@
 
 这是导读，不是规格。字段级细节、选项表、行为变化都在 [docs/design](docs/design/)，文中遇到会给链接，不在这里重抄。
 
-<!-- TODO: 本文依据 docs/design/core-architecture.md 编写（设计状态 draft）。洋葱管线代码落地后，对照 src/ 复核 §2 的文件清单。 -->
+<!-- TODO: 待实现确认：§2 的内核文件已对照 src/ 核对（B1、B2）；plugins/ 下的 retry、auth、mock、share、cache，objects/TokenManager.ts，以及 index.ts 和子路径入口，等 B3、B4、B6 落地后复核。旧实现（core.ts、install.ts、helper.ts、bag.ts 等）B5 才删除，目前与新内核并存。 -->
 
 ## 1. 一段话概述
 
@@ -20,17 +20,26 @@
 
 | 文件 | 职责 |
 |---|---|
-| `client.ts` | `createAxp`、动词分发、`request`、`extend`、`use/eject`、`cancelAll`、`inspect` |
+| `client.ts` | `createAxp`、动词分发、`request`、落定 `settle`、`extend`、`use/eject`、`cancelAll`、`inspect`、`dispose` |
+| `options.ts` | `resolveOption`：请求级四种写法（`false`、`true` 或省略、简写、对象）的统一解析，所有插件共用 |
 | `pipeline.ts` | 插件排序、taps 编译、链组合、`next(patch)`、异常兜底 |
-| `context.ts` | `AxpContext`：请求视图、signal、状态键、`key()`、`fail()`、`markReplayable()` |
+| `stages.ts` | `STAGE_BUILTINS`：阶段和内置插件固定次序的唯一来源，`AxpStage` 类型与排序都从它派生 |
+| `context.ts` | `AxpContext`：请求视图、signal、状态键（`stateKey`）、`key()`、`fail()`、`markReplayable()` |
 | `transport.ts` | 调 `axios.request`、按需克隆请求体、交给响应工厂判定 |
 | `response.ts` | `IAxpResponse`、`AxpResponse`、`IAxpResponseFactory`、`axpResponse()`、`isAxpResponse` |
+| `brand.ts` | 响应品牌 `AXP_RESPONSE` 和类别常量 `AXP_KINDS`。零导入的叶子模块，验收执行器可以直接用 Node 原生加载 |
 | `key.ts` | key 服务（哈希算法从旧的 `plugins/key.ts` 迁来） |
-| `types.ts` | Schema 推断（沿用现有机制）、请求选项、插件类型 |
+| `methods.ts` | 十个动词按 payload 去向（`data` 或 `params`）分组，client 和 key 共用 |
+| `utils.ts` | 共用小件：纯对象判断、`defaults` 克隆与写回、默认头展平、通知回调隔离 |
+| `types.ts` | Schema 推断（沿用现有机制）、请求选项、插件类型、`AxpLogger` |
 | `plugins/*.ts` | 10 个内置插件 |
 | `objects/TokenManager.ts` | 令牌管理，保留，去掉了 `canRefresh` |
+| `index.ts` | 包入口，见下 |
 
-<!-- TODO: core-architecture §2 的模块表没列 index.ts 和子路径入口（`./min`、`./auth` 等）在新结构下怎么组织，只提了要删 `./cancel` `./key` `./logger` `./normalize`；plugin-spec §0 说内核提供统一的 `resolveOption`，也没写落在哪个文件；`debug` 开关对应的 logger 实现同理。以上待补。 -->
+`debug` 没有独立的文件：`createAxp` 按选项挑日志器（`true` 用 `console`，对象原样用，关闭时用 `context.ts` 里共享的空实现 `NO_LOG`），插件经 `ctx.log` 使用。
+
+入口：`index.ts` 导出 `createAxp`、响应与类型、10 个插件工厂、`TokenManager` 等；子路径保留 10 个插件各自的 `./<name>` 和 `./min`，删除 `./cancel`、`./key`、`./logger`、`./normalize`。
+<!-- TODO: 待实现确认：index.ts 的导出清单和 package.json exports 的最终形态，等 B6 打包后核对 -->
 
 10 个内置插件按阶段分布：
 
@@ -39,7 +48,7 @@
 - `attempt`：retry
 - `credential`：auth
 - `source`：mock、share、cache
-- envs：只有 `setup`，装上时把配置写进 `client.axios.defaults`，不进链
+- envs：只有 `setup`，装上时把配置写进 `client.axios.defaults`，不进链；卸载不还原
 
 cancel、key、日志开关、归一化原来是插件，现在降为内核能力，对应的 `axpCancel`、`axpKey`、`axpLogger`、`axpNormalize` 已删除。每个插件的选项和行为见 [插件规格](docs/design/plugin-spec.md)。
 
@@ -68,10 +77,10 @@ api.get('/pet/{id}')(payload, opts)        一次调用 = 一个逻辑请求
 
 具体六步：
 
-1. **合并请求**：动词调用把 `path`、`payload`、方法级配置、调用级配置浅合并成逻辑请求 `AxpRequestConfig`，合并方式和旧版一致。
+1. **合并请求**：动词调用把 `path`、`payload`、方法级配置、调用级配置浅合并成逻辑请求 `AxpRequestConfig`，合并方式和旧版一致；内核再用 axios 公开的 `mergeConfig` 把实例 `defaults` 合并进来，补齐实际发送的 method（小写）并把默认头展平。**各层看到的都是最终生效的配置**，所以 repath、filter、key 都能处理 `defaults` 里的值，语义和旧版拦截器一致。
 2. **建上下文**：内核为这个逻辑请求分配 `id`，建 `AbortController` 并与用户传入的 `signal` 联动，登记到在途集合（`cancelAll()` / `pending()` 用）。
 3. **穿链**：按编译好的链从外到内执行中间件。每层的 `ctx.request` 是外层交给它的那一版。
-4. **到传输层**：若有层调用过 `markReplayable()`，且 `data` 是纯对象或数组，先克隆再发；然后调 `axios.request`，强制 `validateStatus: () => true`，所以 4xx/5xx 也当普通响应处理。
+4. **到传输层**：若有层调用过 `markReplayable()`，且 `data` 是纯对象或数组，先克隆再发；然后调用**用户的 axios 实例**的 `request`（实例上的拦截器照常执行），强制 `validateStatus: () => true`，所以 4xx/5xx 也当普通响应处理。axios 自己还会再合并一次 `defaults`，所以交给它的只是差量：以用户原始的请求级配置为底，叠上各层改动过的字段。层删掉的默认 `params` 键写成 `null`、默认头写成 `false`，防止被二次合并带回来。
 5. **判定回流**：响应工厂把响应（或异常）判定成 `R`，内核给它打上品牌，沿原路返回。
 6. **落定**：最外层从在途集合注销，解除 signal 监听，再按 [§7](#7-落定与-bug-透传) 决定返回 data、返回 `R`、抛 `R` 还是抛原始异常。
 
@@ -107,7 +116,7 @@ api.get('/pet/{id}')(payload, opts)        一次调用 = 一个逻辑请求
 | `id` / `client` | 逻辑请求序号 / 所属客户端 |
 | `request` | 本层看到的请求，**只读** |
 | `signal` | 逻辑请求级：用户 signal ∪ `cancelAll` |
-| `log` | 受 `debug` 开关控制，关闭时是空函数 |
+| `log` | 受 `debug` 开关控制，关闭时是空函数；形状是 `AxpLogger`，即 `{ log, warn, error }` |
 | `key()` | 惰性计算，按 request 对象缓存；不可哈希时为 `null` |
 | `get(k)` / `set(k, v)` | 逻辑请求级状态，用 `stateKey<T>()` 建的 Symbol 键，替代字符串键 |
 | `fail(init)` | 凭空造一个结果，必须经响应工厂，保证扩展字段齐全 |
@@ -115,7 +124,7 @@ api.get('/pet/{id}')(payload, opts)        一次调用 = 一个逻辑请求
 
 完整签名见 [核心架构 §5](docs/design/core-architecture.md#5-上下文)。
 
-**请求不可变**：中间件不改 `ctx.request`，要给内层换请求就调 `next(patch)`。内核把 patch 浅合并成新请求交给内层，`headers` 多合并一层。同一层连续调两次 `next()`，拿到的是同一个基准请求，所以重发天然是"干净"的，不用再保存原始请求体快照，也不用 `axp:share`、`axp:cache` 那类保活键。
+**请求不可变**：中间件不改 `ctx.request`，要给内层换请求就调 `next(patch)`。内核把 patch 浅合并成新请求交给内层，`headers` 多合并一层；patch 里某个字段写 `undefined`，表示把它从请求里删掉。同一层连续调两次 `next()`，拿到的是同一个基准请求，所以重发天然是"干净"的，不用再保存原始请求体快照，也不用 `axp:share`、`axp:cache` 那类保活键。
 
 **signal**：传输层用 `request.signal ?? ctx.signal`。share 用 patch 换成共享的 controller signal，这样首发请求被取消时不会连累跟随者。
 
@@ -173,7 +182,7 @@ const api = createAxp<Schema, MyResponse>({ response })
 | `expectJson` 为真，2xx，声明 json/html 但 body 仍是非空字符串 | `parse` | httpStatus |
 | 收到响应 | 由 `ok` / `status` / `kind` getter 决定 | 同左 |
 
-<!-- TODO: core-architecture §6 写"前五行在构造时写死，后两行交给 getter"，但第六行（expectJson 判 parse）要靠 getter 得出 `parse` 并不成立（默认 getter 会算成 ok），推测也应在构造时写死；该行归属待设计文档澄清，本文不下结论。 -->
+前六行在构造时就把 `ok: false`、`kind`、`status` 写成实例自有属性（`expectJson` 判出的 `parse` 也一样，`status` 取原 HTTP 状态），只有最后一行交给 getter。
 
 三个选项：`envelope`（信封字段名，默认 `{ code, data, message }`，`false` 关闭信封识别）、`expectJson`（默认 `false`）、`create(init, raw?)`（扩展点，返回子类或带额外字段的对象；返回普通对象时内核会补不可枚举的品牌属性）。
 
@@ -216,6 +225,7 @@ interface AxpTap<R> {
 
 interface AxpPlugin<R extends IAxpResponse = IAxpResponse, A = void> {
   readonly name: string
+  readonly enable?: boolean          // false 时不 setup、不进链
   readonly stage?: AxpStage          // 自定义插件默认 'attempt'；只有 taps 时忽略
   readonly enforce?: 'pre' | 'post'  // 默认 'post'
   setup?(client: AxpClient<unknown, R>): AxpPluginInstance<R, A> | void  // 每个客户端调一次，状态建在这里
@@ -226,7 +236,7 @@ interface AxpPlugin<R extends IAxpResponse = IAxpResponse, A = void> {
 
 `setup` 返回的 `AxpPluginInstance` 可以带 `handle`、`taps`、`api`（暴露给使用者的操作，如 cache 的 `clear()`，用 `client.plugin(p)` 取）和 `dispose()`。
 
-<!-- TODO: 插件对象上的 handle/taps 与 setup 返回的 handle/taps 同时存在时怎么合并、谁优先，设计文档没写。 -->
+`handle`、`taps` 既可以写在插件对象上（无状态插件），也可以由 `setup` 返回（有状态插件）。两处都写时以 `setup` 返回的为准，不合并：返回了 `handle` 就用它，对象上的 `handle` 被忽略，`taps` 同理。`handle` 和 `taps` 互相独立，同时存在时各自参与排序，`taps` 的段名从 `<name>#0` 起编号。
 
 ### 约定
 
@@ -291,13 +301,14 @@ const audit: AxpPlugin = {
 | # | 做法 |
 |---|---|
 | P1 | 链在增删插件时编译，请求时不排序、不查表 |
-| P2 | 每层上下文用原型继承逻辑请求级字段，只新建 `request` 视图 |
+| P2 | 每层是固定形状的上下文实例，逻辑请求级状态放在各层共享的同一个容器里；没有补丁时直接复用外层上下文，有补丁才新建一个带新 `request` 视图的实例 |
 | P3 | `key()` 惰性计算并按 request 对象缓存；不用 cache/share 的请求根本不算 key |
 | P4 | 只有 `markReplayable()` 且 `data` 是纯对象/数组才 `structuredClone`；克隆失败或环境没有 `structuredClone` 时回退为原引用（debug 下 warn），不让请求失败 |
 | P5 | 传输强制 `validateStatus` 全放行，HTTP 错误不构造 AxiosError，省掉调用栈捕获 |
 | P6 | 失败直接抛 `R`，不另建错误对象；调用点 stack 只在 debug 模式记录 |
 | P7 | 不再包装 `transformResponse`，不再拷贝尝试钩子数组 |
 | P8 | 缓存过期惰性删除，写入时按容量节流清扫 |
+| P9 | 逻辑请求入口只合并一次 `defaults`；交给 axios 的是差量，避免它内部那次合并按全部字段计费 |
 
 性能门槛和测法见 [测试方案 §8](docs/design/test-plan.md)。
 

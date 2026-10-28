@@ -87,7 +87,7 @@ Fields of `IAxpResponse`:
 | `code` / `message` / `data` | Business code, message and data. `code` is `undefined` for non-envelope responses |
 | `reason` | Finer reason, e.g. `expired`, `denied`, `unauthenticated` for auth failures |
 | `request` | The request that was actually sent. For share or cache hits, the one that was sent |
-| `stack` | Only present when `debug` is on, see below |
+| `stack` | Only present when `debug` is on and the failure is thrown, see below |
 | `raw` | The original `AxiosResponse` |
 | `error` | The original exception; the stack of a network error lives here |
 
@@ -114,7 +114,7 @@ Three related helpers:
   createAxp({ reject: (r) => Object.assign(new Error(r.message), { response: r }) });
   ```
 
-- `debug`: when on, a failure carries the `stack` of the call site where the request was started. It is only recorded in debug mode, so production has no extra cost.
+- `debug`: when on, a thrown failure carries the `stack` of the call site where the request was started (with `throws: false` nothing is thrown, so there is none). It is only recorded in debug mode, so production has no extra cost.
 
 `throws` is a per-request option that defaults to `true`; there is no client-level default, because the return type could not reflect it honestly.
 
@@ -180,19 +180,21 @@ Per-request options accept four forms:
 | --- | --- |
 | `false` | Off for this call |
 | `true` or omitted | Use the plugin-level configuration |
-| shorthand | Documented per plugin, e.g. retry's number or share's policy string; overrides only the main parameter |
-| object | Field-by-field override. Precedence: request > plugin > built-in default. Array fields are replaced as a whole. `enable: false` means the same as `false` |
+| shorthand | Documented per plugin, e.g. retry's number, share's policy string or loading's callback function; overrides only the main parameter |
+| object | Field-by-field override. Precedence: request > plugin > built-in default. A field set to `null` or `undefined` inherits. Array fields are replaced as a whole. `enable: false` means the same as `false` |
 
 Also:
 
 - `null` and `undefined` are both treated as "omitted". Other values with undeclared types are an error; at runtime they are treated as omitted.
 - Every plugin factory accepts `enable?: boolean`, default `true` (`axpMock` defaults to `false`). With `enable: false`, the plugin is not added to the chain, its `setup` doesn't run, and `api.inspect()` doesn't list it. A per-request option can't turn it back on.
 - Per-request options don't accept function forms. The exception is options that are callbacks themselves, such as the per-request callback of `axpLoading`.
+- The request each layer sees has already been merged with the axios instance's `defaults` (`baseURL`, `params`, `headers`, ...), just as the old interceptors saw it. So `repath` and `filter` can work on values from `defaults.params`, and those values are part of the key. If a layer drops a default `params` or `headers` field, axios's own second merge won't bring it back.
+- A plugin's options are fixed when the plugin is created. Changing the options object afterwards has no effect; use per-request options, or create the plugin again.
 - Plugins add their own per-request options by augmenting `AxpRequestOptions` through `declare module '@codejoo/axp'`, so axios's own types stay clean. The kernel's built-in per-request options are `wrap`, `throws`, `silent`, `key` and `signal`.
 
 How errors thrown by callbacks are handled, in two groups:
 
-- Notification callbacks (`loading`, `notify`, `stringify`, `onAccessExpired`, `onAccessDenied`): isolated. They don't affect the request result or plugin state, are reported with `console.error`, and ignore the `debug` switch.
+- Notification callbacks (`loading`, `notify`, `stringify`, `onAccessExpired`, `onAccessDenied`): isolated, whether they throw synchronously or reject asynchronously. They don't affect the request result or plugin state, are reported with `console.error`, and ignore the `debug` switch.
 - Decision callbacks (`shouldRetry`, retry's `delay` and `jitter` functions, `onFailure`, `isProtected`, `fallbackWhen`, `shouldCache`, `ready`): treated as program bugs and rethrown as-is.
 - Exception: a throw from `onRefresh` counts as a failed refresh, not a bug.
 
@@ -211,7 +213,9 @@ Per request: `false`, `true`, a function (the callback for this call), or `{ ena
 - The show starts with the logical request, including any time spent waiting for a token refresh.
 - Retries and auth replays stay inside the same show/hide pair, so there is no flicker.
 - Each callback is counted separately, so every callback sees matched `true` and `false` calls.
-- Unmounting the plugin cancels any pending delayed callbacks.
+- If neither the plugin nor the request provides a callback, this request is not counted.
+- For one callback, `delay` comes from the request that takes the count from 0 to 1, and `delayClose` from the request that takes it from 1 to 0.
+- Removing the plugin (`eject` or `dispose`) cancels any pending delayed callbacks. If the UI is already showing, its callback gets one `false` right away, and requests still in flight won't call it again.
 
 ```ts
 axpLoading({ loading: (v) => setSpinner(v), delay: 200, delayClose: 200 });
@@ -230,13 +234,14 @@ Stage: `outer` (built-in order 2). Each logical request notifies at most once.
 
 Default `stringify`: returns `''` when `r.ok` is true, when `r.kind === 'cancel'`, or when `ctx.request.silent` is set. Otherwise it returns `r.message || \`${r.kind} ${r.status}\``.
 
-Per request: `notify: false` turns it off; the kernel option `silent: true` does the same.
-<!-- TODO: 待实现确认：设计只写了 false 和 silent，请求级对象写法是否可以覆盖 notify 或 stringify 未定 -->
+Per request: `notify` is just a switch. `false` or `{ enable: false }` turns the notification off for this call; `true`, `null` and omitted all use the plugin configuration. The `notify` and `stringify` callbacks can't be overridden per request.
+
+The kernel option `silent: true` makes the default `stringify` return an empty string. A custom `stringify` receives `ctx.request.silent` as-is and decides for itself whether to stay quiet; `notify: false` works with both the default and a custom `stringify`.
 
 ```ts
 axpNotify({
   notify: (msg) => toast.error(msg),
-  stringify: (r) => (r.ok || r.kind === 'cancel' ? '' : r.message),
+  stringify: (r, ctx) => (r.ok || r.kind === 'cancel' || ctx.request.silent ? '' : r.message),
 });
 api.post('/pet')(body, { silent: true });   // no toast for this call
 ```
@@ -255,7 +260,7 @@ Stage: `prepare` (built-in order 1).
 - Values are encoded with `encodeURIComponent` per path segment. A placeholder that appears more than once is replaced everywhere.
 - The caller's objects are never modified; the rewritten request is handed to the inner layers through `next(patch)`.
 
-Per request: `repath: false`.
+Per request: `false` turns it off for this call; an object `{ enable, pattern, removeKey }` overrides the plugin-level fields.
 
 ```ts
 axpRepath();
@@ -268,10 +273,12 @@ Stage: `prepare` (built-in order 2). Active as soon as it is installed.
 
 | Option | Default | Description |
 | --- | --- | --- |
-| `predicate([k, v])` | drops `null`, `undefined`, `NaN` and blank strings | Fields for which this returns `false` are removed |
-| `ignoreKeys` / `ignoreValues` | — | Keys or values exempt from filtering |
+| `predicate([k, v])` | drops `null`, `undefined`, `NaN` and blank strings | Fields for which this returns exactly `true` are removed |
+| `ignoreKeys` / `ignoreValues` | — | Keys or values exempt from filtering; `ignoreValues` recognizes `NaN` |
 
-It strips empty fields from `params` and `data` (plain objects), builds new objects, and passes them on. Per request: `filter: false` turns it off.
+It only looks at the top-level fields of `params` and `data` (plain objects), without recursing. After stripping the empty fields it builds new objects and passes them on; special bodies such as `FormData` are left as they are.
+
+Per request: `false` turns it off for this call; an object `{ enable, predicate, ignoreKeys, ignoreValues }` overrides the plugin-level fields (array fields are replaced as a whole, so an empty array clears the exemptions).
 
 ```ts
 axpFilter();
@@ -462,7 +469,11 @@ axpEnvs([
   { rule: () => import.meta.env.PROD, config: { baseURL: 'http://prod' } },
 ]);
 ```
-<!-- TODO: 待实现确认：卸载插件时是否还原 axios.defaults 未写明 -->
+
+- Once the first rule matches, later rules are not evaluated; if none matches, nothing is changed. If a rule function throws, `createAxp` or `use` throws.
+- Fields are overwritten at the top level, with no deep merge: if the config has `headers`, it replaces the whole `headers` object in `defaults`.
+- Removing the plugin (`eject`, `dispose`) does not restore the configuration that was written.
+- Besides the array, you can pass an object `{ enable, rules }`, where `enable: false` turns the whole plugin off.
 
 ---
 
@@ -474,25 +485,23 @@ These are not plugins. They are always present, and cannot be uninstalled.
 
 The kernel's key service computes the keys used by cache and share:
 
-- Computed from method, url and params. Methods with a request body also include `data`.
+- Computed from method, url and params (params include the instance's `defaults.params`). Methods with a request body also include `data`. For account or tenant isolation, declare it explicitly with `scope` below instead of relying on a field that happens to sit in `defaults`.
 - Lazy: computed the first time it is needed, then cached on the request object. A request that neither caches nor shares never computes a key.
-- `Date` and `URLSearchParams` are hashed by content. Values whose content can't be reliably told apart (`FormData`, `Blob`, `Map`, `Set`, class instances without enumerable fields) produce no key, so those requests are neither cached nor shared. Better to miss than to hit the wrong entry.
+- `Date` and `URLSearchParams` are hashed by content. Values whose content can't be reliably told apart (`FormData`, `Blob`, `Map`, `Set`, class instances without enumerable fields) and objects with circular references produce no key, so those requests are neither cached nor shared. Better to miss than to hit the wrong entry.
 
 Client-level configuration:
 
 | Option | Default | Description |
 | --- | --- | --- |
-| `scope` | — | Mixed into every key, e.g. an account id. Cache and share entries never leak across accounts |
+| `scope` | — | Mixed into every key, e.g. an account id, so cache and share entries never leak across accounts. A string, a number, or a function `(request) => value` returning one of them. A function is evaluated every time a key is computed, so switching accounts doesn't require rebuilding the client. `null`, `undefined`, an empty string and `NaN` add nothing |
 | `ignores` | — | Keys or values exempt from empty-value filtering |
 | `sample` | `false` | Strings longer than 64 characters are sampled rather than hashed in full |
-<!-- TODO: 待实现确认：key.scope 的类型未定。旧版允许函数，新版若只接受静态值，登录切换账号时如何更新 scope 需要定 -->
 
 ```ts
-const api = createAxp({ key: { scope: session.userId } });
+const api = createAxp({ key: { scope: () => session.userId } });   // read the current user each time a key is computed
 ```
 
-Per-request `key`: omit it to compute automatically; pass a string to use an explicit key; `false` means this request doesn't take part in cache or share.
-<!-- TODO: 待实现确认：N2 写了"key: true 包含 query 和 body"，但请求级写法没有列 true，是否保留待定 -->
+Per-request `key`: omit it to compute automatically; pass a string to use an explicit key (the `scope` is added to it too, and a blank string counts as `false`); `false` means this request doesn't take part in cache or share. `true` is the same as omitting it (automatic); it is kept so old `key: true, cache: true` code keeps working, but new code can just leave it out. The automatic key includes params.
 
 ### Cancellation
 
@@ -518,8 +527,8 @@ createAxp({ debug: myLogger });    // print through your own logger
 ```
 
 - When off, the plugins' `ctx.log` is an empty function, so there is no overhead.
-- When on, failed results carry a `stack` (the call site where the request was started).
-- Shape of a custom logger (`AxpLogger`): <!-- TODO: 待实现确认：AxpLogger 的接口形状设计未写明，旧版 PluginLogger 是 log、warn、error 三个方法 -->
+- When on, thrown failures carry a `stack` (the call site where the request was started).
+- Shape of a custom logger, `AxpLogger`: an object with three methods, `{ log, warn, error }`, each taking `(...args: unknown[])`. `debug: true` uses `console`.
 
 ---
 
@@ -530,6 +539,7 @@ A plugin is a named object. `handle` is middleware, `(ctx, next) => Promise<R>`.
 ```ts
 interface AxpPlugin<R, A> {
   readonly name: string;
+  readonly enable?: boolean;                                                 // false: no setup, not in the chain
   readonly stage?: 'outer' | 'prepare' | 'attempt' | 'credential' | 'source'; // default 'attempt'; ignored when only taps are given
   readonly enforce?: 'pre' | 'post';                                         // default 'post'
   setup?(client): AxpPluginInstance<R, A> | void;   // called once per client; keep state here
@@ -580,7 +590,8 @@ const addTrace: AxpPlugin = {
 
 A few conventions:
 
-- Middleware doesn't modify `ctx.request`. To change the request for the inner layers, call `next(patch)`. The kernel shallow-merges the patch into a new request, and `headers` is merged one level deeper.
+- Middleware doesn't modify `ctx.request`. To change the request for the inner layers, call `next(patch)`. The kernel shallow-merges the patch into a new request, and `headers` is merged one level deeper. A field set to `undefined` in the patch is removed from the request (the same goes for a single header inside `headers`).
+- `handle` and `taps` can sit directly on the plugin object (stateless plugins) or be returned from `setup` (stateful plugins). If both are given, the one returned from `setup` wins; they are not merged.
 - Keep state in `setup`, not in a closure created by the factory. That way one plugin object can be installed on several clients, and each client gets its own state. `extend` relies on this too.
 - `next()` never throws; it always returns an `R`.
 
@@ -598,7 +609,6 @@ function createAxp<S = unknown, R extends IAxpResponse = AxpResponse>(options?: 
 | `plugins` | `[]` | Plugin array |
 | `response` | `axpResponse()` | Response factory. Required when `R` is not `AxpResponse` |
 | `key` | — | Key service configuration, see "Kernel features" |
-| `throws` | `true` | Whether failures are thrown |
 | `reject` | `(r) => r` | Conversion applied to expected failures before they are thrown |
 | `debug` | `false` | `true`, or a custom logger |
 
@@ -606,18 +616,17 @@ Client members:
 
 | Member | Description |
 | --- | --- |
-| `api.get(path, methodConfig?)(payload?, callConfig?)` and the rest | The 10 lowercase axios verbs. `delete`, `post`, `put` and `patch` send the payload as `data`; the others send it as `params` |
+| `api.get(path, methodConfig?)(payload?, callConfig?)` and the rest | The 10 lowercase axios verbs. `delete`, `post`, `put` and `patch` send the payload as `data`; the others send it as `params`. For `wrap` and `throws`, the call config wins; if it doesn't set them, the method config is inherited |
 | `api.request<D>(config)` | Untyped escape hatch; also supports `wrap` and `throws` |
 | `api.axios` | The underlying `AxiosInstance` |
-| `api.extend(overrides?, opts?)` | Clones the axios defaults and merges `overrides`. Plugins are inherited by default (`opts.plugins: 'inherit'`); each plugin runs `setup` again, so state is not shared. You can also pass a new plugin array |
+| `api.extend(overrides?, opts?)` | Clones the axios defaults, then writes `overrides` (overwriting at the top level). Plugins are inherited by default (`opts.plugins: 'inherit'`); each plugin runs `setup` again, so state is not shared. You can also pass a new plugin array. `key`, `reject`, `debug` and `response` are inherited too. `overrides` is written after the plugins' `setup`, so it takes precedence over what `axpEnvs` wrote |
 | `api.use(plugin)` | Installs a plugin; the chain is recompiled |
-| `api.eject(name)` | Removes a plugin by name; returns whether it was removed |
+| `api.eject(name)` | Removes a plugin by name and cleans up its instance; returns whether it was removed. Requests in flight are unaffected and keep the chain they started with |
 | `api.plugin(p)` | Returns the plugin instance's `api`, such as cache's `clear()`. Pass the plugin object, not its name. Returns `undefined` if it isn't installed |
 | `api.cancelAll(reason?)` / `api.pending()` | See "Cancellation" |
 | `api.inspect()` | Returns `[{ stage, name }]`, the resolved plugin order |
 | `api.isResponse(e)` | See "Return shape and error handling" |
-| `api.dispose()` | Uninstalls plugins and releases resources such as timers |
-<!-- TODO: 待实现确认：dispose 对在途请求的处理未写明 -->
+| `api.dispose()` | First aborts every in-flight request (they settle with `kind: 'cancel'`), then uninstalls the plugins in reverse order of registration and releases resources such as timers. Safe to call more than once; later calls do nothing. A disposed client can't send requests, `use` or `extend` any more. If one plugin throws during cleanup, the others still run, and the first exception is rethrown at the end |
 
 ```ts
 const admin = api.extend({ baseURL: '/admin' });                         // inherits plugins; state is separate

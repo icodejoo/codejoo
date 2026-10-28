@@ -105,3 +105,10 @@ it("[core.opt.key] 全量哈希中段差异与长串采样", /** 全量哈希中
   );
   expect(params("  value  ")).toBe(params("value"));
 });
+it("[core.req.key] key: true 与省略等价，都按请求自动计算（兼容旧写法）", /** 旧代码大量写 key: true, cache: true，迁移时不必逐处删除。 */ () => {
+  const base = { method: "get", url: "/pets", params: { page: 1 } };
+  const auto = requestKey(base);
+  expect(auto).not.toBeNull();
+  expect(requestKey({ ...base, key: true })).toBe(auto);
+  expect(requestKey({ ...base, params: { page: 2 }, key: true })).not.toBe(auto);
+});

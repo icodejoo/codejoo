@@ -87,7 +87,7 @@ out.raw;    // 原始 AxiosResponse（逃生口）
 | `code` / `message` / `data` | 业务码、消息、数据。非信封响应的 `code` 是 `undefined` |
 | `reason` | 细分原因，如 auth 的 `expired`、`denied`、`unauthenticated` |
 | `request` | 实际发出的请求。命中 share 或 cache 时，是发出那一次的请求 |
-| `stack` | 只在 `debug` 开启时存在，见下文 |
+| `stack` | 只在 `debug` 开启、且失败被抛出时存在，见下文 |
 | `raw` | 原始 `AxiosResponse` |
 | `error` | 原始异常，网络错误的 stack 在这里 |
 
@@ -114,7 +114,7 @@ out.raw;    // 原始 AxiosResponse（逃生口）
   createAxp({ reject: (r) => Object.assign(new Error(r.message), { response: r }) });
   ```
 
-- `debug`：开启后，失败落定时会附上发起请求那一刻的调用点 `stack`。只在 debug 下记录，生产环境没有额外开销。
+- `debug`：开启后，抛出的失败会附上发起请求那一刻的调用点 `stack`（`throws: false` 不抛，也就没有）。只在 debug 下记录，生产环境没有额外开销。
 
 `throws` 只能按请求设置，默认 `true`；没有客户端级默认值，否则返回类型没法如实反映它。
 
@@ -180,19 +180,21 @@ const api = createAxp<Schema, MyResponse>({
 | --- | --- |
 | `false` | 本次关闭 |
 | `true` 或省略 | 用插件级配置 |
-| 简写 | 各插件单独注明，如 retry 的数字、share 的策略字符串，只覆盖主参数 |
-| 对象 | 按字段覆盖，优先级：请求级 > 插件级 > 内置默认。数组字段整体替换。`enable: false` 等同于 `false` |
+| 简写 | 各插件单独注明，如 retry 的数字、share 的策略字符串、loading 的回调函数，只覆盖主参数 |
+| 对象 | 按字段覆盖，优先级：请求级 > 插件级 > 内置默认。字段写 `null` 或 `undefined` 表示继承。数组字段整体替换。`enable: false` 等同于 `false` |
 
 补充：
 
 - `null` 和 `undefined` 都按"省略"处理。其它未声明的值类型会报错，运行时也按省略处理。
 - 每个插件工厂都接受 `enable?: boolean`，默认 `true`（`axpMock` 默认 `false`）。`enable: false` 时插件不进链、不执行 `setup`，`api.inspect()` 也不列出它。请求级无法把它重新打开。
 - 请求级选项不接受函数形式。例外是本身就是回调的选项，比如 `axpLoading` 的请求级回调。
+- 各层拿到的请求已经合并了 axios 实例的 `defaults`（`baseURL`、`params`、`headers` 等），和旧版拦截器看到的一样。所以 `repath`、`filter` 能处理 `defaults.params` 里的值，key 里也包含它们。某一层删掉的默认 `params`、`headers` 字段，发给 axios 时不会被它二次合并带回来。
+- 插件选项在创建插件时就定下了。之后再改传进去的 options 对象不会生效；要变，用请求级选项，或者重新创建插件。
 - 插件的请求选项通过 `declare module '@codejoo/axp'` 扩展 `AxpRequestOptions`，不会污染 axios 的类型。内核自带的请求选项有 `wrap`、`throws`、`silent`、`key`、`signal`。
 
 回调抛错的处理分两类：
 
-- 通知类（`loading`、`notify`、`stringify`、`onAccessExpired`、`onAccessDenied`）：隔离，不影响请求结果和插件状态，用 `console.error` 输出，不受 `debug` 开关控制。
+- 通知类（`loading`、`notify`、`stringify`、`onAccessExpired`、`onAccessDenied`）：隔离，不影响请求结果和插件状态，同步抛错和异步拒绝都一样，用 `console.error` 输出，不受 `debug` 开关控制。
 - 判定类（`shouldRetry`、retry 的 `delay` 和 `jitter` 函数、`onFailure`、`isProtected`、`fallbackWhen`、`shouldCache`、`ready`）：按程序 bug 处理，原样抛出。
 - 例外：`onRefresh` 抛错算刷新失败，不算 bug。
 
@@ -211,7 +213,9 @@ const api = createAxp<Schema, MyResponse>({
 - 显示从逻辑请求开始算，包括等待 token 刷新的时间。
 - 重试和鉴权重放都在同一对显示、隐藏之内，不会闪烁。
 - 每个回调各自计数，所以每个回调都看到成对的 `true` 和 `false`。
-- 卸载插件时，还没触发的延迟回调会被取消。
+- 插件级和请求级都没给回调时，这次请求不参与计数。
+- 同一个回调下，`delay` 取让计数从 0 变成 1 的那个请求的值，`delayClose` 取让计数从 1 变成 0 的那个请求的值。
+- 卸载插件（`eject` 或 `dispose`）时，还没触发的延迟回调会被取消；已经显示出来的会立刻收到一次 `false`，之后在途请求结束也不再回调。
 
 ```ts
 axpLoading({ loading: (v) => setSpinner(v), delay: 200, delayClose: 200 });
@@ -230,13 +234,14 @@ api.get('/quiet')(undefined, { loading: { delay: 0 } });   // 本次跳过防闪
 
 默认的 `stringify`：`r.ok`、`r.kind === 'cancel'`，或者 `ctx.request.silent` 为真时返回 `''`；其它情况返回 `r.message || \`${r.kind} ${r.status}\``。
 
-请求级：`notify: false` 关闭；内核选项 `silent: true` 同样关闭。
-<!-- TODO: 待实现确认：设计只写了 false 和 silent，请求级对象写法是否可以覆盖 notify 或 stringify 未定 -->
+请求级：`notify` 只是个开关。`false` 或 `{ enable: false }` 关闭本次通知，`true`、`null` 和省略都沿用插件配置。`notify`、`stringify` 两个回调不能按请求覆盖。
+
+内核选项 `silent: true` 会让默认的 `stringify` 返回空串。自定义 `stringify` 拿到的 `ctx.request.silent` 是原值，要不要静默由它自己决定；`notify: false` 对默认和自定义的 `stringify` 都有效。
 
 ```ts
 axpNotify({
   notify: (msg) => toast.error(msg),
-  stringify: (r) => (r.ok || r.kind === 'cancel' ? '' : r.message),
+  stringify: (r, ctx) => (r.ok || r.kind === 'cancel' || ctx.request.silent ? '' : r.message),
 });
 api.post('/pet')(body, { silent: true });   // 这一次不弹提示
 ```
@@ -255,7 +260,7 @@ api.post('/pet')(body, { silent: true });   // 这一次不弹提示
 - 值按路径段做 `encodeURIComponent`。同一个占位符出现几次，全部替换。
 - 不修改调用方传入的对象，改写结果通过 `next(patch)` 交给内层。
 
-请求级：`repath: false`。
+请求级：`false` 关闭本次替换；也可以写对象 `{ enable, pattern, removeKey }`，按字段覆盖插件级配置。
 
 ```ts
 axpRepath();
@@ -268,10 +273,12 @@ api.get('/pet/:id')(undefined, { params: { id: 5 } });   // → GET /pet/5
 
 | 选项 | 默认 | 说明 |
 | --- | --- | --- |
-| `predicate([k, v])` | 丢弃 `null`、`undefined`、`NaN`、空白串 | 返回 `false` 的字段会被剥掉 |
-| `ignoreKeys` / `ignoreValues` | — | 豁免过滤的键名或值 |
+| `predicate([k, v])` | 丢弃 `null`、`undefined`、`NaN`、空白串 | 严格返回 `true` 的字段会被剥掉 |
+| `ignoreKeys` / `ignoreValues` | — | 豁免过滤的键名或值，`ignoreValues` 认得 `NaN` |
 
-剥离的是 `params` 和 `data`（纯对象）里的空字段，生成新对象交给内层。请求级 `filter: false` 关闭。
+只看 `params` 和 `data`（纯对象）的顶层字段，不递归。剥掉空字段后生成新对象交给内层，`FormData` 这类特殊请求体保持原样。
+
+请求级：`false` 关闭本次过滤；也可以写对象 `{ enable, predicate, ignoreKeys, ignoreValues }`，按字段覆盖插件级配置（数组字段整体替换，写空数组就是清空豁免）。
 
 ```ts
 axpFilter();
@@ -462,7 +469,11 @@ axpEnvs([
   { rule: () => import.meta.env.PROD, config: { baseURL: 'http://prod' } },
 ]);
 ```
-<!-- TODO: 待实现确认：卸载插件时是否还原 axios.defaults 未写明 -->
+
+- 命中第一条后不再求值后面的规则；都没命中就什么也不改。规则函数抛错时，`createAxp` 或 `use` 会直接抛出。
+- 按顶层字段整体覆盖，不做深合并：配置里写了 `headers`，就整个换掉 `defaults` 里原来的 `headers`。
+- 卸载（`eject`、`dispose`）不会还原已经写入的配置。
+- 除了数组，也可以写成对象 `{ enable, rules }`，用 `enable: false` 整体关掉。
 
 ---
 
@@ -474,25 +485,23 @@ axpEnvs([
 
 缓存和共享的键由内核的 key 服务算出：
 
-- 由 method、url、params 算出。有请求体的方法再加上 data。
+- 由 method、url、params 算出（params 包含实例 `defaults.params`）。有请求体的方法再加上 data。账号、租户隔离请用下面的 `scope` 显式声明，别依赖 defaults 里碰巧带着的字段。
 - 惰性计算：第一次需要时才算，之后按请求对象缓存。不用缓存和共享的请求，不会算 key。
-- `Date` 和 `URLSearchParams` 按内容参与哈希。无法可靠区分内容的值（`FormData`、`Blob`、`Map`、`Set`、没有可枚举字段的类实例）不生成 key。这类请求既不缓存也不共享。宁可没命中，也不能命中错的。
+- `Date` 和 `URLSearchParams` 按内容参与哈希。无法可靠区分内容的值（`FormData`、`Blob`、`Map`、`Set`、没有可枚举字段的类实例）和循环引用的对象不生成 key。这类请求既不缓存也不共享。宁可没命中，也不能命中错的。
 
 客户端级配置：
 
 | 选项 | 默认 | 说明 |
 | --- | --- | --- |
-| `scope` | — | 并入每个 key，比如账号 id。缓存和共享不会跨账号串数据 |
+| `scope` | — | 并入每个 key，比如账号 id，缓存和共享不会跨账号串数据。可以是字符串、数字，或者返回它们的函数 `(request) => 值`。函数在每次算 key 时求值，切换账号不用重建客户端。返回 `null`、`undefined`、空串、`NaN` 时不附加 |
 | `ignores` | — | 豁免空值过滤的键名或值 |
 | `sample` | `false` | 超过 64 字符的字符串采样计算，而不是全量 |
-<!-- TODO: 待实现确认：key.scope 的类型未定。旧版允许函数，新版若只接受静态值，登录切换账号时如何更新 scope 需要定 -->
 
 ```ts
-const api = createAxp({ key: { scope: session.userId } });
+const api = createAxp({ key: { scope: () => session.userId } });   // 每次算 key 时取当前用户
 ```
 
-请求级 `key`：省略则自动计算；传字符串则作为显式的键；`false` 表示这次请求不参与 cache 和 share。
-<!-- TODO: 待实现确认：N2 写了"key: true 包含 query 和 body"，但请求级写法没有列 true，是否保留待定 -->
+请求级 `key`：省略则自动计算；传字符串则作为显式的键（同样会带上 `scope`，空白串等同于 `false`）；`false` 表示这次请求不参与 cache 和 share。`true` 和省略等价，都是自动计算，保留它是为了让旧代码的 `key: true, cache: true` 不用改；新代码直接省略即可。自动计算的 key 包含参数。
 
 ### 取消
 
@@ -518,8 +527,8 @@ createAxp({ debug: myLogger });    // 用自己的 logger 输出
 ```
 
 - 关闭时插件的 `ctx.log` 是空函数，没有额外开销。
-- 开启后，失败的结果带上 `stack`（发起请求那一刻的调用点）。
-- 自定义 logger 的接口形状（`AxpLogger`）：<!-- TODO: 待实现确认：AxpLogger 的接口形状设计未写明，旧版 PluginLogger 是 log、warn、error 三个方法 -->
+- 开启后，抛出的失败带上 `stack`（发起请求那一刻的调用点）。
+- 自定义 logger 的接口形状 `AxpLogger`：`{ log, warn, error }` 三个方法，参数都是 `(...args: unknown[])`。`debug: true` 用 `console`。
 
 ---
 
@@ -530,6 +539,7 @@ createAxp({ debug: myLogger });    // 用自己的 logger 输出
 ```ts
 interface AxpPlugin<R, A> {
   readonly name: string;
+  readonly enable?: boolean;                                                 // false 时不 setup、不进链
   readonly stage?: 'outer' | 'prepare' | 'attempt' | 'credential' | 'source'; // 默认 'attempt'，只有 taps 时忽略
   readonly enforce?: 'pre' | 'post';                                         // 默认 'post'
   setup?(client): AxpPluginInstance<R, A> | void;   // 每个客户端调用一次，状态建在这里
@@ -580,7 +590,8 @@ const addTrace: AxpPlugin = {
 
 几条约定：
 
-- 中间件不修改 `ctx.request`。要给内层改请求，用 `next(patch)`。内核把 patch 浅合并成新请求，`headers` 多合并一层。
+- 中间件不修改 `ctx.request`。要给内层改请求，用 `next(patch)`。内核把 patch 浅合并成新请求，`headers` 多合并一层。patch 里某个字段写 `undefined`，表示把它从请求里删掉（`headers` 里的单个头也一样）。
+- `handle`、`taps` 可以直接写在插件对象上（无状态插件），也可以由 `setup` 返回（有状态插件）。两处都写时以 `setup` 返回的为准，不合并。
 - 状态建在 `setup` 里，不要放在工厂的闭包里。这样同一个插件对象可以装到多个客户端，每个客户端各有一份状态。`extend` 继承插件时也靠这一点，各自独立。
 - `next()` 不会抛错，它返回的始终是 `R`。
 
@@ -598,7 +609,6 @@ function createAxp<S = unknown, R extends IAxpResponse = AxpResponse>(options?: 
 | `plugins` | `[]` | 插件数组 |
 | `response` | `axpResponse()` | 响应工厂。`R` 不是 `AxpResponse` 时必填 |
 | `key` | — | key 服务配置，见"内核能力" |
-| `throws` | `true` | 失败时是否抛出 |
 | `reject` | `(r) => r` | 可预期的失败抛出前的转换 |
 | `debug` | `false` | `true` 或自定义 logger |
 
@@ -606,18 +616,17 @@ function createAxp<S = unknown, R extends IAxpResponse = AxpResponse>(options?: 
 
 | 成员 | 说明 |
 | --- | --- |
-| `api.get(path, methodConfig?)(payload?, callConfig?)` 等 | axios 的 10 个小写动词。`delete`、`post`、`put`、`patch` 的 payload 走 `data`，其它走 `params` |
+| `api.get(path, methodConfig?)(payload?, callConfig?)` 等 | axios 的 10 个小写动词。`delete`、`post`、`put`、`patch` 的 payload 走 `data`，其它走 `params`。`wrap` 和 `throws` 以调用配置为先，没写就继承方法配置 |
 | `api.request<D>(config)` | 无类型的逃生口，同样支持 `wrap` 和 `throws` |
 | `api.axios` | 底层的 `AxiosInstance` |
-| `api.extend(overrides?, opts?)` | 克隆 axios 的 defaults，合并 `overrides`。默认继承插件（`opts.plugins: 'inherit'`），每个插件重新 `setup`，状态不共享。也可以传入新的插件数组 |
+| `api.extend(overrides?, opts?)` | 克隆 axios 的 defaults，再写入 `overrides`（按顶层字段整体覆盖）。默认继承插件（`opts.plugins: 'inherit'`），每个插件重新 `setup`，状态不共享。也可以传入新的插件数组。`key`、`reject`、`debug`、`response` 一并继承。`overrides` 在插件 `setup` 之后才写入，所以优先于 `axpEnvs` 写进去的配置 |
 | `api.use(plugin)` | 装上一个插件，链会重新编译 |
-| `api.eject(name)` | 按名字卸下插件，返回是否卸下成功 |
+| `api.eject(name)` | 按名字卸下插件并清理它的实例，返回是否卸下成功。在途请求不受影响，继续沿用发起时的链 |
 | `api.plugin(p)` | 取得插件实例的 `api`，比如 cache 的 `clear()`。传的是插件对象，不是名字。没装返回 `undefined` |
 | `api.cancelAll(reason?)` / `api.pending()` | 见"取消" |
 | `api.inspect()` | 返回 `[{ stage, name }]`，即解析后的插件顺序 |
 | `api.isResponse(e)` | 见"返回形态与错误处理" |
-| `api.dispose()` | 卸载插件，释放定时器等资源 |
-<!-- TODO: 待实现确认：dispose 对在途请求的处理未写明 -->
+| `api.dispose()` | 先中止全部在途请求（它们按 `kind: 'cancel'` 落定），再按注册的逆序卸载插件，释放定时器等资源。可以重复调用，后面的调用什么也不做。销毁后不能再发请求、`use` 或 `extend`。某个插件清理时抛错不影响其余插件，最后抛出第一个异常 |
 
 ```ts
 const admin = api.extend({ baseURL: '/admin' });                         // 继承插件，状态各自独立

@@ -49,7 +49,7 @@ summary: 10 个内置插件和 4 项内核服务在洋葱管线下的阶段、�
 - 计算时机：`ctx.key()` 首次调用时惰性计算，按 request 对象缓存。cache、share 在 source 阶段调用，此时 repath、filter 已经生效，所以"filter 必须在 key 前"的约束自然满足。
 - 内容：method + url + params（**含实例 `defaults.params`**，因为各层看到的是合并后的有效配置），有请求体的方法再加 data（N2）。
   账号 / 租户隔离请用 `scope` 显式声明，不要依赖 defaults 里恰好带着的 tenant 之类字段：defaults 通常固定不变，靠它隔离只是偶然的副作用。旧版 `key: true` 只哈希 method+url，同一路径不同参数会命中同一条缓存，这是正确性问题。
-- 客户端配置 `createAxp({ key: { scope, ignores, sample } })`：`scope` 并入每个 key（防跨账号串数据），可以是值，也可以是 `() => string | number | null | undefined`（每次计算 key 时取当前用户，切换账号无需重建客户端；N5 只限制请求级选项）；其余两项语义不变。
+- 客户端配置 `createAxp({ key: { scope, ignores, sample } })`：`scope` 并入每个 key（防跨账号串数据），可以是值，也可以是 `(request) => string | number | null | undefined`（每次计算 key 时取当前用户，切换账号无需重建客户端；N5 只限制请求级选项）；其余两项语义不变。
 - 请求级 `key`：省略或 `true` = 需要时自动算（保留 `true` 兼容旧写法）；`string` = 显式 key；`false` = 本请求不参与 cache/share。
 - 删除：`fastMode`、`before/after` 钩子、`'deep'` / 数字等写法。
 
@@ -77,7 +77,7 @@ summary: 10 个内置插件和 4 项内核服务在洋葱管线下的阶段、�
 - 请求级：`false` / `true` / 函数（作为本次回调）/ `{ enable, loading, delay, delayClose }`。
 - 行为：进入时计数 +1，`next()` 返回后在 `finally` 里 -1；一个逻辑请求恰好一对显示/隐藏，重试和重放都在里面。
 - 计数按回调分开：请求级换了回调的请求，计入它自己那个回调的计数，所以每个回调都看到成对的 true/false（旧版可能出现"A 显示、B 隐藏"）。
-- 卸载（`dispose`）取消未触发的定时器。
+- 卸载（`dispose`）取消未触发的定时器，并对已显示的回调立即发一次 `false`，避免页面上的 loading 卡住。
 - 变化：显示从逻辑请求开始算，包括等待 token 刷新的时间（N10）；`guardTransform`、`COMPLETE` 层键、`logical` 参数全部删除（R2-3、R2-4 的问题不再存在）。
 
 ### 2.2 notify（outer，内置次序 2）
@@ -99,12 +99,13 @@ summary: 10 个内置插件和 4 项内核服务在洋葱管线下的阶段、�
 - 选项不变：`pattern`（默认匹配 `{id}` / `:id` / `[id]`）、`removeKey`（默认 true）。
 - 行为不变：只处理 pathname；先从 params 取值（含实例 `defaults.params`），再从 data 取；按路径段 `encodeURIComponent`；同一个占位符出现多次全部替换。
 - 实现：算出新的 url、params、data 后调用 `next({ url, params, data })`，不改调用方传入的对象。
-- 请求级：`repath: false`。
+- 请求级：`false` / `true` / `{ enable, pattern, removeKey }`（按字段覆盖）。
 
 ### 3.2 filter（prepare，内置次序 2）
 
 - 选项不变：`predicate([k, v])`（默认丢弃 null、undefined、NaN、空白串）、`ignoreKeys`、`ignoreValues`。
 - 行为：剥离 params 和 data（纯对象）里的空字段，生成新对象，用 patch 交给内层；params 含实例 `defaults.params`，被剥掉的默认键不会被 axios 二次合并带回。
+- 请求级：`false` / `true` / `{ enable, predicate, ignoreKeys, ignoreValues }`（按字段覆盖）。
 - 变化：**装上即生效**（N6），请求级 `filter: false` 关闭；旧版要请求级写 `filter: true` 才过滤，装了不生效是个坑。
 
 ## 4. attempt 阶段：retry

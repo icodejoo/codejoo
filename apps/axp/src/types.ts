@@ -316,8 +316,8 @@ export interface AxpRequestOptions {
   throws?: boolean;
   /** 跳过通知。 */
   silent?: boolean;
-  /** 显式 key 或关闭 key；省略时惰性计算。 */
-  key?: string | false;
+  /** 显式 key（字符串）或关闭 key（false）；省略或 true 时惰性自动计算（true 保留给旧写法 `key: true, cache: true` 平滑迁移）。 */
+  key?: string | boolean;
   /** 用户的逻辑请求取消信号。 */
   signal?: AbortSignal;
 }
