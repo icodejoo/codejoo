@@ -45,7 +45,7 @@ test/
 ├── unit/          <模块>.unit.test.ts            例：token-manager.unit.test.ts
 ├── rule/          <插件>.rule.test.ts            例：retry.rule.test.ts
 ├── boundary/      <插件>.boundary.test.ts        例：cache.boundary.test.ts
-├── combo/         <a>+<b>.combo.test.ts          插件名按字母序，a < b；例：auth+retry.combo.test.ts
+├── combo/         <a>+<b>[+<c>…].combo.test.ts   插件名按字母序，可多段；例：auth+retry.combo.test.ts、cancel+key+share.combo.test.ts
 │                  powerset.combo.test.ts         全插件幂集扫描
 ├── integration/   <主题>.integration.test.ts     例：install-order.integration.test.ts
 └── helpers/       不放用例

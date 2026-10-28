@@ -16,4 +16,4 @@
 
 ## 参考记录
 
-- [测试用例旧→新映射记录](reference/test-migration-map.md) — 迁移到六层结构时每条用例的去向审计表，目前为空壳。draft。
+- [测试用例旧→新映射记录](reference/test-migration-map.md) — 迁移到六层结构时每条用例的去向审计表，A、B 两批迁移已全部完成，含每批用例数核对与 drop/N/A 清单。draft。

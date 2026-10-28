@@ -6,7 +6,7 @@ summary: 测试迁移到六层结构时，每条用例的旧位置、新位置�
 ---
 ## TL;DR
 
-A 批（单插件规则/补丁/覆盖文件，共 16 个提交）已迁移完成，基线冻结于 8c12b94；B 批（dioman-coverage、dioman-powerset、auth.integration、integration、attempt、adapter-layers、axp-install、types、e2e）尚未开始。记录规则见 [测试六层分类规范 §4](../guides/test-layers.md)。迁移完成后状态改为 `archived`，不删除。mirror 列待验收场景 id 对照后统一回填，A 批暂空。
+迁移已全部完成：A 批（单插件规则/补丁/覆盖文件，16 个提交，基线冻结于 8c12b94）与 B 批（dioman-coverage、dioman-powerset、auth.integration、integration、attempt、adapter-layers、axp-install、types、e2e，9 个提交）均已落地，`test/` 根目录除 `index.ts`、`openapi.ts`、`mock.json`、`helpers/` 等支撑文件外不再有 `*.test.ts`。B 批共 drop 2 条、N/A 4 条（原 it.skip），无 merge；全量 `vp test run` 为 683 条用例（原 689，减少 6），expected fail 仍为 3，skip 清零。记录规则见 [测试六层分类规范 §4](../guides/test-layers.md)。状态暂保持 `draft`，是否改 `archived` 由负责人定。mirror 列待验收场景 id 对照后统一回填，A、B 批暂空。
 
 ## 基线（迁移开始时冻结）
 
@@ -38,15 +38,15 @@ A 批（单插件规则/补丁/覆盖文件，共 16 个提交）已迁移完成
 | helper+logger（helper.coverage、logger.coverage） | 8f1a010 | 38 | 0 | 0 | 0 | 0 | 0 | 38 | 是 |
 | core（core.coverage） | 6e15e36 | 22 | 0 | 0 | 0 | 0 | 0 | 22 | 是 |
 | install（install.coverage） | 96db491 | 2 | 0 | 0 | 0 | 0 | 0 | 2 | 是 |
-| dioman-coverage（dioman-coverage.test，含 4 条 skip） | 待回填 | 48 | 2 | 4 | 0 | 0 | 0 | 42 | 是 |
-| powerset（dioman-powerset.test） | 待回填 | 2 | 0 | 0 | 0 | 0 | 0 | 2 | 是 |
-| auth.integration（auth.integration.test） | 待回填 | 24 | 0 | 0 | 0 | 0 | 0 | 24 | 是 |
-| integration（integration.test） | 待回填 | 8 | 0 | 0 | 0 | 0 | 0 | 8 | 是 |
-| attempt（attempt.test） | 待回填 | 5 | 0 | 0 | 0 | 0 | 0 | 5 | 是 |
-| adapter-layers（adapter-layers.test） | 待回填 | 6 | 0 | 0 | 0 | 0 | 0 | 6 | 是 |
-| axp-install（axp-install.test） | 待回填 | 17 | 0 | 0 | 0 | 0 | 0 | 17 | 是 |
-| types（types.test） | 待回填 | 2 | 0 | 0 | 0 | 0 | 0 | 2 | 是 |
-| e2e（e2e.test） | 待回填 | 18 | 0 | 0 | 0 | 0 | 0 | 18 | 是 |
+| dioman-coverage（dioman-coverage.test，含 4 条 skip） | b18e8b9 | 48 | 2 | 4 | 0 | 0 | 0 | 42 | 是 |
+| powerset（dioman-powerset.test） | 8524d1c | 2 | 0 | 0 | 0 | 0 | 0 | 2 | 是 |
+| auth.integration（auth.integration.test） | f630d5a | 24 | 0 | 0 | 0 | 0 | 0 | 24 | 是 |
+| integration（integration.test） | e17609e | 8 | 0 | 0 | 0 | 0 | 0 | 8 | 是 |
+| attempt（attempt.test） | f7d6227 | 5 | 0 | 0 | 0 | 0 | 0 | 5 | 是 |
+| adapter-layers（adapter-layers.test） | a676218 | 6 | 0 | 0 | 0 | 0 | 0 | 6 | 是 |
+| axp-install（axp-install.test） | 451f75f | 17 | 0 | 0 | 0 | 0 | 0 | 17 | 是 |
+| types（types.test） | ba56061 | 2 | 0 | 0 | 0 | 0 | 0 | 2 | 是 |
+| e2e（e2e.test） | 8cf9d1d | 18 | 0 | 0 | 0 | 0 | 0 | 18 | 是 |
 
 ## 判层备注（A 批）
 
@@ -57,6 +57,17 @@ A 批（单插件规则/补丁/覆盖文件，共 16 个提交）已迁移完成
 - 同名辅助函数/导入在不同来源里等价时（`mockResp`、`deferred`、`notify`）合并为一份，不改断言。
 - 3 条 expected fail（auth 的 authExpired、share 的冻结 AxiosError 与全订阅者 timeout）原样保留为 `it.fails`，在 boundary。
 - A 批无 drop/N/A/merge：同 id 的不同输入一律视为变体，跨层的 `retry:false` 类（unit `$shouldRetry` vs rule 端到端）输入不同，保留。
+
+## 判层与去重备注（B 批）
+
+- dioman-coverage 的单插件端到端用例（经 `Axp.create` + 假 adapter）里，`key()` 只是给 cache/share 提供 `config.key` 的脚手架，判 rule；只有 key 自身行为必须靠 cache 命中与否才能观察的 4 条才进 `combo/cache+key`。
+- 4 个及以上插件交互的用例按全部插件名命名（`auth+cancel+notify+retry.combo.test.ts`），不再按主题压缩成两段。
+- 为守住每个文件约 400 行，新增主题文件：`rule/cache.rule.store`、`rule/share.rule.policy`、`boundary/auth.boundary.refresh`；auth 相关测试替身抽到 `test/helpers/auth.ts`（`makeTM`、`authHeader`、`authBackend`、`FakeTokenManager`），A 批文件里已有的本地 `makeTM` 原样保留。
+- auth.integration 的 handle 重排两条（prepend/dispose 时在途刷新）涉及 `Axp.install` 装配，判 integration；其余并发/时序/兜底判 boundary，单请求声明行为判 rule。
+- `[auth.req.authExpired]` 是该用例原有前缀，台账里没有这个 id，原样保留，待台账补。
+- 无台账 id 的用例（powerset 两条、e2e 3 条）不加前缀，依据列已注明。
+- 去重原则沿用 A 批：同 id 不同输入（含"同等价类但字面量/结构不同"）一律视为变体保留，只在同层、同 id、同输入、同期望时 drop。拿不准而保留的清单见各行依据列里的"拿不准而保留"字样。
+- 两个空的 `describe.skip`（0 用例）已删除，映射里各记一行 N/A，不计入核对公式。
 
 ## 映射
 
