@@ -1,6 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import axios, { AxiosError } from 'axios';
-import envs from '../src/plugins/envs';
 import normalize from '../src/plugins/normalize';
 import notify from '../src/plugins/notify';
 import cancel, { cancelAll } from '../src/plugins/cancel';
@@ -19,23 +18,6 @@ function interceptors() {
 function response(config: any, data: unknown = 'ok') {
     return { config, data, status: 200, statusText: '', headers: {} };
 }
-
-describe('envs/filter/repath — 次要分支与卸载', () => {
-    it.each([{ timeout: 1 }, { name: 'named' }])('envs 无 baseURL 配置 %s 也可安装并还原', (config) => {
-        const ax = axios.create();
-        const before = ax.defaults.timeout;
-        const off = envs([{ rule: () => true, config }]).install(ax);
-        expect(ax.defaults).toMatchObject(config);
-        off?.();
-        expect(ax.defaults.timeout).toBe(before);
-    });
-    it('envs rule 抛错不修改 defaults', () => {
-        const ax = axios.create();
-        const before = ax.defaults.baseURL;
-        expect(() => envs([{ rule: () => { throw new Error('rule'); }, config: { baseURL: '/new' } }]).install(ax)).toThrow('rule');
-        expect(ax.defaults.baseURL).toBe(before);
-    });
-});
 
 describe('normalize/notify — 失败旁路与清理', () => {
     it.each([true, { enable: true }, () => ({ enable: true })])('normalize=%s 仍校验业务失败并携带 config', async (option) => {

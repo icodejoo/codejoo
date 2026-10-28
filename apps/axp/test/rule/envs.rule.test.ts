@@ -1,14 +1,12 @@
 import { describe, it, expect, vi } from 'vitest';
-import envs from '../src/plugins/envs';
-
+import envs from '../../src/plugins/envs';
 
 function makeAx(): any {
     return { defaults: { baseURL: '', headers: {} } };
 }
 
-
 describe('envs', () => {
-    it('选第一个匹配的规则，merge 到 defaults', () => {
+    it('[envs.fn.axpEnvs][envs.cb.rules[].rule][envs.opt.rules[].config] 选第一个匹配的规则，merge 到 defaults', () => {
         const ax = makeAx();
         envs([
             { rule: () => false, config: { baseURL: 'http://a' } },
@@ -19,7 +17,7 @@ describe('envs', () => {
         expect(ax.defaults.timeout).toBe(5000);
     });
 
-    it('第一条命中后 break：后续 rule() 不再调用', () => {
+    it('[envs.cb.rules[].rule] 第一条命中后 break：后续 rule() 不再调用', () => {
         const ax = makeAx();
         const r1 = vi.fn(() => true);
         const r2 = vi.fn(() => true);
@@ -31,7 +29,7 @@ describe('envs', () => {
         expect(r2).not.toHaveBeenCalled();
     });
 
-    it('没有匹配 → 不修改 defaults', () => {
+    it('[envs.fn.axpEnvs] 没有匹配 → 不修改 defaults', () => {
         const ax = makeAx();
         const before = { ...ax.defaults };
         envs([
@@ -41,14 +39,7 @@ describe('envs', () => {
         expect(ax.defaults).toEqual(before);
     });
 
-    it('空规则列表 → no-op', () => {
-        const ax = makeAx();
-        const before = { ...ax.defaults };
-        envs().install(ax);
-        expect(ax.defaults).toEqual(before);
-    });
-
-    it('合并是浅 Object.assign（不递归）', () => {
+    it('[envs.opt.rules[].config] 合并是浅 Object.assign（不递归）', () => {
         const ax = makeAx();
         ax.defaults.headers = { 'X-A': '1' };
         envs([

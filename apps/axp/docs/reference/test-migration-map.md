@@ -31,6 +31,7 @@ A 批（单插件规则/补丁/覆盖文件）迁移进行中，基线冻结于 
 | mock（mock.test 余下、mock.coverage） | 本批提交 | 29 | 0 | 0 | 0 | 0 | 0 | 29 | 是 |
 | repath（repath.test 全部 + lifecycle.coverage 的 2 条） | 本批提交 | 23 | 0 | 0 | 0 | 0 | 0 | 23 | 是 |
 | filter（filter.test 全部 + lifecycle.coverage 的 2 条） | 本批提交 | 19 | 0 | 0 | 0 | 0 | 0 | 19 | 是 |
+| envs（envs.test 全部 + lifecycle.coverage 的 2 条） | 本批提交 | 8 | 0 | 0 | 0 | 0 | 0 | 8 | 是 |
 
 ## 映射
 
@@ -446,3 +447,10 @@ A 批（单插件规则/补丁/覆盖文件）迁移进行中，基线冻结于 
 | test/filter.test.ts::filter — 函数形式解出 falsy / enable:false → 跳过过滤 > config.filter = () => ({ enable:false })：同样跳过 | rule/filter.rule.test.ts::filter — 函数形式解出 falsy / enable:false → 跳过过滤 > [filter.req.filter.enable] config.filter = () => ({ enable:false })：同样跳过 | rename | 规则层（rule） |  |
 | test/lifecycle.coverage.test.ts::envs/filter/repath — 次要分支与卸载 > filter 忽略继承属性，收集 dropped，ignoreValues 支持 NaN | unit/filter.unit.test.ts::envs/filter/repath — 次要分支与卸载 > [filter.fn.$filter][filter.opt.ignoreValues] filter 忽略继承属性，收集 dropped，ignoreValues 支持 NaN | rename | 纯函数：继承属性、dropped、NaN |  |
 | test/lifecycle.coverage.test.ts::envs/filter/repath — 次要分支与卸载 > filter 函数解析为 false 时删除配置，数组与文本保持原值 | boundary/filter.boundary.test.ts::envs/filter/repath — 次要分支与卸载 > [filter.req.filter.callback][filter.fn.axpFilter] filter 函数解析为 false 时删除配置，数组与文本保持原值 | rename | 函数解析为 false，数组与文本 params 保持原值 |  |
+| test/envs.test.ts::envs > 选第一个匹配的规则，merge 到 defaults | rule/envs.rule.test.ts::envs > [envs.fn.axpEnvs][envs.cb.rules[].rule][envs.opt.rules[].config] 选第一个匹配的规则，merge 到 defaults | rename | 命中规则并合并到 defaults |  |
+| test/envs.test.ts::envs > 第一条命中后 break：后续 rule() 不再调用 | rule/envs.rule.test.ts::envs > [envs.cb.rules[].rule] 第一条命中后 break：后续 rule() 不再调用 | rename | 第一条命中后即停 |  |
+| test/envs.test.ts::envs > 没有匹配 → 不修改 defaults | rule/envs.rule.test.ts::envs > [envs.fn.axpEnvs] 没有匹配 → 不修改 defaults | rename | 无匹配不修改 defaults |  |
+| test/envs.test.ts::envs > 空规则列表 → no-op | boundary/envs.boundary.test.ts::envs > [envs.fn.axpEnvs] 空规则列表 → no-op | rename | 空规则列表 |  |
+| test/envs.test.ts::envs > 合并是浅 Object.assign（不递归） | rule/envs.rule.test.ts::envs > [envs.opt.rules[].config] 合并是浅 Object.assign（不递归） | rename | 浅合并 |  |
+| test/lifecycle.coverage.test.ts::envs/filter/repath — 次要分支与卸载 > envs 无 baseURL 配置 %s 也可安装并还原（each） | boundary/envs.boundary.test.ts::envs/filter/repath — 次要分支与卸载 > [envs.opt.rules[].config][envs.method.cleanup] envs 无 baseURL 配置 %s 也可安装并还原 | rename | 无 baseURL 配置的安装与还原（each） |  |
+| test/lifecycle.coverage.test.ts::envs/filter/repath — 次要分支与卸载 > envs rule 抛错不修改 defaults | boundary/envs.boundary.test.ts::envs/filter/repath — 次要分支与卸载 > [envs.cb.rules[].rule] envs rule 抛错不修改 defaults | rename | rule 抛错，异常回调 |  |
