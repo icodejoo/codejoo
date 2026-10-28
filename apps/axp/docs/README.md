@@ -1,10 +1,21 @@
 # axp 文档索引
 
-项目的设计说明见根目录的 [README](../README.md) 和 [ARCHITECTURE](../ARCHITECTURE.md)。这里收录的是过程文档。
+使用说明见根目录的 [README](../README.md)。根目录的 [ARCHITECTURE](../ARCHITECTURE.md) 描述的是旧架构，已经过期；新架构以下面的「设计」为准，重构完成后重写。
+
+## 决策（已拍板）
+
+- [0001 核心重构的六条决策](decisions/0001-core-redesign.md) — 洋葱管线、具名阶段、归一化响应 `IAxpResponse`、不设错误类的取舍与理由。active。
+
+## 设计（洋葱管线重构）
+
+- [核心架构方案](design/core-architecture.md) — 新内核结构、数据流、阶段排序、上下文、归一化响应与错误、插件接口、客户端 API、性能设计。draft。
+- [内置插件与内核服务规格](design/plugin-spec.md) — 10 个插件和 4 项内核服务的选项、行为、相对现状的变化汇总。draft。
+- [测试方案](design/test-plan.md) — 六层用例要点、组合不变量、覆盖率与台账、性能门槛、验收矩阵、旧用例迁移。draft。
+- [实施计划](design/implementation-plan.md) — B0–B7 批次、Codex 派发约束、评审关卡与风险。draft。
 
 ## 报告（带日期的结果）
 
-- [2026-10-27 Codex 全量 review：终审与修复记录](reports/2026-10-27-codex-full-review.md) — 30 条问题的终审结论、修复方式、对外行为变化。active。
+- [2026-10-27 Codex 全量 review：终审与修复记录](reports/2026-10-27-codex-full-review.md) — 30 条问题的终审结论、修复方式、对外行为变化；「待优化」O1–O6 由上面的重构解决。active。
 
 ## 外部关联
 
