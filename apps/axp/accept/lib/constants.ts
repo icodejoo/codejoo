@@ -70,5 +70,11 @@ export const DEFAULT_RETRY_METHODS: readonly string[] = ["GET", "PUT", "HEAD", "
 export const KERNEL_CAPABILITIES: readonly string[] = ["cancel", "key", "normalize", "log"];
 /** 由内置插件提供的能力 */
 export const PLUGIN_CAPABILITIES: readonly string[] = ["auth", "cache", "retry", "share", "loading", "mock", "notify", "repath", "filter", "envs"];
-/** axp 具备的能力名（CONTRACT §7，内核 + 插件）；不在其中的能力，场景直接跳过 */
-export const SUPPORTED_CAPABILITIES: ReadonlySet<string> = new Set([...PLUGIN_CAPABILITIES, ...KERNEL_CAPABILITIES]);
+/**
+ * 行为级能力：不对应插件或请求选项，是 axp 管线本身的语义，场景只靠 `requires` 声明。
+ * mock-in-chain：mock 探测在插件链内发出，不走 cache / share，回落后的真实请求才走；keep-alive：连接复用不受上一次失败影响。
+ * 同属 CONTRACT §7 细分能力的 multipart、share-retry、timeout-send 不在其中（执行器未实现或 axp 没有）。
+ */
+export const BEHAVIOR_CAPABILITIES: readonly string[] = ["mock-in-chain", "keep-alive"];
+/** axp 具备的能力名（CONTRACT §7，内核 + 插件 + 行为级）；不在其中的能力，场景直接跳过 */
+export const SUPPORTED_CAPABILITIES: ReadonlySet<string> = new Set([...PLUGIN_CAPABILITIES, ...KERNEL_CAPABILITIES, ...BEHAVIOR_CAPABILITIES]);

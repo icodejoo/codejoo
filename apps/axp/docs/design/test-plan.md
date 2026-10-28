@@ -198,7 +198,7 @@ summary: 新架构按六层怎么测、覆盖率和 API 台账口径、组合不
 
 一次运行 = 场景 × 网络 × 风格 × adapter，定义见 testkit 的 `MATRIX.md`：
 
-- 场景：`scenarios/*.json`，当前 438 个，axp 可执行 354 个；
+- 场景：`scenarios/*.json`，当前 443 个，axp 可执行 358 个；
 - 网络：normal、weak、lossy、offline、blackhole、flap、dns；
 - 风格：http、business；
 - adapter：http、fetch。

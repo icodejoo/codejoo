@@ -2,7 +2,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
-import { KERNEL_CAPABILITIES, PLUGIN_CAPABILITIES, SUPPORTED_CAPABILITIES } from "../lib/constants.ts";
+import { BEHAVIOR_CAPABILITIES, KERNEL_CAPABILITIES, PLUGIN_CAPABILITIES, SUPPORTED_CAPABILITIES } from "../lib/constants.ts";
 import {
   checkRequestOptions,
   validateScenarioMapping,
@@ -170,20 +170,24 @@ describe("映射不了的选项要显式报错", () => {
     expect(STEP_KINDS).toHaveLength(16);
   });
 
-  it("能力清单：内核具备（cancel/key/normalize/log）+ 插件提供 = axp 全部能力 = 映射表登记的插件，缺失的三项不在其中", () => {
+  it("能力清单：内核具备（cancel/key/normalize/log）+ 插件提供 = 映射表登记的插件；再加行为级（mock-in-chain/keep-alive）= axp 全部能力，缺失的不在其中", () => {
     expect(KERNEL_CAPABILITIES.toSorted()).toEqual(["cancel", "key", "log", "normalize"]);
     expect(PLUGIN_CAPABILITIES.filter((c) => KERNEL_CAPABILITIES.includes(c))).toEqual([]);
-    expect([...SUPPORTED_CAPABILITIES].toSorted()).toEqual([...PLUGIN_CAPABILITIES, ...KERNEL_CAPABILITIES].toSorted());
-    expect([...SUPPORTED_CAPABILITIES].toSorted()).toEqual(Object.keys(PLUGIN_OPTION_MAP).toSorted());
+    expect(BEHAVIOR_CAPABILITIES.toSorted()).toEqual(["keep-alive", "mock-in-chain"]);
+    expect(BEHAVIOR_CAPABILITIES.filter((c) => KERNEL_CAPABILITIES.includes(c) || PLUGIN_CAPABILITIES.includes(c))).toEqual([]);
+    expect([...SUPPORTED_CAPABILITIES].toSorted()).toEqual([...PLUGIN_CAPABILITIES, ...KERNEL_CAPABILITIES, ...BEHAVIOR_CAPABILITIES].toSorted());
+    expect([...PLUGIN_CAPABILITIES, ...KERNEL_CAPABILITIES].toSorted()).toEqual(Object.keys(PLUGIN_OPTION_MAP).toSorted());
     for (const c of UNSUPPORTED_PLUGINS) expect(SUPPORTED_CAPABILITIES.has(c), c).toBe(false);
+    for (const c of ["multipart", "share-retry", "timeout-send"]) expect(SUPPORTED_CAPABILITIES.has(c), c).toBe(false);
   });
 
-  it("mapping.md 的能力清单与代码一致（内核具备 / 插件提供 / 缺失 三行）", () => {
+  it("mapping.md 的能力清单与代码一致（内核具备 / 插件提供 / 行为级 / 缺失 四行）", () => {
     const doc = fs.readFileSync(path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..", "mapping.md"), "utf8");
     /** 取 md 里"<标签>：`a b c`"这一行的名单 */
     const listOf = (label: string): string[] => (new RegExp(`${label}：\`([^\`]+)\``).exec(doc)?.[1] ?? "").split(/\s+/).filter(Boolean).toSorted();
     expect(listOf("内核具备")).toEqual(KERNEL_CAPABILITIES.toSorted());
     expect(listOf("插件提供")).toEqual(PLUGIN_CAPABILITIES.toSorted());
+    expect(listOf("行为级")).toEqual(BEHAVIOR_CAPABILITIES.toSorted());
     expect(listOf("缺失")).toEqual(UNSUPPORTED_PLUGINS.toSorted());
   });
 

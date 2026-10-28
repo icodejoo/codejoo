@@ -14,7 +14,8 @@ axp 的能力：
 
 - 内核具备：`cancel key normalize log`（不再是插件，不用装配）
 - 插件提供：`auth cache retry share loading mock notify repath filter envs`
-- 缺失：`breaker offline timeout`（对应场景一律跳过）
+- 行为级：`mock-in-chain keep-alive`（不对应插件或选项，axp 管线本身就满足，场景靠 `requires` 声明；2026-10-28 B7 验收用这两项各 4 格实测通过后登记）
+- 缺失：`breaker offline timeout`（对应场景一律跳过）；另外 `multipart`（执行器不构造 multipart 请求体）、`share-retry`、`timeout-send` 也不在能力清单里，同样按缺能力跳过
 
 ---
 
