@@ -10,6 +10,13 @@ import { collectRequests, stepKind, STEP_KINDS, walkSteps } from './walk.ts';
 /** 一个选项的校验器：返回 null 表示可映射，返回字符串表示"映射不了"的原因 */
 type OptionCheck = (value: unknown) => string | null;
 
+/** 中立 key 选项：与 `true` 同义，查询参数和请求体都算进 key */
+const KEY_DEEP = 'deep';
+/** 中立 key 选项：只看方法+路径（新 key 服务没有这个模式，映射不了） */
+const KEY_SIMPLE = 'simple';
+/** `key: 'simple'` 映射不了的原因：新 key 服务始终把 params（及请求体）算进 key */
+const KEY_SIMPLE_UNSUPPORTED = `axp 的 key 服务始终含 params 与请求体，没有 '${KEY_SIMPLE}'（只看方法+路径）模式`;
+
 const isNum: OptionCheck = (v) => (typeof v === 'number' && Number.isFinite(v) ? null : '需要数字');
 const isBool: OptionCheck = (v) => (typeof v === 'boolean' ? null : '需要布尔值');
 const isStrList: OptionCheck = (v) => (Array.isArray(v) && v.every((x) => typeof x === 'string') ? null : '需要字符串数组');
@@ -18,7 +25,11 @@ const isObj: OptionCheck = (v) => (v && typeof v === 'object' && !Array.isArray(
 /** 只接受指定取值 */
 const oneOf = (...allowed: unknown[]): OptionCheck => (v) => (allowed.includes(v) ? null : `仅支持 ${allowed.map((x) => JSON.stringify(x)).join(' / ')}`);
 
-/** 中立插件选项 → 是否可映射。键存在即"已映射"，校验器给出取值层面的限制 */
+/**
+ * 中立插件选项 → 是否可映射。键存在即"已映射"，校验器给出取值层面的限制。
+ * 其中 cancel / key / normalize / log 在 axp 里是内核能力，不再装配插件（见 KERNEL_CAPABILITIES），
+ * 但中立 schema 仍有这些选项，所以保留登记：`key.scope` 落到客户端的 key 配置，其余无需落地。
+ */
 export const PLUGIN_OPTION_MAP: Record<string, Record<string, OptionCheck>> = {
   auth: { url_pattern: (v) => (typeof v === 'string' ? null : '需要字符串'), refresh: oneOf('endpoint'), refresh_query: isObj },
   cache: { ttl_ms: isNum, max: isNum, methods: isStrList },
@@ -39,6 +50,12 @@ export const PLUGIN_OPTION_MAP: Record<string, Record<string, OptionCheck>> = {
 /** axp 没有对应能力、一律显式报错的插件 */
 export const UNSUPPORTED_PLUGINS: readonly string[] = ['breaker', 'offline', 'timeout'];
 
+/** 校验中立请求级 key：布尔或字符串；`'simple'` 映射不了 */
+const checkKeyOption: OptionCheck = (v) => {
+  if (v === KEY_SIMPLE) return KEY_SIMPLE_UNSUPPORTED;
+  return typeof v === 'boolean' || typeof v === 'string' ? null : '需要 boolean 或字符串';
+};
+
 /** 中立请求级选项 → 是否可映射；`breaker` 无对应能力，一律映射不了 */
 export const REQUEST_OPTION_MAP: Record<string, OptionCheck> = {
   auth: isBool,
@@ -48,7 +65,7 @@ export const REQUEST_OPTION_MAP: Record<string, OptionCheck> = {
   loading: isBool,
   silent: isBool,
   timeout_ms: isNum,
-  key: (v) => (typeof v === 'boolean' || typeof v === 'string' ? null : '需要 boolean 或字符串'),
+  key: checkKeyOption,
   mock: isBool,
   normalize: isBool,
   filter: isBool,
@@ -150,21 +167,47 @@ export interface MappedRequestConfig {
 }
 
 /**
- * 翻译中立的 key 选项。中立语义：`true` 与 `'deep'` 都要把查询参数（及请求体）算进 key，`'simple'` 只看方法+路径。
- * axp 里 `key: true` 是 simple（只哈希 method+url，不含 `params`），所以：
- * 中立 `true`/`'deep'` → axp `'deep'`；中立 `'simple'` → axp `true`；其它字符串是显式 key，原样传。
+ * 翻译中立的 key 选项。新 key 服务默认就把 method+url+params（有请求体的方法再加 data）算进 key，
+ * 所以中立 `true` 与 `'deep'` 都对应 axp 的 `true`（默认行为）；`false` 与显式字符串原样传。
+ * 注意 `'deep'` 在新 API 里已删除，原样传会被当成一条字面 key，必须翻译掉。
  * @param key 中立 key 选项
- * @example mapKeyOption(true) // 'deep'
+ * @returns axp 请求级 key
+ * @throws `'simple'` 在新 key 服务里没有对应模式，抛"映射不了"（正常流程里 validateScenarioMapping 已提前拦截）
+ * @example mapKeyOption('deep') // true
  */
 export function mapKeyOption(key: boolean | string): boolean | string {
-  if (key === true || key === 'deep') return 'deep';
-  if (key === 'simple') return true;
-  return key;
+  if (key === KEY_SIMPLE) throw new Error(`映射不了: key ${KEY_SIMPLE_UNSUPPORTED}`);
+  return key === KEY_DEEP ? true : key;
+}
+
+/** axp cache 插件的选项（执行器会传的那几项） */
+export interface MappedCacheOptions {
+  /** 缓存有效期，毫秒 */
+  expires?: number;
+  /** LRU 容量 */
+  max?: number;
+  /** 允许缓存的方法（小写）；不传时用 axp 默认 get/head，与中立默认一致 */
+  methods?: string[];
+}
+
+/**
+ * 把中立的 `cache` 插件选项翻译成 axp cache 插件选项。
+ * `methods` 直接作为插件选项传入（转小写），不再靠 shouldCache 叠加；未写时不传，沿用 axp 默认的 GET/HEAD。
+ * @param cfg 中立 cache 插件选项
+ * @returns axp 插件选项；未设置的项不出现
+ * @example mapCacheOptions({ ttl_ms: 300, methods: ['GET', 'POST'] }) // { expires: 300, methods: ['get', 'post'] }
+ */
+export function mapCacheOptions(cfg: { ttl_ms?: number; max?: number; methods?: string[] }): MappedCacheOptions {
+  const out: MappedCacheOptions = {};
+  if (cfg.ttl_ms !== undefined) out.expires = cfg.ttl_ms;
+  if (cfg.max !== undefined) out.max = cfg.max;
+  if (cfg.methods !== undefined) out.methods = cfg.methods.map((m) => m.toLowerCase());
+  return out;
 }
 
 /**
  * 把中立的请求级选项翻译成 axp/axios 的请求配置字段。
- * - `key: 'simple'` 在 axp 里是 `key: true`（字符串 'simple' 会被当成字面 key）；
+ * - `key: true` / `'deep'` 都是 axp 的 `key: true`（默认含参数）；`'simple'` 映射不了，会抛错；
  * - 方法名转小写（axp 的 retry.methods 只认小写）。
  * @param options 中立请求选项
  * @returns axios 配置片段；未设置的选项不出现

@@ -1,7 +1,9 @@
 import fs from 'node:fs';
 import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
-import { checkRequestOptions, validateScenarioMapping, mapRequestOptions, authUrlPatterns, PLUGIN_OPTION_MAP, REQUEST_OPTION_MAP, UNSUPPORTED_PLUGINS } from '../lib/mapping.ts';
+import { KERNEL_CAPABILITIES, PLUGIN_CAPABILITIES, SUPPORTED_CAPABILITIES } from '../lib/constants.ts';
+import { checkRequestOptions, validateScenarioMapping, mapCacheOptions, mapKeyOption, mapRequestOptions, authUrlPatterns, PLUGIN_OPTION_MAP, REQUEST_OPTION_MAP, UNSUPPORTED_PLUGINS } from '../lib/mapping.ts';
 import { parseConfig } from '../lib/config.ts';
 import { analyzeDryRun, renderDryRun } from '../lib/dry-run.ts';
 import { buildPlan } from '../lib/plan.ts';
@@ -23,11 +25,31 @@ describe('映射：中立选项 → axp 参数', () => {
     expect(mapRequestOptions(undefined)).toEqual({});
   });
 
-  it("key：中立 true/'deep' 含查询参数 → axp 'deep'；'simple' → axp true（axp 的 true 不含 params）", () => {
-    expect(mapRequestOptions({ key: true }).key).toBe('deep');
-    expect(mapRequestOptions({ key: 'deep' }).key).toBe('deep');
-    expect(mapRequestOptions({ key: 'simple' }).key).toBe(true);
+  it("key：中立 true 直接是 axp 默认行为（含参数），'deep' 是同义写法也翻成 true；false 与显式字符串原样", () => {
+    expect(mapRequestOptions({ key: true }).key).toBe(true);
+    expect(mapRequestOptions({ key: 'deep' }).key).toBe(true);
+    expect(mapRequestOptions({ key: false }).key).toBe(false);
     expect(mapRequestOptions({ key: 'fixed' }).key).toBe('fixed');
+    expect(mapRequestOptions({})).not.toHaveProperty('key');
+  });
+
+  it("key：'simple'（只看方法+路径）新 key 服务没有这个模式，映射不了——校验阶段报错，直接调用也抛错", () => {
+    expect(checkRequestOptions({ id: 'r', path: '/x', options: { key: 'simple' } })[0]).toMatch(/请求 r 选项 key: .*simple/);
+    expect(validateScenarioMapping(sc({ steps: [{ request: { id: 'r', path: '/x', options: { key: 'simple' } } }] }))).toHaveLength(1);
+    expect(() => mapKeyOption('simple')).toThrow(/映射不了/);
+    expect(() => mapRequestOptions({ key: 'simple' })).toThrow(/映射不了/);
+    // 其它写法都能过校验
+    for (const key of [true, false, 'deep', 'fixed']) expect(checkRequestOptions({ id: 'r', path: '/x', options: { key } })).toEqual([]);
+  });
+
+  it('cache.methods：映射成 cache 插件选项（转小写），不写就不传（沿用 axp 默认 get/head）', () => {
+    expect(mapCacheOptions({ ttl_ms: 300, max: 5, methods: ['GET', 'POST'] })).toEqual({ expires: 300, max: 5, methods: ['get', 'post'] });
+    expect(mapCacheOptions({ ttl_ms: 300 })).toEqual({ expires: 300 });
+    expect(mapCacheOptions({})).not.toHaveProperty('methods');
+    // 空名单 = 任何方法都不缓存，必须原样传，不能当成"没写"
+    expect(mapCacheOptions({ methods: [] })).toEqual({ methods: [] });
+    expect(validateScenarioMapping(sc({ client: { plugins: { cache: { ttl_ms: 1, methods: ['GET', 'PUT'] } } } }))).toEqual([]);
+    expect(validateScenarioMapping(sc({ client: { plugins: { cache: { methods: 'GET' } } } }))[0]).toMatch(/cache\.methods: 需要字符串数组/);
   });
 
   it('filter：请求级布尔原样映射成 config.filter；非布尔显式报错', () => {
@@ -77,6 +99,23 @@ describe('映射不了的选项要显式报错', () => {
     expect(Object.keys(PLUGIN_OPTION_MAP).sort()).toEqual(['auth', 'cache', 'cancel', 'envs', 'filter', 'key', 'loading', 'log', 'mock', 'normalize', 'notify', 'repath', 'retry', 'share']);
     expect(Object.keys(REQUEST_OPTION_MAP).sort()).toEqual(['auth', 'breaker', 'cache', 'filter', 'key', 'loading', 'mock', 'normalize', 'retry', 'share', 'silent', 'timeout_ms']);
     expect(STEP_KINDS).toHaveLength(16);
+  });
+
+  it('能力清单：内核具备（cancel/key/normalize/log）+ 插件提供 = axp 全部能力 = 映射表登记的插件，缺失的三项不在其中', () => {
+    expect(KERNEL_CAPABILITIES.toSorted()).toEqual(['cancel', 'key', 'log', 'normalize']);
+    expect(PLUGIN_CAPABILITIES.filter((c) => KERNEL_CAPABILITIES.includes(c))).toEqual([]);
+    expect([...SUPPORTED_CAPABILITIES].toSorted()).toEqual([...PLUGIN_CAPABILITIES, ...KERNEL_CAPABILITIES].toSorted());
+    expect([...SUPPORTED_CAPABILITIES].toSorted()).toEqual(Object.keys(PLUGIN_OPTION_MAP).toSorted());
+    for (const c of UNSUPPORTED_PLUGINS) expect(SUPPORTED_CAPABILITIES.has(c), c).toBe(false);
+  });
+
+  it('mapping.md 的能力清单与代码一致（内核具备 / 插件提供 / 缺失 三行）', () => {
+    const doc = fs.readFileSync(path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', 'mapping.md'), 'utf8');
+    /** 取 md 里"<标签>：`a b c`"这一行的名单 */
+    const listOf = (label: string): string[] => (new RegExp(`${label}：\`([^\`]+)\``).exec(doc)?.[1] ?? '').split(/\s+/).filter(Boolean).toSorted();
+    expect(listOf('内核具备')).toEqual(KERNEL_CAPABILITIES.toSorted());
+    expect(listOf('插件提供')).toEqual(PLUGIN_CAPABILITIES.toSorted());
+    expect(listOf('缺失')).toEqual(UNSUPPORTED_PLUGINS.toSorted());
   });
 
   const dir = 'E:/workspaces/api-ws-demo/testkit/scenarios';
