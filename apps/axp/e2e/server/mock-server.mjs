@@ -8,7 +8,7 @@
  * 通用查询控制（任意端点可叠加）：
  *   ?delay=ms       延迟响应（演示 loading / cancel / 慢请求）
  *   ?status=NNN     强制 HTTP 状态码
- *   ?code=XXXX      覆盖业务 code（如 5001 → normalize-response 判失败）
+ *   ?code=XXXX      覆盖业务 code（如 5001 → 归一化响应判为 kind:biz 失败）
  *   ?fail=N         前 N 次（按 id 计数）返回 500，第 N+1 次起成功（演示 retry / share-retry）
  *   ?id=KEY         命中计数 / fail 计数的分组键（默认 'default'）
  *
@@ -17,11 +17,11 @@
  *   POST /api/echo     回显 body 到 data
  *   GET  /api/echo     回显 query / method / path 到 data
  *   GET  /mock/*       专供 mock 插件重写后的目标，data.mocked=true
- *   ANY  /users/*等    回显最终 path（演示 replace-path-vars 替换结果）
+ *   ANY  /users/*等    回显最终 path（演示 axpRepath 替换结果）
  *   POST /api/hits/reset  清空全部计数器
  */
-import http from 'node:http';
-import { pathToFileURL } from 'node:url';
+import http from "node:http";
+import { pathToFileURL } from "node:url";
 
 const PORT = Number(process.env.MOCK_PORT) || 4570;
 
@@ -37,47 +37,50 @@ export function createMockServer() {
   const fails = Object.create(null);
 
   /** 鉴权：当前服务端有效 token（演示 auth 刷新）。客户端持过期/空 token → 401 → 刷新换取它 */
-  const AUTH_TOKEN = 'srv-token';
+  const AUTH_TOKEN = "srv-token";
   let refreshCount = 0;
 
   /** 发送带 CORS 的 JSON 响应。 */
   const json = (res, status, body) => {
     res.writeHead(status, {
-      'content-type': 'application/json; charset=utf-8',
-      'access-control-allow-origin': '*',
-      'access-control-allow-methods': '*',
-      'access-control-allow-headers': '*',
-      'cache-control': 'no-store',
+      "content-type": "application/json; charset=utf-8",
+      "access-control-allow-origin": "*",
+      "access-control-allow-methods": "*",
+      "access-control-allow-headers": "*",
+      "cache-control": "no-store",
     });
     res.end(JSON.stringify(body));
   };
 
   /** 构造业务信封。 */
-  const envelope = (data, code = '0000', message = 'ok') => ({ code, message, data });
+  const envelope = (data, code = "0000", message = "ok") => ({ code, message, data });
 
   /** 读取 JSON 或纯文本请求体。 */
   const readBody = (req) =>
     new Promise((resolve) => {
-      let raw = '';
-      req.on('data', (c) => (raw += c));
-      req.on('end', () => {
-        try { resolve(raw ? JSON.parse(raw) : undefined); }
-        catch { resolve(raw); }
+      let raw = "";
+      req.on("data", (c) => (raw += c));
+      req.on("end", () => {
+        try {
+          resolve(raw ? JSON.parse(raw) : undefined);
+        } catch {
+          resolve(raw);
+        }
       });
     });
 
   const server = http.createServer(async (req, res) => {
     // CORS 预检
-    if (req.method === 'OPTIONS') return json(res, 204, {});
+    if (req.method === "OPTIONS") return json(res, 204, {});
 
     const url = new URL(req.url, `http://localhost:${PORT}`);
     const path = url.pathname;
     const q = url.searchParams;
-    const id = q.get('id') || 'default';
-    const delay = Number(q.get('delay')) || 0;
-    const forcedStatus = q.get('status') ? Number(q.get('status')) : null;
-    const forcedCode = q.get('code');
-    const failN = Number(q.get('fail')) || 0;
+    const id = q.get("id") || "default";
+    const delay = Number(q.get("delay")) || 0;
+    const forcedStatus = q.get("status") ? Number(q.get("status")) : null;
+    const forcedCode = q.get("code");
+    const failN = Number(q.get("fail")) || 0;
 
     /** 按请求配置延迟响应并应用强制状态码。 */
     const finish = async (status, body) => {
@@ -86,7 +89,7 @@ export function createMockServer() {
     };
 
     // 计数清零
-    if (path === '/api/hits/reset' && req.method === 'POST') {
+    if (path === "/api/hits/reset" && req.method === "POST") {
       for (const k in hits) delete hits[k];
       for (const k in fails) delete fails[k];
       refreshCount = 0;
@@ -94,62 +97,60 @@ export function createMockServer() {
     }
 
     // 受保护资源：Authorization 必须为 `Bearer ${AUTH_TOKEN}`，否则 401（演示 auth 刷新）
-    if (path === '/api/secure') {
+    if (path === "/api/secure") {
       hits[id] = (hits[id] || 0) + 1;
-      const auth = req.headers['authorization'];
+      const auth = req.headers["authorization"];
       if (auth === `Bearer ${AUTH_TOKEN}`) {
-        return finish(200, envelope({ user: 'u', token: AUTH_TOKEN, hits: hits[id] }));
+        return finish(200, envelope({ user: "u", token: AUTH_TOKEN, hits: hits[id] }));
       }
-      return finish(401, envelope(null, '401', 'unauthorized'));
+      return finish(401, envelope(null, "401", "unauthorized"));
     }
 
     // 始终拒绝的受保护资源（演示"刷新后 token 仍被拒"的有界收敛：刷一次+重放后过期，不死循环）
-    if (path === '/api/secure-dead') {
+    if (path === "/api/secure-dead") {
       hits[id] = (hits[id] || 0) + 1;
-      return finish(401, envelope(null, '401', 'always unauthorized'));
+      return finish(401, envelope(null, "401", "always unauthorized"));
     }
 
     // 刷新令牌：颁发当前有效 token（客户端据此恢复）
-    if (path === '/api/refresh' && req.method === 'POST') {
+    if (path === "/api/refresh" && req.method === "POST") {
       refreshCount++;
       return finish(200, envelope({ token: AUTH_TOKEN, refreshCount }));
     }
 
     // 只读当前计数（不增加），供断言
-    if (path === '/api/hits' && req.method === 'GET') {
+    if (path === "/api/hits" && req.method === "GET") {
       return finish(200, envelope({ id, hits: hits[id] || 0 }));
     }
 
     // 命中计数端点：cache/share/retry/loading/cancel 的主力
-    if (path === '/api/hit') {
+    if (path === "/api/hit") {
       hits[id] = (hits[id] || 0) + 1;
       if (failN > 0) {
         fails[id] = (fails[id] || 0) + 1;
         if (fails[id] <= failN) {
-          return finish(500, envelope(null, '5000', `forced fail ${fails[id]}/${failN}`));
+          return finish(500, envelope(null, "5000", `forced fail ${fails[id]}/${failN}`));
         }
       }
-      const body = forcedCode
-        ? envelope({ id, hits: hits[id] }, forcedCode, `code=${forcedCode}`)
-        : envelope({ id, hits: hits[id] });
+      const body = forcedCode ? envelope({ id, hits: hits[id] }, forcedCode, `code=${forcedCode}`) : envelope({ id, hits: hits[id] });
       return finish(200, body);
     }
 
     // 不存在的 mock 路由（演示 mock.fallback：404 → 回落真实接口）。必须先于 /mock 判定。
-    if (path.startsWith('/mock-404')) {
-      return finish(404, envelope(null, '4040', 'mock route not found'));
+    if (path.startsWith("/mock-404")) {
+      return finish(404, envelope(null, "4040", "mock route not found"));
     }
 
     // 网关：mock 未命中时由「服务端」转发到真实上游（mock-or-passthrough），
     // 区别于客户端(axios)回落 —— 更贴近真实 mock 服务的工作方式。
     // `/gw/<realpath>` → 服务端 loopback 转发到 `<realpath>`，并在 query 上打 `_gw=1` 作为转发标记。
-    if (path.startsWith('/gw/')) {
+    if (path.startsWith("/gw/")) {
       const realPath = path.slice(3); // 去掉 '/gw'
       const fwd = new URL(`http://127.0.0.1:${server.address().port}${realPath}`);
       for (const [k, v] of q) fwd.searchParams.set(k, v);
-      fwd.searchParams.set('_gw', '1'); // 转发标记，证明经由 mock server 转发（非客户端回落）
-      const init = { method: req.method, headers: { 'content-type': 'application/json' } };
-      if (req.method !== 'GET' && req.method !== 'HEAD') init.body = JSON.stringify(await readBody(req));
+      fwd.searchParams.set("_gw", "1"); // 转发标记，证明经由 mock server 转发（非客户端回落）
+      const init = { method: req.method, headers: { "content-type": "application/json" } };
+      if (req.method !== "GET" && req.method !== "HEAD") init.body = JSON.stringify(await readBody(req));
       const upstream = await fetch(fwd, init);
       const text = await upstream.text();
       if (delay > 0) await new Promise((r) => setTimeout(r, delay));
@@ -157,27 +158,27 @@ export function createMockServer() {
     }
 
     // mock 插件重写后的目标
-    if (path.startsWith('/mock')) {
+    if (path.startsWith("/mock")) {
       return finish(200, envelope({ mocked: true, path, query: Object.fromEntries(q) }));
     }
 
     // echo
-    if (path === '/api/echo') {
+    if (path === "/api/echo") {
       const data = {
         method: req.method,
         path,
         query: Object.fromEntries(q),
-        body: req.method === 'GET' ? undefined : await readBody(req),
+        body: req.method === "GET" ? undefined : await readBody(req),
       };
       return finish(200, forcedCode ? envelope(data, forcedCode) : envelope(data));
     }
 
-    // 兜底：回显最终 path（演示 replace-path-vars 的替换结果）
+    // 兜底：回显最终 path（演示 axpRepath 的替换结果）
     const data = {
       method: req.method,
       path,
       query: Object.fromEntries(q),
-      body: req.method === 'GET' ? undefined : await readBody(req),
+      body: req.method === "GET" ? undefined : await readBody(req),
     };
     return finish(200, forcedCode ? envelope(data, forcedCode) : envelope(data));
   });
@@ -185,7 +186,8 @@ export function createMockServer() {
   return server;
 }
 
-if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) createMockServer().listen(PORT, () => {
-  // eslint-disable-next-line no-console
-  console.log(`[mock] listening on http://localhost:${PORT}`);
-});
+if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href)
+  createMockServer().listen(PORT, () => {
+    // eslint-disable-next-line no-console
+    console.log(`[mock] listening on http://localhost:${PORT}`);
+  });

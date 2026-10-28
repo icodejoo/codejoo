@@ -1,10 +1,14 @@
-import type { AdapterName, NetworkName, Style } from './constants.ts';
+import type { AdapterName, NetworkName, Style } from "./constants.ts";
 
 /** 中立能力名 */
 export type Capability = string;
 
 /** 区间断言：eq / min / max */
-export interface Range { eq?: number; min?: number; max?: number }
+export interface Range {
+  eq?: number;
+  min?: number;
+  max?: number;
+}
 
 /** 单条请求结果预期 */
 export interface ResultExpect {
@@ -49,7 +53,7 @@ export interface RequestOptions {
   auth?: boolean;
   cache?: boolean | { ttl_ms?: number; key?: string };
   retry?: number | boolean | { max?: number; delay_ms?: number; statuses?: number[]; methods?: string[]; respect_retry_after?: boolean };
-  share?: boolean | 'start' | 'end' | 'race' | 'none';
+  share?: boolean | "start" | "end" | "race" | "none";
   loading?: boolean;
   silent?: boolean;
   timeout_ms?: number;
@@ -63,7 +67,7 @@ export interface RequestOptions {
 /** 请求 step */
 export interface RequestSpec {
   id: string;
-  method?: 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE' | 'HEAD';
+  method?: "GET" | "POST" | "PUT" | "PATCH" | "DELETE" | "HEAD";
   path: string;
   query?: Record<string, unknown>;
   body?: unknown;
@@ -82,13 +86,19 @@ export interface LoginSpec {
 }
 
 /** set_token 里 access 的取值 */
-export type AccessTokenMode = 'none' | 'empty' | 'garbage' | 'bad_signature' | 'tampered_payload' | 'wrong_scheme' | 'previous' | 'keep';
+export type AccessTokenMode = "none" | "empty" | "garbage" | "bad_signature" | "tampered_payload" | "wrong_scheme" | "previous" | "keep";
 /** set_token 里 refresh 的取值 */
-export type RefreshTokenMode = 'none' | 'garbage' | 'previous' | 'keep';
+export type RefreshTokenMode = "none" | "garbage" | "previous" | "keep";
 /** set_token step 参数 */
-export interface SetTokenSpec { access?: AccessTokenMode; refresh?: RefreshTokenMode }
+export interface SetTokenSpec {
+  access?: AccessTokenMode;
+  refresh?: RefreshTokenMode;
+}
 /** revoke step 参数 */
-export interface RevokeSpec { user?: string; scope?: 'all' | 'access' }
+export interface RevokeSpec {
+  user?: string;
+  scope?: "all" | "access";
+}
 /** network step 的取值：预设名或 netem profile 对象 */
 export type NetworkValue = NetworkName | Record<string, unknown>;
 
@@ -132,7 +142,7 @@ export interface Scenario {
 }
 
 /** 跳过原因分类 */
-export type SkipCategory = 'missing-capability' | 'not-applicable';
+export type SkipCategory = "missing-capability" | "not-applicable";
 
 /** 运行计划里的一项：场景 × 网络 × 风格 × adapter */
 export interface PlanEntry {
@@ -142,13 +152,13 @@ export interface PlanEntry {
   style: Style;
   adapter: AdapterName;
   /** run：执行；skip：跳过并给出原因 */
-  decision: { kind: 'run' } | { kind: 'skip'; reason: string; category: SkipCategory };
+  decision: { kind: "run" } | { kind: "skip"; reason: string; category: SkipCategory };
   /** 中立选项映射不了的问题（空数组表示都能映射） */
   issues: string[];
 }
 
 /** 单次运行的最终状态 */
-export type RunStatus = 'passed' | 'failed' | 'skipped';
+export type RunStatus = "passed" | "failed" | "skipped";
 
 /** 单次运行的结果 */
 export interface RunResult {

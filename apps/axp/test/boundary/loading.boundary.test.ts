@@ -1,182 +1,136 @@
-import { describe, it, expect, vi, afterEach } from 'vitest';
-import axios from 'axios';
-import type { AxiosAdapter, AxiosRequestConfig } from 'axios';
-import loading, { $wrap } from '../../src/plugins/loading';
-import { Axp } from '../../src/install';
-import mock from '../../src/plugins/mock';
-import { makeNetwork } from '../helpers/network';
+/* eslint-disable no-await-in-loop -- 同一客户端依次核对请求选项和生命周期，避免引入额外并发语义。 */
+import { beforeEach, expect, it, vi } from "vitest";
+import axpLoading from "../../src/plugins/loading";
+import type { AxpRequestConfig } from "../../src/types";
+import { loadingRecorder, observeUi, recordEvents, uiClient } from "../helpers/ui";
 
-// ───────────────────────────────────────────────────────────────────────────
-//  $wrap：单计数器 + 按请求解析回调
-// ───────────────────────────────────────────────────────────────────────────
+/** 同步故障模式。 */
+const SYNC_FAILURE = "throw";
+/** 等待显示的窗口。 */
+const SHOW_WINDOW = "show";
+/** 等待隐藏的窗口。 */
+const HIDE_WINDOW = "hide";
+/** 默认回调的事件标签。 */
+const LOADING_LABEL = "main";
+/** 底层传输故障模式。 */
+const ADAPTER_FAILURE = "adapter";
 
-/** 创建可控制 resolve/reject 的 mock adapter */
-function deferredAdapter() {
-    const pending: Array<{ resolve: (v: any) => void; reject: (e: any) => void; config: AxiosRequestConfig }> = [];
-    const adp: AxiosAdapter = vi.fn((config) =>
-        new Promise((resolve, reject) => {
-            pending.push({ resolve, reject, config });
-        })
-    ) as any;
-    return { adp, pending };
-}
+/** 防闪烁与卸载竞态使用假时钟。 */
+beforeEach(() => {
+  vi.useFakeTimers();
+});
+/** 故意抛出的原始异常。 */
+const BUG = new Error("loading bug");
+/** 显示插件的固定名称。 */
+const NAME = "axp:loading";
+/** 有在途时间的假传输配置。 */
+const SLOW = { latency: 30 } as AxpRequestConfig;
 
-afterEach(() => { vi.useRealTimers(); vi.restoreAllMocks(); });
-
-/** 构造 adapter 层成功响应。 */
-function response(config: any, data: unknown = 'ok') {
-    return { config, data, status: 200, statusText: '', headers: {} };
-}
-
-// 来源 review 补丁
-describe('loading 逻辑请求与清理', () => {
-    const path = '/review-loading';
-
-    it('[loading.opt.enable] 总开关关闭时请求级回调也不参与计数', async () => {
-        const net = makeNetwork();
-        const ax = axios.create({ adapter: net.adapter });
-        const fn = vi.fn();
-        loading({ enable: false }).install(ax);
-        await ax.get(path, { loading: fn });
-        expect(net.calls('get', path)).toBe(1);
-        expect(fn).not.toHaveBeenCalled();
-    });
-
-    it.each([false, { enable: false }])('[loading.req.loading][loading.req.loading.enable] 跳过配置 %s 不执行抛错回调', async (option) => {
-        const net = makeNetwork();
-        const ax = axios.create({ adapter: net.adapter });
-        const fn = vi.fn(() => { throw new Error('不可执行'); });
-        loading({ loading: fn }).install(ax);
-        await ax.get(path, { loading: option });
-        expect(net.calls('get', path)).toBe(1);
-        expect(fn).not.toHaveBeenCalled();
-    });
-
-    it.each(['函数', '对象'])('[loading.req.loading.callback][loading.req.loading.loading] 请求级%s回调抛错和拒绝不破坏下一次计数', async (form) => {
-        const net = makeNetwork();
-        const ax = axios.create({ adapter: net.adapter });
-        const fallback = vi.fn();
-        const fn = vi.fn((visible: boolean) => {
-            if (visible) throw new Error('显示失败');
-            return Promise.reject(new Error('隐藏失败'));
-        });
-        loading({ loading: fallback }).install(ax);
-        const option = form === '函数' ? fn : { loading: fn };
-        await ax.get(path, { loading: option });
-        await ax.get(path, { loading: option });
-        expect(fn.mock.calls).toEqual([[true], [false], [true], [false]]);
-        expect(fallback).not.toHaveBeenCalled();
-    });
-
-    it.each([0, -1])('[loading.req.loading.delay][loading.req.loading.delayClose] 请求级延迟 %s 覆盖默认长延迟并即时显示隐藏', async (delay) => {
-        vi.useFakeTimers();
-        const fn = vi.fn();
-        const { adp, pending } = deferredAdapter();
-        const wrapped = $wrap(adp, { loading: fn, delay: 1000, delayClose: 1000 });
-        const request = wrapped({ loading: { delay, delayClose: delay } } as any);
-        expect(fn.mock.calls).toEqual([[true]]);
-        pending[0].resolve(response(pending[0].config));
-        await request;
-        expect(fn.mock.calls).toEqual([[true], [false]]);
-        expect(vi.getTimerCount()).toBe(0);
-    });
-
-    it.each([0, 1])('[loading.cb.loading][loading.opt.delay] 回调抛错与拒绝不影响请求和后续计数（delay=%i）', async (delay) => {
-        const net = makeNetwork();
-        const fn = vi.fn((visible: boolean) => { if (visible) throw new Error('UI failed'); return Promise.reject(new Error('UI rejected')); });
-        const ax = axios.create({ adapter: net.adapter });
-        Axp.install(ax, { loading: loading({ loading: fn, delay }) });
-        await ax.get(path, { latency: 10 } as any);
-        await ax.get(path, { latency: 10 } as any);
-        expect(fn.mock.calls.map(([value]) => value)).toEqual([true, false, true, false]);
-    });
-
-    it.each(['show', 'hide'])('[loading.method.cleanup][loading.opt.delay][loading.opt.delayClose] dispose 清除 %s 定时器，旧请求完成也不再回调', async (phase) => {
-        vi.useFakeTimers();
-        try {
-            const { adp, pending } = deferredAdapter();
-            const fn = vi.fn();
-            const ax = axios.create({ adapter: adp });
-            const handle = Axp.install(ax, { loading: loading({ loading: fn, delay: phase === 'show' ? 10 : 0, delayClose: 10 }) });
-            const request = ax.get(path);
-            if (phase === 'hide') {
-                pending[0].resolve({ config: pending[0].config, status: 200, data: null });
-                await request;
-            }
-            handle.dispose();
-            const before = fn.mock.calls.length;
-            await vi.advanceTimersByTimeAsync(20);
-            if (phase === 'show') {
-                pending[0].resolve({ config: pending[0].config, status: 200, data: null });
-                await request;
-                await vi.advanceTimersByTimeAsync(20);
-            }
-            expect(fn).toHaveBeenCalledTimes(before);
-        } finally { vi.useRealTimers(); }
-    });
+it("[loading.opt.enable] 插件关闭不可被请求回调重新开启", /** 总开关不 setup、不进 inspect。 */ async () => {
+  const fn = vi.fn();
+  const plugin = axpLoading({ enable: false, loading: fn });
+  const setup = vi.spyOn(plugin, "setup");
+  const h = uiClient([plugin]);
+  const pending = h.send({ loading: { enable: true, loading: fn } });
+  await vi.runAllTimersAsync();
+  await pending;
+  expect(fn).not.toHaveBeenCalled();
+  expect(setup).not.toHaveBeenCalled();
+  expect(h.api.inspect()).toEqual([]);
 });
 
-describe('loading — adapter 同步抛错 / 非函数 adapter', () => {
-    it('[loading.fn.$wrap] prev 同步抛错 → 请求 reject，且回调 true/false 成对（计数不泄漏）', async () => {
-        const fn = vi.fn();
-        const thrower: AxiosAdapter = (() => { throw new Error('sync boom'); }) as any;
-        const wrapped = $wrap(thrower, { loading: fn });
-        await expect(wrapped({} as any)).rejects.toThrow('sync boom');
-        expect(fn.mock.calls).toEqual([[true], [false]]);
-        // 计数已回落：下一次请求仍能重新触发 true
-        await expect(wrapped({} as any)).rejects.toThrow('sync boom');
-        expect(fn.mock.calls).toEqual([[true], [false], [true], [false]]);
-    });
+it.each([SYNC_FAILURE, "reject"])(
+  "[loading.cb.error] %s 隔离并始终 console.error，后续计数正常",
+  /** 同步和异步通知错误。 */ async (mode) => {
+    const error = vi.spyOn(console, "error").mockImplementation(/** 保持测试安静。 */ () => {});
+    const h = uiClient();
+    const record = loadingRecorder(h.events);
+    const loading = vi.fn(
+      /** 先记录事件再模拟 UI 故障。 */ (visible: boolean) => {
+        record(visible);
+        if (mode === SYNC_FAILURE) throw BUG;
+        return Promise.reject(BUG);
+      },
+    );
+    h.api.use(axpLoading({ loading }));
+    for (const config of [{}, { loading }, { loading: { loading, delay: 5 } }]) {
+      const before = error.mock.calls.length;
+      const pending = h.send({ ...SLOW, ...config });
+      await vi.runAllTimersAsync();
+      expect((await pending).ok).toBe(true);
+      expect(error.mock.calls.length - before).toBe(2);
+      expect(error.mock.calls[before]?.[1]).toBe(BUG);
+    }
+  },
+);
 
-    it('[loading.fn.axpLoading] 裸 axios.create()（adapter 为数组）安装 loading 后请求正常', async () => {
-        const net = vi.fn(async (config: any) => ({ status: 200, statusText: 'OK', headers: {}, config, data: 'ok' }) as any);
-        const ax = axios.create({ adapter: [net as any] });
-        const fn = vi.fn();
-        loading({ loading: fn }).install(ax);
-        const r = await ax.get('/x');
-        expect(r.data).toBe('ok');
-        expect(fn.mock.calls).toEqual([[true], [false]]);
-    });
-});
+it.each([SHOW_WINDOW, HIDE_WINDOW, "inflight"])(
+  "[loading.method.lifecycle] 卸载取消 %s 窗口，旧请求完成不再回调",
+  /** 清理两个计时器和在途请求。 */ async (window) => {
+    const h = uiClient();
+    h.api.use(
+      axpLoading({
+        loading: loadingRecorder(h.events),
+        delay: window === SHOW_WINDOW ? 10 : 0,
+        delayClose: 10,
+      }),
+    );
+    const pending = h.send(SLOW);
+    if (window === HIDE_WINDOW) {
+      await vi.advanceTimersByTimeAsync(30);
+      await pending;
+    }
+    expect(h.api.eject(NAME)).toBe(true);
+    const snapshot = [...h.events.loading.get(LOADING_LABEL)!];
+    expect(h.api.eject(NAME)).toBe(false);
+    await vi.runAllTimersAsync();
+    await pending;
+    expect(h.events.loading.get(LOADING_LABEL)).toEqual(snapshot);
+    expect(vi.getTimerCount()).toBe(0);
+    h.api.use(axpLoading({ loading: loadingRecorder(h.events, "fresh") }));
+    const fresh = h.send();
+    await vi.runAllTimersAsync();
+    await fresh;
+  },
+);
 
-// 来源 review 补丁
-describe('loading 泄漏修复', () => {
-    const path = '/leak';
+it.each([ADAPTER_FAILURE, "transform"])(
+  "[loading.cb.finally] %s 抛无 config 异常仍成对释放",
+  /** 原始 bug 不泄漏计数。 */ async (source) => {
+    const h = uiClient(
+      [],
+      {},
+      source === ADAPTER_FAILURE
+        ? /** 同步传输故障。 */ () => {
+            throw BUG;
+          }
+        : {
+            transformResponse: /** 用户转换器故障。 */ () => {
+              throw BUG;
+            },
+          },
+    );
+    h.api.use(axpLoading({ loading: loadingRecorder(h.events) }));
+    const assertion = expect(h.send()).rejects.toBe(BUG);
+    await vi.runAllTimersAsync();
+    await assertion;
+    expect(h.events.loading.get(LOADING_LABEL)).toEqual([true, false]);
+  },
+);
 
-    it('[loading.fn.$wrap] transformResponse 抛无 config 的 Error 仍释放计数', async () => {
-        const net = makeNetwork();
-        const ax = axios.create({
-            adapter: net.adapter,
-            transformResponse: [() => { throw new Error('boom'); }],
-        });
-        const fn = vi.fn();
-        Axp.install(ax, { loading: loading({ loading: fn }) });
-        await expect(ax.get(path)).rejects.toThrow('boom');
-        expect(fn.mock.calls.map(([v]) => v)).toEqual([true, false]);
-    });
-
-    it('[loading.method.install][loading.fn.axpLoading][loading.method.cleanup] 同实例两个独立 handle 各装 loading，各自计数都能归零', async () => {
-        const net = makeNetwork();
-        const ax = axios.create({ adapter: net.adapter });
-        const outer = vi.fn();
-        const inner = vi.fn();
-        Axp.install(ax, { loading: loading({ loading: outer }) });
-        Axp.install(ax, { loading: loading({ loading: inner }) });
-        await ax.get(path);
-        expect(inner.mock.calls.map(([v]) => v)).toEqual([true, false]);
-        expect(outer.mock.calls.map(([v]) => v)).toEqual([true, false]);
-    });
-});
-
-describe('cancel/loading — 资源释放边界', () => {
-    it('[loading.method.cleanup][loading.fn.$wrap] loading dispose 后旧 wrapper 直通且 finish 对无配置幂等', async () => {
-        const callback = vi.fn();
-        const adapter = vi.fn(async (c) => response(c));
-        const wrapped = $wrap(adapter, { loading: callback }, true);
-        wrapped.finish();
-        wrapped.finish({});
-        wrapped.dispose();
-        expect((await wrapped({} as any)).data).toBe('ok');
-        expect(callback).not.toHaveBeenCalled();
-    });
+it("[loading.method.lifecycle] 同一定义装在父子客户端各自计数", /** extend 重新建立状态。 */ async () => {
+  const parent = uiClient();
+  const shared = loadingRecorder(parent.events);
+  parent.api.use(axpLoading({ loading: shared }));
+  const child = observeUi({ ...parent, api: parent.api.extend(), events: recordEvents() });
+  const first = parent.send(SLOW);
+  const second = child.send(SLOW);
+  expect(parent.events.loading.get(LOADING_LABEL)).toEqual([true, true]);
+  await vi.runAllTimersAsync();
+  await Promise.all([first, second]);
+  // 同一 UI 回调被两个客户端各自使用，分别检查每个客户端的一对。
+  expect(parent.events.loading.get(LOADING_LABEL)).toEqual([true, true, false, false]);
+  const observed = parent.events.loading.get(LOADING_LABEL)!;
+  parent.events.loading.set(LOADING_LABEL, [observed[0], observed[2]]);
+  child.events.loading.set(LOADING_LABEL, [observed[1], observed[3]]);
 });

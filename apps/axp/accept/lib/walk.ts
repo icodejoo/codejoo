@@ -1,10 +1,7 @@
-import type { RequestSpec, Step } from './types.ts';
+import type { RequestSpec, Step } from "./types.ts";
 
 /** 所有 step 类型名，执行器必须全部实现 */
-export const STEP_KINDS = [
-  'request', 'parallel', 'sequence', 'fire', 'repeat', 'wait', 'login', 'set_token',
-  'logout', 'revoke', 'expire_local', 'cancel_all', 'clear_cache', 'network', 'server_reset', 'style',
-] as const;
+export const STEP_KINDS = ["request", "parallel", "sequence", "fire", "repeat", "wait", "login", "set_token", "logout", "revoke", "expire_local", "cancel_all", "clear_cache", "network", "server_reset", "style"] as const;
 
 /** step 类型名 */
 export type StepKind = (typeof STEP_KINDS)[number];
@@ -28,10 +25,10 @@ export function walkSteps(steps: Step[], visit: (step: Step, kind: StepKind | un
   for (const s of steps) {
     const kind = stepKind(s);
     visit(s, kind);
-    if (kind === 'parallel') walkSteps((s as { parallel: Step[] }).parallel, visit);
-    else if (kind === 'sequence') walkSteps((s as { sequence: Step[] }).sequence, visit);
-    else if (kind === 'fire') walkSteps([(s as { fire: Step }).fire], visit);
-    else if (kind === 'repeat') walkSteps([(s as { repeat: { step: Step } }).repeat.step], visit);
+    if (kind === "parallel") walkSteps((s as { parallel: Step[] }).parallel, visit);
+    else if (kind === "sequence") walkSteps((s as { sequence: Step[] }).sequence, visit);
+    else if (kind === "fire") walkSteps([(s as { fire: Step }).fire], visit);
+    else if (kind === "repeat") walkSteps([(s as { repeat: { step: Step } }).repeat.step], visit);
   }
 }
 
@@ -42,7 +39,7 @@ export function walkSteps(steps: Step[], visit: (step: Step, kind: StepKind | un
 export function collectRequests(steps: Step[]): RequestSpec[] {
   const out: RequestSpec[] = [];
   walkSteps(steps, (s, kind) => {
-    if (kind === 'request') out.push((s as { request: RequestSpec }).request);
+    if (kind === "request") out.push((s as { request: RequestSpec }).request);
   });
   return out;
 }

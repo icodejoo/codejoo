@@ -1,31 +1,32 @@
-import { describe, it, expect, vi } from 'vitest';
-import axios from 'axios';
-import { Axp } from '../../src';
-import auth from '../../src/plugins/auth';
-import cancel, { cancelAll } from '../../src/plugins/cancel';
-import retry from '../../src/plugins/retry';
-import notify from '../../src/plugins/notify';
-import { makeNetwork } from '../helpers/network';
-import { makeTM } from '../helpers/auth';
+import { beforeEach, expect, it, vi } from "vitest";
+import axpNotify from "../../src/plugins/notify";
+import axpRetry from "../../src/plugins/retry";
+import type { AxpResponse } from "../../src/response";
+import { authClient, failure, REQUEST_URL, run } from "../helpers/b3";
+import { notifyRecorder } from "../helpers/ui";
 
-describe('review — auth 重放的逻辑请求边界', () => {
-  const path = '/review-auth';
-  const initialToken = 'old';
-  const refreshedToken = 'fresh';
-
-  it.each([200, 500])('[auth.cb.onAccessExpired × retry.opt.max × cancel.fn.cancelAll × notify.cb.notify] 重放返回 %i 时只通知一次、预算只用一次，controller 全部释放', async (status) => {
-    const net = makeNetwork().on('GET', path, (_config, hit) => ({ status: hit === 1 ? 401 : status }));
-    const ax = axios.create({ adapter: net.adapter });
-    const tm = makeTM(initialToken);
-    const showNotice = vi.fn();
-    Axp.install(ax, {
-      auth: auth({ tokenManager: tm, onRefresh: () => { tm.set(refreshedToken); return true; }, onAccessExpired: vi.fn() }),
-      retry: retry({ max: 1, delay: 0 }), cancel: cancel(),
-      notify: notify({ notify: showNotice, stringify: () => 'done' }),
-    });
-    await ax.get(path).catch(() => undefined);
-    expect(net.totalStarted).toBe(status === 200 ? 2 : 3);
-    expect(showNotice).toHaveBeenCalledTimes(1);
-    expect(cancelAll(ax)).toBe(0);
-  });
+/** 每个组合用例使用独立假时钟。 */
+beforeEach(() => {
+  vi.useFakeTimers();
 });
+
+it.each([
+  [401, { kind: "auth", reason: "expired" }, 2],
+  [500, { ok: false, status: 500 }, 3],
+] as const)(
+  "[auth.cb.onAccessExpired][retry.opt.max][core.method.cancelAll][notify.cb.notify] 重放返回 %i：只通知一次、重试预算至多用一次，之后逻辑请求全部释放",
+  /** 刷新重放不占预算，重放后的失败交给 retry 或 auth 收敛。 */ async (replayStatus, expected, sends) => {
+    const h = authClient({}, [axpRetry({ max: 1, delay: 0 })]);
+    const notify = vi.fn(notifyRecorder(h.events));
+    h.api.use(axpNotify<AxpResponse>({ notify }));
+    h.net.on("get", REQUEST_URL, /** 首发 401，之后（重放与重试）都返回目标状态。 */ (_config, hit) => failure(hit === 1 ? 401 : replayStatus));
+    const result = await run(h);
+    expect(result).toMatchObject(expected);
+    expect(h.net.totalStarted).toBe(sends);
+    expect(h.settings.onRefresh).toHaveBeenCalledTimes(1);
+    expect(h.settings.onAccessExpired).toHaveBeenCalledTimes(replayStatus === 401 ? 1 : 0);
+    expect(notify).toHaveBeenCalledTimes(1);
+    expect(h.api.pending()).toBe(0);
+    expect(h.api.cancelAll()).toBe(0);
+  },
+);

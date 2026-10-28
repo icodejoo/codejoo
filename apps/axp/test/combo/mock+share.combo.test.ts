@@ -1,37 +1,50 @@
-import { describe, it, expect } from 'vitest';
-import axios from 'axios';
-import { Axp } from '../../src';
-import mock from '../../src/plugins/mock';
-import share from '../../src/plugins/share';
-import { makeNetwork } from '../helpers/network';
+import { beforeEach, expect, it, vi } from "vitest";
+import axpMock from "../../src/plugins/mock";
+import axpShare from "../../src/plugins/share";
+import { envelope, sourceClient } from "../helpers/source";
 
-describe('mock 探测不参与 share 合并', () => {
-  const path = '/ms';
-  const mockPath = `http://mock${path}`;
-  const N = 3;
-  const setup = (net: ReturnType<typeof makeNetwork>) => {
-    const ax = axios.create({ adapter: net.adapter });
-    Axp.install(ax, { share: share(), mock: mock({ enable: true, mock: true, mockUrl: 'http://mock' }) });
-    return ax;
-  };
-  const run = (ax: ReturnType<typeof setup>) =>
-    Promise.all(Array.from({ length: N }, () => ax.get(path, { key: 'k', share: true } as any)));
+/** 并发用例统一用假时钟。 */
+beforeEach(() => {
+  vi.useFakeTimers();
+});
 
-  it('[mock.req.mock × share.req.share] 同 key 并发 N 个 mock 成功请求：探测发 N 次，不合并', async () => {
-    const net = makeNetwork().on('GET', mockPath, () => ({ status: 200, data: 'mocked' }));
-    const res = await run(setup(net));
-    expect(res.map((r) => r.data)).toEqual(['mocked', 'mocked', 'mocked']);
-    expect(net.calls('GET', mockPath)).toBe(N);
-    expect(net.calls('GET', path)).toBe(0);
-  });
+/** mock 服务器基址。 */
+const MOCK = "http://mock";
+/** 被 mock 且被共享的接口。 */
+const REAL = "/real";
+/** 探测地址。 */
+const PROBE = `${MOCK}${REAL}`;
+/** 并发调用方数量。 */
+const CALLERS = 6;
 
-  it('[mock.req.mock × share.req.share] 同 key 并发 N 个全部回落：探测 N 次，真实请求只 1 次（share 合并）', async () => {
-    const net = makeNetwork()
-      .on('GET', mockPath, () => ({ status: 404 }))
-      .on('GET', path, () => ({ status: 200, data: 'real' }));
-    const res = await run(setup(net));
-    expect(res.map((r) => r.data)).toEqual(['real', 'real', 'real']);
-    expect(net.calls('GET', mockPath)).toBe(N);
-    expect(net.calls('GET', path)).toBe(1);
-  });
+/** 装好 mock 与 share；mock 默认成功。 */
+function client() {
+  const h = sourceClient([axpMock({ enable: true, mockUrl: MOCK }), axpShare()]);
+  h.net.on("get", PROBE, () => envelope("mock"));
+  h.net.on("get", REAL, () => envelope("real"));
+  return h;
+}
+/** 并发发出同 key 的请求并等它们落定。 */
+async function burst(h: ReturnType<typeof client>) {
+  const pending = Array.from({ length: CALLERS }, () => h.send({ url: REAL, mock: true, share: true, latency: 5 } as never));
+  await vi.runAllTimersAsync();
+  return Promise.all(pending);
+}
+
+it("[mock.req.mock × share.req.share] 同 key 并发的 mock 成功请求：探测各发一次，不占共享条目、不合并", async () => {
+  const h = client();
+  const results = await burst(h);
+  expect(h.net.calls("get", PROBE)).toBe(CALLERS);
+  expect(h.net.calls("get", REAL)).toBe(0);
+  expect(results.every((r) => r.data === "mock")).toBe(true);
+});
+
+it("[mock.req.mock × share.req.share] 同 key 并发且全部回落：探测各发一次，真实请求经 share 合并成一次", async () => {
+  const h = client();
+  h.net.on("get", PROBE, () => ({ status: 404 }));
+  const results = await burst(h);
+  expect(h.net.calls("get", PROBE)).toBe(CALLERS);
+  expect(h.net.calls("get", REAL)).toBe(1);
+  expect(new Set(results).size).toBe(1);
+  expect(results[0].data).toBe("real");
 });

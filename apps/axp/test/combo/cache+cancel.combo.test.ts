@@ -1,17 +1,44 @@
-import { describe, it, expect } from 'vitest';
-import axios from 'axios';
-import { Axp, axpKey, axpCache } from '../../src';
-import { makeNetwork } from '../helpers/network';
-import cancel, { cancelAll } from '../../src/plugins/cancel';
+import { beforeEach, expect, it, vi } from "vitest";
+import axpCache from "../../src/plugins/cache";
+import { AXP_KINDS } from "../../src/response";
+import { signalAdapter, sourceClient, type IWireCall } from "../helpers/source";
 
-describe('cancel — 与 cache / share / retry 组合（Axp.install 规范顺序）', () => {
-    it('[cancel.fn.cancelAll × cache.req.cache] cancel + cache：命中缓存后 controller 不残留，cancelAll 返回 0', async () => {
-        const net = makeNetwork();
-        const ax = axios.create({ adapter: net.adapter });
-        Axp.install(ax, { key: axpKey(), cancel: cancel(), cache: axpCache() });
-        await ax.get('/a', { key: 'k', cache: true } as any);   // 未命中，真实请求
-        await ax.get('/a', { key: 'k', cache: true } as any);   // 命中，响应来自缓存
-        expect(net.calls('GET', '/a')).toBe(1);
-        expect(cancelAll(ax)).toBe(0);
-    });
+/** 取消时序统一用假时钟。 */
+beforeEach(() => {
+  vi.useFakeTimers();
+});
+
+/** 被缓存的接口。 */
+const URL = "/pets";
+
+/** 装好 cache 与会响应取消的适配器。 */
+function client() {
+  const calls: IWireCall[] = [];
+  const h = sourceClient([axpCache()], {}, signalAdapter(calls));
+  return { ...h, calls };
+}
+
+it("[core.method.cancelAll × cache.req.cache] 命中缓存的请求不留下在途登记：pending 与 cancelAll 都是 0", async () => {
+  const h = client();
+  const first = h.send({ url: URL, cache: true });
+  await vi.runAllTimersAsync();
+  await first;
+  const hit = await h.send({ url: URL, cache: true });
+  expect(hit.ok).toBe(true);
+  expect(h.api.pending()).toBe(0);
+  expect(h.api.cancelAll()).toBe(0);
+  expect(h.calls).toHaveLength(1);
+});
+
+it("[core.method.cancelAll × cache.req.cache] 取消在途的未命中请求：以 cancel 告终，不写缓存，之后重新发送", async () => {
+  const h = client();
+  const pending = h.send({ url: URL, cache: true });
+  await vi.advanceTimersByTimeAsync(1);
+  expect(h.api.cancelAll()).toBe(1);
+  await vi.runAllTimersAsync();
+  expect((await pending).kind).toBe(AXP_KINDS.CANCEL);
+  const again = h.send({ url: URL, cache: true });
+  await vi.runAllTimersAsync();
+  expect((await again).ok).toBe(true);
+  expect(h.calls).toHaveLength(2);
 });

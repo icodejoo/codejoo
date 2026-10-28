@@ -1,93 +1,43 @@
-import { describe, it, expect, vi } from 'vitest';
-import envs from '../../src/plugins/envs';
-import axios from 'axios';
-import { Axp } from '../../src';
-import { use } from '../helpers/install';
+import { create as createAxios } from "axios";
+import { expect, it, vi } from "vitest";
+import axpEnvs from "../../src/plugins/envs";
+import { createTestClient } from "../helpers/client";
 
-function makeAx(): any {
-    return { defaults: { baseURL: '', headers: {} } };
-}
+/** 首个命中的服务地址。 */
+const SELECTED_BASE_URL = "/selected";
+/** 内置环境插件名。 */
+const NAME = "axp:envs";
 
-describe('envs', () => {
-    it('[envs.prop.name] 工厂返回固定插件名称', () => {
-        expect(envs().name).toBe('axp:envs');
-    });
-    it('[envs.method.install][envs.fn.axpEnvs][envs.cb.rules[].rule][envs.opt.rules[].config] 选第一个匹配的规则，merge 到 defaults', () => {
-        const ax = makeAx();
-        envs([
-            { rule: () => false, config: { baseURL: 'http://a' } },
-            { rule: () => true, config: { baseURL: 'http://b', timeout: 5000 } },
-            { rule: () => true, config: { baseURL: 'http://c' } },  // 不会执行
-        ]).install(ax);
-        expect(ax.defaults.baseURL).toBe('http://b');
-        expect(ax.defaults.timeout).toBe(5000);
-    });
-
-    it('[envs.cb.rules[].rule] 第一条命中后 break：后续 rule() 不再调用', () => {
-        const ax = makeAx();
-        const r1 = vi.fn(() => true);
-        const r2 = vi.fn(() => true);
-        envs([
-            { rule: r1, config: { baseURL: '/a' } },
-            { rule: r2, config: { baseURL: '/b' } },
-        ]).install(ax);
-        expect(r1).toHaveBeenCalledOnce();
-        expect(r2).not.toHaveBeenCalled();
-    });
-
-    it('[envs.fn.axpEnvs] 没有匹配 → 不修改 defaults', () => {
-        const ax = makeAx();
-        const before = { ...ax.defaults };
-        envs([
-            { rule: () => false, config: { baseURL: '/a' } },
-            { rule: () => false, config: { baseURL: '/b' } },
-        ]).install(ax);
-        expect(ax.defaults).toEqual(before);
-    });
-
-    it('[envs.opt.rules[].config] 合并是浅 Object.assign（不递归）', () => {
-        const ax = makeAx();
-        ax.defaults.headers = { 'X-A': '1' };
-        envs([
-            { rule: () => true, config: { headers: { 'X-B': '2' } as any } },
-        ]).install(ax);
-        // 浅合并：X-A 被整体替换掉
-        expect(ax.defaults.headers).toEqual({ 'X-B': '2' });
-        expect(ax.defaults.headers['X-A']).toBeUndefined();
-    });
+it("[envs.opt.rules][envs.prop.name] 第一个命中配置浅合并，不再读取后续规则，不进链", /** 环境选择只发生在 setup。 */ () => {
+  const axios = createAxios({ baseURL: "/original", timeout: 10 });
+  const later = vi.fn(/** 不应读取的后续规则。 */ () => true);
+  const headers = { common: { "X-Env": "test" } };
+  const plugin = axpEnvs([
+    { rule: /** 跳过第一条。 */ () => false, config: { timeout: 100 } },
+    { rule: /** 首个命中。 */ () => true, config: { baseURL: SELECTED_BASE_URL, headers } },
+    { rule: later, config: { baseURL: "/later" } },
+  ]);
+  const { api } = createTestClient([plugin], { axios });
+  expect(plugin.name).toBe(NAME);
+  expect(axios.defaults.baseURL).toBe(SELECTED_BASE_URL);
+  expect(axios.defaults.timeout).toBe(10);
+  expect(axios.defaults.headers).toEqual(headers);
+  expect(axios.defaults.headers).not.toBe(headers);
+  expect(later).not.toHaveBeenCalled();
+  expect(api.inspect()).toEqual([]);
+  expect(api.eject(plugin.name)).toBe(true);
+  expect(axios.defaults.baseURL).toBe(SELECTED_BASE_URL);
+  api.use(plugin);
+  api.dispose();
+  expect(axios.defaults.headers).toEqual(headers);
+  expect(axios.defaults.headers).not.toBe(headers);
 });
-
-describe('envs', () => {
-  it('[envs.fn.axpEnvs][envs.cb.rules[].rule][envs.opt.rules[].config] the first matching rule wins and its config is shallow-merged into axios.defaults; a later, also-matching rule is never even evaluated', () => {
-    const ax = axios.create();
-    const api = Axp.create(ax);
-    let secondRuleEvaluated = false;
-    use(api, envs([
-      { rule: () => true, config: { baseURL: 'https://prod.example.com', timeout: 5000, headers: { 'X-Env': 'prod' } } },
-      { rule: () => { secondRuleEvaluated = true; return true; }, config: { baseURL: 'https://staging.example.com' } },
-    ]));
-
-    expect(ax.defaults.baseURL).toBe('https://prod.example.com');
-    expect(ax.defaults.timeout).toBe(5000);
-    // envs.ts applies via a flat Object.assign(defaults, config) — no axios
-    // header normalization, so this lands exactly where it was given.
-    expect((ax.defaults.headers as any)['X-Env']).toBe('prod');
-    expect(secondRuleEvaluated).toBe(false);
-  });
-
-  it('[envs.fn.axpEnvs] no matching rule leaves axios.defaults untouched', () => {
-    const ax = axios.create({ baseURL: 'https://default.example.com' });
-    const api = Axp.create(ax);
-    use(api, envs([{ rule: () => false, config: { baseURL: 'https://x' } }]));
-    expect(ax.defaults.baseURL).toBe('https://default.example.com');
-  });
-
-  it('[envs.method.cleanup][envs.fn.axpEnvs] the cleanup install() returns reverts the applied config snapshot', () => {
-    const ax = axios.create({ baseURL: 'https://default.example.com' });
-    const api = Axp.create(ax);
-    const cleanup = envs([{ rule: () => true, config: { baseURL: 'https://x' } }]).install(api.axios);
-    expect(ax.defaults.baseURL).toBe('https://x');
-    cleanup?.();
-    expect(ax.defaults.baseURL).toBe('https://default.example.com');
-  });
+it("[envs.opt.enable][envs.cb.noMatch] 插件关闭不求值，未命中不修改 defaults", /** 总开关和未匹配。 */ () => {
+  const rule = vi.fn(/** 不应求值的规则。 */ () => true);
+  const { api } = createTestClient([axpEnvs({ enable: false, rules: [{ rule, config: { baseURL: "/disabled" } }] })]);
+  expect(rule).not.toHaveBeenCalled();
+  api.eject(NAME);
+  api.use(axpEnvs([{ rule: /** 不匹配。 */ () => false, config: { baseURL: "/unused" } }]));
+  expect(api.axios.defaults.baseURL).toBeUndefined();
+  api.dispose();
 });

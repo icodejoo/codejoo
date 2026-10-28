@@ -1,39 +1,84 @@
-import { describe, it, expect, vi } from 'vitest';
-import axios from 'axios';
-import loading from '../../src/plugins/loading';
-import { Axp } from '../../src/install';
-import mock from '../../src/plugins/mock';
-import { makeNetwork } from '../helpers/network';
+import { beforeEach, expect, it, vi } from "vitest";
+import axpLoading from "../../src/plugins/loading";
+import axpMock from "../../src/plugins/mock";
+import { envelope, sourceClient } from "../helpers/source";
+import { loadingRecorder } from "../helpers/ui";
 
-// 来源 review 补丁
-describe('loading 逻辑请求与清理', () => {
-    const path = '/review-loading';
-
-    it('[loading.fn.axpLoading × mock.opt.mock] mock 先卸载时 loading 保持生效，两者全卸载后不复活 mock', async () => {
-        const net = makeNetwork();
-        const ax = axios.create({ adapter: net.adapter });
-        const fn = vi.fn();
-        const mockHandle = Axp.install(ax, { mock: mock({ enable: true, mock: true, mockUrl: 'http://mock' }) });
-        const loadingHandle = Axp.install(ax, { loading: loading({ loading: fn }) });
-        mockHandle.dispose();
-        await ax.get(path);
-        expect(fn.mock.calls.map(([value]) => value)).toEqual([true, false]);
-        loadingHandle.dispose();
-        await ax.get(path);
-        expect(net.log.map((record) => record.url)).toEqual([path, path]);
-        expect(ax.defaults.adapter).toBe(net.adapter);
-    });
+/** loading 的防闪烁与探测时序统一用假时钟。 */
+beforeEach(() => {
+  vi.useFakeTimers();
 });
 
-it('[loading.fn.axpLoading × mock.opt.mock] loading 先卸载时外层 mock 保持生效，两者全卸载后还原原 adapter', async () => {
-    const path = '/review-mock';
-    const net = makeNetwork();
-    const ax = axios.create({ adapter: net.adapter });
-    const loadingHandle = Axp.install(ax, { loading: loading({ loading: vi.fn() }) });
-    const mockHandle = Axp.install(ax, { mock: mock({ enable: true, mock: true, mockUrl: 'http://mock' }) });
-    loadingHandle.dispose();
-    await ax.get(path);
-    expect(net.log[0].url).toBe(`http://mock${path}`);
-    mockHandle.dispose();
-    expect(ax.defaults.adapter).toBe(net.adapter);
+/** mock 服务器基址。 */
+const MOCK = "http://mock";
+/** 被 mock 的接口。 */
+const REAL = "/real";
+/** 默认回调的事件标签。 */
+const LABEL = "main";
+
+/** 装好 loading 与 mock；探测 404 回落真实接口。 */
+function client(loadingOptions: { delay?: number } = {}) {
+  const h = sourceClient([]);
+  h.api.use(axpLoading({ loading: loadingRecorder(h.events, LABEL), ...loadingOptions }));
+  h.api.use(axpMock({ enable: true, mockUrl: MOCK }));
+  h.net.on("get", `${MOCK}${REAL}`, () => ({ status: 404 }));
+  h.net.on("get", REAL, () => envelope("real"));
+  return h;
+}
+
+it("[loading.cb.loading × mock.req.mock] 探测加回落是同一个逻辑请求：整个过程只有一对显示与隐藏", async () => {
+  const h = client();
+  const pending = h.send({ url: REAL, mock: true, latency: 10 } as never);
+  await vi.runAllTimersAsync();
+  expect((await pending).data).toBe("real");
+  expect(h.events.loading.get(LABEL)).toEqual([true, false]);
+  expect(h.net.calls("get", `${MOCK}${REAL}`)).toBe(1);
+  expect(h.net.calls("get", REAL)).toBe(1);
+});
+
+it("[loading.opt.delay × mock.req.mock] 探测加回落在 delay 内完成：从未显示", async () => {
+  const h = client({ delay: 1000 });
+  const pending = h.send({ url: REAL, mock: true });
+  await vi.runAllTimersAsync();
+  expect((await pending).data).toBe("real");
+  expect(h.events.loading.get(LABEL)).toEqual([]);
+});
+
+it("[loading.cb.loading × mock.req.mock] 探测期间取消：loading 照常成对结束，不发真实请求", async () => {
+  const h = client();
+  const controller = new AbortController();
+  const pending = h.send({
+    url: REAL,
+    mock: true,
+    latency: 20,
+    signal: controller.signal,
+  } as never);
+  await vi.advanceTimersByTimeAsync(5);
+  controller.abort();
+  await vi.runAllTimersAsync();
+  expect((await pending).kind).toBe("cancel");
+  expect(h.events.loading.get(LABEL)).toEqual([true, false]);
+  expect(h.net.calls("get", REAL)).toBe(0);
+});
+
+it("[loading.method.lifecycle × mock.method.lifecycle] 先卸 mock：loading 继续生效；先卸 loading：mock 继续生效；两者都卸载后请求直达真实接口", async () => {
+  const h = client();
+  h.net.on("get", `${MOCK}${REAL}`, () => envelope("mock"));
+  const send = async () => {
+    const pending = h.send({ url: REAL, mock: true });
+    await vi.runAllTimersAsync();
+    return pending;
+  };
+  expect((await send()).data).toBe("mock");
+  expect(h.events.loading.get(LABEL)).toEqual([true, false]);
+  expect(h.api.eject("axp:mock")).toBe(true);
+  expect((await send()).data).toBe("real");
+  expect(h.events.loading.get(LABEL)).toEqual([true, false, true, false]);
+  h.api.use(axpMock({ enable: true, mockUrl: MOCK }));
+  expect(h.api.eject("axp:loading")).toBe(true);
+  expect((await send()).data).toBe("mock");
+  expect(h.events.loading.get(LABEL)).toEqual([true, false, true, false]);
+  expect(h.api.eject("axp:mock")).toBe(true);
+  expect((await send()).data).toBe("real");
+  expect(h.api.inspect()).toEqual([]);
 });

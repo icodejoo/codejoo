@@ -1,24 +1,22 @@
-import { sleep } from './http.ts';
-import { checkServer, evaluateLocal } from './assertions.ts';
-import type { Observed } from './assertions.ts';
-import { createClient } from './client-factory.ts';
-import type { AcceptConfig } from './config.ts';
-import {
-  DEFAULT_RUN_TIMEOUT_MS, DNS_FAIL_HOST, INFLIGHT_DRAIN_MS, SERVER_RETRY_INTERVAL_MS, SERVER_RETRY_MS,
-} from './constants.ts';
-import type { NetworkName } from './constants.ts';
-import { resolveExpectation } from './expect.ts';
-import { EventLog, PendingTracker } from './events.ts';
-import { domainOf } from './loader.ts';
-import type { Observation } from './matchers.ts';
-import { openProxy, swapHost } from './netem-client.ts';
-import type { NetemClient } from './netem-client.ts';
-import { RunEnvironment } from './run-env.ts';
-import type { ProxyEndpoint } from './run-env.ts';
-import { makeRunId, ServerClient } from './server-client.ts';
-import { drainFired, newStepState, runStep } from './steps.ts';
-import { TokenStore } from './tokens.ts';
-import type { Expectation, PlanEntry, RunResult, Scenario } from './types.ts';
+import { sleep } from "./http.ts";
+import { checkServer, evaluateLocal } from "./assertions.ts";
+import type { Observed } from "./assertions.ts";
+import { createClient } from "./client-factory.ts";
+import type { AcceptConfig } from "./config.ts";
+import { DEFAULT_RUN_TIMEOUT_MS, DNS_FAIL_HOST, INFLIGHT_DRAIN_MS, SERVER_RETRY_INTERVAL_MS, SERVER_RETRY_MS } from "./constants.ts";
+import type { NetworkName } from "./constants.ts";
+import { resolveExpectation } from "./expect.ts";
+import { EventLog, PendingTracker } from "./events.ts";
+import { domainOf } from "./loader.ts";
+import type { Observation } from "./matchers.ts";
+import { openProxy, swapHost } from "./netem-client.ts";
+import type { NetemClient } from "./netem-client.ts";
+import { RunEnvironment } from "./run-env.ts";
+import type { ProxyEndpoint } from "./run-env.ts";
+import { makeRunId, ServerClient } from "./server-client.ts";
+import { drainFired, newStepState, runStep } from "./steps.ts";
+import { TokenStore } from "./tokens.ts";
+import type { Expectation, PlanEntry, RunResult, Scenario } from "./types.ts";
 
 /** 执行一次运行所需的共享依赖 */
 export interface RunnerDeps {
@@ -29,7 +27,7 @@ export interface RunnerDeps {
 }
 
 /** 超时哨兵 */
-const TIMEOUT = Symbol('run-timeout');
+const TIMEOUT = Symbol("run-timeout");
 
 /** 等待指定毫秒 */
 
@@ -40,7 +38,7 @@ const TIMEOUT = Symbol('run-timeout');
  * @param fn 处理函数
  */
 export async function mapPool<T, R>(items: T[], limit: number, fn: (item: T, index: number) => Promise<R>): Promise<R[]> {
-  const out = new Array<R>(items.length);
+  const out: R[] = [];
   let next = 0;
   const worker = async (): Promise<void> => {
     while (next < items.length) {
@@ -68,7 +66,11 @@ export function settleDelayMs(sc: Scenario): number {
 
 /** 收集声明了 from_cache 的请求 id（需要探测是否到达服务器） */
 export function reachIdsOf(exp: Expectation): Set<string> {
-  return new Set(Object.entries(exp.results ?? {}).filter(([, r]) => r.from_cache !== undefined).map(([id]) => id));
+  return new Set(
+    Object.entries(exp.results ?? {})
+      .filter(([, r]) => r.from_cache !== undefined)
+      .map(([id]) => id),
+  );
 }
 
 /**
@@ -78,10 +80,7 @@ export function reachIdsOf(exp: Expectation): Set<string> {
  * @param check 断言函数，返回失败原因
  * @returns 最后一次的观测与失败原因
  */
-export async function observeUntil(
-  read: () => Promise<Observation>,
-  check: (obs: Observation) => string[],
-): Promise<{ obs: Observation; fails: string[] }> {
+export async function observeUntil(read: () => Promise<Observation>, check: (obs: Observation) => string[]): Promise<{ obs: Observation; fails: string[] }> {
   const deadline = Date.now() + SERVER_RETRY_MS;
   for (;;) {
     const obs = await read();
@@ -103,10 +102,10 @@ export async function runEntry(entry: PlanEntry, seq: number, deps: RunnerDeps):
   const { scenario: sc, network, style, adapter } = entry;
   const base = { key: entry.key, scenarioId: sc.id, domain: domainOf(sc.id), network, style, adapter };
   const started = Date.now();
-  const fail = (reasons: string[], runId?: string): RunResult => ({ ...base, status: 'failed', reasons, durationMs: Date.now() - started, runId });
+  const fail = (reasons: string[], runId?: string): RunResult => ({ ...base, status: "failed", reasons, durationMs: Date.now() - started, runId });
 
   const exp = resolveExpectation(sc, network, style);
-  if (!exp) return fail(['没有匹配的预期（expect 未覆盖该网络与风格）']);
+  if (!exp) return fail(["没有匹配的预期（expect 未覆盖该网络与风格）"]);
   if (entry.issues.length) return fail(entry.issues.map((i) => `映射不了: ${i}`));
 
   const runId = makeRunId(deps.session, seq, sc.id);
@@ -117,7 +116,7 @@ export async function runEntry(entry: PlanEntry, seq: number, deps: RunnerDeps):
   const open = (n: string): Promise<ProxyEndpoint> => openProxy(deps.netem, deps.config.server, n as NetworkName);
   let proxy: ProxyEndpoint | undefined;
   try {
-    if (network !== 'dns') proxy = await open(network);
+    if (network !== "dns") proxy = await open(network);
   } catch (e) {
     return fail([`netem: ${(e as Error).message}`], runId);
   }
@@ -131,16 +130,19 @@ export async function runEntry(entry: PlanEntry, seq: number, deps: RunnerDeps):
       loading: events.onLoading,
       notify: events.onNotify,
       refresh: events.onRefresh,
-      expired: (t) => events.onExpired(t),
-      denied: (t) => events.onDenied(t),
-      unauthenticated: (t) => events.onUnauthenticated(t),
-      expiredMarked: (t) => events.markExpired(t),
+      expired: events.onExpired,
+      denied: events.onDenied,
+      unauthenticated: events.onUnauthenticated,
     },
     getStyle: () => server.style,
     runId,
   });
   const env = new RunEnvironment({
-    client, server, netem: deps.netem, tokens, events, tracker,
+    client,
+    server,
+    netem: deps.netem,
+    tokens,
+    tracker,
     serverUrl: deps.config.server,
     proxy,
     reachIds: reachIdsOf(exp),
@@ -159,7 +161,9 @@ export async function runEntry(entry: PlanEntry, seq: number, deps: RunnerDeps):
     })();
     const outcome = await Promise.race([
       body.then(() => undefined),
-      new Promise<typeof TIMEOUT>((r) => { timer = setTimeout(() => r(TIMEOUT), timeoutMs); }),
+      new Promise<typeof TIMEOUT>((r) => {
+        timer = setTimeout(() => r(TIMEOUT), timeoutMs);
+      }),
     ]);
     if (outcome === TIMEOUT) reasons.push(`运行超过 ${timeoutMs}ms 仍未结束`);
   } catch (e) {
@@ -183,7 +187,10 @@ export async function runEntry(entry: PlanEntry, seq: number, deps: RunnerDeps):
   reasons.push(...evaluateLocal(exp, observed));
 
   try {
-    const { fails } = await observeUntil(() => server.observe(), (obs) => checkServer(exp.server, obs));
+    const { fails } = await observeUntil(
+      () => server.observe(),
+      (obs) => checkServer(exp.server, obs),
+    );
     reasons.push(...fails);
   } catch (e) {
     reasons.push(`服务端观测失败: ${(e as Error).message}`);
@@ -192,14 +199,22 @@ export async function runEntry(entry: PlanEntry, seq: number, deps: RunnerDeps):
   client.dispose();
   const finalProxy = env.proxy;
   if (finalProxy) {
-    try { await deps.netem.deleteProxy(finalProxy.id); } catch (e) { reasons.push(`netem 清理失败: ${(e as Error).message}`); }
+    try {
+      await deps.netem.deleteProxy(finalProxy.id);
+    } catch (e) {
+      reasons.push(`netem 清理失败: ${(e as Error).message}`);
+    }
   }
   const inflight = await drainInflight(server);
   if (inflight !== 0) reasons.push(`通用: 服务端 inflight=${inflight}，应为 0`);
-  try { await server.reset(); } catch { /* 清理失败不影响结论 */ }
+  try {
+    await server.reset();
+  } catch {
+    /* 清理失败不影响结论 */
+  }
 
   const unique = [...new Set(reasons)];
-  return { ...base, status: unique.length ? 'failed' : 'passed', reasons: unique, durationMs: Date.now() - started, runId };
+  return { ...base, status: unique.length ? "failed" : "passed", reasons: unique, durationMs: Date.now() - started, runId };
 }
 
 /**
@@ -211,7 +226,11 @@ async function drainInflight(server: ServerClient): Promise<number> {
   const deadline = Date.now() + INFLIGHT_DRAIN_MS;
   let last = 0;
   for (;;) {
-    try { last = (await server.observe()).inflight; } catch { return 0; }
+    try {
+      last = (await server.observe()).inflight;
+    } catch {
+      return 0;
+    }
     if (last === 0 || Date.now() >= deadline) return last;
     await sleep(SERVER_RETRY_INTERVAL_MS);
   }

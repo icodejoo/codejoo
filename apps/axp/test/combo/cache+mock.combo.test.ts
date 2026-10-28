@@ -1,40 +1,53 @@
-import { describe, it, expect } from 'vitest';
-import axios from 'axios';
-import { Axp } from '../../src';
-import cache from '../../src/plugins/cache';
-import mock from '../../src/plugins/mock';
-import { makeNetwork } from '../helpers/network';
+import { expect, it } from "vitest";
+import axpCache, { clearCache } from "../../src/plugins/cache";
+import axpMock from "../../src/plugins/mock";
+import { envelope, sourceClient } from "../helpers/source";
 
-describe('mock 探测不进缓存', () => {
-  const path = '/cm';
-  const mockPath = `http://mock${path}`;
-  const setup = (net: ReturnType<typeof makeNetwork>) => {
-    const ax = axios.create({ adapter: net.adapter });
-    Axp.install(ax, { cache: cache(), mock: mock({ enable: true, mock: true, mockUrl: 'http://mock' }) });
-    return ax;
-  };
-  const opt = { key: 'k', cache: true } as any;
+/** mock 服务器基址。 */
+const MOCK = "http://mock";
+/** 被 mock 且被缓存的接口。 */
+const REAL = "/real";
+/** 探测地址。 */
+const PROBE = `${MOCK}${REAL}`;
 
-  it('[mock.req.mock × cache.req.cache] 同 key 两次 mock 成功：探测各发一次，响应不写入缓存', async () => {
-    const net = makeNetwork().on('GET', mockPath, () => ({ status: 200, data: 'mocked' }));
-    const ax = setup(net);
-    expect((await ax.get(path, { ...opt })).data).toBe('mocked');
-    expect((await ax.get(path, { ...opt })).data).toBe('mocked');
-    expect(net.log.map((r) => r.url)).toEqual([mockPath, mockPath]);
-    // 关掉 mock 后同 key 走真实接口：缓存里没有 mock 数据，真实请求发出
-    net.on('GET', path, () => ({ status: 200, data: 'real' }));
-    expect((await ax.get(path, { ...opt, mock: false })).data).toBe('real');
-    expect(net.log.map((r) => r.url)).toEqual([mockPath, mockPath, path]);
-  });
+/** 装好 mock 与 cache；mock 默认成功，真实接口返回 real。 */
+function client() {
+  const h = sourceClient([axpMock({ enable: true, mockUrl: MOCK }), axpCache()]);
+  h.net.on("get", PROBE, () => envelope("mock"));
+  h.net.on("get", REAL, () => envelope("real"));
+  return h;
+}
 
-  it('[mock.req.mock × cache.req.cache] mock 404 回落：真实响应被缓存，再次回落命中缓存', async () => {
-    const net = makeNetwork()
-      .on('GET', mockPath, () => ({ status: 404 }))
-      .on('GET', path, () => ({ status: 200, data: 'real' }));
-    const ax = setup(net);
-    expect((await ax.get(path, { ...opt })).data).toBe('real');
-    expect((await ax.get(path, { ...opt })).data).toBe('real');
-    // 探测每次都发（2 次），真实接口只打 1 次
-    expect(net.log.map((r) => r.url)).toEqual([mockPath, path, mockPath]);
-  });
+it("[mock.req.mock × cache.req.cache] 同 key 两次 mock 成功：探测各发一次，探测响应不写入缓存", async () => {
+  const h = client();
+  const first = await h.send({ url: REAL, mock: true, cache: true });
+  const second = await h.send({ url: REAL, mock: true, cache: true });
+  expect([first.data, second.data]).toEqual(["mock", "mock"]);
+  expect(h.net.calls("get", PROBE)).toBe(2);
+  expect(h.net.calls("get", REAL)).toBe(0);
+  expect(clearCache(h.api)).toBe(0);
+});
+
+it("[mock.req.mock × cache.req.cache] mock 404 回落：真实响应被缓存，再次请求探测照发、真实结果命中缓存", async () => {
+  const h = client();
+  h.net.on("get", PROBE, () => ({ status: 404 }));
+  const first = await h.send({ url: REAL, mock: true, cache: true });
+  expect(first.data).toBe("real");
+  expect(clearCache(h.api)).toBe(1);
+  const again = await h.send({ url: REAL, mock: true, cache: true });
+  const second = await h.send({ url: REAL, mock: true, cache: true });
+  expect(again.data).toBe("real");
+  expect(second).toBe(again);
+  expect(h.net.calls("get", PROBE)).toBe(3);
+  expect(h.net.calls("get", REAL)).toBe(2);
+});
+
+it("[mock.req.mock × cache.req.cache] 缓存先命中的真实结果不受 mock 影响：mock:false 的请求读写同一条缓存", async () => {
+  const h = client();
+  const real = await h.send({ url: REAL, cache: true });
+  const viaMock = await h.send({ url: REAL, mock: true, cache: true });
+  expect(real.data).toBe("real");
+  expect(viaMock.data).toBe("mock");
+  expect((await h.send({ url: REAL, cache: true })).data).toBe("real");
+  expect(h.net.calls("get", REAL)).toBe(1);
 });

@@ -1,110 +1,92 @@
-import { describe, it, expect, vi } from 'vitest';
-import axios from 'axios';
-import { Axp, axpNotify as notify } from '../../src';
-import { makeNetwork } from '../helpers/network';
-import { use } from '../helpers/install';
+/* eslint-disable no-await-in-loop -- 同一客户端依次核对请求选项和生命周期，避免引入额外并发语义。 */
+import type { AxpResponse } from "../../src/response";
+import { AxiosError } from "axios";
+import { beforeEach, expect, it, vi } from "vitest";
+import axpNotify from "../../src/plugins/notify";
+import { notifyRecorder, uiClient } from "../helpers/ui";
 
-function mkApi() {
-  const net = makeNetwork();
-  const api = Axp.create(axios.create({ adapter: net.adapter }));
-  return { net, api };
-}
+/** 自定义格式化返回空消息的地址。 */
+const EMPTY_MESSAGE_URL = "/empty";
 
-describe('notify', () => {
-  it('[notify.cb.notify][notify.cb.stringify] a successful response is stringified and, if non-empty, passed to notify — the response itself passes through unchanged', async () => {
-    // `message` is `undefined` on the success path (no AxiosError involved)
-    // and falls back to `response.statusText` (empty in this mock) — the
-    // envelope's own `data.message` field is read off `data`, not `message`.
-    const { net, api } = mkApi();
-    net.fallback(() => ({ data: { code: 0, data: { v: 1 }, message: 'all good' } }));
-    const messages: string[] = [];
-    use(api, [notify<any>({
-      notify: (m) => messages.push(m),
-      stringify: (data) => `ok: ${data?.message} v=${data?.data?.v}`,
-    })]);
+/** 消息规则用假网络与假时钟。 */
+beforeEach(() => {
+  vi.useFakeTimers();
+});
+/** 非空业务提示。 */
+const MESSAGE = "业务失败";
+/** 通知插件名称。 */
+const NAME = "axp:notify";
 
-    const r = await api.axios.get('/data');
-    expect((r.data as any).data.v).toBe(1);
-    expect(messages).toEqual(['ok: all good v=1']);
-  });
-
-  it('[notify.cb.stringify] an empty stringify result means no notification', async () => {
-    const { net, api } = mkApi();
-    net.fallback(() => ({ data: { code: 0, data: null, message: '' } }));
-    const messages: string[] = [];
-    use(api, [notify({ notify: (m) => messages.push(m), stringify: () => '' })]);
-
-    await api.axios.get('/data');
-    expect(messages).toEqual([]);
-  });
-
-  it('[notify.cb.stringify][notify.cb.notify] an HTTP error is also stringified via the same callback, and the error still propagates', async () => {
-    // `message` here is the AxiosError's OWN description (e.g. "Request
-    // failed with status code 500"), not `response.data.message` — matches
-    // dioman's DiomanNotify exactly (`err.message`, a DioException's own
-    // description, not a field pulled out of the response body). A caller
-    // wanting the body's own message field reads it off `data` themselves.
-    const { net, api } = mkApi();
-    net.fallback(() => ({ status: 500, data: { code: 1, data: null, message: 'server exploded' } }));
-    const messages: string[] = [];
-    use(api, [notify<any>({
-      notify: (m) => messages.push(m),
-      stringify: (data, message, status) => `err ${status}: ${message} (body says: ${data?.message})`,
-    })]);
-
-    await expect(api.axios.get('/data')).rejects.toBeTruthy();
-    expect(messages).toEqual(['err 500: Request failed with status code 500 (body says: server exploded)']);
-  });
-
-  it('[notify.cb.stringify][notify.fn.axpNotify] a network-level error (no HTTP response at all) still gets stringified, with status 0', async () => {
-    const { net, api } = mkApi();
-    net.fallback(() => { throw new Error('ECONNREFUSED'); });
-    const calls: Array<{ data: unknown; message: string; status: number }> = [];
-    use(api, [notify({
-      notify: () => {},
-      stringify: (data, message, status) => { calls.push({ data, message, status }); return 'x'; },
-    })]);
-
-    await expect(api.axios.get('/data')).rejects.toBeTruthy();
-    expect(calls).toHaveLength(1);
-    expect(calls[0].status).toBe(0);
-  });
+it("[notify.cb.defaultStringify] 成功不提示，业务失败读逻辑状态，缺消息回退类别和状态", /** 默认消息规则。 */ async () => {
+  const h = uiClient();
+  const record = notifyRecorder(h.events);
+  const notify = vi.fn(record);
+  h.api.use(axpNotify<AxpResponse>({ notify }));
+  for (const [status, data, expected] of [
+    [200, { code: 0, data: 1 }, undefined],
+    [200, { code: 403, data: null, message: MESSAGE }, MESSAGE],
+    [500, {}, "http 500"],
+  ] as const) {
+    h.net.fallback(/** 当前场景的信封。 */ () => ({ status, data }));
+    const before = notify.mock.calls.length;
+    const pending = h.send();
+    await vi.runAllTimersAsync();
+    const response = await pending;
+    if (expected) expect(notify).toHaveBeenLastCalledWith(expected, response);
+    expect(notify.mock.calls.length - before).toBe(expected ? 1 : 0);
+  }
 });
 
-
-describe('notify — 安装/卸载与请求级 silent（真实 axios）', () => {
-  /** 成功响应的 axios 实例。 */
-  function okAxios() {
-    return axios.create({ adapter: async (c) => ({ config: c, data: { v: 1 }, status: 200, statusText: 'OK', headers: {} }) });
+it("[notify.req.notify][notify.req.silent] 请求关闭与 silent 默认静默，卸载停止通知", /** 请求级开关保留在请求上。 */ async () => {
+  const h = uiClient();
+  const notify = vi.fn(notifyRecorder(h.events));
+  h.api.use(axpNotify<AxpResponse>({ notify }));
+  h.net.fallback(/** 失败供静默规则判断。 */ () => ({ status: 500 }));
+  for (const config of [{ notify: false }, { notify: { enable: false } }, { silent: true }, { notify: null }, {}]) {
+    const pending = h.send(config);
+    await vi.runAllTimersAsync();
+    const response = await pending;
+    expect(response.request.notify).toEqual(config.notify);
   }
+  expect(notify).toHaveBeenCalledTimes(2);
+  expect(h.api.inspect()).toEqual([{ name: NAME, stage: "outer" }]);
+  h.api.eject(NAME);
+  const pending = h.send();
+  await vi.runAllTimersAsync();
+  await pending;
+  expect(notify).toHaveBeenCalledTimes(2);
+});
 
-  it("[notify.prop.name] 插件实例 name 为 'axp:notify'", () => {
-    expect(notify({ notify: () => {}, stringify: () => '' }).name).toBe('axp:notify');
-  });
+it("[notify.cb.stringify] 自定义收到 r 和 ctx，可为成功生成消息或返回空串", /** 自定义扩展点和身份。 */ async () => {
+  const h = uiClient();
+  const notify = vi.fn(notifyRecorder(h.events));
+  const contexts: unknown[] = [];
+  const stringify = vi.fn(
+    /** 保存根请求选项并生成自定义成功提示。 */ (r, ctx) => {
+      contexts.push(ctx.request.silent);
+      return r.request.url === EMPTY_MESSAGE_URL ? "" : MESSAGE;
+    },
+  );
+  const plugin = axpNotify<AxpResponse>({ notify, stringify });
+  expect(plugin.name).toBe(NAME);
+  h.api.use(plugin);
+  for (const config of [{ silent: true }, { silent: false }, { url: EMPTY_MESSAGE_URL }]) {
+    const pending = h.send(config);
+    await vi.runAllTimersAsync();
+    const response = await pending;
+    expect(stringify.mock.calls[stringify.mock.calls.length - 1]?.[0]).toBe(response);
+  }
+  expect(contexts).toEqual([true, false, undefined]);
+  expect(notify).toHaveBeenCalledTimes(2);
+});
 
-  it('[notify.method.install][notify.method.cleanup] install 后响应触发 notify，cleanup 后不再触发', async () => {
-    const ax = okAxios();
-    const messages: string[] = [];
-    const off = notify({ notify: (m) => messages.push(m), stringify: () => 'hi' }).install(ax) as () => void;
-    await ax.get('/a');
-    off();
-    await ax.get('/b');
-    expect(messages).toEqual(['hi']);
-  });
-
-  it('[notify.req.silent] silent 由执行器 stringify 读取：stringify 据 config.silent 返回空串即可静默；插件本身不读取 silent', async () => {
-    const ax = okAxios();
-    const messages: string[] = [];
-    notify({ notify: (m) => messages.push(m), stringify: (_d, _m, _s, config) => (config.silent ? '' : 'toast') }).install(ax);
-    await ax.get('/a', { silent: true } as any);
-    await ax.get('/b');
-    expect(messages).toEqual(['toast']);
-
-    // stringify 不看 silent 时，silent:true 也照常通知
-    const ax2 = okAxios();
-    const m2: string[] = [];
-    notify({ notify: (m) => m2.push(m), stringify: () => 'always' }).install(ax2);
-    await ax2.get('/c', { silent: true } as any);
-    expect(m2).toEqual(['always']);
-  });
+it("[notify.cb.network] 无 HTTP 响应时 r.status 为零且仍传给 stringify", /** 网络异常归一化。 */ async () => {
+  const h = uiClient([], {}, /** 标准网络错误。 */ () => Promise.reject(new AxiosError("offline", "ERR_NETWORK")));
+  const notify = vi.fn(notifyRecorder(h.events));
+  const stringify = vi.fn(/** 从统一响应生成网络消息。 */ (r) => `${r.kind} ${r.status}`);
+  h.api.use(axpNotify<AxpResponse>({ notify, stringify }));
+  const response = await h.send();
+  expect(response.kind).toBe("network");
+  expect(notify).toHaveBeenCalledWith("network 0", response);
+  expect(stringify.mock.calls[0]?.[0]).toBe(response);
 });

@@ -18,16 +18,16 @@ declare namespace model {
   interface LocalMethodRefs extends MethodRefs {
     // Example: a POST endpoint not yet in the spec
     /** 保留生成的 POST 路径并新增草稿接口。 */
-    post: MethodRefs['post'] & {
+    post: MethodRefs["post"] & {
       /** 创建草稿宠物。 */
-      '/pet/draft': [response: model.Pet, request: [payload: model.req.AddPet]];
+      "/pet/draft": [response: model.Pet, request: [payload: model.req.AddPet]];
     };
 
     // Example: an experimental GET with no payload and unknown response shape
     /** 保留生成的 GET 路径并新增实验接口。 */
-    get: MethodRefs['get'] & {
+    get: MethodRefs["get"] & {
       /** 查询实验性接口。 */
-      '/experimental/whatever': [response: unknown, request: []];
+      "/experimental/whatever": [response: unknown, request: []];
     };
   }
 }

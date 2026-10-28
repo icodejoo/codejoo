@@ -1,89 +1,108 @@
-import type { Plugin } from '../types';
-import { isObject, isPrimitive, pluginLog } from '../helper';
+import { resolveRequestOption, resolveOption, type AxpOption, type IPluginSwitch } from "../options";
+import type { AxpResponse, IAxpResponse } from "../response";
+import type { AxpPlugin } from "../types";
+import { isObject, ORIGIN_PREFIX, toTag, toText } from "../utils";
 
-/** 路径变量插件配置。 */
-export interface IRepathOptions {
-    /** 是否启用插件 / whether to enable this plugin */
-    enable?: boolean,
-    /** 自定义 url 变量匹配规则 / custom regex for matching URL path variables */
-    pattern?: RegExp;
-    /** params/data 命中 url 参数时，替换的同时是否从 params/data 中删除该字段，默认 true / whether to also delete the field from params/data after substitution, default true */
-    removeKey?: boolean
+/** 内置路径替换插件名称。 */
+const NAME = "axp:repath";
+/** 三种路径变量，冒号变量仅匹配单个路径段。 */
+const DEFAULT_PATTERN = /{([^}]+)}|\[([^\]]+)]|:([^/\s]+)/g;
+/** 普通对象的类型标签，只有它的字段才可能提供路径变量。 */
+const PLAIN_TAG = "[object Object]";
+/** 路径变量的内置配置。 */
+const DEFAULTS = {
+  /** 三种路径变量语法。 */ pattern: DEFAULT_PATTERN,
+  /** 删除已消费字段。 */ removeKey: true,
+};
+/** 路径变量配置。 */
+export interface IRepathOptions extends IPluginSwitch {
+  /** 捕获组提供变量名的正则表达式。 */
+  pattern?: RegExp;
+  /** 替换后移除来源字段，默认开启。 */
+  removeKey?: boolean;
 }
-
-const name = 'axp:repath'
-
-/**
- * 将路径变量替换成真实值（`{id}` / `:id` / `[id]` ← params / data）。
- *
- * Substitutes path variables (`{id}` / `:id` / `[id]`) in the URL with values from `params`/`data`.
- * @param options 匹配规则、启用状态与字段删除策略。
- * @returns 可安装到 axios 的路径变量插件。
- * @example axpRepath({ removeKey: false })
+/** 复制外壳后删除已消费字段。 */
+function omit(source: object | undefined, keys?: Set<string>): unknown {
+  if (!keys) return source;
+  const copy: Record<string, unknown> = { ...source };
+  for (const key of keys) delete copy[key];
+  return copy;
+}
+/** 只为实际读到的路径变量记录消费字段。 */
+interface IConsumedFields {
+  /** params 中已读取的字段。 */ params?: Set<string>;
+  /** data 中已读取的字段。 */ data?: Set<string>;
+  /** 标量请求体是否已消费。 */ removeData?: boolean;
+}
+/** 查询对象保留数组和特殊对象的既有取值语义。 */
+function readParams(params: unknown, key: string, used: IConsumedFields): unknown {
+  if (!isObject(params) || !(key in params)) return undefined;
+  (used.params ??= new Set()).add(key);
+  return params[key];
+}
+/** 请求体沿用对象标签和标量的原判定方式。 */
+function readData(data: unknown, key: string, used: IConsumedFields): unknown {
+  if (data == null) return undefined;
+  if (toTag(data) === PLAIN_TAG) {
+    const source = data as Record<string, unknown>;
+    if (!(key in source)) return undefined;
+    (used.data ??= new Set()).add(key);
+    return source[key];
+  }
+  if (typeof data === "object" || typeof data === "function") return undefined;
+  used.removeData = true;
+  return data;
+}
+/** 只替换 pathname，params 优先于 data，按路径段编码。
+ * @param options 匹配模式、字段消费规则与插件开关。
+ * @returns 经 next(patch) 传递新请求视图的 prepare 插件。
+ * @example `axpRepath({ removeKey: false })`
  */
-export default function axpRepath(
-    { enable = true, removeKey = true, pattern = /{([^}]+)}|\[([^\]]+)]|:([^/\s]+)/g }: IRepathOptions = {},
-): Plugin {
-    return {
-        name: name,
-        /** 安装路径变量请求拦截器，返回卸载函数。 */
-        install(axios) {
-            pluginLog(axios.defaults, `[${name}] enabled:${enable}`)
-            if (!enable) return;  // enable:false → 整个插件不安装拦截器（与 cache/share/filter 等一致）
-            const id = axios.interceptors.request.use(
-                /** 用 pattern 匹配 url 中的变量，从 params/data 取值替换 / matches url variables via `pattern`, substituting values from params/data */
-                function $normalize(config) {
-                    const { params, data, url } = config
-                    if (!url) return config;
-                    // 保留 authority，以及 query/hash 的原始文本。
-                    const prefix = url.match(/^(?:[a-z][a-z\d+.-]*:)?\/\/[^/?#]*/i)?.[0] ?? '';
-                    const rest = url.slice(prefix.length);
-                    const suffixAt = rest.search(/[?#]/);
-                    const pathname = suffixAt < 0 ? rest : rest.slice(0, suffixAt);
-                    const suffix = suffixAt < 0 ? '' : rest.slice(suffixAt);
-                    const paramsKeys = new Set<string>();
-                    const dataKeys = new Set<string>();
-                    let removeData = false;
-                    config.url = prefix + pathname.replace(pattern, (match, x, y, z) => {
-                        const key = x || y || z;
-                        if (!key) return match;
-                        let value: any = null;
-
-                        //try remove from params
-                        if (params && key in params) {
-                            value = params[key];
-                            paramsKeys.add(key);
-                        }
-
-                        //fall back to data ONLY when params didn't supply the value
-                        //（`==` on purpose: params[key] can legitimately be `undefined`,
-                        // not just the `null` this variable starts at — either means "no value"）
-                        if (value == null && data != null) {
-                            if (isObject(data) && key in data) {
-                                value = data[key];
-                                dataKeys.add(key);
-                            } else if (isPrimitive(data)) {
-                                value = data;
-                                removeData = true;
-                            }
-                        }
-                        
-                        return value == null ? match : encodeURIComponent(String(value));
-                    }) + suffix;
-
-                    if (removeKey) {
-                        for (const key of paramsKeys) delete params[key];
-                        for (const key of dataKeys) delete data[key];
-                        if (removeData) delete config.data;
-                    }
-
-                    return config;
-                },
-            );
-            return () => { axios.interceptors.request.eject(id); };
+export default function axpRepath<R extends IAxpResponse = AxpResponse>(options: IRepathOptions = {}): AxpPlugin<R> {
+  const base = resolveOption<IRepathOptions, typeof DEFAULTS>(undefined, options, DEFAULTS);
+  const basePattern = new RegExp(base.pattern.source, base.pattern.flags);
+  return {
+    name: NAME,
+    enable: options.enable,
+    stage: "prepare",
+    /** 替换完毕后统一移除字段，重复变量仍可读取同一来源。 */
+    async handle(ctx, next) {
+      const resolved = resolveRequestOption(ctx.request.repath, base, DEFAULTS);
+      const { url, params, data } = ctx.request;
+      if (!resolved || !url) return next();
+      const prefix = url.match(ORIGIN_PREFIX)?.[0] ?? "";
+      const rest = url.slice(prefix.length);
+      const suffixAt = rest.search(/[?#]/);
+      const pathname = suffixAt < 0 ? rest : rest.slice(0, suffixAt);
+      if (resolved.pattern === DEFAULT_PATTERN && !/[{[:]/.test(pathname)) return next();
+      const suffix = rest.slice(pathname.length);
+      const used: IConsumedFields = {};
+      // 不向共享正则写 lastIndex；无捕获组时不把 replace 的 offset 当变量名。
+      const pattern = resolved.pattern === base.pattern ? basePattern : new RegExp(resolved.pattern.source, resolved.pattern.flags);
+      pattern.lastIndex = 0;
+      const replaced = pathname.replace(
+        pattern,
+        /** 捕获组依次提供变量名。 */ (match, ...args: unknown[]) => {
+          const captures = args.slice(0, -2);
+          const key = captures.find(/** 忽略未命中的可选组。 */ (value) => typeof value === "string" && value.length > 0);
+          if (typeof key !== "string") return match;
+          const value = readParams(params, key, used) ?? readData(data, key, used);
+          return value == null ? match : encodeURIComponent(toText(value));
         },
-    };
+      );
+      if (replaced === pathname) return next();
+      return next({
+        url: prefix + replaced + suffix,
+        params: resolved.removeKey ? omit(params, used.params) : params,
+        data: resolved.removeKey ? (used.removeData ? undefined : omit(data, used.data)) : data,
+      });
+    },
+  };
 }
 
-// 见 normalize：严格模式 ESM 下 fn.name 须用 defineProperty 重定义
-Object.defineProperty(axpRepath, 'name', { value: name })
+declare module "../types" {
+  interface AxpRequestOptions {
+    /** 请求级关闭或按字段覆盖路径替换配置。 */
+    repath?: AxpOption<IRepathOptions>;
+  }
+}

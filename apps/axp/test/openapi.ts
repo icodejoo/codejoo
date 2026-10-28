@@ -1,7 +1,8 @@
-import { generate, configureTypescript, configureBase } from '@codejoo/openapi2lang';
+import { generate, configureTypescript, configureBase } from "@codejoo/openapi2lang";
 
-generate(configureBase({
-    source: "./test/mock.json"
-}), [
-    configureTypescript()
-])
+await generate(
+  configureBase({
+    source: "./test/mock.json",
+  }),
+  [configureTypescript()],
+);

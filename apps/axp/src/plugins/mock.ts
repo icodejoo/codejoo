@@ -1,214 +1,117 @@
+import { resolveOption, resolveRequestOption, type AxpOption, type IPluginSwitch } from "../options";
+import { AXP_KINDS, type AxpResponse, type IAxpResponse } from "../response";
+import type { AxpPlugin, AxpRequestPatch } from "../types";
+import { ORIGIN_PREFIX } from "../utils";
 
-import type { Plugin } from '../types';
-import { pluginLog, pluginWarn, wrapAdapter } from '../helper';
-import type { AxiosRequestConfig, AxiosResponse } from 'axios';
+/** 内置 mock 插件名称。 */
+const NAME = "axp:mock";
+/** mock 服务器上没有这条接口时的 HTTP 状态。 */
+const NOT_FOUND = 404;
+/** 开启了 mock 却没有 mockUrl 时的调试提示。 */
+const SKIPPED_MESSAGE = `[${NAME}] 已跳过：没有 mockUrl，直接请求真实接口`;
+/** 探测结果需要回落时的调试提示前缀。 */
+const FALLBACK_MESSAGE = `[${NAME}] 回落真实接口：`;
 
+/** 判断 mock 探测结果是否应回落真实接口，返回真值即回落；抛错按程序 bug 处理。 */
+export type TMockFallback<R extends IAxpResponse = IAxpResponse> = (response: R) => boolean;
 
-const name = 'axp:mock'
+/** mock 插件的装配配置。 */
+export interface IMockOptions<R extends IAxpResponse = IAxpResponse> extends IPluginSwitch {
+  /** 插件总开关；默认 false，通常写 import.meta.env.DEV。 */
+  enable?: boolean;
+  /** 是否让全部请求走 mock；请求级 false 可退出，默认 false。 */
+  mock?: boolean;
+  /** mock 服务器基址；缺失时跳过 mock 直接请求真实接口。 */
+  mockUrl?: string;
+  /** 回落判定，默认 404 或网络不可达。 */
+  fallbackWhen?: TMockFallback<R>;
+}
 
-/**
- * Mock 插件：命中请求**优先打 mock，mock 不存在则自动回落真实接口**。
- * （mock 仅应在开发环境启用 `enable: import.meta.env.DEV`，故回落即默认行为，无需开关。）
- *   - **触发判定**：`config.mock` 为真，或插件级 `mock: true` 兜底
- *   - **URL 改写**：见 `$rewriteUrl`（绝对/相对/无 url 三种）
- *   - **回落**：先打 mock，mock **不存在**（默认：HTTP 404，或不可达的网络错误）→ 改用
- *     **原始请求**打真实接口；判定可由 `fallbackWhen` 自定义（如把 5xx/501 也视为"无 mock"）
- *   - **实现层**：基于 adapter 包装（而非拦截器）——只有 adapter 能"先发 mock、看结果、再改发真实"。
- *     回落只重走底层 adapter，不会二次触发其它拦截器
- *
- * Mock plugin: a matched request is sent to mock first, and automatically falls
- * back to the real endpoint if the mock doesn't exist (default: HTTP 404, or a
- * network error meaning the mock address is unreachable — customizable via
- * `fallbackWhen`). Adapter-based (not an interceptor) because only an adapter
- * can send mock, inspect the result, then re-send for real without
- * re-triggering other interceptors.
- *
- * @example
- *   useAxiosPlugin(ax).use(mock({
- *     enable: import.meta.env.DEV,
- *     mockUrl: 'http://localhost:4523',
- *   }));
- *
- *   ax.get('/api/x', { mock: true });                  // 先 mock，404/不可达则真实
- *   ax.get('/api/y', { mock: { mockUrl: 'http://m2' } });
- * @param options 插件配置：enable/mock/mockUrl/fallbackWhen / plugin config: enable/mock/mockUrl/fallbackWhen
- * @returns Plugin：install 时包装 adapter 实现 mock-先行/回落真实，卸载还原 adapter / a Plugin implementing mock-first/fallback-to-real on install, restores the adapter on teardown
+/** 请求级 mock 对象写法；开关只认 enable，不再有 mock 字段。 */
+export interface IMockRequestOptions extends IPluginSwitch {
+  /** 本次请求专用的 mock 服务器基址。 */
+  mockUrl?: string;
+  /** 本次请求专用的回落判定。 */
+  fallbackWhen?: TMockFallback;
+}
+
+/** 内置默认：mock 不存在时才回落。 */
+const DEFAULTS = {
+  /** 默认回落判定。 */
+  fallbackWhen: $shouldFallback,
+};
+
+/** 默认回落判定：mock 服务器没有这条接口（404）或根本连不上（network）。
+ * @param response 探测请求的归一化响应。
+ * @returns 是否应改打真实接口；取消、其它状态一律不回落。
+ * @example `$shouldFallback(r) // r.httpStatus === 404 时为 true`
  */
-export default function axpMock(
-  { enable = false, mock: mockGlobal = false, mockUrl, fallbackWhen }: IMockOptions = {},
-): Plugin {
-  const defaults: IMockOptions = { mock: mockGlobal, mockUrl, fallbackWhen };
+export function $shouldFallback(response: IAxpResponse): boolean {
+  return response.httpStatus === NOT_FOUND || response.kind === AXP_KINDS.NETWORK;
+}
+
+/** 拼接基址与非空的相对路径，保证中间只有一个斜杠。 */
+function joinUrl(base: string, relative: string): string {
+  return `${base.replace(/\/+$/, "")}/${relative.replace(/^\/+/, "")}`;
+}
+
+/** 把请求地址改写到 mock 服务器，保留 query 与 hash。
+ * @param url 原请求地址，可为相对、绝对或缺省。
+ * @param mockUrl mock 服务器基址。
+ * @returns 只含被改写字段的请求补丁；缺省地址改写 baseURL，其余改写 url。
+ * @example `$rewriteUrl('/pet?id=1', 'http://m') // { url: 'http://m/pet?id=1' }`
+ */
+export function $rewriteUrl(url: string | undefined, mockUrl: string): AxpRequestPatch {
+  if (!url) return { baseURL: mockUrl };
+  if (!ORIGIN_PREFIX.test(url)) return { url: joinUrl(mockUrl, url) };
+  try {
+    const parsed = new URL(url);
+    return { url: joinUrl(mockUrl, parsed.pathname + parsed.search + parsed.hash) };
+  } catch {
+    return { url: joinUrl(mockUrl, url) };
+  }
+}
+
+/** 先探测 mock 服务器，mock 不存在时回落真实接口。
+ * 探测请求关闭 cache 与 share，探测结果不写缓存、不占共享条目。
+ * @param options 总开关、全局 mock 开关、mock 基址与回落判定。
+ * @returns source 阶段内置次序 1 的插件；enable 默认 false。
+ * @example `axpMock({ enable: import.meta.env.DEV, mockUrl: 'http://localhost:4523' })`
+ */
+export default function axpMock<R extends IAxpResponse = AxpResponse>(options: IMockOptions<R> = {}): AxpPlugin<R> {
+  const base = resolveOption<IMockOptions<R>, typeof DEFAULTS>(undefined, options, DEFAULTS);
+  // 请求省略或写了不认得的值时只看插件级 mock：未全局开启则不走 mock。
+  const optIn = !base.mock;
   return {
-    name,
-    /** 包装 adapter 路由 mock，保留配置供 retry/auth 重放解析。 */
-    install(axios) {
-      pluginLog(axios.defaults, `[${name}] enabled:${enable} mockUrl:${mockUrl ?? '<none>'}`);
-      if (!enable) return;
-      return wrapAdapter(axios, (prev) => (config) => {
-        const opt = $resolveMock(config, defaults);
-        if (!opt) return prev(config);
-        if (!opt.mockUrl) {
-          pluginWarn(config, `[${name}] skipped: no mockUrl`);
-          return prev(config);
-        }
-
-        // 克隆出 mock 专用 config（保留原始 config 以便回落真实接口）。
-        // 显式关掉 cache/share：mockConfig 与 config 共享同一个 config.key，若探测 mock 时
-        // 被 cache/share 用该 key 写入/占用了条目，真实回落调用会命中"mock 探测"留下的脏数据。
-        const mockConfig = { ...config, cache: false as const, share: false as const };
-        $rewriteUrl(mockConfig, opt.mockUrl);
-
-        // 先打 mock，不存在(404/不可达)则回落原始请求 → 真实接口
-        const decide = opt.fallbackWhen ?? $shouldFallback;
-        return prev(mockConfig).then(
-          (response) => {
-            if (decide({ response })) {
-              pluginLog(config, `[${name}] fallback → real (mock status ${response.status})`);
-              return prev(config);
-            }
-            return response;
-          },
-          (error) => {
-            if (decide({ error })) {
-              pluginLog(config, `[${name}] fallback → real (mock unreachable)`);
-              return prev(config);
-            }
-            return Promise.reject(error);
-          },
-        );
+    name: NAME,
+    enable: options.enable ?? false,
+    stage: "source",
+    /** 探测命中直接返回；需要回落时再走一次真实请求。 */
+    async handle(ctx, next) {
+      const resolved = resolveRequestOption(ctx.request.mock, base, DEFAULTS, undefined, optIn);
+      if (!resolved) return next();
+      const mockUrl = resolved.mockUrl;
+      if (!mockUrl) {
+        ctx.log.warn(SKIPPED_MESSAGE);
+        return next();
+      }
+      // 探测与回落会把同一请求体发两次，标记可重放让每次发送都转换独立副本
+      ctx.markReplayable();
+      const probe = await next({
+        ...$rewriteUrl(ctx.request.url, mockUrl),
+        cache: false,
+        share: false,
       });
+      if (!resolved.fallbackWhen(probe)) return probe;
+      ctx.log.log(`${FALLBACK_MESSAGE}${probe.kind} ${probe.httpStatus}`);
+      return next();
     },
   };
 }
 
-
-/**
- * 解析 mock 配置；null 表示本请求不 mock / resolves the mock config; null means not mocked.
- * @internal
- * @param config 请求配置 / the request config
- * @param defaults 插件级默认配置 / plugin-wide defaults
- * @returns 解析后的 mock 配置，或 null / the resolved config, or null if not mocked
- */
-export function $resolveMock(config: AxiosRequestConfig, defaults: IMockOptions): IResolvedMock | null {
-  const v = config.mock;
-  if (v === false) return null;
-  if (v === true) return pick(undefined, defaults);
-  if (typeof v === 'object' && v !== null) {
-    if (v.mock === false) return null;
-    return pick(v, defaults);
-  }
-  return defaults.mock ? pick(undefined, defaults) : null;
-}
-
-/**
- * 合并请求级 override 与插件级 defaults（请求级优先）。未指定字段保持 undefined，以便与
- * 历史断言 `toEqual({ mockUrl })` 兼容（toEqual 忽略 undefined 字段）。
- *
- * Merges a per-request override with plugin-wide defaults (per-request wins).
- * Unspecified fields stay `undefined` to remain compatible with legacy
- * `toEqual({ mockUrl })` assertions (which ignore `undefined` fields).
- *
- * @param v 请求级 mock 对象 / the per-request mock object (may be undefined)
- * @param defaults 插件级默认配置 / plugin-wide defaults
- * @returns 合并后的已解析 mock 配置 / the merged, resolved config
- */
-function pick(v: IMockObject | undefined, defaults: IMockOptions): IResolvedMock {
-  return {
-    mockUrl: v?.mockUrl ?? defaults.mockUrl,
-    fallbackWhen: v?.fallbackWhen ?? defaults.fallbackWhen,
-  };
-}
-
-
-/** 默认"mock 不存在"判定：带响应（含 axios 抛出的 HTTP 错误）只认 404，无响应的网络不可达才回落（排除主动取消） / default "mock doesn't exist" check: with a response (incl. an axios HTTP error) only 404 counts; a response-less network error falls back (cancellation excluded) @internal */
-export function $shouldFallback(info: { response?: AxiosResponse; error?: any }): boolean {
-  // 默认 validateStatus 下非 2xx 走 error 路径，响应挂在 error.response 上，不能当"不可达"
-  const res = info.response ?? info.error?.response;
-  if (res) return res.status === 404;
-  const e = info.error;
-  if (e && (e.code === 'ERR_CANCELED' || e.name === 'CanceledError')) return false; // 用户取消，不回落
-  return !!e; // 网络层错误（连接被拒/超时等）= mock 不可达
-}
-
-
-/** 将 config.url / config.baseURL 重写到 mockUrl / rewrites config.url / config.baseURL to point at mockUrl @internal */
-export function $rewriteUrl(config: AxiosRequestConfig, mockUrl: string): void {
-  const url = config.url;
-  if (!url) {
-    config.baseURL = mockUrl;
-    return;
-  }
-  if (isAbsoluteURL(url)) {
-    // 完整 URL：去掉原 origin，把 path/search 拼到 mockUrl 后
-    try {
-      const u = new URL(url);
-      config.url = combineURLs(mockUrl, u.pathname + u.search + u.hash);
-    } catch {
-      // 解析失败时退化为简单拼接
-      config.url = combineURLs(mockUrl, url);
-    }
-  } else {
-    config.url = combineURLs(mockUrl, url);
-  }
-}
-
-
-/** 简化版：是否绝对 URL / simplified check: whether url is absolute */
-function isAbsoluteURL(url: string): boolean {
-  return /^([a-z][a-z\d+\-.]*:)?\/\//i.test(url);
-}
-
-/** 简化版：处理结尾 / 与开头 / 的拼接 / simplified join: handles a trailing/leading slash */
-function combineURLs(base: string, rel: string): string {
-  return rel ? `${base.replace(/\/+$/, '')}/${rel.replace(/^\/+/, '')}` : base;
-}
-
-
-/** 自定义"mock 不存在"判定：返回 true 触发回落到真实接口 / custom "mock doesn't exist" decider: return true to trigger fallback */
-export type MockFallbackDecider = (info: { response?: AxiosResponse; error?: unknown }) => boolean;
-
-/** 请求级 config.mock 的对象形式（内部） / the object form of per-request config.mock (internal) */
-interface IMockObject {
-  /** 是否启用 mock（对象形式内的显式开关） / whether mock is enabled (explicit switch within the object form) */
-  mock?: boolean;
-  /** 本请求专用的 mock 服务器地址（覆盖插件级） / mock server address for this request only (overrides plugin-wide) */
-  mockUrl?: string;
-  /** 本请求专用的回落判定（覆盖插件级） / fallback decider for this request only (overrides plugin-wide) */
-  fallbackWhen?: MockFallbackDecider;
-}
-
-/** `$resolveMock` 解析出的请求级配置（内部中间态） / the per-request config resolved by $resolveMock (internal) */
-interface IResolvedMock {
-  /** 本请求生效的 mock 服务器地址 / effective mock server address for this request */
-  mockUrl?: string;
-  /** 本请求生效的回落判定 / effective fallback decider for this request */
-  fallbackWhen?: MockFallbackDecider;
-}
-
-export interface IMockOptions {
-  /** 插件级总开关；建议设为 import.meta.env.DEV 之类的编译期常量，默认 false / plugin-wide kill switch; recommend a compile-time constant like import.meta.env.DEV, defaults to false */
-  enable?: boolean;
-  /** 默认是否 mock；true 时所有请求走 mockUrl，除非请求级显式 mock: false / default mock-or-not; true routes all requests through mockUrl unless overridden with mock: false */
-  mock?: boolean;
-  /** mock 服务器基地址 / the mock server base URL */
-  mockUrl?: string;
-  /** 自定义"mock 不存在"判定；返回 true 触发回落，默认 404 或网络不可达 / custom "mock doesn't exist" decider; true triggers fallback, default 404 or unreachable */
-  fallbackWhen?: MockFallbackDecider;
-}
-
-
-declare module 'axios' {
-  interface AxiosRequestConfig {
-    /**
-     * mock 配置（mock 不存在时自动回落真实接口）：
-     *   - `false` → 不 mock（覆盖插件级）
-     *   - `true` → 启用，使用插件级 mockUrl
-     *   - `{ mock?, mockUrl?, fallbackWhen? }` → 自定义
-     *
-     * Mock config (falls back to the real endpoint automatically if the mock
-     * doesn't exist): `false` → not mocked; `true` → enabled, uses plugin-wide
-     * `mockUrl`; object form customizes.
-     */
-    mock?: boolean | { mock?: boolean; mockUrl?: string; fallbackWhen?: MockFallbackDecider };
+declare module "../types" {
+  interface AxpRequestOptions {
+    /** false 关闭；true 沿用插件配置；对象覆盖 mockUrl、fallbackWhen，enable:false 等同 false。 */
+    mock?: AxpOption<IMockRequestOptions>;
   }
 }

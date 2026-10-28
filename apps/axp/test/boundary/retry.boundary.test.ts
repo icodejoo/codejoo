@@ -1,196 +1,311 @@
-import { describe, it, expect, vi, afterEach } from 'vitest';
-import axios, { AxiosHeaders } from 'axios';
-import axpRetry, { default as retry } from '../../src/plugins/retry';
-import { Axp } from '../../src/install';
-import { makeNetwork } from '../helpers/network';
-import { use } from '../helpers/install';
+/* eslint-disable no-await-in-loop -- 逐项推进假时钟以观测等待边界。 */
+import { AxiosError } from "axios";
+import { beforeEach, expect, it, vi } from "vitest";
+import axpRetry, { type IRetryOptions } from "../../src/plugins/retry";
+import { AxpResponse, type AxpKind } from "../../src/response";
+import type { AxpRequestConfig } from "../../src/types";
+import { b3Client, POLLUTED_ONCE, pollutingBody, pollutingTransform, REQUEST_URL, run } from "../helpers/b3";
 
-function mkApi() {
-    const net = makeNetwork();
-    const api = Axp.create(axios.create({ adapter: net.adapter }));
-    return { net, api };
-}
-
-afterEach(() => { vi.useRealTimers(); vi.restoreAllMocks(); });
-
-/** 构造成功或可重试的 adapter 响应。 */
-function response(config: any, status = 200, headers: any = {}) {
-    return { status, statusText: '', headers, config, data: { code: 0 } };
-}
-
-describe('retry 集成 — 网络/HTTP 错误路径', () => {
-    it('[retry.opt.max] max=0 → 不重试，直接 reject', async () => {
-        const { net, api } = mkApi();
-        net.on('GET', '/x', () => ({ status: 500 }));
-        use(api, axpRetry({ max: 0, delay: 0 }));
-        await expect(api.get('/x')(undefined, { retry: 0 } as any)).rejects.toBeTruthy();
-        expect(net.calls('GET', '/x')).toBe(1);
-    });
-
-    it('[retry.opt.max][retry.cb.shouldRetry] 耗尽次数时最后一次是已 resolve 的响应（shouldRetry 恒为 true）→ 原样 resolve 最后一次响应，不合成错误', async () => {
-        const { net, api } = mkApi();
-        net.on('GET', '/x', () => ({ data: { code: 0, data: 'ok' } }));
-        use(api, axpRetry({ max: 2, delay: 0, shouldRetry: () => true }));
-        await expect(api.get('/x')(undefined, { retry: 2 } as any)).resolves.toBe('ok');
-        expect(net.calls('GET', '/x')).toBe(3);  // 首发 + 2 次重试，shouldRetry 一直说重试直到预算耗尽
-    });
-
-    it('[retry.opt.max] business 风格（HTTP 200 + 失败码）耗尽后 resolve 最后一次响应，交给下游 normalize 转成失败', async () => {
-        const net = makeNetwork().on('GET', '/b', () => ({ data: { code: 500, message: 'boom' } }));
-        const ax = axios.create({ adapter: net.adapter });
-        Axp.install(ax, { retry: axpRetry({ max: 2, delay: 0, shouldRetry: (r) => (r?.data as any)?.code === 500 }) });
-        const resp = await ax.get('/b');
-        expect(resp.status).toBe(200);
-        expect(resp.data).toMatchObject({ code: 500 });   // 原响应，而非通用 "exhausted retries" 错误
-        expect(net.calls('GET', '/b')).toBe(3);
-    });
+/** 延迟与封顶的观测窗口。 */
+const LOCAL_DELAY = 40;
+const REMOTE_DELAY = 2000;
+const CAP = 20;
+/** 决策函数的原始故障。 */
+const BUG = new Error("retry callback bug");
+/** 等待测试使用假时钟。 */
+beforeEach(() => {
+  vi.useFakeTimers();
 });
 
-describe('retry 集成 — delay / jitter / delayMax', () => {
-    it('[retry.cb.delay] delay 函数返回非 number 视为 0（不等待）', async () => {
-        const { net, api } = mkApi();
-        net.on('GET', '/x', (_c, hit) => (hit < 2 ? { status: 500 } : { data: { code: 0, data: 'ok' } }));
-        const start = Date.now();
-        use(api, axpRetry({ max: 2, delay: () => undefined }));
-        await api.get('/x')(undefined, { retry: 2 } as any);
-        expect(Date.now() - start).toBeLessThan(200);  // 没有真的等待
-    });
+it.each(["cancel", "auth", "internal", "parse"] as const)(
+  "[retry.priority.kind][retry.cb.shouldRetry] %s 永不调用 shouldRetry 或重试",
+  /** 合成失败也经过内核异常边界。 */ async (kind) => {
+    const shouldRetry = vi.fn(/** 不应覆盖失败类别否决。 */ () => true);
+    const h = b3Client([axpRetry({ shouldRetry })]);
+    const inner = vi.fn(/** 构造内核契约中的不可重试失败。 */ (ctx) => ctx.fail({ kind, error: kind === "internal" ? BUG : undefined }));
+    h.api.use({ name: "failure-kind", stage: "source", handle: inner });
+    const pending = h.send().catch(/** 原始程序异常必须保留。 */ (error) => error);
+    await vi.runAllTimersAsync();
+    const result = await pending;
+    if (kind === "internal") expect(result).toBe(BUG);
+    else expect(result.kind).toBe(kind);
+    expect(inner).toHaveBeenCalledTimes(1);
+    expect(shouldRetry).not.toHaveBeenCalled();
+  },
+);
 
-    it('[retry.cb.jitter] jitter 函数返回值非有限数/负数时回退原始 delay', async () => {
-        const { net, api } = mkApi();
-        net.on('GET', '/x', (_c, hit) => (hit < 2 ? { status: 500 } : { data: { code: 0, data: 'ok' } }));
-        vi.useFakeTimers();
-        try {
-            use(api, axpRetry({ max: 1, delay: 500, jitter: () => -1 }));
-            const p = api.get('/x')(undefined, { retry: 1 } as any);
-            await vi.advanceTimersByTimeAsync(0);
-            await vi.advanceTimersByTimeAsync(499);
-            expect(net.calls('GET', '/x')).toBe(1);  // 无效抖动回退到原始 500ms，还没到点
-            await vi.advanceTimersByTimeAsync(1);
-            await vi.advanceTimersByTimeAsync(1);
-            expect(net.calls('GET', '/x')).toBe(2);
-            await expect(p).resolves.toBe('ok');
-        } finally {
-            vi.useRealTimers();
-        }
-    });
+it.each([false, true])(
+  "[retry.cb.delay][retry.req.retry.delay.callback][retry.cb.jitter] delay 参数与请求回调覆盖，请求级=%s",
+  /** 回调看到一开始的次数、总预算和失败 R。 */ async (requestLevel) => {
+    const fallback = vi.fn(/** 被请求覆盖时不调用。 */ () => REMOTE_DELAY);
+    const delay = vi.fn(/** 指定本地等待时间。 */ () => LOCAL_DELAY);
+    const jitter = vi.fn(/** 接收未经封顶的延迟。 */ (ms) => ms / 2);
+    const h = b3Client([
+      axpRetry({
+        max: 1,
+        delay: requestLevel ? fallback : delay,
+        jitter: requestLevel ? undefined : jitter,
+      }),
+    ]);
+    h.net.fallback(/** 每次相同失败。 */ () => ({ status: 500 }));
+    const pending = h.send({ retry: requestLevel ? { delay, jitter } : true });
+    await vi.advanceTimersByTimeAsync(CAP - 1);
+    expect(h.net.totalStarted).toBe(1);
+    await vi.advanceTimersByTimeAsync(1);
+    await vi.runAllTimersAsync();
+    await pending;
+    expect(h.net.totalStarted).toBe(2);
+    expect(delay).toHaveBeenCalledWith(1, 1, expect.objectContaining({ status: 500 }));
+    expect(jitter).toHaveBeenCalledExactlyOnceWith(LOCAL_DELAY);
+    if (requestLevel) expect(fallback).not.toHaveBeenCalled();
+  },
+);
+
+it.each([
+  ["delay", { delay: LOCAL_DELAY }, { delay: 0 }, 0],
+  ["non-number", { delay: LOCAL_DELAY }, { delay: (): null => null }, 0],
+  ["delayMax", { delay: LOCAL_DELAY }, { delayMax: 0 }, 0],
+  ["jitter-zero", { delay: LOCAL_DELAY }, { jitter: true }, 0],
+  ["jitter-half", { delay: LOCAL_DELAY, jitter: true }, {}, CAP],
+  ["cap", { delay: REMOTE_DELAY }, { delayMax: CAP }, CAP],
+  ["negative", { delay: -1 }, {}, 0],
+  ["invalid-infinity", { delay: LOCAL_DELAY }, { jitter: (): number => Infinity }, LOCAL_DELAY],
+  ["invalid-negative", { delay: LOCAL_DELAY }, { jitter: (): number => -1 }, LOCAL_DELAY],
+  ["invalid-nan", { delay: LOCAL_DELAY }, { jitter: (): number => NaN }, LOCAL_DELAY],
+  ["default-cap", { delay: Infinity }, {}, 10_000],
+] as const)(
+  "[retry.opt.delayMax][retry.req.retry.delay][retry.req.retry.jitter] %s 的实际等待",
+  /** 零值不丢失，非法抖动回退原始值。 */ async (label, base, override, ms) => {
+    vi.spyOn(Math, "random").mockReturnValue(label === "jitter-half" ? 0.5 : 0);
+    const h = b3Client([axpRetry({ ...base, max: 1 } as IRetryOptions<AxpResponse>)]);
+    h.net.fallback(/** 产生可重试错误。 */ () => ({ status: 500 }));
+    const pending = h.send({ retry: override });
+    if (ms > 0) {
+      await vi.advanceTimersByTimeAsync(ms - 1);
+      expect(h.net.totalStarted).toBe(1);
+      await vi.advanceTimersByTimeAsync(1);
+    }
+    await vi.runAllTimersAsync();
+    await pending;
+    expect(h.net.totalStarted).toBe(2);
+  },
+);
+
+it.each(["delay", "jitter", "shouldRetry"] as const)(
+  "[retry.callback.bug][retry.req.retry.shouldRetry][retry.req.retry.delay.callback][retry.req.retry.jitter.callback] %s 抛原始异常且不遗留 timer",
+  /** 请求级判定优先，故障不回退插件策略。 */ async (field) => {
+    const fallback = vi.fn(/** 不可回退。 */ () => false);
+    const override = {
+      [field]: /** 程序异常须由落定原样抛出。 */ () => {
+        throw BUG;
+      },
+    };
+    const h = b3Client([axpRetry({ delay: 0, shouldRetry: fallback })]);
+    h.net.fallback(/** 首轮服务端错误。 */ () => ({ status: 500 }));
+    const pending = h.send({ retry: { shouldRetry: () => true, ...override } }).catch(/** 尽早观察拒绝。 */ (error) => error);
+    await vi.runAllTimersAsync();
+    expect(await pending).toBe(BUG);
+    expect(fallback).not.toHaveBeenCalled();
+    expect(h.net.totalStarted).toBe(1);
+    expect(vi.getTimerCount()).toBe(0);
+  },
+);
+
+it.each([false, true])(
+  "[retry.opt.respectRetryAfter][retry.opt.retryAfterMax][retry.opt.afterStatusCodes][retry.business.retryAfter] 数字秒优先且独立封顶，business=%s",
+  /** Retry-After 不执行本地延迟与抖动，也不受 delayMax 影响。 */ async (business) => {
+    const delay = vi.fn(/** 有合法服务端时间就不调用。 */ () => LOCAL_DELAY);
+    const jitter = vi.fn(/** 服务端时间不叠加抖动。 */ () => 0);
+    const h = b3Client([axpRetry({ max: 1, delay, jitter, delayMax: 0, retryAfterMax: REMOTE_DELAY })]);
+    h.net.fallback(
+      /** 逻辑 429 可来自业务信封。 */ () => ({
+        status: business ? 200 : 429,
+        data: { code: business ? 429 : 0, data: null },
+        headers: { "Retry-After": "4" },
+      }),
+    );
+    const pending = h.send();
+    await vi.advanceTimersByTimeAsync(REMOTE_DELAY - 1);
+    expect(h.net.totalStarted).toBe(1);
+    await vi.advanceTimersByTimeAsync(1);
+    await vi.runAllTimersAsync();
+    await pending;
+    expect(h.net.totalStarted).toBe(2);
+    expect(delay).not.toHaveBeenCalled();
+    expect(jitter).not.toHaveBeenCalled();
+  },
+);
+
+it("[retry.opt.respectRetryAfter] HTTP-date 按当前时钟计算", /** 日期头实际影响请求间隔。 */ async () => {
+  vi.setSystemTime(new Date("2026-10-28T00:00:00Z"));
+  const h = b3Client([axpRetry({ max: 1, delay: 0 })]);
+  h.net.fallback(
+    /** 服务端要求两秒后重试。 */ () => ({
+      status: 503,
+      headers: { "retry-after": new Date(Date.now() + REMOTE_DELAY).toUTCString() },
+    }),
+  );
+  const pending = h.send();
+  await vi.advanceTimersByTimeAsync(REMOTE_DELAY - 1);
+  expect(h.net.totalStarted).toBe(1);
+  await vi.advanceTimersByTimeAsync(1);
+  await vi.runAllTimersAsync();
+  await pending;
+  expect(h.net.totalStarted).toBe(2);
 });
 
-describe('retry 集成 — 取消', () => {
-    it('[retry.fn.axpRetry] 等待重试期间被取消 → 立刻停止等待并 reject，不会空等满整个 delay', async () => {
-        const { net, api } = mkApi();
-        net.on('GET', '/x', () => ({ status: 500 }));
-        use(api, axpRetry({ max: 3, delay: 5000 }));
-        const controller = new AbortController();
-        const p = api.get('/x')(undefined, { retry: 3, signal: controller.signal } as any);
-        setTimeout(() => controller.abort(), 30);
-        const start = Date.now();
-        await expect(p).rejects.toBeTruthy();
-        expect(Date.now() - start).toBeLessThan(500);  // 远小于 5000ms 的 delay，证明没有空等
-    });
+it.each([
+  [500, {}, {}, "2", LOCAL_DELAY],
+  [429, { afterStatusCodes: [] }, {}, "2", LOCAL_DELAY],
+  [429, {}, { afterStatusCodes: [] }, "2", LOCAL_DELAY],
+  [429, { respectRetryAfter: false }, {}, "2", LOCAL_DELAY],
+  [429, {}, { respectRetryAfter: false }, "2", LOCAL_DELAY],
+  [429, { respectRetryAfter: false }, { respectRetryAfter: true }, "2", REMOTE_DELAY],
+  [429, {}, {}, "invalid", LOCAL_DELAY],
+  [429, {}, {}, undefined, LOCAL_DELAY],
+  [429, {}, {}, "-1", 0],
+  [429, {}, {}, "Thu, 01 Jan 1970 00:00:00 GMT", 0],
+  [429, { retryAfterMax: 0 }, {}, "2", 0],
+  [429, {}, { retryAfterMax: 0 }, "2", 0],
+  [413, { statusCodes: [413] }, {}, "2", REMOTE_DELAY],
+  [500, {}, { afterStatusCodes: [500] }, "2", REMOTE_DELAY],
+] as const)(
+  "[retry.req.retry.respectRetryAfter][retry.req.retry.afterStatusCodes][retry.req.retry.retryAfterMax] 状态 %i / 配置 %j / 覆盖 %j / 头 %s",
+  /** 逻辑状态门控、无效头回退和零封顶。 */ async (status, base, request, header, ms) => {
+    const delay = vi.fn(/** 合法头缺失时回退。 */ () => LOCAL_DELAY);
+    const h = b3Client([axpRetry({ max: 1, delay, ...base })]);
+    h.net.fallback(
+      /** 保留服务端等待头。 */ () => ({
+        status,
+        headers: header === undefined ? {} : { "retry-after": header },
+      }),
+    );
+    const pending = h.send({ retry: request });
+    if (ms > 0) {
+      await vi.advanceTimersByTimeAsync(ms - 1);
+      expect(h.net.totalStarted).toBe(1);
+      await vi.advanceTimersByTimeAsync(1);
+    }
+    await vi.runAllTimersAsync();
+    await pending;
+    expect(h.net.totalStarted).toBe(2);
+    expect(delay).toHaveBeenCalledTimes(ms === LOCAL_DELAY ? 1 : 0);
+  },
+);
+
+it("[retry.result.last][retry.opt.max] max=0 和耗尽均保留成功/失败的最后响应身份", /** 不合成耗尽错误。 */ async () => {
+  for (const status of [200, 500]) {
+    for (const max of [0, 2]) {
+      const shouldRetry = vi.fn(/** 即使成功也可继续至预算耗尽。 */ () => true);
+      const h = b3Client([axpRetry({ max, delay: 0, shouldRetry })]);
+      let last: unknown;
+      h.api.use({
+        name: "response-identity",
+        taps: [
+          {
+            stage: "source",
+            /** 记录真正最后一次的 R。 */ onResponse(r) {
+              last = r;
+            },
+          },
+        ],
+      });
+      h.net.fallback(
+        /** 固定状态且业务数据随发送改变。 */ (_c, hit) => ({
+          status,
+          data: { code: status === 200 ? 0 : 500, data: hit },
+        }),
+      );
+      const pending = h.send();
+      await vi.runAllTimersAsync();
+      expect(await pending).toBe(last);
+      expect(h.net.totalStarted).toBe(max + 1);
+      expect(shouldRetry).toHaveBeenCalledTimes(max);
+    }
+  }
 });
 
-describe('retry — max=0（默认）时不改写初始结果', () => {
-    it('[retry.opt.max] shouldRetry 恒真 + 200 响应 → 原样 resolve，不被改成 "exhausted retries"', async () => {
-        const { net, api } = mkApi();
-        net.fallback(() => ({ data: { code: 0, data: 'fine' } }));
-        use(api, axpRetry({ shouldRetry: () => true }));
-        const r = await api.axios.get('/ok');
-        expect(r.status).toBe(200);
-        expect(net.calls('GET', '/ok')).toBe(1);
-    });
-
-    it('[retry.opt.max] shouldRetry 恒真 + 500 → 原错误 reject（不是 exhausted），且不重发', async () => {
-        const { net, api } = mkApi();
-        net.fallback(() => ({ status: 500 }));
-        use(api, axpRetry({ shouldRetry: () => true }));
-        await expect(api.axios.get('/bad')).rejects.toMatchObject({ response: { status: 500 } });
-        expect(net.calls('GET', '/bad')).toBe(1);
-    });
+it("[retry.priority.raw][retry.kind.default] 无响应无 request 的网络错误经工厂归一化后可重试", /** 旧 config 缺失不再阻止重试。 */ async () => {
+  const h = b3Client([axpRetry({ max: 1, delay: 0 })]);
+  h.net.fallback(
+    /** 不给错误挂 config。 */ () => {
+      throw new AxiosError("offline", AxiosError.ERR_NETWORK);
+    },
+  );
+  const pending = h.send();
+  await vi.runAllTimersAsync();
+  expect((await pending).kind).toBe("network");
+  expect(h.net.totalStarted).toBe(2);
 });
 
-describe('retry — 循环终止与 Header 边界', () => {
-    it.each(['garbage', '-1', '0', 'Thu, 01 Jan 1970 00:00:00 GMT'])('[retry.opt.respectRetryAfter] Retry-After=%s 无效或过去值不造成额外长等待', async (header) => {
-        vi.useFakeTimers();
-        const adapter = vi.fn()
-            .mockImplementationOnce(async (c) => response(c, 503, new AxiosHeaders({ 'retry-after': header })))
-            .mockImplementation(async (c) => response(c));
-        const ax = axios.create({ adapter });
-        retry({ max: 1, delay: 25 }).install(ax);
-        const pending = ax.get('/');
-        await vi.advanceTimersByTimeAsync(0);
-        expect(adapter).toHaveBeenCalledTimes(header === 'garbage' ? 1 : 2);
-        await vi.advanceTimersByTimeAsync(25);
-        expect((await pending).status).toBe(200);
-        expect(adapter).toHaveBeenCalledTimes(2);
-        expect(vi.getTimerCount()).toBe(0);
-    });
-    it('[retry.fn.axpRetry] 错误无 config 时原样拒绝，不启动重试循环', async () => {
-        const error = new Error('no config');
-        const adapter = vi.fn(async () => { throw error; });
-        const ax = axios.create({ adapter });
-        retry({ max: 4, delay: 0, shouldRetry: () => true }).install(ax);
-        await expect(ax.get('/')).rejects.toBe(error);
-        expect(adapter).toHaveBeenCalledOnce();
-    });
-    it('[retry.cb.shouldRetry] shouldRetry 抛错明确拒绝，不发出额外尝试', async () => {
-        const error = new Error('predicate');
-        const adapter = vi.fn(async (c) => response(c));
-        const ax = axios.create({ adapter });
-        retry({ max: 2, shouldRetry: () => { throw error; } }).install(ax);
-        await expect(ax.get('/')).rejects.toBe(error);
-        expect(adapter).toHaveBeenCalledOnce();
-    });
+it("[retry.kind.default][retry.priority.kind] 无 raw 的合成 HTTP 失败回退 delay", /** 没有原始头不会破坏逻辑状态重试。 */ async () => {
+  const h = b3Client([axpRetry({ max: 1, delay: 0 })]);
+  let count = 0;
+  h.api.use({
+    name: "synthetic-http",
+    stage: "source",
+    /** 构造没有 raw 的服务端失败。 */ async handle(ctx) {
+      count++;
+      return new AxpResponse({ kind: "http" as AxpKind, httpStatus: 503, request: ctx.request });
+    },
+  });
+  const pending = h.send({ url: REQUEST_URL } as AxpRequestConfig);
+  await vi.runAllTimersAsync();
+  expect((await pending).status).toBe(503);
+  expect(count).toBe(2);
 });
 
-describe('retry: business-failure loop exhaustion and error-path behavior', () => {
-  it('[retry.opt.max][retry.cb.shouldRetry] when every retry attempt still looks like a business failure (shouldRetry), the loop exhausts and RESOLVES with the LAST attempt as-is', async () => {
-    // Same as Dio: gives up and resolves with the last, still-failing attempt,
-    // so downstream normalize turns it into the usual failure (same as without retry).
-    const { net, api } = mkApi();
+it.each(["signal", "cancelAll"] as const)(
+  "[retry.fn.axpRetry][retry.cb.delay] 等待重试期间被取消（%s）：立刻以 cancel 结束，不空等满延迟，不再发送，不留定时器",
+  /** 等待可被逻辑请求的取消信号打断。 */ async (how) => {
+    const h = b3Client([axpRetry({ max: 2, delay: REMOTE_DELAY })]);
     let attempts = 0;
-    net.fallback(() => { attempts++; return { data: { code: 1, data: { attempt: attempts } } }; });
-    use(api, [retry({ max: 2, delay: 0, shouldRetry: (r) => (r?.data as any)?.code !== 0 })]);
+    h.api.use({
+      name: "attempt-count",
+      stage: "source",
+      handle: /** 统计内层被进入的次数。 */ (_ctx, next) => (attempts++, next()),
+    });
+    h.net.fallback(/** 每次都可重试失败。 */ () => ({ status: 500 }));
+    const controller = new AbortController();
+    const pending = h.send({ signal: controller.signal });
+    await vi.advanceTimersByTimeAsync(10);
+    expect(h.net.totalStarted).toBe(1);
+    if (how === "signal") controller.abort();
+    else expect(h.api.cancelAll()).toBe(1);
+    await vi.advanceTimersByTimeAsync(0);
+    expect((await pending).kind).toBe("cancel");
+    expect(h.net.totalStarted).toBe(1);
+    expect(attempts).toBe(1);
+    expect(vi.getTimerCount()).toBe(0);
+  },
+);
 
-    const resp: any = await api.axios.get('/data', { retry: { max: 2, shouldRetry: (r: any) => r?.data?.code !== 0 } } as any);
-    expect(attempts).toBe(3);
-    expect(resp.data.code).toBe(1);
-  });
+it("[retry.fn.axpRetry][retry.opt.respectRetryAfter] 服务端等待期间取消同样立即结束", /** Retry-After 的等待也可取消。 */ async () => {
+  const h = b3Client([axpRetry({ max: 1, delay: 0 })]);
+  h.net.fallback(/** 要求十秒后重试。 */ () => ({ status: 503, headers: { "retry-after": "10" } }));
+  const pending = h.send();
+  await vi.advanceTimersByTimeAsync(10);
+  expect(h.api.cancelAll()).toBe(1);
+  await vi.advanceTimersByTimeAsync(0);
+  expect((await pending).kind).toBe("cancel");
+  expect(h.net.totalStarted).toBe(1);
+  expect(vi.getTimerCount()).toBe(0);
 });
 
-/** 请求用的测试路径 */
-const PATH = '/attempt';
-
-describe('review #8 — 重发/重放保持请求体与首发一致', () => {
-  const transformRequest = [(d: unknown) => JSON.stringify({ payload: d })];
-
-  it('[retry.fn.axpRetry][retry.opt.methods] retry：自定义 transformRequest 不被套两层', async () => {
-    const bodies: unknown[] = [];
-    const net = makeNetwork().on('POST', PATH, (config, hit) => {
+it("[retry.fn.axpRetry][retry.opt.methods][retry.opt.max] 重发的请求体与首发一致：转换器原地改入参也不累加或套两层，调用方数据不被改", /** I7：每次尝试请求体一致。 */ async () => {
+  const bodies: unknown[] = [];
+  const h = b3Client([axpRetry({ delay: 0, methods: ["post"] })]);
+  h.net.on(
+    "post",
+    REQUEST_URL,
+    /** 前两次失败，第三次成功。 */ (config, hit) => {
       bodies.push(config.data);
-      return { status: hit === 1 ? 500 : 200 };
-    });
-    const ax = axios.create({ adapter: net.adapter, transformRequest });
-    Axp.install(ax, { retry: retry({ max: 1, delay: 1, methods: ['post'] }) });
-    await ax.post(PATH, { a: 1 });
-    expect(bodies).toEqual(['{"payload":{"a":1}}', '{"payload":{"a":1}}']);
-  });
-});
-
-describe('review #P3 — transformRequest 原地改 data 时重发仍用原始快照', () => {
-  it('[retry.fn.axpRetry][retry.opt.max] retry 重发的请求体不累加', async () => {
-    const bodies: unknown[] = [];
-    const net = makeNetwork().on('PUT', PATH, (config, hit) => {
-      bodies.push(config.data);
-      return { status: hit === 1 ? 500 : 200 };
-    });
-    const ax = axios.create({
-      adapter: net.adapter,
-      transformRequest: [(d: any) => { d.n++; return JSON.stringify(d); }],
-    });
-    Axp.install(ax, { retry: retry({ max: 2, delay: 1 }) });
-    const r = await ax.put(PATH, { n: 0 });
-    expect(r.status).toBe(200);
-    expect(bodies).toEqual(['{"n":1}', '{"n":1}']);
-  });
+      return hit < 3 ? { status: 500 } : {};
+    },
+  );
+  const data = pollutingBody();
+  const result = await run(h, { method: "post", data, transformRequest: [pollutingTransform] });
+  expect(result.ok).toBe(true);
+  expect(bodies).toEqual([POLLUTED_ONCE, POLLUTED_ONCE, POLLUTED_ONCE]);
+  expect(data).toEqual(pollutingBody());
 });

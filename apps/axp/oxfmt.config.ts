@@ -1,10 +1,10 @@
-import { defineConfig } from 'oxfmt'
+import { defineConfig } from "oxfmt";
 
-import { fmt as baseFmt } from '../../oxfmt.config.ts'
+import { fmt as baseFmt } from "../../oxfmt.config.ts";
 
 const fmt = defineConfig({
-  ...baseFmt
-})
+  ...baseFmt,
+});
 
-export { fmt }
-export default { fmt }
+export { fmt };
+export default { fmt };

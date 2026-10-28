@@ -1,25 +1,25 @@
-import type { AccessTokenMode, RefreshTokenMode, SetTokenSpec } from './types.ts';
+import type { AccessTokenMode, RefreshTokenMode, SetTokenSpec } from "./types.ts";
 
 /** 默认的令牌前缀 */
-export const DEFAULT_SCHEME = 'Bearer';
+export const DEFAULT_SCHEME = "Bearer";
 /** 错误前缀（set_token wrong_scheme 用） */
-export const WRONG_SCHEME = 'Token';
+export const WRONG_SCHEME = "Token";
 /** "假令牌"：不是 JWT 格式的字符串 */
-export const GARBAGE_ACCESS = 'garbage-not-a-jwt';
+export const GARBAGE_ACCESS = "garbage-not-a-jwt";
 /** "假 refresh" */
-export const GARBAGE_REFRESH = 'garbage-refresh-token';
+export const GARBAGE_REFRESH = "garbage-refresh-token";
 /** 被篡改的 sub 取值后缀 */
-const TAMPER_SUFFIX = '-tampered';
+const TAMPER_SUFFIX = "-tampered";
 
 /** base64url 编码 */
 export function b64urlEncode(text: string): string {
-  return Buffer.from(text, 'utf8').toString('base64url');
+  return Buffer.from(text, "utf8").toString("base64url");
 }
 
 /** base64url 解码；非法输入返回 null */
 export function b64urlDecode(seg: string): string | null {
   try {
-    return Buffer.from(seg, 'base64url').toString('utf8');
+    return Buffer.from(seg, "base64url").toString("utf8");
   } catch {
     return null;
   }
@@ -27,8 +27,8 @@ export function b64urlDecode(seg: string): string | null {
 
 /** 把 Authorization 头值拆成 [scheme, token]；没有空格时 scheme 为空串 */
 export function splitHeader(value: string): [scheme: string, token: string] {
-  const i = value.indexOf(' ');
-  return i < 0 ? ['', value] : [value.slice(0, i), value.slice(i + 1)];
+  const i = value.indexOf(" ");
+  return i < 0 ? ["", value] : [value.slice(0, i), value.slice(i + 1)];
 }
 
 /**
@@ -36,12 +36,12 @@ export function splitHeader(value: string): [scheme: string, token: string] {
  * @param jwt 合法 JWT；不是三段式时原样追加一个字符让它必然失效
  */
 export function breakSignature(jwt: string): string {
-  const parts = jwt.split('.');
+  const parts = jwt.split(".");
   if (parts.length !== 3) return `${jwt}x`;
-  const sig = parts[2] ?? '';
-  const first = sig[0] === 'A' ? 'B' : 'A';
+  const sig = parts[2] ?? "";
+  const first = sig[0] === "A" ? "B" : "A";
   parts[2] = first + sig.slice(1);
-  return parts.join('.');
+  return parts.join(".");
 }
 
 /**
@@ -49,15 +49,15 @@ export function breakSignature(jwt: string): string {
  * @param jwt 合法 JWT；解析失败时退化为破坏签名
  */
 export function tamperPayload(jwt: string): string {
-  const parts = jwt.split('.');
+  const parts = jwt.split(".");
   if (parts.length !== 3) return breakSignature(jwt);
-  const json = b64urlDecode(parts[1] ?? '');
+  const json = b64urlDecode(parts[1] ?? "");
   if (json === null) return breakSignature(jwt);
   try {
     const payload = JSON.parse(json) as Record<string, unknown>;
-    payload.sub = `${String(payload.sub ?? 'u')}${TAMPER_SUFFIX}`;
+    payload.sub = `${typeof payload.sub === "string" ? payload.sub : "u"}${TAMPER_SUFFIX}`;
     parts[1] = b64urlEncode(JSON.stringify(payload));
-    return parts.join('.');
+    return parts.join(".");
   } catch {
     return breakSignature(jwt);
   }
@@ -69,8 +69,6 @@ export function tamperPayload(jwt: string): string {
  * 内部保存"完整 Authorization 头值"（如 `Bearer xxx`），这样 wrong_scheme 能原样表达。
  */
 export class TokenStore {
-  /** 刷新许可，axp 在会话过期后置 false，登录时由执行器重置 */
-  canRefresh = true;
   /** 当前登录用户名 */
   user: string | undefined;
   #access: string | undefined;
@@ -144,8 +142,8 @@ export class TokenStore {
    */
   applySetToken(spec: SetTokenSpec): void {
     // 先算出两个新值再统一写入，避免 access 的修改影响 refresh 的 previous 取值
-    const nextAccess = resolveAccess(spec.access ?? 'keep', this.#access, this.#prevAccess);
-    const nextRefresh = resolveRefresh(spec.refresh ?? 'keep', this.#refresh, this.#prevRefresh);
+    const nextAccess = resolveAccess(spec.access ?? "keep", this.#access, this.#prevAccess);
+    const nextRefresh = resolveRefresh(spec.refresh ?? "keep", this.#refresh, this.#prevRefresh);
     this.setAccessHeader(nextAccess);
     this.setRefresh(nextRefresh);
   }
@@ -159,16 +157,24 @@ export class TokenStore {
  * @returns 新头值（undefined 表示删除）
  */
 export function resolveAccess(mode: AccessTokenMode, current: string | undefined, previous: string | undefined): string | undefined {
-  const [scheme, raw] = splitHeader(current ?? '');
+  const [scheme, raw] = splitHeader(current ?? "");
   switch (mode) {
-    case 'keep': return current;
-    case 'none': return undefined;
-    case 'empty': return '';
-    case 'garbage': return `${DEFAULT_SCHEME} ${GARBAGE_ACCESS}`;
-    case 'bad_signature': return `${scheme || DEFAULT_SCHEME} ${breakSignature(raw)}`;
-    case 'tampered_payload': return `${scheme || DEFAULT_SCHEME} ${tamperPayload(raw)}`;
-    case 'wrong_scheme': return `${WRONG_SCHEME} ${raw}`;
-    case 'previous': return previous;
+    case "keep":
+      return current;
+    case "none":
+      return undefined;
+    case "empty":
+      return "";
+    case "garbage":
+      return `${DEFAULT_SCHEME} ${GARBAGE_ACCESS}`;
+    case "bad_signature":
+      return `${scheme || DEFAULT_SCHEME} ${breakSignature(raw)}`;
+    case "tampered_payload":
+      return `${scheme || DEFAULT_SCHEME} ${tamperPayload(raw)}`;
+    case "wrong_scheme":
+      return `${WRONG_SCHEME} ${raw}`;
+    case "previous":
+      return previous;
   }
 }
 
@@ -180,9 +186,13 @@ export function resolveAccess(mode: AccessTokenMode, current: string | undefined
  */
 export function resolveRefresh(mode: RefreshTokenMode, current: string | undefined, previous: string | undefined): string | undefined {
   switch (mode) {
-    case 'keep': return current;
-    case 'none': return undefined;
-    case 'garbage': return GARBAGE_REFRESH;
-    case 'previous': return previous;
+    case "keep":
+      return current;
+    case "none":
+      return undefined;
+    case "garbage":
+      return GARBAGE_REFRESH;
+    case "previous":
+      return previous;
   }
 }

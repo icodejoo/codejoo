@@ -1,354 +1,306 @@
-import { describe, it, expect, vi, afterEach } from 'vitest';
-import axios from 'axios';
-import type { AxiosResponse, AxiosAdapter } from 'axios';
-import cache, { clearCache, removeCache } from '../../src/plugins/cache';
+import { afterEach, beforeEach, expect, it, vi } from "vitest";
+import axpCache, { clearCache, type IAxpCacheEntry, type ICacheOptions } from "../../src/plugins/cache";
+import type { AxpResponse } from "../../src/response";
+import { envelope, sourceClient } from "../helpers/source";
 
-const mockResp = (data: any, config: any = {}): AxiosResponse =>
-    ({ status: 200, statusText: 'OK', headers: {}, config, data } as any);
+/** 缓存边界依赖有效期与到达顺序，统一用假时钟。 */
+beforeEach(() => {
+  vi.useFakeTimers();
+  vi.setSystemTime(0);
+});
+/** 还原被替换的全局。 */
+afterEach(() => {
+  vi.unstubAllGlobals();
+});
 
-// Review 修复：#11 旧响应不覆盖 / #12 原始快照 / #14 容量 / #15 shouldCache / #1 clearCache 竞态
+/** 被缓存的接口。 */
+const URL = "/cached";
+/** 默认容量。 */
+const DEFAULT_MAX = 500;
+/** 慢请求延迟。 */
+const SLOW = 30;
+/** 快请求延迟。 */
+const FAST = 5;
 
-const mockAxios = (): any => ({ defaults: { adapter: vi.fn() } });
-
-/** 构造可手动落定的 promise */
-function deferred<T>() {
-    let resolve!: (v: T) => void;
-    let reject!: (e: any) => void;
-    const promise = new Promise<T>((res, rej) => {
-        resolve = res;
-        reject = rej;
-    });
-    return { promise, resolve, reject };
+/** 建立路由按命中序号返回 `hit-N` 的缓存客户端。 */
+function cachedClient(options: ICacheOptions<AxpResponse> = {}) {
+  const cache = axpCache(options);
+  const h = sourceClient([cache]);
+  h.net.on("get", URL, (_config, hit) => envelope(`hit-${hit}`));
+  return { ...h, cache };
+}
+/** 客户端类型。 */
+type TClient = ReturnType<typeof cachedClient>;
+/** 发出一个请求并推进假时钟直到落定。 */
+async function call(h: TClient, config: Record<string, unknown> = {}) {
+  const pending = h.send({ url: URL, ...config });
+  await vi.runAllTimersAsync();
+  return pending;
+}
+/** 发出一个预期抛出原始异常的请求，返回被抛出的值。 */
+async function thrown(h: TClient, config: Record<string, unknown> = {}) {
+  const caught = h.send({ url: URL, ...config }).then(
+    /** 不应成功。 */ () => undefined,
+    /** 记录被抛出的值。 */ (error: unknown) => error,
+  );
+  await vi.runAllTimersAsync();
+  return caught;
 }
 
-afterEach(() => { vi.useRealTimers(); vi.unstubAllGlobals(); });
-
-/** 构造 adapter 层原始响应。 */
-function response(data: unknown, config: any = {}) {
-    return { data, config, status: 200, statusText: '', headers: {} };
-}
-
-describe('removeCache / clearCache', () => {
-    it('[cache.fn.removeCache][cache.fn.clearCache] 对未安装实例：返回 0/false', () => {
-        const fakeAx = {} as any;
-        expect(removeCache(fakeAx, 'x')).toBe(false);
-        expect(clearCache(fakeAx)).toBe(0);
-    });
+it("[cache.fn.axpCache] 较慢的旧响应后到，不覆盖较新发起请求的结果", async () => {
+  const h = cachedClient();
+  h.net.on("get", URL, (_config, hit) => envelope(hit === 1 ? "old" : "new"));
+  const slow = h.send({ url: URL, cache: true, latency: SLOW } as never);
+  const fast = h.send({ url: URL, cache: true, latency: FAST } as never);
+  await vi.runAllTimersAsync();
+  expect([(await slow).data, (await fast).data]).toEqual(["old", "new"]);
+  expect((await call(h, { cache: true })).data).toBe("new");
+  expect(h.net.calls("get", URL)).toBe(2);
 });
 
-describe('cache — 裸 axios.create()（非函数 adapter）', () => {
-    it('[cache.fn.axpCache] defaults.adapter 是数组时安装不崩，二次同 key 命中缓存', async () => {
-        const net = vi.fn(async (config: any) => mockResp({ n: 1 }, config));
-        // 数组形式的 adapter：与 axios.create() 默认的 ['xhr','http','fetch'] 同属“非函数”分支
-        const ax = axios.create({ adapter: [net as any] });
-        expect(typeof ax.defaults.adapter).not.toBe('function');
-        cache().install(ax);
-        await ax.get('/a', { cache: true, key: 'k' } as any);
-        const r2 = await ax.get('/a', { cache: true, key: 'k' } as any);
-        expect(r2.data).toEqual({ n: 1 });
-        expect(net).toHaveBeenCalledTimes(1);
-    });
+it("[cache.fn.clearCache][cache.method.api] clear 之前发出的在途请求落定后不回写", async () => {
+  const h = cachedClient();
+  const pending = h.send({ url: URL, cache: true, latency: SLOW } as never);
+  await vi.advanceTimersByTimeAsync(1);
+  expect(clearCache(h.api)).toBe(0);
+  await vi.runAllTimersAsync();
+  expect((await pending).ok).toBe(true);
+  await call(h, { cache: true });
+  expect(h.net.calls("get", URL)).toBe(2);
+  await call(h, { cache: true });
+  expect(h.net.calls("get", URL)).toBe(2);
 });
 
-// 来源 review #11
-describe('cache — 较晚完成的旧响应不覆盖新结果', () => {
-    it('[cache.fn.axpCache] A 先发后到、B 后发先到 → 缓存保留 B', async () => {
-        const ax = mockAxios();
-        const a = deferred<AxiosResponse>();
-        const b = deferred<AxiosResponse>();
-        const adp = vi.fn().mockReturnValueOnce(a.promise).mockReturnValueOnce(b.promise);
-        ax.defaults.adapter = adp;
-        cache().install(ax);
-        const wrapped = ax.defaults.adapter as AxiosAdapter;
-        const cfg = (): any => ({ url: '/x', cache: true, key: 'k' });
-        const pa = wrapped(cfg());
-        const pb = wrapped(cfg());
-        b.resolve(mockResp(2));
-        await pb;
-        a.resolve(mockResp(1));
-        await pa;
-        const hit = await wrapped(cfg());
-        expect(hit.data).toBe(2);
-        expect(adp).toHaveBeenCalledTimes(2);
-    });
+it("[cache.opt.max][cache.fn.axpCache] 条目被 LRU 淘汰后，更早发起的在途响应仍不回写（R2-2）", async () => {
+  const h = cachedClient({ max: 2 });
+  h.net.on("get", URL, (_config, hit) => envelope(hit === 1 ? "stale" : `hit-${hit}`));
+  const stale = h.send({ url: URL, cache: { key: "k" }, latency: 50 } as never);
+  await vi.advanceTimersByTimeAsync(1);
+  const fresh = h.send({ url: URL, cache: { key: "k" }, latency: FAST } as never);
+  await vi.advanceTimersByTimeAsync(FAST + 1);
+  expect((await fresh).data).toBe("hit-2");
+  // 其它 key 把 k 淘汰出容量为 2 的缓存。
+  await call(h, { cache: { key: "x" } });
+  await call(h, { cache: { key: "y" } });
+  await vi.runAllTimersAsync();
+  expect((await stale).data).toBe("stale");
+  const before = h.net.calls("get", URL);
+  expect((await call(h, { cache: { key: "k" } })).data).not.toBe("stale");
+  expect(h.net.calls("get", URL) - before).toBe(1);
 });
 
-// 来源 review #15
-describe('cache — shouldCache', () => {
-    it('[cache.fn.$defaultShouldCache] 未解析的 JSON 字符串信封同样识别', async () => {
-        const ax = mockAxios();
-        const adp = vi.fn(async () => mockResp('{"code":1}'));
-        ax.defaults.adapter = adp;
-        cache().install(ax);
-        const wrapped = ax.defaults.adapter as AxiosAdapter;
-        await wrapped({ cache: true, key: 'k' } as any);
-        await wrapped({ cache: true, key: 'k' } as any);
-        expect(adp).toHaveBeenCalledTimes(2);
-    });
+it("[cache.opt.max] max:1 只保留最后写入的一条", async () => {
+  const h = cachedClient({ max: 1 });
+  await call(h, { cache: { key: "a" } });
+  await call(h, { cache: { key: "b" } });
+  const before = h.net.calls("get", URL);
+  await call(h, { cache: { key: "b" } });
+  expect(h.net.calls("get", URL) - before).toBe(0);
+  await call(h, { cache: { key: "a" } });
+  expect(h.net.calls("get", URL) - before).toBe(1);
 });
 
-// 来源 review #1
-describe('cache — clearCache 与在途请求', () => {
-    it('[cache.fn.clearCache] clearCache 之前发出的请求落定后不回写', async () => {
-        const ax = mockAxios();
-        const a = deferred<AxiosResponse>();
-        const adp = vi.fn().mockReturnValueOnce(a.promise).mockResolvedValue(mockResp('new'));
-        ax.defaults.adapter = adp;
-        cache().install(ax);
-        const wrapped = ax.defaults.adapter as AxiosAdapter;
-        const cfg = (): any => ({ cache: true, key: 'k' });
-        const pa = wrapped(cfg());
-        clearCache(ax); // 切换账号
-        a.resolve(mockResp('old'));
-        await pa;
-        const r = await wrapped(cfg());
-        expect(r.data).toBe('new');
-        expect(adp).toHaveBeenCalledTimes(2);
-    });
+it.each([0, -5, Number.NaN])("[cache.opt.max] max=%s 回退默认容量 500，不会退化成只存一条", async (max) => {
+  const h = cachedClient({ max });
+  const keys = ["a", "b", "c"];
+  for (const key of keys) {
+    // oxlint-disable-next-line no-await-in-loop -- 依次写入三条。
+    await call(h, { cache: { key } });
+  }
+  for (const key of keys) {
+    // oxlint-disable-next-line no-await-in-loop -- 依次读取三条。
+    await call(h, { cache: { key } });
+  }
+  expect(h.net.calls("get", URL)).toBe(keys.length);
+  expect(DEFAULT_MAX).toBeGreaterThan(keys.length);
 });
 
-describe('cache — 条目被 LRU 淘汰后旧响应仍不回写', () => {
-    it('[cache.opt.max] A 先发、B 后发先到，其他 key 淘汰 B 后 A 到达不得写入', async () => {
-        const ax = mockAxios();
-        const a = deferred<AxiosResponse>();
-        const b = deferred<AxiosResponse>();
-        const adp = vi.fn()
-            .mockReturnValueOnce(a.promise)
-            .mockReturnValueOnce(b.promise)
-            .mockResolvedValueOnce(mockResp('o'))
-            .mockResolvedValue(mockResp('fresh'));
-        ax.defaults.adapter = adp;
-        cache({ max: 1 }).install(ax);
-        const wrapped = ax.defaults.adapter as AxiosAdapter;
-        const pa = wrapped({ url: '/x', cache: true, key: 'k' } as any);
-        const pb = wrapped({ url: '/x', cache: true, key: 'k' } as any);
-        b.resolve(mockResp('B'));
-        await pb;
-        await wrapped({ url: '/o', cache: true, key: 'other' } as any); // 淘汰 k
-        a.resolve(mockResp('A'));
-        await pa;
-        const r = await wrapped({ url: '/x', cache: true, key: 'k' } as any);
-        expect(r.data).toBe('fresh'); // 未命中旧 A
-        expect(adp).toHaveBeenCalledTimes(4);
-    });
-
-    it('[cache.fn.axpCache] 在途请求结束后 key 的 seq 表被清理', async () => {
-        const ax = mockAxios();
-        ax.defaults.adapter = vi.fn().mockResolvedValue(mockResp(1));
-        cache({ max: 1 }).install(ax);
-        const wrapped = ax.defaults.adapter as AxiosAdapter;
-        for (let i = 0; i < 3; i++) await wrapped({ url: '/x', cache: true, key: `k${i}` } as any);
-        // 行为层面：仍可正常工作且不抛错
-        expect((await wrapped({ url: '/x', cache: true, key: 'k2' } as any)).data).toBe(1);
-    });
+it("[cache.opt.max] max=Infinity 不限容量", async () => {
+  const h = cachedClient({ max: Number.POSITIVE_INFINITY });
+  for (let index = 0; index <= DEFAULT_MAX; index++) {
+    // oxlint-disable-next-line no-await-in-loop -- 依次写入超过默认容量的条目。
+    await call(h, { cache: { key: `k${index}` } });
+  }
+  await call(h, { cache: { key: "k0" } });
+  expect(h.net.calls("get", URL)).toBe(DEFAULT_MAX + 1);
 });
 
-describe('cache — 解析与错误边界', () => {
-    it('[cache.opt.clone][cache.req.cache.clone] structuredClone 不可用时 deep 明确抛错且不发送请求', async () => {
-        vi.stubGlobal('structuredClone', undefined);
-        const adapter = vi.fn(async (c) => response('ok', c));
-        const ax = axios.create({ adapter });
-        cache().install(ax);
-        await expect(ax.get('/', { cache: { key: 'k', clone: 'deep' } })).rejects.toThrow('structuredClone');
-        expect(adapter).not.toHaveBeenCalled();
-    });
-    it('[cache.cb.shouldCache][cache.req.cache.shouldCache] shouldCache 抛错后同 key 后续仍能缓存', async () => {
-        const adapter = vi.fn(async (c) => response('ok', c));
-        const ax = axios.create({ adapter });
-        cache().install(ax);
-        const error = new Error('predicate');
-        await expect(ax.get('/', { cache: { key: 'k', shouldCache: () => { throw error; } } })).rejects.toBe(error);
-        await ax.get('/', { cache: { key: 'k' } });
-        await ax.get('/', { cache: { key: 'k' } });
-        expect(adapter).toHaveBeenCalledTimes(2);
-    });
-    it('[cache.fn.axpCache] 拒绝不会入缓存，后续成功可正常写入', async () => {
-        const error = new Error('network');
-        const adapter = vi.fn().mockRejectedValueOnce(error).mockImplementation(async (c) => response('ok', c));
-        const ax = axios.create({ adapter });
-        cache().install(ax);
-        await expect(ax.get('/', { key: 'k', cache: true })).rejects.toBe(error);
-        await ax.get('/', { key: 'k', cache: true });
-        await ax.get('/', { key: 'k', cache: true });
-        expect(adapter).toHaveBeenCalledTimes(2);
-    });
+it.each([0, -1, Number.NaN])("[cache.opt.expires][cache.req.cache.expires] 有效期 %s 写入即过期，永不命中", async (expires) => {
+  const h = cachedClient();
+  await call(h, { cache: expires });
+  await call(h, { cache: expires });
+  await call(h, { cache: { expires } });
+  expect(h.net.calls("get", URL)).toBe(3);
 });
 
-describe('cache — 卸载、代次与 TTL 边界', () => {
-    it('[cache.method.cleanup] 卸载时在途请求仍返回，但旧响应不写入重新安装后的缓存', async () => {
-        const pending = deferred<any>();
-        const adapter = vi.fn().mockReturnValueOnce(pending.promise).mockImplementation(async (c) => response('new', c));
-        const ax = axios.create({ adapter });
-        const off = cache().install(ax);
-        const old = ax.get('/', { key: 'k', cache: true });
-        await vi.waitFor(() => expect(adapter).toHaveBeenCalledOnce());
-        off?.();
-        expect(removeCache(ax, 'k')).toBe(false);
-        cache().install(ax);
-        pending.resolve(response('old'));
-        expect((await old).data).toBe('old');
-        expect((await ax.get('/', { key: 'k', cache: true })).data).toBe('new');
-        expect(adapter).toHaveBeenCalledTimes(2);
-    });
-    it.each([0, -1])('[cache.opt.expires] TTL=%i 不命中，即使时间未推进', async (expires) => {
-        vi.useFakeTimers();
-        const adapter = vi.fn(async (c) => response('ok', c));
-        const ax = axios.create({ adapter });
-        cache({ expires }).install(ax);
-        await ax.get('/', { key: 'k', cache: true });
-        await ax.get('/', { key: 'k', cache: true });
-        expect(adapter).toHaveBeenCalledTimes(2);
-    });
-    it('[cache.opt.expires][cache.opt.max] TTL 恰好到期时重新发送，max=0 回退默认容量', async () => {
-        vi.useFakeTimers();
-        const adapter = vi.fn(async (c) => response('ok', c));
-        const ax = axios.create({ adapter });
-        cache({ expires: 10, max: 0 }).install(ax);
-        await ax.get('/', { key: 'a', cache: true });
-        await ax.get('/', { key: 'b', cache: true });
-        expect(clearCache(ax)).toBe(2);
-        await ax.get('/', { key: 'a', cache: true });
-        vi.advanceTimersByTime(10);
-        await ax.get('/', { key: 'a', cache: true });
-        expect(adapter).toHaveBeenCalledTimes(4);
-    });
+it("[cache.opt.expires] 有效期 Infinity 永不过期", async () => {
+  const h = cachedClient({ expires: Number.POSITIVE_INFINITY });
+  await call(h, { cache: true });
+  vi.advanceTimersByTime(Number.MAX_SAFE_INTEGER / 2);
+  await call(h, { cache: true });
+  expect(h.net.calls("get", URL)).toBe(1);
 });
 
-describe('cache — 选项与回调边界', () => {
-    /** 建一个已装插件的实例，adapter 计数。 */
-    function setup(opts: any = {}) {
-        const adapter = vi.fn(async (c: any) => response('ok', c));
-        const ax = axios.create({ adapter });
-        const off = cache(opts).install(ax);
-        return { adapter, ax, off };
-    }
+it("[cache.opt.store] 第三方存储不处理过期（如 new Map）：过期条目由插件读取时再检查并删除，不会被返回", async () => {
+  const map = new Map<string, IAxpCacheEntry<AxpResponse>>();
+  const h = cachedClient({ store: map });
+  await call(h, { cache: { expires: 100, key: "k" } });
+  expect(map.size).toBe(1);
+  vi.advanceTimersByTime(99);
+  await call(h, { cache: { expires: 100, key: "k" } });
+  expect(h.net.calls("get", URL)).toBe(1);
+  vi.advanceTimersByTime(1);
+  h.net.on("get", URL, () => ({ status: 500 }));
+  const miss = await call(h, { cache: { expires: 100, key: "k" } });
+  expect(miss.httpStatus).toBe(500);
+  expect(map.size).toBe(0);
+});
 
-    it('[cache.opt.enable] enable:false 时请求级 cache:true 也不缓存；enable:undefined 视为开启', async () => {
-        const a = setup({ enable: false });
-        await a.ax.get('/', { key: 'k', cache: true });
-        await a.ax.get('/', { key: 'k', cache: true });
-        expect(a.adapter).toHaveBeenCalledTimes(2);
-        const b = setup({ enable: undefined });
-        await b.ax.get('/', { key: 'k', cache: true });
-        await b.ax.get('/', { key: 'k', cache: true });
-        expect(b.adapter).toHaveBeenCalledTimes(1);
-    });
+it("[cache.cb.shouldCache] 判定抛错按程序 bug 抛原始异常，同 key 后续仍能缓存", async () => {
+  const bug = new Error("should-cache bug");
+  let calls = 0;
+  const h = cachedClient({
+    shouldCache: () => {
+      if (calls++ === 0) throw bug;
+      return true;
+    },
+  });
+  expect(await thrown(h, { cache: true })).toBe(bug);
+  await call(h, { cache: true });
+  await call(h, { cache: true });
+  expect(h.net.calls("get", URL)).toBe(2);
+});
 
-    it.each([false, null, undefined, 0, '', 'yes'])('[cache.req.cache] cache=%j → 视为未启用，不缓存', async (v) => {
-        const { adapter, ax } = setup();
-        await ax.get('/', { key: 'k', cache: v } as any);
-        await ax.get('/', { key: 'k', cache: v } as any);
-        expect(adapter).toHaveBeenCalledTimes(2);
-        expect(removeCache(ax, 'k')).toBe(false);
-    });
+it("[cache.cb.clone] 命中时 clone 抛错：原始异常透传，缓存条目保留", async () => {
+  const bug = new Error("clone bug");
+  const h = cachedClient();
+  await call(h, { cache: true });
+  expect(
+    await thrown(h, {
+      cache: {
+        clone: () => {
+          throw bug;
+        },
+      },
+    }),
+  ).toBe(bug);
+  await call(h, { cache: true });
+  expect(h.net.calls("get", URL)).toBe(1);
+});
 
-    it('[cache.req.cache.expires] expires 为 0/负数/NaN → 写入即视为过期，不命中；undefined 回退插件级', async () => {
-        for (const expires of [0, -5, NaN]) {
-            const { adapter, ax } = setup();
-            await ax.get('/', { key: 'k', cache: { expires } });
-            await ax.get('/', { key: 'k', cache: { expires } });
-            expect(adapter).toHaveBeenCalledTimes(2);
-        }
-        const { adapter, ax } = setup({ expires: 1000 });
-        await ax.get('/', { key: 'k', cache: { expires: undefined } });
-        await ax.get('/', { key: 'k', cache: { expires: undefined } });
-        expect(adapter).toHaveBeenCalledTimes(1);
-    });
+it("[cache.cb.clone] 未命中返回时 clone 抛错：原始异常透传，已写入的缓存原件保留", async () => {
+  const bug = new Error("clone bug");
+  const h = cachedClient();
+  expect(
+    await thrown(h, {
+      cache: {
+        clone: () => {
+          throw bug;
+        },
+      },
+    }),
+  ).toBe(bug);
+  const hit = await call(h, { cache: true });
+  expect(hit.data).toBe("hit-1");
+  expect(h.net.calls("get", URL)).toBe(1);
+});
 
-    it('[cache.req.cache.key][cache.cb.key] key 回调返回 undefined/空串 → 不缓存且不回退 config.key', async () => {
-        const { adapter, ax } = setup({ key: () => undefined });
-        await ax.get('/', { key: 'cfg', cache: true });
-        await ax.get('/', { key: 'cfg', cache: true });
-        expect(adapter).toHaveBeenCalledTimes(2);
-        expect(removeCache(ax, 'cfg')).toBe(false);
+it("[cache.cb.clone] clone 返回 null：本次 data 为 null，缓存原件不受影响", async () => {
+  const h = cachedClient();
+  const first = await call(h, { cache: { clone: () => null } });
+  expect(first.data).toBeNull();
+  expect(first.ok).toBe(true);
+  expect((await call(h, { cache: true })).data).toBe("hit-1");
+});
 
-        const c = setup();
-        await c.ax.get('/', { cache: { key: () => '' } });
-        await c.ax.get('/', { cache: { key: () => '' } });
-        expect(c.adapter).toHaveBeenCalledTimes(2);
-    });
+it("[cache.cb.clone] 失败响应不经过 clone，原样返回", async () => {
+  const clone = vi.fn((data: unknown) => data);
+  const h = cachedClient();
+  h.net.on("get", URL, () => ({ status: 500 }));
+  const failed = await call(h, { cache: { clone } });
+  expect(failed.httpStatus).toBe(500);
+  expect(clone).not.toHaveBeenCalled();
+});
 
-    it('[cache.cb.key] 插件级 key 回调抛错 → 请求以该错误拒绝且不发出；后续请求不受影响', async () => {
-        const err = new Error('key boom');
-        const { adapter, ax } = setup({ key: () => { throw err; } });
-        await expect(ax.get('/', { cache: true })).rejects.toBe(err);
-        expect(adapter).not.toHaveBeenCalled();
-        await ax.get('/', { cache: false });
-        expect(adapter).toHaveBeenCalledTimes(1);
-    });
+it("[cache.req.cache.clone] deep 在没有 structuredClone 的环境里抛错且不发送请求，不悄悄共享 data", async () => {
+  const h = cachedClient();
+  vi.stubGlobal("structuredClone", undefined);
+  const error = await thrown(h, { cache: { clone: "deep" } });
+  expect(error).toBeInstanceOf(Error);
+  expect((error as Error).message).toContain("structuredClone");
+  expect(h.net.calls("get", URL)).toBe(0);
+});
 
-    it('[cache.req.cache.key.callback] 请求级 key 回调抛错 → 以该错误拒绝且不发出；返回 undefined → 直通不缓存', async () => {
-        const err = new Error('req key boom');
-        const { adapter, ax } = setup();
-        await expect(ax.get('/', { cache: { key: () => { throw err; } } })).rejects.toBe(err);
-        expect(adapter).not.toHaveBeenCalled();
-        await ax.get('/', { cache: { key: () => undefined } });
-        await ax.get('/', { cache: { key: () => undefined } });
-        expect(adapter).toHaveBeenCalledTimes(2);
-    });
+it("[cache.fn.axpCache] key 为 null（不可哈希、key:false）且没有显式键时直接放行，不读不写", async () => {
+  const h = cachedClient();
+  const unhashable = { params: { id: new Map() } };
+  await call(h, { cache: true, ...unhashable });
+  await call(h, { cache: true, ...unhashable });
+  await call(h, { cache: true, key: false });
+  await call(h, { cache: true, key: false });
+  expect(h.net.calls("get", URL)).toBe(4);
+  expect(clearCache(h.api)).toBe(0);
+});
 
-    it('[cache.cb.clone][cache.req.cache.clone.callback] clone 回调命中时抛错 → 请求拒绝，但缓存条目保留', async () => {
-        const err = new Error('clone boom');
-        let boom = false;
-        const { adapter, ax } = setup();
-        const clone = (d: any) => { if (boom) throw err; return d; };
-        await ax.get('/', { key: 'k', cache: { clone } });
-        boom = true;
-        await expect(ax.get('/', { key: 'k', cache: { clone } })).rejects.toBe(err);
-        boom = false;
-        await ax.get('/', { key: 'k', cache: { clone } });
-        expect(adapter).toHaveBeenCalledTimes(1);
-    });
+it("[cache.req.cache.key] 显式缓存键优先于 key:false；空串与非字符串键退回 key 服务", async () => {
+  const h = cachedClient();
+  await call(h, { cache: { key: "explicit" }, key: false });
+  await call(h, { cache: { key: "explicit" }, key: false });
+  expect(h.net.calls("get", URL)).toBe(1);
+  for (const key of ["", 123]) {
+    const before = h.net.calls("get", URL);
+    // oxlint-disable-next-line no-await-in-loop -- 同一客户端依次核对每种键。
+    await call(h, { cache: { key: key as never }, params: { by: String(key) } });
+    // oxlint-disable-next-line no-await-in-loop -- 同上。
+    await call(h, { cache: { key: key as never }, params: { by: String(key) } });
+    expect(h.net.calls("get", URL) - before).toBe(1);
+  }
+});
 
-    it('[cache.cb.clone][cache.req.cache.clone.callback] clone 回调返回 null → 本次 data 为 null，不影响缓存原件', async () => {
-        const { ax } = setup();
-        await ax.get('/', { key: 'k', cache: { clone: () => undefined } });
-        const hit = await ax.get('/', { key: 'k', cache: { clone: () => null } });
-        expect(hit.data).toBeNull();
-        const raw = await ax.get('/', { key: 'k', cache: true });
-        expect(raw.data).toBe('ok');
-    });
+it("[cache.method.lifecycle] 卸载时在途请求仍返回，但旧响应不写入重新安装后的缓存", async () => {
+  const h = cachedClient();
+  const pending = h.send({ url: URL, cache: true, latency: SLOW } as never);
+  await vi.advanceTimersByTimeAsync(1);
+  expect(h.api.eject("axp:cache")).toBe(true);
+  h.api.use(h.cache);
+  await vi.runAllTimersAsync();
+  expect((await pending).ok).toBe(true);
+  await call(h, { cache: true });
+  expect(h.net.calls("get", URL)).toBe(2);
+  await call(h, { cache: true });
+  expect(h.net.calls("get", URL)).toBe(2);
+});
 
-    it('[cache.method.install] 同一实例重复 install → 后装的接管缓存仓，旧 cleanup 不抛错', async () => {
-        const adapter = vi.fn(async (c: any) => response('ok', c));
-        const ax = axios.create({ adapter });
-        const off1 = cache().install(ax) as () => void;
-        cache().install(ax);
-        await ax.get('/', { key: 'k', cache: true });
-        expect(removeCache(ax, 'k')).toBe(true);
-        expect(() => off1()).not.toThrow();
-    });
+it("[cache.method.api] 重复 clear 与 remove 安全；清空计数包含尚未惰性清理的过期条目", async () => {
+  const h = cachedClient();
+  const api = h.api.plugin(h.cache)!;
+  await call(h, { cache: { expires: 10, key: "a" } });
+  vi.advanceTimersByTime(10);
+  expect(api.clear()).toBe(1);
+  expect(api.clear()).toBe(0);
+  expect(api.remove("a")).toBe(false);
+});
 
-    it('[cache.method.cleanup] 重复 cleanup 不抛错，且 adapter 保持已恢复', () => {
-        const ax = axios.create({ adapter: vi.fn() as any });
-        const before = ax.defaults.adapter;
-        const off = cache().install(ax) as () => void;
-        off();
-        expect(() => off()).not.toThrow();
-        expect(ax.defaults.adapter).toBe(before);
-    });
+it("[cache.opt.max][cache.fn.axpCache] 写入超过容量时顺带清扫过期条目，而不只是淘汰最久未用的", async () => {
+  const h = cachedClient({ max: 2 });
+  const api = h.api.plugin(h.cache)!;
+  await call(h, { cache: { expires: 10, key: "a" } });
+  await call(h, { cache: { expires: 10, key: "b" } });
+  vi.advanceTimersByTime(10);
+  await call(h, { cache: { key: "c" } });
+  // 过期的 a、b 被一并清走，只剩新写入的 c；单纯 LRU 淘汰会留下 b 和 c 两条。
+  expect(api.clear()).toBe(1);
+});
 
-    it('[cache.prop.name] name 恒为 axp:cache，不随 options 变化（含 enable:false / 空对象）', () => {
-        expect(cache({ enable: false }).name).toBe('axp:cache');
-        expect(cache({}).name).toBe('axp:cache');
-    });
-
-    it('[cache.opt.storage][cache.cb.storage.getItem][cache.cb.storage.setItem][cache.cb.storage.removeItem][cache.cb.storage.clear] storage 方法抛错/返回 rejected Promise 也不影响缓存（工厂未消费）', async () => {
-        const boom = () => { throw new Error('x'); };
-        const storage = { getItem: vi.fn(boom), setItem: vi.fn(boom), removeItem: vi.fn(boom), clear: vi.fn(() => Promise.reject(new Error('y'))) };
-        const { adapter, ax } = setup({ storage });
-        await ax.get('/', { key: 'k', cache: true });
-        await ax.get('/', { key: 'k', cache: true });
-        removeCache(ax, 'k');
-        clearCache(ax);
-        expect(adapter).toHaveBeenCalledTimes(1);
-        for (const fn of Object.values(storage)) expect(fn).not.toHaveBeenCalled();
-    });
-
-    it('[cache.opt.memory] memory 为 null/非布尔 → 忽略，仍走进程内缓存', async () => {
-        const { adapter, ax } = setup({ memory: null });
-        await ax.get('/', { key: 'k', cache: true });
-        await ax.get('/', { key: 'k', cache: true });
-        expect(adapter).toHaveBeenCalledTimes(1);
-    });
+it("[cache.method.lifecycle] 重名 use 被拒绝；eject 与 dispose 重复调用都安全，卸载后可用同一插件对象重装", async () => {
+  const h = cachedClient();
+  expect(() => h.api.use(h.cache)).toThrow(/Duplicate plugin/);
+  expect(h.api.eject("axp:cache")).toBe(true);
+  expect(h.api.eject("axp:cache")).toBe(false);
+  h.api.use(h.cache);
+  await call(h, { cache: true });
+  await call(h, { cache: true });
+  expect(h.net.calls("get", URL)).toBe(1);
+  h.api.dispose();
+  expect(() => h.api.dispose()).not.toThrow();
 });

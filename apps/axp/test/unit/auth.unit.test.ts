@@ -1,170 +1,109 @@
-import { describe, it, expect, afterEach, vi } from 'vitest';
-import {
-    $normalize,
-    $compileMethods,
-    $compileUrlPatterns,
-    $pathnameOf,
-    $patternToRegex,
-    authFailureFactory,
-    AuthFailureAction,
-    AuthFailureAction as Action,
-} from '../../src/plugins/auth';
-import type { ITokenManager } from '../../src/objects/TokenManager';
-import { FakeTokenManager } from '../helpers/auth';
+import { describe, expect, it, vi } from "vitest";
+import type { AxpContext } from "../../src/context";
+import axpAuth, { AuthFailureAction, defaultAuthFailure } from "../../src/plugins/auth";
+import type { AxpResponse } from "../../src/response";
+import { memoryTokens } from "../helpers/b3";
 
-/** 极简 TokenManager 替身：accessToken getter 加 Bearer 前缀（与真实实现一致） */
-function makeTM(token?: string): ITokenManager {
-  let access = token;
-  let refresh: string | undefined;
-  return {
-    canRefresh: true,
-    get accessToken() { return access ? `Bearer ${access}` : undefined; },
-    get refreshToken() { return refresh; },
-    set(a?: string, r?: string) { access = a; refresh = r; },
-    clear() { access = undefined; refresh = undefined; },
-  };
+/** 受保护请求注入过的 token 与会话当前 token 的对照夹具。 */
+const INJECTED = "injected";
+const OTHER = "other";
+/** 只提供状态读取的上下文替身，defaultAuthFailure 只会 get 注入快照。 */
+function ctxWith(injected: string | undefined): AxpContext<AxpResponse> {
+  return { get: vi.fn(/** 只读注入快照。 */ () => injected) } as unknown as AxpContext<AxpResponse>;
 }
+/** 只带逻辑状态的响应替身。 */
+function statusOf(status: number): AxpResponse {
+  return { status } as AxpResponse;
+}
+/** 以指定 access token 建立会话，undefined 表示未登录。 */
+function tokensOf(access: string | undefined) {
+  const tm = memoryTokens();
+  tm.set(access);
+  return tm;
+}
+/** 五个动作的稳定字面量。 */
+const ACTION_VALUES = {
+  Refresh: "refresh",
+  Replay: "replay",
+  Deny: "deny",
+  Expired: "expired",
+  Others: "others",
+};
 
-afterEach(() => { vi.restoreAllMocks(); vi.unstubAllGlobals(); vi.resetModules(); });
+describe("defaultAuthFailure", () => {
+  it.each([
+    ["401 无 token", 401, undefined, undefined, AuthFailureAction.Expired],
+    ["401 空串 token 视为无 token", 401, "", INJECTED, AuthFailureAction.Expired],
+    ["401 携带与当前一致", 401, INJECTED, INJECTED, AuthFailureAction.Refresh],
+    ["401 携带与当前不一致（已被并发刷新）", 401, OTHER, INJECTED, AuthFailureAction.Replay],
+    ["401 没有注入记录", 401, OTHER, undefined, AuthFailureAction.Replay],
+    ["403 有 token", 403, INJECTED, INJECTED, AuthFailureAction.Deny],
+    ["403 无 token", 403, undefined, undefined, AuthFailureAction.Deny],
+    ["403 空串 token 视为无 token", 403, "", undefined, AuthFailureAction.Deny],
+    ["500", 500, INJECTED, INJECTED, AuthFailureAction.Others],
+    ["200", 200, INJECTED, INJECTED, AuthFailureAction.Others],
+    ["状态 0", 0, INJECTED, INJECTED, AuthFailureAction.Others],
+    ["状态 NaN", NaN, INJECTED, INJECTED, AuthFailureAction.Others],
+    ["状态为负", -401, INJECTED, INJECTED, AuthFailureAction.Others],
+  ])(
+    "[auth.fn.defaultAuthFailure][auth.const.AuthFailureAction] %s",
+    /** 只读逻辑状态与注入快照，不解析请求头。 */ (_label, status, current, injected, expected) => {
+      const tm = tokensOf(current);
+      expect(defaultAuthFailure(statusOf(status), tm, ctxWith(injected))).toBe(expected);
+    },
+  );
 
-describe('$normalize — 必填校验与缺省', () => {
-  const base = { tokenManager: makeTM(), onRefresh: () => true, onAccessExpired: () => { } };
-  it('[auth.fn.$normalize][auth.cb.onRefresh][auth.cb.onAccessExpired][auth.opt.tokenManager] 缺 tokenManager / onRefresh / onAccessExpired → 抛错', () => {
-    expect(() => $normalize({} as any)).toThrow(/tokenManager/);
-    expect(() => $normalize({ tokenManager: makeTM() } as any)).toThrow(/onRefresh/);
-    expect(() => $normalize({ tokenManager: makeTM(), onRefresh: () => 1 } as any)).toThrow(/onAccessExpired/);
-  });
-  it('[auth.fn.$normalize][auth.cb.onAccessDenied][auth.cb.onFailure][auth.cb.ready] onAccessDenied 缺省回退 onAccessExpired；默认 onFailure / ready 填充', () => {
-    const cfg = $normalize(base as any);
-    expect(cfg.onAccessDenied).toBe(cfg.onAccessExpired);
-    expect(typeof cfg.onFailure).toBe('function');
-    expect(typeof cfg.ready).toBe('function');
-    expect(cfg.accessDeniedCode).toBe('ACCESS_DENIED');
+  it("[auth.fn.defaultAuthFailure] 无状态：连续用不同会话判定互不影响", /** 同一函数多次调用。 */ () => {
+    const first = tokensOf(INJECTED);
+    const second = tokensOf(undefined);
+    expect(defaultAuthFailure(statusOf(401), first, ctxWith(INJECTED))).toBe(AuthFailureAction.Refresh);
+    expect(defaultAuthFailure(statusOf(401), second, ctxWith(INJECTED))).toBe(AuthFailureAction.Expired);
+    expect(defaultAuthFailure(statusOf(401), first, ctxWith(INJECTED))).toBe(AuthFailureAction.Refresh);
   });
 });
 
-describe('$compileMethods', () => {
-  it("[auth.fn.$compileMethods][auth.opt.methods] '*' → 恒真；'post' → 仅 post；数组 → 任一命中；空 → 恒假", () => {
-    expect($compileMethods('*')('get')).toBe(true);
-    expect($compileMethods('post')('post')).toBe(true);
-    expect($compileMethods('post')('get')).toBe(false);
-    const set = $compileMethods(['get', 'POST']);
-    expect(set('get')).toBe(true);
-    expect(set('post')).toBe(true);
-    expect(set('put')).toBe(false);
-    expect($compileMethods([])('get')).toBe(false);
-    expect($compileMethods(undefined)('get')).toBe(false);
+describe("AuthFailureAction", () => {
+  it("[auth.const.AuthFailureAction] 五个动作的值稳定，且同时可作值和类型使用", /** 值和类型同名导出。 */ () => {
+    expect({ ...AuthFailureAction }).toEqual(ACTION_VALUES);
+    const typed: AuthFailureAction = AuthFailureAction.Refresh;
+    expect(typed).toBe("refresh");
   });
 });
 
-describe('$compileUrlPatterns / $patternToRegex', () => {
-  it("[auth.fn.$compileUrlPatterns][auth.opt.urlPattern] '*' 恒真；'/user/*' 前缀；':id' 单段；'!' 否定", () => {
-    expect($compileUrlPatterns('*')('/anything')).toBe(true);
-    const p = $compileUrlPatterns(['/user/*']);
-    expect(p('/user/1')).toBe(true);
-    expect(p('/admin/1')).toBe(false);
-    const neg = $compileUrlPatterns(['/user/*', '!/user/login']);
-    expect(neg('/user/1')).toBe(true);
-    expect(neg('/user/login')).toBe(false);
-  });
-  it('[auth.fn.$patternToRegex] $patternToRegex：:name 单段、* 任意', () => {
-    expect($patternToRegex('/u/:id')!.test('/u/5')).toBe(true);
-    expect($patternToRegex('/u/:id')!.test('/u/5/x')).toBe(false);
-    expect($patternToRegex('/u/*')!.test('/u/a/b')).toBe(true);
-  });
-});
+describe("axpAuth 装配", () => {
+  const refresh = vi.fn();
+  const expired = vi.fn();
+  it.each([
+    ["缺 tokenManager", { onRefresh: refresh, onAccessExpired: expired }, "options.tokenManager is required"],
+    ["缺 onRefresh", { tokenManager: memoryTokens(), onAccessExpired: expired }, "options.onRefresh is required"],
+    ["缺 onAccessExpired", { tokenManager: memoryTokens(), onRefresh: refresh }, "options.onAccessExpired is required"],
+    ["onRefresh 不是函数", { tokenManager: memoryTokens(), onRefresh: "x", onAccessExpired: expired }, "options.onRefresh is required"],
+    ["整个选项缺失", undefined, "options.tokenManager is required"],
+    ["选项为 null", null, "options.tokenManager is required"],
+  ])(
+    "[auth.opt.tokenManager][auth.cb.onRefresh][auth.cb.onAccessExpired] %s 创建时即抛错",
+    /** 必填项在装配期校验，不拖到首个请求。 */ (_label, options, message) => {
+      expect(() => axpAuth(options as never)).toThrow(message);
+    },
+  );
 
-describe('authFailureFactory（默认 onFailure）', () => {
-  const f = authFailureFactory();
-  it('[auth.fn.authFailureFactory][auth.const.AuthFailureAction.Others] 非 401/403 → Others', () => {
-    expect(f({ accessToken: 'Bearer x' }, { status: 200 })).toBe(AuthFailureAction.Others);
-  });
-  it('[auth.fn.authFailureFactory][auth.const.AuthFailureAction.Expired][auth.const.AuthFailureAction.Deny] 无 token：401 → Expired，403 → Deny', () => {
-    expect(f({ accessToken: undefined }, { status: 401 })).toBe(AuthFailureAction.Expired);
-    expect(f({ accessToken: undefined }, { status: 403 })).toBe(AuthFailureAction.Deny);
-  });
-  it('[auth.fn.authFailureFactory][auth.const.AuthFailureAction.Replay] 未携带 token → Replay', () => {
-    expect(f({ accessToken: 'Bearer x' }, { status: 401, config: { headers: {} } })).toBe(AuthFailureAction.Replay);
-  });
-  it('[auth.fn.authFailureFactory][auth.const.AuthFailureAction.Refresh][auth.const.AuthFailureAction.Replay] 携带与当前一致 → Refresh；不一致 → Replay', () => {
-    expect(f({ accessToken: 'Bearer x' }, { status: 401, config: { headers: { Authorization: 'Bearer x' } } })).toBe(AuthFailureAction.Refresh);
-    expect(f({ accessToken: 'Bearer x' }, { status: 401, config: { headers: { Authorization: 'Bearer old' } } })).toBe(AuthFailureAction.Replay);
-  });
-});
-
-describe('auth — enable / 元信息', () => {
-  it('[auth.const.AuthFailureAction] 公开动作同时可作为值和类型使用', () => {
-    const action: AuthFailureAction = AuthFailureAction.Refresh;
-    expect(action).toBe('refresh');
-  });
-});
-
-describe('$pathnameOf — 取 URL 的 pathname', () => {
-  it('[auth.fn.$pathnameOf] 相对路径原样；去掉查询串与 hash', () => {
-    expect($pathnameOf('/me')).toBe('/me');
-    expect($pathnameOf('/me?x=1')).toBe('/me');
-    expect($pathnameOf('/me#top')).toBe('/me');
-    expect($pathnameOf('/a/b?x=/y#z')).toBe('/a/b');
-  });
-  it('[auth.fn.$pathnameOf] 绝对 URL 去掉 scheme://host(:port)；协议相对 URL 同理', () => {
-    expect($pathnameOf('https://x.com/me')).toBe('/me');
-    expect($pathnameOf('http://x.com:8080/a/b?q=1')).toBe('/a/b');
-    expect($pathnameOf('//cdn.x.com/f.js')).toBe('/f.js');
-  });
-  it('[auth.fn.$pathnameOf] 结果为空 → "/"', () => {
-    expect($pathnameOf('')).toBe('/');
-    expect($pathnameOf('https://x.com')).toBe('/');
-    expect($pathnameOf('https://x.com?x=1')).toBe('/');
-    expect($pathnameOf('?x=1')).toBe('/');
-  });
-});
-
-describe('auth — URLPattern 原生与回退路径', () => {
-    it('[auth.fn.$compileUrlPatterns][auth.opt.urlPattern] 仅排除列表默认放行其他路径，空模式忽略', () => {
-        vi.stubGlobal('URLPattern', undefined);
-        const match = $compileUrlPatterns(['', '!/public/*']);
-        expect(match('/public/a')).toBe(false);
-        expect(match('/private/a')).toBe(true);
-        expect($compileUrlPatterns([''])('/')).toBe(false);
+  it("[auth.prop.name] 工厂与插件名称都稳定为 axp:auth，enable 原样透出", /** 工厂 name 被锁定。 */ () => {
+    const plugin = axpAuth({
+      tokenManager: memoryTokens(),
+      onRefresh: refresh,
+      onAccessExpired: expired,
     });
-    it('[auth.fn.$compileUrlPatterns] 原生 URLPattern.test 抛错时返回 false', () => {
-        /** 模拟构造成功但匹配时抛错的浏览器实现。 */
-        class BrokenPattern {
-            /** 模拟原生匹配异常。 */
-            test() { throw new Error('test'); }
-        }
-        vi.stubGlobal('URLPattern', BrokenPattern);
-        expect($compileUrlPatterns('/a')('/a')).toBe(false);
-    });
-    it('[auth.fn.$patternToRegex][auth.fn.$compileUrlPatterns] 原生 URLPattern 构造失败回退正则，转义标点并支持单段参数', () => {
-        /** 模拟不支持该模式的原生构造器。 */
-        class InvalidPattern {
-            /** 模拟模式编译异常。 */
-            constructor() { throw new Error('pattern'); }
-        }
-        vi.stubGlobal('URLPattern', InvalidPattern);
-        const match = $compileUrlPatterns('/v1.0/:id');
-        expect(match('/v1.0/123')).toBe(true);
-        expect(match('/v1x0/123')).toBe(false);
-        expect(match('/v1.0/a/b')).toBe(false);
-    });
-    it('[auth.fn.authFailureFactory][auth.fn.authFailureFactory.headerName] 自定义凭证头名可从普通小写头读取', () => {
-        expect(authFailureFactory('X-Token')({ accessToken: 't' }, {
-            status: 401, config: { headers: { 'x-token': 't' } },
-        })).toBe(Action.Refresh);
-    });
-});
-
-describe('auth: authFailureFactory classification', () => {
-  const factory = authFailureFactory('Authorization');
-
-  it('[auth.fn.authFailureFactory][auth.const.AuthFailureAction.Replay] no carried header at all classifies as replay (someone else already refreshed before this request even went out)', () => {
-    const tm = new FakeTokenManager('t0');
-    expect(factory(tm as any, { status: 401, config: {} })).toBe(AuthFailureAction.Replay);
-  });
-
-  it('[auth.fn.authFailureFactory][auth.const.AuthFailureAction.Others] a non-401/403 status classifies as Others', () => {
-    const tm = new FakeTokenManager('t0');
-    expect(factory(tm as any, { status: 500 })).toBe(AuthFailureAction.Others);
+    expect(axpAuth.name).toBe("axp:auth");
+    expect(plugin.name).toBe("axp:auth");
+    expect(plugin.stage).toBe("credential");
+    expect(plugin.enable).toBeUndefined();
+    expect(
+      axpAuth({
+        tokenManager: memoryTokens(),
+        onRefresh: refresh,
+        onAccessExpired: expired,
+        enable: false,
+      }).enable,
+    ).toBe(false);
   });
 });

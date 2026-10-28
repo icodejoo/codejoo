@@ -1,208 +1,72 @@
-import { afterEach, describe, expect, it, vi } from 'vitest';
-import repath from '../../src/plugins/repath';
-import axios from 'axios';
-import { Axp } from '../../src';
-import { makeNetwork } from '../helpers/network';
-import { use } from '../helpers/install';
+/* eslint-disable no-await-in-loop -- 同一客户端依次核对请求选项和生命周期，避免引入额外并发语义。 */
+import { expect, it } from "vitest";
+import axpRepath from "../../src/plugins/repath";
+import { preparedClient } from "../helpers/prepare";
 
-afterEach(() => { vi.useRealTimers(); vi.restoreAllMocks(); });
+/** 查询参数字段名。 */
+const PARAMS_FIELD = "params";
+/** 请求体字段名。 */
+const DATA_FIELD = "data";
+/** 可参与路径替换的空文本。 */
+const EMPTY_TEXT = "";
+/** 缺值边界使用的路径模板。 */
+const VARIABLE_PATH = "/:id";
 
-/** 创建可直接调用拦截器回调的最小 axios 替身。 */
-function interceptors() {
-    const request = { use: vi.fn(), eject: vi.fn() };
-    const response = { use: vi.fn(), eject: vi.fn() };
-    const ax: any = { defaults: {}, interceptors: { request, response } };
-    return { ax, request, response };
-}
-
-/** 构造 adapter 层成功响应。 */
-function response(config: any, data: unknown = 'ok') {
-    return { config, data, status: 200, statusText: '', headers: {} };
-}
-
-/** 捕获 request 拦截器的极简 axios */
-function makeMockAxios() {
-    const reqHandlers: Array<(config: any) => any> = [];
-    const axios: any = {
-        defaults: {},
-        interceptors: {
-            request: {
-                use: (f: any) => { reqHandlers.push(f); return reqHandlers.length - 1; },
-                eject: () => { },
-            },
-        },
-    };
-    return { axios, reqHandlers };
-}
-
-/** 安装插件并返回其 request 拦截器（已断言存在） */
-function install(opts?: Parameters<typeof repath>[0]) {
-    const { axios, reqHandlers } = makeMockAxios();
-    repath(opts).install(axios);
-    return { run: reqHandlers[0], reqHandlers };
-}
-
-describe('envs/filter/repath — 次要分支与卸载', () => {
-    it('[repath.opt.pattern][repath.method.cleanup] repath 无 url 与无捕获组模式原样返回，卸载后不替换', async () => {
-        const { ax, request } = interceptors();
-        const off = repath({ pattern: /(?:x)/g }).install(ax);
-        const handler = request.use.mock.calls[0][0];
-        const config = { url: undefined, params: { id: 1 } };
-        expect(handler(config)).toBe(config);
-        expect(handler({ url: 'x' }).url).toBe('x');
-        off?.();
-        expect(request.eject).toHaveBeenCalledOnce();
-    });
-    it.each([0, false, ''])('[repath.fn.axpRepath] repath 原始请求体 %s 应可用于路径变量', async (data) => {
-        const { ax, request } = interceptors();
-        repath().install(ax);
-        const config = { url: '/:id', data };
-        const result = request.use.mock.calls[0][0](config);
-        // 原始值 0/false/'' 也是有效路径值，不能被 truthy 守卫漏掉。
-        expect(result.url).toBe('/' + encodeURIComponent(String(data)));
-    });
-});
-
-describe('repath — 取值来源与边界', () => {
-    it('[repath.fn.axpRepath] 值为 0 → 用 ?? 兜底，仍替换为 "0"', () => {
-        const { run } = install();
-        const config: any = { url: '/u/:id', params: { id: 0 } };
-        run(config);
-        expect(config.url).toBe('/u/0');
-    });
-
-    it('[repath.fn.axpRepath] 无匹配值 → 原样保留占位符', () => {
-        const { run } = install();
-        const config: any = { url: '/u/:missing', params: {} };
-        run(config);
-        expect(config.url).toBe('/u/:missing');
-    });
-});
-
-// 来源 review #22
-describe('repath — 路径边界', () => {
-    /** 重复占位符的输入路径。 */
-    const repeatedPath = '/u/{id}/again/{id}';
-    /** 两次替换完成后的路径。 */
-    const repeatedResult = '/u/5/again/5';
-    it('[repath.fn.axpRepath] 只替换 pathname，完整保留 query 与 hash', () => {
-        const { run } = install();
-        const config = { url: '/u/:id?view=1&other={id}#tab/:id', params: { id: 5 } };
-        run(config);
-        expect(config.url).toBe('/u/5?view=1&other={id}#tab/:id');
-        expect(config.params).toEqual({});
-    });
-
-    it.each(['params', 'data'])('[repath.fn.axpRepath] 重复占位符从 %s 读取后统一删除', (source) => {
-        const { run } = install();
-        const config = { url: repeatedPath, [source]: { id: 5, keep: true } };
-        run(config);
-        expect(config.url).toBe(repeatedResult);
-        expect(config[source]).toEqual({ keep: true });
-    });
-
-    it('[repath.fn.axpRepath] 原始 data 可用于重复占位符，替换后统一删除', () => {
-        const { run } = install();
-        const config = { url: repeatedPath, data: 5 };
-        run(config);
-        expect(config.url).toBe(repeatedResult);
-        expect(config.data).toBeUndefined();
-    });
-
-    it('[repath.fn.axpRepath] 值按路径段编码，不能注入斜杠、query 或 hash', () => {
-        const { run } = install();
-        const config = { url: '/u/[id]?view=1#tab', params: { id: 'a/b?admin=1#中文 %' } };
-        run(config);
-        expect(config.url).toBe('/u/a%2Fb%3Fadmin%3D1%23%E4%B8%AD%E6%96%87%20%25?view=1#tab');
-    });
-
-    it('[repath.fn.axpRepath] 绝对 URL 的协议和端口保持原样', () => {
-        const { run } = install();
-        const config = { url: 'http://localhost:4570/u/:id?view=1', params: { id: 5 } };
-        run(config);
-        expect(config.url).toBe('http://localhost:4570/u/5?view=1');
-    });
-});
-
-/** 装好网络仿真的 Core 工厂 */
-function mkApi() {
-  const net = makeNetwork();
-  const api = Axp.create(axios.create({ adapter: net.adapter }));
-  return { net, api };
-}
-
-describe('repath', () => {
-  it('[repath.fn.axpRepath] a placeholder with no match in either params or data is left as-is in the path', async () => {
-    const { net, api } = mkApi();
-    let seenUrl = '';
-    net.fallback((config) => { seenUrl = config.url ?? ''; return { data: { code: 0, data: null } }; });
-    use(api, [repath()]);
-
-    await api.axios.get('/user/{id}');
-    expect(seenUrl).toBe('/user/{id}');
-  });
-});
-
-
-/** 装好 repath 的真实 axios，返回 adapter 收到的 config 列表与 install 的返回值。 */
-function realAxios(opts?: Parameters<typeof repath>[0]) {
-    const seen: any[] = [];
-    const ax = axios.create({
-        adapter: async (c: any) => { seen.push(c); return response(c); },
-    });
-    const off = repath(opts).install(ax) as (() => void) | undefined;
-    return { ax, seen, off };
-}
-
-describe('repath — 选项与安装/卸载边界（真实 axios）', () => {
-    it('[repath.opt.enable][repath.method.install] enable:false 不装拦截器且无 cleanup；省略/undefined 视为启用', async () => {
-        const off = realAxios({ enable: false });
-        expect(off.off).toBeUndefined();
-        await off.ax.get('/u/:id', { params: { id: 1 } });
-        expect(off.seen[0].url).toBe('/u/:id');
-        const on = realAxios({ enable: undefined });
-        await on.ax.get('/u/:id', { params: { id: 1 } });
-        expect(on.seen[0].url).toBe('/u/1');
-    });
-
-    it('[repath.opt.removeKey] removeKey 省略/undefined 默认删除；false 时 params/data 对象与原始 data 都保留', async () => {
-        const def = realAxios({ removeKey: undefined });
-        await def.ax.get('/u/:id', { params: { id: 1, k: 2 } });
-        expect(def.seen[0].params).toEqual({ k: 2 });
-
-        const keep = realAxios({ removeKey: false });
-        await keep.ax.post('/u/:id/:name', { id: 1, name: 'n' }, { params: { id: 9 } });
-        expect(keep.seen[0].url).toBe('/u/9/n');
-        expect(keep.seen[0].params).toEqual({ id: 9 });
-        expect(JSON.parse(keep.seen[0].data)).toEqual({ id: 1, name: 'n' });
-
-        const prim = realAxios({ removeKey: false });
-        await prim.ax.put('/u/:id', 42);
-        expect(prim.seen[0].url).toBe('/u/42');
-        expect(prim.seen[0].data).toBe(42);
-    });
-
-    it('[repath.opt.removeKey] params 为 undefined/null 且无匹配值：占位符保留，不抛错', async () => {
-        const { ax, seen } = realAxios();
-        await ax.get('/u/:id');
-        await ax.get('/u/:id', { params: null as any });
-        expect(seen.map((c) => c.url)).toEqual(['/u/:id', '/u/:id']);
-    });
-
-    it('[repath.method.cleanup] cleanup 重复调用安全，卸载后可重装', async () => {
-        const { ax, seen, off } = realAxios();
-        off!();
-        expect(() => off!()).not.toThrow();
-        repath().install(ax);
-        await ax.get('/u/:id', { params: { id: 3 } });
-        expect(seen[0].url).toBe('/u/3');
-    });
-
-    it('[repath.method.install] 同一实例重复 install：URL 只替换一次，第二个拦截器无变量可替换', async () => {
-        const { ax, seen } = realAxios();
-        repath().install(ax);
-        await ax.get('/u/:id', { params: { id: 3, k: 1 } });
-        expect(seen[0].url).toBe('/u/3');
-        expect(seen[0].params).toEqual({ k: 1 });
-    });
+/** 需要单段编码的特殊字符。 */
+const VALUE = "a/b?c#汉 字";
+/** 编码后的单段路径。 */
+const ENCODED = encodeURIComponent(VALUE);
+it.each(["/:id/{id}/[id]", "https://host:8080/:id/{id}/[id]?q=:id#hash={id}", "//host:8080/:id/{id}/[id]?q=:id#hash={id}"])(
+  "[repath.fn.pathname] 只替换 pathname，重复变量编码且保留 host/query/hash：%s",
+  /** 重复变量从未修改来源取值。 */ async (url) => {
+    for (const source of [PARAMS_FIELD, DATA_FIELD]) {
+      const { api } = preparedClient([axpRepath()]);
+      const original = Object.freeze({ id: VALUE });
+      const r = await api.request({ url, [source]: original, throws: false });
+      const end = url.indexOf("?");
+      const path = end < 0 ? url : url.slice(0, end);
+      const suffix = end < 0 ? EMPTY_TEXT : url.slice(end);
+      expect(r.request.url).toBe(path.replace(/:id|{id}|\[id\]/g, ENCODED) + suffix);
+      expect(r.request[source as typeof PARAMS_FIELD | typeof DATA_FIELD]).toEqual({});
+      expect(original.id).toBe(VALUE);
+      api.dispose();
+    }
+  },
+);
+it.each([0, false, EMPTY_TEXT, 1n, Symbol("id")])(
+  "[repath.req.primitive] 原始 data %s 可替换重复变量，删除只影响内层",
+  /** 原始值来源。 */ async (data) => {
+    for (const removeKey of [true, false]) {
+      const { api } = preparedClient([axpRepath({ removeKey })], {
+        transformRequest: /** 保留原始请求体。 */ (value) => value,
+      });
+      const config = Object.freeze({ url: "/:id/{id}", data });
+      const r = await api.request({ ...config, throws: false });
+      const encoded = encodeURIComponent(String(data));
+      expect(r.request.url).toBe(`/${encoded}/${encoded}`);
+      expect(r.request.data).toBe(removeKey ? undefined : data);
+      expect(config.data).toBe(data);
+      api.dispose();
+    }
+  },
+);
+it("[repath.req.missing][repath.opt.pattern] 缺 URL、缺值、空值和无捕获组均安全透传", /** 不误读 replace 的尾部参数。 */ async () => {
+  const { api } = preparedClient([axpRepath()]);
+  for (const params of [undefined, null, {}, { id: null }]) {
+    for (const data of [undefined, null, {}, { id: null }, [], new Date(), new FormData(), /** 函数不是原始值来源。 */ () => 1]) {
+      const r = await api.request({
+        url: VARIABLE_PATH,
+        params,
+        data,
+        throws: false,
+        transformRequest: /** 保留函数身份。 */ (value) => value,
+      });
+      expect(r.request.url).toBe(VARIABLE_PATH);
+    }
+  }
+  expect((await api.request({ throws: false })).request.url).toBeUndefined();
+  api.eject("axp:repath");
+  api.use(axpRepath({ pattern: /:id/g }));
+  expect((await api.request({ url: VARIABLE_PATH, params: { id: 1 }, throws: false })).request.url).toBe(VARIABLE_PATH);
+  api.dispose();
 });

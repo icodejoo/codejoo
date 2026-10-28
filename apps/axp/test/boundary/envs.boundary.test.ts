@@ -1,44 +1,48 @@
-import { afterEach, describe, expect, it, vi } from 'vitest';
-import axios from 'axios';
-import envs from '../../src/plugins/envs';
+import { create as createAxios } from "axios";
+import { expect, it } from "vitest";
+import axpEnvs from "../../src/plugins/envs";
+import { createTestClient } from "../helpers/client";
 
-afterEach(() => { vi.useRealTimers(); vi.restoreAllMocks(); });
+/** 安装前的服务地址。 */
+const ORIGINAL_BASE_URL = "/original";
 
-function makeAx(): any {
-    return { defaults: { baseURL: '', headers: {} } };
-}
-
-describe('envs/filter/repath — 次要分支与卸载', () => {
-    it.each([{ timeout: 1 }, { name: 'named' }])('[envs.opt.rules[].config][envs.method.cleanup] envs 无 baseURL 配置 %s 也可安装并还原', (config) => {
-        const ax = axios.create();
-        const before = ax.defaults.timeout;
-        const off = envs([{ rule: () => true, config }]).install(ax);
-        expect(ax.defaults).toMatchObject(config);
-        off?.();
-        expect(ax.defaults.timeout).toBe(before);
-    });
-    it('[envs.cb.rules[].rule] envs rule 抛错不修改 defaults', () => {
-        const ax = axios.create();
-        const before = ax.defaults.baseURL;
-        expect(() => envs([{ rule: () => { throw new Error('rule'); }, config: { baseURL: '/new' } }]).install(ax)).toThrow('rule');
-        expect(ax.defaults.baseURL).toBe(before);
-    });
+it.each([{}, { timeout: 0 }, { responseType: "text" as const }])(
+  "[envs.opt.config] 无 baseURL、空配置和零值精确保留，卸载不还原 %j",
+  /** 原有字段只被显式值覆盖。 */ (config) => {
+    const { api } = createTestClient([axpEnvs({ rules: [{ rule: /** 命中本配置。 */ () => true, config }] })]);
+    for (const [key, value] of Object.entries(config)) expect((api.axios.defaults as Record<string, unknown>)[key]).toBe(value);
+    api.eject("axp:envs");
+    api.dispose();
+    for (const [key, value] of Object.entries(config)) expect((api.axios.defaults as Record<string, unknown>)[key]).toBe(value);
+  },
+);
+it("[envs.cb.error] rule 抛错时原样中断 setup，不写入 defaults", /** 安装错误不能应用未命中配置。 */ () => {
+  const axios = createAxios({ baseURL: ORIGINAL_BASE_URL });
+  const bug = new Error("env rule");
+  expect(
+    /** 构造时中断安装。 */ () =>
+      createTestClient(
+        [
+          axpEnvs([
+            { rule: /** 前置规则未命中。 */ () => false, config: { baseURL: "/skip" } },
+            {
+              rule: /** 判定故障。 */ () => {
+                throw bug;
+              },
+              config: { baseURL: "/wrong" },
+            },
+          ]),
+        ],
+        { axios },
+      ),
+  ).toThrow(bug);
+  expect(axios.defaults.baseURL).toBe(ORIGINAL_BASE_URL);
 });
-
-describe('envs', () => {
-    it.each([{}, { timeout: 0, baseURL: '' }])('[envs.opt.rules[].config] 空配置或零值配置 %s 保留其精确含义且可恢复', (config) => {
-        const ax = axios.create({ baseURL: '/before', timeout: 1000 });
-        const off = envs([{ rule: () => true, config }]).install(ax);
-        expect(ax.defaults).toMatchObject({ baseURL: '/before', timeout: 1000, ...config });
-        off?.();
-        expect(ax.defaults.baseURL).toBe('/before');
-        expect(ax.defaults.timeout).toBe(1000);
-    });
-
-    it('[envs.method.install][envs.fn.axpEnvs] 空规则列表 → no-op', () => {
-        const ax = makeAx();
-        const before = { ...ax.defaults };
-        envs().install(ax);
-        expect(ax.defaults).toEqual(before);
-    });
+it("[envs.opt.empty] 省略、空数组和无规则对象均不修改 defaults", /** 兼容数组入口与总开关对象入口。 */ () => {
+  for (const plugin of [axpEnvs(), axpEnvs([]), axpEnvs({})]) {
+    const { api } = createTestClient([plugin]);
+    expect(api.inspect()).toEqual([]);
+    expect(api.axios.defaults.baseURL).toBeUndefined();
+    api.dispose();
+  }
 });

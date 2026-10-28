@@ -1,35 +1,35 @@
 /** 全局常量：环境变量名、默认值、能力集合、网络/风格枚举。同一字面量只在这里出现一次。 */
 
 /** 响应风格 */
-export type Style = 'http' | 'business';
+export type Style = "http" | "business";
 /** 网络预设名 */
-export type NetworkName = 'normal' | 'weak' | 'lossy' | 'offline' | 'blackhole' | 'flap' | 'dns';
+export type NetworkName = "normal" | "weak" | "lossy" | "offline" | "blackhole" | "flap" | "dns";
 /** adapter 名（axios 的 http / fetch 两种） */
-export type AdapterName = 'http' | 'fetch';
+export type AdapterName = "http" | "fetch";
 
 /** 全部风格，顺序即报告列顺序 */
-export const ALL_STYLES: readonly Style[] = ['http', 'business'];
+export const ALL_STYLES: readonly Style[] = ["http", "business"];
 /** 全部网络预设，顺序即报告列顺序 */
-export const ALL_NETWORKS: readonly NetworkName[] = ['normal', 'weak', 'lossy', 'offline', 'blackhole', 'flap', 'dns'];
+export const ALL_NETWORKS: readonly NetworkName[] = ["normal", "weak", "lossy", "offline", "blackhole", "flap", "dns"];
 /** 全部 adapter */
-export const ALL_ADAPTERS: readonly AdapterName[] = ['http', 'fetch'];
+export const ALL_ADAPTERS: readonly AdapterName[] = ["http", "fetch"];
 
 /** 环境变量名：测试服务器地址 */
-export const ENV_SERVER = 'TESTKIT_SERVER';
+export const ENV_SERVER = "TESTKIT_SERVER";
 /** 环境变量名：netem 控制地址 */
-export const ENV_NETEM = 'TESTKIT_NETEM';
+export const ENV_NETEM = "TESTKIT_NETEM";
 /** 环境变量名：场景目录 */
-export const ENV_SCENARIOS = 'TESTKIT_SCENARIOS';
+export const ENV_SCENARIOS = "TESTKIT_SCENARIOS";
 
 /** 测试服务器默认地址 */
-export const DEFAULT_SERVER = 'http://127.0.0.1:47080';
+export const DEFAULT_SERVER = "http://127.0.0.1:47080";
 /** netem 控制 API 默认地址 */
-export const DEFAULT_NETEM = 'http://127.0.0.1:47090';
+export const DEFAULT_NETEM = "http://127.0.0.1:47090";
 /** 场景目录默认位置 */
-export const DEFAULT_SCENARIOS = 'E:/workspaces/api-ws-demo/testkit/scenarios';
+export const DEFAULT_SCENARIOS = "E:/workspaces/api-ws-demo/testkit/scenarios";
 
 /** DNS 失败网络使用的不可解析域名（CONTRACT §6） */
-export const DNS_FAIL_HOST = 'nonexistent.invalid';
+export const DNS_FAIL_HOST = "nonexistent.invalid";
 
 /** 单次运行的默认总超时（schema 默认值） */
 export const DEFAULT_RUN_TIMEOUT_MS = 20000;
@@ -48,36 +48,33 @@ export const INFLIGHT_DRAIN_MS = 3000;
 
 /** flap 网络的时间表：先断 1500ms 再恢复（CONTRACT §6） */
 export const FLAP_SCHEDULE: ReadonlyArray<{ at_ms: number; profile: string }> = [
-  { at_ms: 0, profile: 'offline' },
-  { at_ms: 1500, profile: 'normal' },
+  { at_ms: 0, profile: "offline" },
+  { at_ms: 1500, profile: "normal" },
 ];
 
 /** 请求头：运行轮次 */
-export const HEADER_RUN = 'X-Test-Run';
+export const HEADER_RUN = "X-Test-Run";
 /** 请求头：响应风格 */
-export const HEADER_STYLE = 'X-Test-Style';
+export const HEADER_STYLE = "X-Test-Style";
 
 /** 受保护路径的默认前缀 */
-export const PRIVATE_PREFIX = '/t/private';
+export const PRIVATE_PREFIX = "/t/private";
 /** mock 服务的路径前缀（CONTRACT §4.1） */
-export const MOCK_PREFIX = '/t/mock';
+export const MOCK_PREFIX = "/t/mock";
 /** 默认的可重试状态（schema 中立默认值，比 axp 默认少 408/429） */
 export const DEFAULT_RETRY_STATUSES: readonly number[] = [500, 502, 503, 504];
 /** 默认可重试的幂等方法（大写） */
-export const DEFAULT_RETRY_METHODS: readonly string[] = ['GET', 'PUT', 'HEAD', 'DELETE', 'OPTIONS'];
+export const DEFAULT_RETRY_METHODS: readonly string[] = ["GET", "PUT", "HEAD", "DELETE", "OPTIONS"];
 
-/** 默认可缓存的方法（大写）：axp 的缓存不分方法，中立默认只缓存读请求，与 retry 默认方法对称 */
-export const DEFAULT_CACHE_METHODS: readonly string[] = ['GET', 'HEAD'];
-
-/** axp 具备的能力名（CONTRACT §7）；不在其中的能力，场景直接跳过 */
-export const SUPPORTED_CAPABILITIES: ReadonlySet<string> = new Set([
-  'auth', 'cache', 'retry', 'share', 'cancel', 'loading', 'mock',
-  'normalize', 'notify', 'repath', 'key', 'filter', 'envs', 'log',
-]);
-
-/** auth 插件客户端侧"无令牌即拒绝"抛出的错误消息 */
-export const AUTH_DENIED_MESSAGE = '[axp:auth] access denied';
-/** auth 插件在等待刷新失败后中止排队请求抛出的错误消息 */
-export const AUTH_REFRESH_FAILED_MESSAGE = '[axp:auth] refresh failed';
-/** auth 插件合成越权响应用的业务码 */
-export const AUTH_SYNTH_CODE = 'ACCESS_DENIED';
+/** 内核直接具备的能力（不再是插件）：取消、key 服务、归一化响应、日志开关 */
+export const KERNEL_CAPABILITIES: readonly string[] = ["cancel", "key", "normalize", "log"];
+/** 由内置插件提供的能力 */
+export const PLUGIN_CAPABILITIES: readonly string[] = ["auth", "cache", "retry", "share", "loading", "mock", "notify", "repath", "filter", "envs"];
+/**
+ * 行为级能力：不对应插件或请求选项，是 axp 管线本身的语义，场景只靠 `requires` 声明。
+ * mock-in-chain：mock 探测在插件链内发出，不走 cache / share，回落后的真实请求才走；keep-alive：连接复用不受上一次失败影响。
+ * 同属 CONTRACT §7 细分能力的 multipart、share-retry、timeout-send 不在其中（执行器未实现或 axp 没有）。
+ */
+export const BEHAVIOR_CAPABILITIES: readonly string[] = ["mock-in-chain", "keep-alive"];
+/** axp 具备的能力名（CONTRACT §7，内核 + 插件 + 行为级）；不在其中的能力，场景直接跳过 */
+export const SUPPORTED_CAPABILITIES: ReadonlySet<string> = new Set([...PLUGIN_CAPABILITIES, ...KERNEL_CAPABILITIES, ...BEHAVIOR_CAPABILITIES]);

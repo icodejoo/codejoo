@@ -1,48 +1,69 @@
-import { describe, it, expect, vi } from 'vitest';
-import axios from 'axios';
-import loading from '../../src/plugins/loading';
-import { Axp } from '../../src/install';
-import retry from '../../src/plugins/retry';
-import auth from '../../src/plugins/auth';
-import TokenManager from '../../src/objects/TokenManager';
-import mock from '../../src/plugins/mock';
-import { makeNetwork } from '../helpers/network';
+import { AxiosError } from "axios";
+import { beforeEach, expect, it, vi } from "vitest";
+import axpLoading from "../../src/plugins/loading";
+import { authClient, deferred, failure, guarded, REFRESH_TOKEN, REQUEST_URL, run, TOKEN_NEW } from "../helpers/b3";
+import { loadingRecorder } from "../helpers/ui";
 
-// 来源 review 补丁
-describe('loading 逻辑请求与清理', () => {
-    const path = '/review-loading';
-
-    it('[loading.cb.loading × auth.cb.onRefresh] auth 刷新和 replay 后 retry 期间始终显示', async () => {
-        const net = makeNetwork().on('GET', path, (_config, hit) => ({ status: hit === 1 ? 401 : hit === 2 ? 500 : 200 }));
-        const values: boolean[] = [];
-        const tm = new TokenManager();
-        tm.set('old');
-        const ax = axios.create({ adapter: net.adapter });
-        Axp.install(ax, {
-            auth: auth({ tokenManager: tm, onRefresh: () => { expect(values).toEqual([true]); tm.set('fresh'); return true; }, onAccessExpired: vi.fn() }),
-            retry: retry({ max: 1, delay: 1 }),
-            loading: loading({ loading: (value) => values.push(value) }),
-        });
-        await ax.get(path);
-        expect(values).toEqual([true, false]);
-        expect(net.totalStarted).toBe(3);
-    });
-
-    it.each([401, 500])('[loading.cb.loading × auth.cb.onRefresh] 首发 %i 后重发抛出无 config 的错误也释放 loading', async (status) => {
-        const failure = new Error('adapter failed');
-        const net = makeNetwork().on('GET', path, (_config, hit) => {
-            if (hit === 1) return { status };
-            throw failure;
-        });
-        const tm = new TokenManager();
-        tm.set('old');
-        const fn = vi.fn();
-        const ax = axios.create({ adapter: net.adapter });
-        Axp.install(ax, {
-            auth: auth({ tokenManager: tm, onRefresh: () => { tm.set('fresh'); return true; }, onAccessExpired: vi.fn() }),
-            retry: retry({ max: 1, delay: 0 }), loading: loading({ loading: fn }),
-        });
-        await expect(ax.get(path)).rejects.toBe(failure);
-        expect(fn.mock.calls.map(([value]) => value)).toEqual([true, false]);
-    });
+/** 默认回调的事件标签。 */
+const LOADING_LABEL = "main";
+/** 每个组合用例使用独立假时钟。 */
+beforeEach(() => {
+  vi.useFakeTimers();
 });
+
+it("[loading.cb.loading][auth.cb.onRefresh] 刷新等待期间一直显示，排队的新请求并入同一次显示：全程只有一对回调", /** N10：loading 覆盖刷新等待。 */ async () => {
+  const gate = deferred<void>();
+  const h = authClient({
+    onRefresh: /** 等门打开再换 token。 */ async (_r, tm) => {
+      await gate.promise;
+      tm.set(TOKEN_NEW, REFRESH_TOKEN);
+    },
+  });
+  h.api.use(axpLoading({ loading: loadingRecorder(h.events) }));
+  h.net.on(
+    "get",
+    REQUEST_URL,
+    guarded(() => TOKEN_NEW),
+  );
+  const first = h.send({ url: REQUEST_URL });
+  await vi.runAllTimersAsync();
+  expect(h.events.loading.get(LOADING_LABEL)).toEqual([true]);
+  const queued = h.send({ url: REQUEST_URL });
+  await vi.runAllTimersAsync();
+  expect(h.events.loading.get(LOADING_LABEL)).toEqual([true]);
+  gate.resolve();
+  await vi.runAllTimersAsync();
+  expect((await first).ok).toBe(true);
+  expect((await queued).ok).toBe(true);
+  expect(h.events.loading.get(LOADING_LABEL)).toEqual([true, false]);
+});
+
+it("[loading.cb.loading][auth.cb.onRefresh] 刷新失败收敛后同样隐藏：一对回调，结果为 auth/expired", /** 失败路径也成对。 */ async () => {
+  const h = authClient({ onRefresh: () => false });
+  h.api.use(axpLoading({ loading: loadingRecorder(h.events) }));
+  h.net.on("get", REQUEST_URL, () => failure(401));
+  expect(await run(h)).toMatchObject({ kind: "auth", reason: "expired" });
+  expect(h.events.loading.get(LOADING_LABEL)).toEqual([true, false]);
+});
+
+it.each([
+  ["network", AxiosError.ERR_NETWORK],
+  ["timeout", AxiosError.ETIMEDOUT],
+] as const)(
+  "[loading.cb.loading][auth.cb.onRefresh] 首发 401 后重放遇到 %s 失败也释放 loading，结果保留该失败类别",
+  /** 重放失败不遗漏 false。 */ async (kind, code) => {
+    const h = authClient();
+    h.api.use(axpLoading({ loading: loadingRecorder(h.events) }));
+    h.net.on(
+      "get",
+      REQUEST_URL,
+      /** 首发 401，重放传输失败。 */ (_config, hit) => {
+        if (hit === 1) return failure(401);
+        throw new AxiosError("replay failed", code);
+      },
+    );
+    expect(await run(h)).toMatchObject({ ok: false, kind });
+    expect(h.events.loading.get(LOADING_LABEL)).toEqual([true, false]);
+    expect(h.settings.onRefresh).toHaveBeenCalledTimes(1);
+  },
+);

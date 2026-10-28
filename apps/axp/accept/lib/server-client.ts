@@ -1,11 +1,15 @@
-import { HEADER_RUN, HEADER_STYLE } from './constants.ts';
-import { rawJson } from './http.ts';
-import type { Style } from './constants.ts';
-import type { Observation } from './matchers.ts';
-import type { LoginSpec } from './types.ts';
+import { HEADER_RUN, HEADER_STYLE } from "./constants.ts";
+import { rawJson } from "./http.ts";
+import type { Style } from "./constants.ts";
+import type { Observation } from "./matchers.ts";
+import type { LoginSpec } from "./types.ts";
 
 /** 信封响应 */
-export interface Envelope<T = unknown> { code: number | string; message?: string; data: T }
+export interface Envelope<T = unknown> {
+  code: number | string;
+  message?: string;
+  data: T;
+}
 
 /** 登录得到的令牌 */
 export interface LoginTokens {
@@ -18,7 +22,7 @@ export interface LoginTokens {
 export class BypassError extends Error {
   constructor(message: string) {
     super(message);
-    this.name = 'BypassError';
+    this.name = "BypassError";
   }
 }
 
@@ -38,19 +42,23 @@ export class ServerClient {
    * @param style 初始响应风格
    */
   constructor(baseUrl: string, runId: string, style: Style) {
-    this.baseUrl = baseUrl.replace(/\/+$/, '');
+    this.baseUrl = baseUrl.replace(/\/+$/, "");
     this.runId = runId;
     this.#style = style;
   }
 
   /** 当前响应风格 */
-  get style(): Style { return this.#style; }
+  get style(): Style {
+    return this.#style;
+  }
 
   /**
    * 切换响应风格（style step），从下一个请求开始生效。
    * @param style 新风格
    */
-  setStyle(style: Style): void { this.#style = style; }
+  setStyle(style: Style): void {
+    this.#style = style;
+  }
 
   /** 本次运行要带的公共请求头 */
   headers(): Record<string, string> {
@@ -65,9 +73,7 @@ export class ServerClient {
    * @returns 信封；非 JSON 响应抛 BypassError
    */
   async call<T = unknown>(method: string, path: string, body?: unknown): Promise<Envelope<T>> {
-    const { status, text } = await rawJson(
-      `${this.baseUrl}${path}`, method, body, this.headers(), (m) => new BypassError(`${method} ${path} ${m}`),
-    );
+    const { status, text } = await rawJson(`${this.baseUrl}${path}`, method, body, this.headers(), (m) => new BypassError(`${method} ${path} ${m}`));
     try {
       return JSON.parse(text) as Envelope<T>;
     } catch {
@@ -78,7 +84,7 @@ export class ServerClient {
   /** 调用并要求 code=0，否则抛 BypassError */
   async callOk<T = unknown>(method: string, path: string, body?: unknown): Promise<T> {
     const env = await this.call<T>(method, path, body);
-    if (env.code !== 0) throw new BypassError(`${method} ${path} 失败: code=${String(env.code)} ${env.message ?? ''}`);
+    if (env.code !== 0) throw new BypassError(`${method} ${path} 失败: code=${String(env.code)} ${env.message ?? ""}`);
     return env.data;
   }
 
@@ -88,12 +94,12 @@ export class ServerClient {
    * @returns 新令牌
    */
   async login(spec: LoginSpec): Promise<LoginTokens> {
-    const body: Record<string, unknown> = { username: spec.user ?? 'user' };
+    const body: Record<string, unknown> = { username: spec.user ?? "user" };
     if (spec.password !== undefined) body.password = spec.password;
     if (spec.access_ttl_ms !== undefined) body.access_ttl_ms = spec.access_ttl_ms;
     if (spec.refresh_ttl_ms !== undefined) body.refresh_ttl_ms = spec.refresh_ttl_ms;
     if (spec.strict_rotation !== undefined) body.strict_rotation = spec.strict_rotation;
-    const data = await this.callOk<{ access_token: string; refresh_token?: string }>('POST', '/t/auth/login', body);
+    const data = await this.callOk<{ access_token: string; refresh_token?: string }>("POST", "/t/auth/login", body);
     return { accessToken: data.access_token, refreshToken: data.refresh_token };
   }
 
@@ -102,7 +108,7 @@ export class ServerClient {
    * @param refreshToken 要吊销的 refresh；没有就传空串
    */
   async logout(refreshToken: string | undefined): Promise<void> {
-    await this.callOk('POST', '/t/auth/logout', { refresh_token: refreshToken ?? '' });
+    await this.callOk("POST", "/t/auth/logout", { refresh_token: refreshToken ?? "" });
   }
 
   /**
@@ -110,13 +116,13 @@ export class ServerClient {
    * @param user 用户名
    * @param scope all（默认）或 access
    */
-  async revoke(user: string, scope: 'all' | 'access' = 'all'): Promise<void> {
-    await this.callOk('POST', '/t/auth/revoke', { username: user, scope });
+  async revoke(user: string, scope: "all" | "access" = "all"): Promise<void> {
+    await this.callOk("POST", "/t/auth/revoke", { username: user, scope });
   }
 
   /** server_reset step：DELETE /t/runs/{run}，清空本轮状态 */
   async reset(): Promise<void> {
-    await this.callOk('DELETE', `/t/runs/${encodeURIComponent(this.runId)}`);
+    await this.callOk("DELETE", `/t/runs/${encodeURIComponent(this.runId)}`);
   }
 
   /**
@@ -124,7 +130,7 @@ export class ServerClient {
    * @returns 规整后的观测；缺失字段补零
    */
   async observe(): Promise<Observation> {
-    const d = await this.callOk<Partial<Observation>>('GET', `/t/runs/${encodeURIComponent(this.runId)}`);
+    const d = await this.callOk<Partial<Observation>>("GET", `/t/runs/${encodeURIComponent(this.runId)}`);
     return {
       total: d.total ?? 0,
       inflight: d.inflight ?? 0,
@@ -144,5 +150,5 @@ export class ServerClient {
  * @example makeRunId('a1b2', 7, 'auth.deny-403') // 'a1b2-7-auth.deny-403'
  */
 export function makeRunId(session: string, seq: number, scenarioId: string): string {
-  return `${session}-${seq}-${scenarioId.replace(/[^A-Za-z0-9._-]/g, '_')}`;
+  return `${session}-${seq}-${scenarioId.replace(/[^A-Za-z0-9._-]/g, "_")}`;
 }

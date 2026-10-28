@@ -1,19 +1,47 @@
-import { describe, expect, it } from 'vitest';
-import Response, { AxpError } from '../../src/objects/Response';
+import { AxiosError, type AxiosResponse } from "axios";
+import { expect, it } from "vitest";
+import { AxpResponse, axpResponse, type IAxpResponse, type IAxpResponseFactory } from "../../src/response";
+import { createTestClient } from "../helpers/client";
 
-describe('AxpResponse — 构造与字段规则', () => {
-    it('[public.export.AxpResponse][public.member.AxpResponse.status][public.member.AxpResponse.code][public.member.AxpResponse.message][public.member.AxpResponse.data][public.member.AxpResponse.successful] 构造按顺序保存 status/code/message/data，并计算 successful', () => {
-        const r = new Response(200, 0, 'ok', { n: 1 });
-        expect(r).toMatchObject({ status: 200, code: 0, message: 'ok', data: { n: 1 }, successful: true });
-        expect(new Response(500, 'E1', 'bad')).toMatchObject({ status: 500, code: 'E1', successful: false, data: null });
+it.each([false, true])(
+  "[core.opt.expectJson] adapter 不返回 headers 时正常响应：expectJson=%s",
+  /** 验证自定义 adapter 缺失响应头。 */ async (expectJson) => {
+    const { api } = createTestClient(
+      [],
+      { response: axpResponse({ expectJson }) },
+      /** 模拟无响应头的 adapter。 */
+      async (config) => ({ config, status: 200, statusText: "", data: "text" }) as AxiosResponse,
+    );
+    expect(await api.get("/no-headers")(undefined, { wrap: true })).toMatchObject({
+      kind: "ok",
+      data: "text",
     });
-    it('[public.member.AxpResponse.fromResponse][public.member.AxpResponse.status][public.member.AxpResponse.code] 信封响应取 body.code，非信封响应 code 缺省为 0', () => {
-        expect(Response.fromResponse({ status: 200, data: { code: '0000', data: 1 } })).toMatchObject({ status: 200, code: '0000', data: 1, successful: true });
-        expect(Response.fromResponse({ status: 201, data: 'raw' })).toMatchObject({ status: 201, code: 0, data: 'raw', successful: true });
-    });
-    it('[public.export.ApiError] ApiError 是 AxpError 的公开别名，消息取自响应 message', async () => {
-        const { ApiError } = await import('../../src');
-        expect(ApiError).toBe(AxpError);
-        expect(new ApiError(new Response(400, 1, '参数错误')).message).toBe('参数错误');
-    });
+  },
+);
+
+/** 模拟独立工厂产出尚未带品牌的普通对象。 */
+function plain(response: IAxpResponse): IAxpResponse {
+  return { ...response, ok: response.ok, kind: response.kind, status: response.status };
+}
+it("[core.fn.isAxpResponse][core.opt.response] 自定义完整工厂的普通对象在各入口补品牌", /** 自定义完整工厂的普通对象在各入口补品牌。 */ async () => {
+  const base = axpResponse<IAxpResponse>({
+    create: /** 自定义构造器直接返回默认响应类。 */ (init) => new AxpResponse(init),
+  });
+  const factory: IAxpResponseFactory<IAxpResponse> = {
+    /** 模拟收到响应的工厂。 */
+    fromResponse: (raw, ctx) => plain(base.fromResponse(raw, ctx)),
+    /** 模拟传输错误的工厂。 */
+    fromError: (error, ctx) => plain(base.fromError(error, ctx)),
+    /** 模拟短路与取消的工厂。 */
+    fail: (init, ctx) => plain(base.fail(init, ctx)),
+  };
+  const { api } = createTestClient<IAxpResponse>([], { response: factory });
+  expect(api.isResponse(await api.request({ wrap: true }))).toBe(true);
+  api.axios.defaults.adapter = /** 模拟离线的传输失败。 */ async () => {
+    throw new AxiosError("offline");
+  };
+  expect(api.isResponse(await api.request({ throws: false }))).toBe(true);
+  const controller = new AbortController();
+  controller.abort();
+  expect(api.isResponse(await api.request({ signal: controller.signal, throws: false }))).toBe(true);
 });

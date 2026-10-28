@@ -1,30 +1,54 @@
-import { describe, it, expect } from 'vitest';
-import axios from 'axios';
-import { Axp, axpNotify as notify, axpRetry as retry } from '../../src';
-import { makeNetwork } from '../helpers/network';
+import { beforeEach, expect, it, vi } from "vitest";
+import axpNotify from "../../src/plugins/notify";
+import axpRetry from "../../src/plugins/retry";
+import type { AxpResponse } from "../../src/response";
+import { b3Client, failure, REQUEST_URL, run } from "../helpers/b3";
+import { notifyRecorder } from "../helpers/ui";
 
-function mkApi() {
-  const net = makeNetwork();
-  const api = Axp.create(axios.create({ adapter: net.adapter }));
-  return { net, api };
+/** 重试等待时长。 */
+const RETRY_WAIT = 100;
+/** 每个组合用例使用独立假时钟。 */
+beforeEach(() => {
+  vi.useFakeTimers();
+});
+
+/** 装好 retry 与 notify 的客户端，notify 按逻辑请求计数。 */
+function notifyRetryClient(max = 2) {
+  const h = b3Client([axpRetry({ max, delay: RETRY_WAIT })]);
+  const notify = vi.fn(notifyRecorder(h.events));
+  h.api.use(axpNotify<AxpResponse>({ notify }));
+  return { ...h, notify };
 }
 
-describe('notify', () => {
-  it(`[notify.fn.axpNotify × retry.opt.max] a retry-recovered response fires notify exactly ONCE (retry.ts resends through a bare, interceptor-less axios instance that never re-enters this chain — unlike auth.ts, which still double-fires; see notify.ts's doc comment)`, async () => {
-    const { net, api } = mkApi();
-    let attempts = 0;
-    net.fallback(() => {
-      attempts++;
-      return attempts < 2 ? { status: 500, data: { code: 1, data: null } } : { data: { code: 0, data: { v: 1 } } };
-    });
-    const messages: string[] = [];
-    Axp.install(api.axios, {
-      retry: retry({ max: 2, delay: 0 }),
-      notify: notify<any>({ notify: (m) => messages.push(m), stringify: (_data, _m, status) => `status=${status}` }),
-    });
+it("[notify.cb.notify][retry.opt.max] 重试后恢复：不通知，中间失败的尝试不单独通知", /** 只有最终 R 才进入 notify。 */ async () => {
+  const h = notifyRetryClient();
+  h.net.fallback(/** 前两次失败，第三次恢复。 */ (_config, hit) => (hit < 3 ? failure(500) : {}));
+  expect((await run(h)).ok).toBe(true);
+  expect(h.net.totalStarted).toBe(3);
+  expect(h.notify).not.toHaveBeenCalled();
+});
 
-    const r = await api.axios.get('/data');
-    expect((r.data as any).data.v).toBe(1);
-    expect(messages).toEqual(['status=200']);
-  });
+it.each([
+  ["HTTP 状态", false, "http 500"],
+  ["business 风格", true, "biz 500"],
+] as const)(
+  "[notify.cb.notify][retry.opt.max] 重试耗尽后最终失败才通知，恰好一次（%s）",
+  /** 通知看到的是最后一次尝试的 R。 */ async (_style, business, message) => {
+    const h = notifyRetryClient();
+    h.net.fallback(/** 持续失败直到耗尽。 */ () => failure(500, business));
+    const result = await run(h);
+    expect(h.net.totalStarted).toBe(3);
+    expect(h.notify).toHaveBeenCalledExactlyOnceWith(message, result);
+  },
+);
+
+it("[notify.cb.notify][retry.opt.max] 等待重试期间被取消：取消不通知", /** cancel 类别被默认 stringify 忽略。 */ async () => {
+  const h = notifyRetryClient();
+  h.net.fallback(/** 持续失败。 */ () => failure(500));
+  const pending = h.send({ url: REQUEST_URL });
+  await vi.advanceTimersByTimeAsync(RETRY_WAIT / 2);
+  expect(h.api.cancelAll()).toBe(1);
+  await vi.runAllTimersAsync();
+  expect((await pending).kind).toBe("cancel");
+  expect(h.notify).not.toHaveBeenCalled();
 });

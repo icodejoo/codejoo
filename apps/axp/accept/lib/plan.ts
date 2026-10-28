@@ -1,9 +1,9 @@
-import { ALL_ADAPTERS, ALL_STYLES, SUPPORTED_CAPABILITIES } from './constants.ts';
-import type { AdapterName } from './constants.ts';
-import type { Filters } from './config.ts';
-import { resolveExpectation } from './expect.ts';
-import { validateScenarioMapping } from './mapping.ts';
-import type { PlanEntry, Scenario } from './types.ts';
+import { ALL_ADAPTERS, ALL_STYLES, SUPPORTED_CAPABILITIES } from "./constants.ts";
+import type { AdapterName } from "./constants.ts";
+import type { Filters } from "./config.ts";
+import { resolveExpectation } from "./expect.ts";
+import { inapplicableReason, validateScenarioMapping } from "./mapping.ts";
+import type { PlanEntry, Scenario } from "./types.ts";
 
 /** 计划汇总 */
 export interface PlanSummary {
@@ -42,7 +42,8 @@ export function matchesIdFilter(id: string, prefixes: string[]): boolean {
 
 /**
  * 生成运行计划：场景 × 网络 × 风格 × adapter，并标注每一项是执行还是跳过。
- * 跳过的依据：缺少能力（`skipped: missing <cap>`），或预期里写了 `skip`（该网络/风格下不适用）。
+ * 跳过的依据：缺少能力（`skipped: missing <cap>`），或预期里写了 `skip`（该网络/风格下不适用），
+ * 或在 axp 上不适用（见 mapping.ts 的 inapplicableReason）。
  * 同时给每个场景算一遍"中立选项能否映射"（对该场景的所有条目相同）。
  * @param scenarios 场景列表
  * @param filters 过滤条件（id 前缀、网络、风格、adapter）；空数组表示不过滤
@@ -50,11 +51,7 @@ export function matchesIdFilter(id: string, prefixes: string[]): boolean {
  * @returns 计划条目，顺序：场景、网络、风格、adapter
  * @example buildPlan(scenarios, { ids: ['auth.'], networks: [], styles: [], adapters: ['http'] })
  */
-export function buildPlan(
-  scenarios: Scenario[],
-  filters: Filters,
-  supported: ReadonlySet<string> = SUPPORTED_CAPABILITIES,
-): PlanEntry[] {
+export function buildPlan(scenarios: Scenario[], filters: Filters, supported: ReadonlySet<string> = SUPPORTED_CAPABILITIES): PlanEntry[] {
   const entries: PlanEntry[] = [];
   for (const sc of scenarios) {
     if (!matchesIdFilter(sc.id, filters.ids)) continue;
@@ -70,15 +67,20 @@ export function buildPlan(
           const key = `${sc.id}|${network}|${style}|${adapter}`;
           const base = { key, scenario: sc, network, style, adapter, issues };
           if (missing.length) {
-            entries.push({ ...base, decision: { kind: 'skip', category: 'missing-capability', reason: `missing ${missing.join('+')}` } });
+            entries.push({ ...base, decision: { kind: "skip", category: "missing-capability", reason: `missing ${missing.join("+")}` } });
             continue;
           }
           const exp = resolveExpectation(sc, network, style);
           if (exp?.skip) {
-            entries.push({ ...base, decision: { kind: 'skip', category: 'not-applicable', reason: `not applicable: ${exp.skip}` } });
+            entries.push({ ...base, decision: { kind: "skip", category: "not-applicable", reason: `not applicable: ${exp.skip}` } });
             continue;
           }
-          entries.push({ ...base, decision: { kind: 'run' } });
+          const inapplicable = exp ? inapplicableReason(sc, network, style, exp) : null;
+          if (inapplicable) {
+            entries.push({ ...base, decision: { kind: "skip", category: "not-applicable", reason: `not applicable: ${inapplicable}` } });
+            continue;
+          }
+          entries.push({ ...base, decision: { kind: "run" } });
         }
       }
     }
@@ -95,7 +97,7 @@ export function summarizePlan(entries: PlanEntry[]): PlanSummary {
   const byAdapter: Record<string, number> = {};
   let toRun = 0;
   for (const e of entries) {
-    if (e.decision.kind === 'skip') skipReasons[e.decision.reason] = (skipReasons[e.decision.reason] ?? 0) + 1;
+    if (e.decision.kind === "skip") skipReasons[e.decision.reason] = (skipReasons[e.decision.reason] ?? 0) + 1;
     else {
       toRun++;
       byAdapter[e.adapter] = (byAdapter[e.adapter] ?? 0) + 1;

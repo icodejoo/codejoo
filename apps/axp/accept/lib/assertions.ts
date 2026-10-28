@@ -1,10 +1,10 @@
-import { errorMatchesAny } from './classify.ts';
-import type { Style } from './constants.ts';
-import { checkLoadingPaired } from './events.ts';
-import type { EventSnapshot } from './events.ts';
-import { checkOrder, checkRange, countAborted, subsetMatch } from './matchers.ts';
-import type { Observation } from './matchers.ts';
-import type { Expectation, Range, ServerExpect } from './types.ts';
+import { errorMatchesAny } from "./classify.ts";
+import type { Style } from "./constants.ts";
+import { checkLoadingPaired } from "./events.ts";
+import type { EventSnapshot } from "./events.ts";
+import { checkOrder, checkRange, countAborted, subsetMatch } from "./matchers.ts";
+import type { Observation } from "./matchers.ts";
+import type { Expectation, Range, ServerExpect } from "./types.ts";
 
 /** 一条请求的执行记录 */
 export interface RequestRecord {
@@ -48,20 +48,23 @@ export function checkResults(exp: Expectation, observed: Observed): string[] {
   const fails: string[] = [];
   for (const [id, r] of Object.entries(exp.results ?? {})) {
     const rec = observed.records.get(id);
-    if (!rec) { fails.push(`${id}: 请求没有发出或没有落定`); continue; }
-    if (r.ok === true && !rec.ok) fails.push(`${id}: 期望成功，实际失败 ${rec.kind}（${rec.message ?? ''}）`);
+    if (!rec) {
+      fails.push(`${id}: 请求没有发出或没有落定`);
+      continue;
+    }
+    if (r.ok === true && !rec.ok) fails.push(`${id}: 期望成功，实际失败 ${rec.kind}（${rec.message ?? ""}）`);
     if (r.ok === false && rec.ok) fails.push(`${id}: 期望失败，实际成功`);
     if (r.error !== undefined) {
       if (rec.ok) fails.push(`${id}: 期望错误 ${JSON.stringify(r.error)}，实际成功`);
-      else if (!errorMatchesAny(r.error, rec.kind ?? '', rec.style)) {
-        fails.push(`${id}: 期望错误 ${JSON.stringify(r.error)}，实际 ${rec.kind}（${rec.message ?? ''}）`);
+      else if (!errorMatchesAny(r.error, rec.kind ?? "", rec.style)) {
+        fails.push(`${id}: 期望错误 ${JSON.stringify(r.error)}，实际 ${rec.kind}（${rec.message ?? ""}）`);
       }
     }
     if (r.data !== undefined && rec.ok) fails.push(...subsetMatch(rec.data, r.data, `${id}.data`));
     if (r.hit !== undefined && rec.ok && hitOf(rec.data) !== r.hit) fails.push(`${id}.hit: 实际 ${String(hitOf(rec.data))}，期望 ${r.hit}`);
     if (r.from_cache !== undefined) {
       if (rec.reached === undefined) fails.push(`${id}.from_cache: 无法推断（没有服务端观测）`);
-      else if (rec.reached === r.from_cache) fails.push(`${id}.from_cache: 期望 ${r.from_cache}，实际${rec.reached ? '到达了服务器' : '未到达服务器'}`);
+      else if (rec.reached === r.from_cache) fails.push(`${id}.from_cache: 期望 ${r.from_cache}，实际${rec.reached ? "到达了服务器" : "未到达服务器"}`);
     }
   }
   return fails;
@@ -92,13 +95,15 @@ export function checkClient(exp: Expectation, observed: Observed): string[] {
     const e = JSON.stringify(c.loading);
     if (a !== e) fails.push(`client.loading: 实际 ${a}，期望 ${e}`);
   }
-  fails.push(...rangeFails([
-    ['client.notify', observed.events.notify.length, c.notify],
-    ['client.refresh', observed.events.refresh, c.refresh],
-    ['client.expired', observed.events.expired, c.expired],
-    ['client.denied', observed.events.denied, c.denied],
-    ['client.pending_after', observed.pendingAfter, c.pending_after],
-  ]));
+  fails.push(
+    ...rangeFails([
+      ["client.notify", observed.events.notify.length, c.notify],
+      ["client.refresh", observed.events.refresh, c.refresh],
+      ["client.expired", observed.events.expired, c.expired],
+      ["client.denied", observed.events.denied, c.denied],
+      ["client.pending_after", observed.pendingAfter, c.pending_after],
+    ]),
+  );
   return fails;
 }
 
@@ -110,9 +115,9 @@ export function checkClient(exp: Expectation, observed: Observed): string[] {
 export function checkServer(exp: ServerExpect | undefined, obs: Observation): string[] {
   if (!exp) return [];
   const fails = rangeFails([
-    ['server.total', obs.total, exp.total],
-    ['server.peak_inflight', obs.peak_inflight, exp.peak_inflight],
-    ['server.aborted', countAborted(obs), exp.aborted],
+    ["server.total", obs.total, exp.total],
+    ["server.peak_inflight", obs.peak_inflight, exp.peak_inflight],
+    ["server.aborted", countAborted(obs), exp.aborted],
   ]);
   for (const [k, r] of Object.entries(exp.by_key ?? {})) fails.push(...rangeFails([[`server.by_key[${k}]`, obs.by_key[k] ?? 0, r]]));
   for (const [k, r] of Object.entries(exp.by_path ?? {})) fails.push(...rangeFails([[`server.by_path[${k}]`, obs.by_path[k] ?? 0, r]]));
@@ -130,7 +135,7 @@ export function checkOrderAndDuration(exp: Expectation, observed: Observed): str
     const f = checkOrder(observed.order, exp.order);
     if (f) fails.push(f);
   }
-  fails.push(...rangeFails([['duration_ms', observed.durationMs, exp.duration_ms]]));
+  fails.push(...rangeFails([["duration_ms", observed.durationMs, exp.duration_ms]]));
   return fails;
 }
 
@@ -154,10 +159,5 @@ export function checkGeneric(observed: Observed): string[] {
  * @returns 失败原因清单；空数组表示通过
  */
 export function evaluateLocal(exp: Expectation, observed: Observed): string[] {
-  return [
-    ...checkResults(exp, observed),
-    ...checkOrderAndDuration(exp, observed),
-    ...checkClient(exp, observed),
-    ...checkGeneric(observed),
-  ];
+  return [...checkResults(exp, observed), ...checkOrderAndDuration(exp, observed), ...checkClient(exp, observed), ...checkGeneric(observed)];
 }

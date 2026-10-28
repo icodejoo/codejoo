@@ -1,21 +1,24 @@
-import { sleep } from './http.ts';
-import { classifyError } from './classify.ts';
-import type { ClientHandle } from './client-factory.ts';
-import { DNS_FAIL_HOST, EXPIRE_LOCAL_TTL_MS, EXPIRE_LOCAL_WAIT_MS } from './constants.ts';
-import type { Style } from './constants.ts';
-import type { EventLog, PendingTracker } from './events.ts';
-import type { RequestRecord } from './assertions.ts';
-import { reachedServer, serverKeyOf } from './matchers.ts';
-import type { Observation } from './matchers.ts';
-import { swapHost } from './netem-client.ts';
-import type { NetemClient } from './netem-client.ts';
-import type { ServerClient } from './server-client.ts';
-import type { StepEnv } from './steps.ts';
-import type { TokenStore } from './tokens.ts';
-import type { LoginSpec, NetworkValue, RequestSpec, RevokeSpec, SetTokenSpec } from './types.ts';
+import { sleep } from "./http.ts";
+import { classifyError } from "./classify.ts";
+import type { ClientHandle } from "./client-factory.ts";
+import { DNS_FAIL_HOST, EXPIRE_LOCAL_TTL_MS, EXPIRE_LOCAL_WAIT_MS } from "./constants.ts";
+import type { Style } from "./constants.ts";
+import type { PendingTracker } from "./events.ts";
+import type { RequestRecord } from "./assertions.ts";
+import { reachedServer, serverKeyOf } from "./matchers.ts";
+import type { Observation } from "./matchers.ts";
+import { swapHost } from "./netem-client.ts";
+import type { NetemClient } from "./netem-client.ts";
+import type { ServerClient } from "./server-client.ts";
+import type { StepEnv } from "./steps.ts";
+import type { TokenStore } from "./tokens.ts";
+import type { LoginSpec, NetworkValue, RequestSpec, RevokeSpec, SetTokenSpec } from "./types.ts";
 
 /** 通过代理把客户端接到服务器的信息 */
-export interface ProxyEndpoint { id: string; baseURL: string }
+export interface ProxyEndpoint {
+  id: string;
+  baseURL: string;
+}
 
 /** RunEnvironment 的构造参数 */
 export interface RunEnvDeps {
@@ -23,7 +26,6 @@ export interface RunEnvDeps {
   server: ServerClient;
   netem: NetemClient;
   tokens: TokenStore;
-  events: EventLog;
   tracker: PendingTracker;
   /** 测试服务器地址（dns 切换与 netem upstream 用） */
   serverUrl: string;
@@ -36,7 +38,7 @@ export interface RunEnvDeps {
 }
 
 /** 默认的用户名（login 没写 user 时） */
-const DEFAULT_USER = 'user';
+const DEFAULT_USER = "user";
 
 /**
  * step 的具体执行环境：把 StepEnv 的每个动作落到真实的 axp 客户端、旁路服务器客户端与 netem 上，
@@ -48,7 +50,6 @@ export class RunEnvironment implements StepEnv {
   readonly order: string[] = [];
   /** 运行被中止（超时）后，不再发起新动作 */
   stopped = false;
-  #seq = 0;
   #d: RunEnvDeps;
   #proxy: ProxyEndpoint | undefined;
 
@@ -58,7 +59,9 @@ export class RunEnvironment implements StepEnv {
   }
 
   /** 当前代理（可能在运行中创建），供清理使用 */
-  get proxy(): ProxyEndpoint | undefined { return this.#proxy; }
+  get proxy(): ProxyEndpoint | undefined {
+    return this.#proxy;
+  }
 
   /** 等待指定毫秒（step 编排通过环境接口调用，便于单测替换） */
   sleep(ms: number): Promise<void> {
@@ -67,14 +70,17 @@ export class RunEnvironment implements StepEnv {
 
   /** 安全地观测服务端：失败返回 undefined（观测本身出问题不应打断场景） */
   async #observe(): Promise<Observation | undefined> {
-    try { return await this.#d.server.observe(); } catch { return undefined; }
+    try {
+      return await this.#d.server.observe();
+    } catch {
+      return undefined;
+    }
   }
 
   async request(spec: RequestSpec, idSuffix: string): Promise<void> {
     if (this.stopped) return;
-    const { client, tracker, events, server } = this.#d;
+    const { client, tracker, server } = this.#d;
     const id = `${spec.id}${idSuffix}`;
-    const tkReq = `${id}~${++this.#seq}`;
     const style: Style = server.style;
     const probe = this.#d.reachIds.has(id);
     const before = probe ? await this.#observe() : undefined;
@@ -83,27 +89,20 @@ export class RunEnvironment implements StepEnv {
     const record: RequestRecord = { id, style, ok: false };
     tracker.start();
     try {
-      record.data = await client.send(spec, { tkReq, signal: ctrl?.signal });
+      record.data = await client.send(spec, { signal: ctrl?.signal });
       record.ok = true;
     } catch (e) {
-      record.kind = classifyError(e, { style, tags: events.tagsOf(tkReq) });
+      record.kind = classifyError(e);
       record.message = (e as Error)?.message;
     } finally {
       if (timer) clearTimeout(timer);
-    }
-    // 业务风格下 auth 在"过期/越权"后会把失败响应原样 resolve，此时以 auth 标签为准判为失败
-    const tags = events.tagsOf(tkReq);
-    if (record.ok && tags.size > 0) {
-      record.ok = false;
-      record.data = undefined;
-      record.kind = classifyError(undefined, { style, tags });
     }
     tracker.settle();
     this.order.push(id);
     this.records.set(id, record);
     if (probe && before) {
       const after = await this.#observe();
-      if (after) record.reached = reachedServer(before, after, serverKeyOf(spec.method ?? 'GET', spec.path, spec.query));
+      if (after) record.reached = reachedServer(before, after, serverKeyOf(spec.method ?? "GET", spec.path, spec.query));
     }
   }
 
@@ -112,7 +111,6 @@ export class RunEnvironment implements StepEnv {
     const t = await server.login(spec);
     tokens.set(t.accessToken, t.refreshToken);
     tokens.user = spec.user ?? DEFAULT_USER;
-    tokens.canRefresh = true;
   }
 
   setToken(spec: SetTokenSpec): void {
@@ -128,16 +126,15 @@ export class RunEnvironment implements StepEnv {
 
   async revoke(spec: RevokeSpec): Promise<void> {
     const { server, tokens } = this.#d;
-    await server.revoke(spec.user ?? tokens.user ?? DEFAULT_USER, spec.scope ?? 'all');
+    await server.revoke(spec.user ?? tokens.user ?? DEFAULT_USER, spec.scope ?? "all");
   }
 
   async expireLocal(): Promise<void> {
     const { server, tokens } = this.#d;
-    if (!tokens.user) throw new Error('expire_local 需要先 login');
+    if (!tokens.user) throw new Error("expire_local 需要先 login");
     // 向服务器重新登录一个 ttl=1 的会话，只取它的 access，refresh 保持不变
     const t = await server.login({ user: tokens.user, access_ttl_ms: EXPIRE_LOCAL_TTL_MS });
     tokens.setAccessHeader(`Bearer ${t.accessToken}`);
-    tokens.canRefresh = true;
     await this.sleep(EXPIRE_LOCAL_WAIT_MS);
   }
 
@@ -151,11 +148,11 @@ export class RunEnvironment implements StepEnv {
 
   async network(value: NetworkValue): Promise<void> {
     const { client, netem, serverUrl } = this.#d;
-    if (value === 'dns') {
+    if (value === "dns") {
       client.setBaseURL(swapHost(serverUrl, DNS_FAIL_HOST));
       return;
     }
-    if (!this.#proxy) this.#proxy = await this.#d.openProxy('normal');
+    if (!this.#proxy) this.#proxy = await this.#d.openProxy("normal");
     client.setBaseURL(this.#proxy.baseURL);
     await netem.apply(this.#proxy.id, value);
   }

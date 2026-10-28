@@ -1,251 +1,335 @@
-// Power-set correctness sweep — axp port of dioman's dioman_powerset_test.dart.
-//
-// Ported from dioman (Dio) to axp (axios). Two structural differences from
-// the Dio original, both load-bearing for how this file's assertions differ:
-//
-//   1. LIFO/FIFO: Dio's interceptor chain is a single FIFO list — the same
-//      install order applies to both onRequest and onResponse. Axios splits
-//      this: request interceptors run LIFO (last `use()`d runs first),
-//      response interceptors run FIFO (first `use()`d runs first) — see
-//      src/plugin.ts's class doc. A single `.use()` order cannot reproduce
-//      Dio's "same order both directions" on axios. This file picks ONE
-//      canonical order (below, mirroring Dio's canonical list positions
-//      1:1 minus `log`, which has no axp equivalent) and lets axios's real,
-//      documented semantics decide the resulting behavior — it is NOT
-//      asserting byte-identical internal traversal order to Dio, only that
-//      axp's OWN composition is internally consistent per combination.
-//
-//   2. Unwrapping: Dio's DiomanNormalize is what unwraps the envelope
-//      (`{code,data,message}` → `data`) — without it, callers see the raw
-//      envelope. axp unwraps unconditionally at `Core`'s dispatch layer
-//      (`shapeResponse` in src/core.ts), independent of any plugin.
-//      `normalize` here does NOT unwrap — it only turns a business
-//      failure (`code !== 0`) into a thrown `ApiError`. So unlike Dio, the
-//      baseline success sweep's returned shape does NOT depend on whether
-//      `normalize` is in the mask — it's always the unwrapped
-//      `{ v: 1 }`, with or without it.
-//
-// Also unlike Dio's version, this uses `makeNetwork()` (in-process fake
-// adapter, test/helpers/network.ts) instead of a real loopback HTTP server —
-// no real sockets are opened, so none of Dio's TIME_WAIT/ephemeral-port
-// pacing is needed here; the whole exception-path sweep runs in-process and
-// fast.
-//
-// 12 plugins (dioman's 13 minus `log`, which axp has no equivalent for) →
-// 2^12 - 1 = 4095 non-empty combinations per sweep (vs. dioman's 8191).
-import { describe, it } from 'vitest';
-import axios from 'axios';
-import {
-  Axp,
-  axpEnvs as envs, axpRepath as repath, axpFilter as filter, axpKey as key, axpCache as cache,
-  axpShare as share, axpMock as mock, axpCancel as cancel, axpLoading as loading, axpAuth as auth,
-  axpRetry as retry, axpNormalize as normalize,
-} from '../../src';
-import type { ITokenManager } from '../../src';
-import { makeNetwork } from '../helpers/network';
-import { use } from '../helpers/install';
+import { AxiosError, type InternalAxiosRequestConfig } from "axios";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import axpAuth from "../../src/plugins/auth";
+import axpCache from "../../src/plugins/cache";
+import axpFilter from "../../src/plugins/filter";
+import axpLoading from "../../src/plugins/loading";
+import axpMock from "../../src/plugins/mock";
+import axpNotify from "../../src/plugins/notify";
+import axpRepath from "../../src/plugins/repath";
+import axpRetry from "../../src/plugins/retry";
+import axpShare from "../../src/plugins/share";
+import type { ITokenManager } from "../../src/objects/TokenManager";
+import { isAxpResponse, type AxpKind, type AxpResponse } from "../../src/response";
+import type { AxpPlugin, AxpRequestConfig } from "../../src/types";
+import { guarded, memoryTokens, REFRESH_TOKEN, TOKEN_NEW } from "../helpers/b3";
+import type { ITestEvents } from "../helpers/client";
+import { countRefresh, createInvariantHarness, createNotifyRecorder, type IInvariantHarness } from "../helpers/invariants";
+import type { RouteResult } from "../helpers/network";
+import { recordEvents } from "../helpers/client";
+import { loadingRecorder } from "../helpers/ui";
 
-class MutableTokenManager implements ITokenManager {
-  canRefresh = true;
-  #access: string | undefined;
-  #refresh: string | undefined = 'refresh';
-  constructor(access: string) { this.#access = access; }
-  get accessToken() { return this.#access; }
-  get refreshToken() { return this.#refresh; }
-  set(access?: string, refresh?: string) {
-    this.#access = access;
-    if (refresh !== undefined) this.#refresh = refresh;
-  }
-  clear() { this.#access = undefined; }
+/** 插件表的一项：子集就是这些项的任意组合。 */
+interface IPluginEntry {
+  /** 子集名里显示的短名，表内唯一。 */
+  name: string;
+  /** 为一次运行造全新的插件对象；events 供需要观测回调的插件绑定。 */
+  make: (events: ITestEvents) => AxpPlugin<AxpResponse, any>;
+  /** 必须同时在场的其它插件名；子集缺任意一个就不生成。 */
+  needs?: string[];
+}
+/** 一个子集：用于标题的名字与成员。 */
+interface ISubset {
+  /** 成员短名按插件表顺序用 + 连接；空集用 EMPTY_LABEL。 */
+  label: string;
+  /** 本子集的插件表项。 */
+  entries: IPluginEntry[];
+}
+/** 一条脚本化流程。 */
+interface IFlow {
+  /** 流程名，出现在用例标题里。 */
+  name: string;
+  /** 无插件时每个逻辑请求应得到的 kind，只用来确认脚本没有空转，不参与 powerset 断言。 */
+  baseline: AxpKind[];
+  /** 只发请求、推进假时钟，不断言结果；收尾由用例统一排空并检查不变量。 */
+  run(h: IInvariantHarness): Promise<void>;
 }
 
-// Canonical registration order — same relative order as Dio's Dioman.install
-// list (envs, repath, filter, key, cache, share, mock, cancel, loading, auth,
-// retry, [log dropped], normalize), renamed to axp's plugin names. See the
-// file doc: this is a *choice*, not a re-derivation of Dio's exact traversal.
-const _names = [
-  'envs', 'repath', 'filter', 'key', 'cache', 'share', 'mock', //
-  'cancel', 'loading', 'auth', 'retry', 'normalize',
-] as const;
+/** 空子集的标题。 */
+const EMPTY_LABEL = "无插件";
+/** 假网络上的各条路径。 */
+const PATH = {
+  /** 恒 200。 */ ok: "/combo/ok",
+  /** 恒 500。 */ http500: "/combo/http500",
+  /** 抛网络错误。 */ offline: "/combo/offline",
+  /** 并发同 key 的两个请求共用。 */ same: "/combo/same",
+  /** 慢响应，给取消留出窗口。 */ slow: "/combo/slow",
+  /** 带路径变量。 */ user: "/combo/users/:id/orders",
+  /** 前两次 500，之后成功。 */ flaky: "/combo/flaky",
+  /** 受保护：只认刷新后的新 token，旧 token 得到 HTTP 200 + 业务码 401。 */ auth: "/combo/auth",
+} as const;
+/** mock 服务器基址；探测它的请求一律 404，让 mock 插件确定地回落真实接口。 */
+const MOCK_URL = "http://mock";
+/** mock 服务器上没有这条接口。 */
+const NOT_FOUND = 404;
+/** flaky 路径前这么多次发送返回 500，之后成功。 */
+const FLAKY_FAILURES = 2;
+/** retry 的预算：恰好够 flaky 路径在第三次发送时成功。 */
+const RETRY_MAX = 2;
+/** 请求级开启 cache 与 share；插件没装时这两个字段无人读取。 */
+const SOURCE_OPTIONS = { cache: true, share: true } as const;
+/** 受保护路径上并发请求的参数：两个同 key，一个不同 key，同时覆盖共享与单飞刷新。 */
+const AUTH_PARAMS = [{ id: 1 }, { id: 1 }, { id: 2 }] as const;
+/** 受保护路径的服务端：只认刷新后的新 token，其余按业务码 401 失败。 */
+const authRoute = guarded(() => TOKEN_NEW, true);
+/** 短延迟：比 loading 的显示延迟更短，显示定时器会在结束前被取消。 */
+const LATENCY_SHORT = 10;
+/** 中延迟：比 loading 的显示延迟更长，会真正显示再隐藏。 */
+const LATENCY_MEDIUM = 30;
+/** 长延迟：取消流程里请求停在半途。 */
+const LATENCY_LONG = 100;
+/** 取消前推进的假时间，落在 loading 已显示、请求未返回之间。 */
+const CANCEL_AT = 40;
+/** loading 的显示与隐藏延迟（毫秒），让防闪烁定时器参与组合。 */
+const LOADING_DELAY = 20;
+/** 并发同 key 流程里两个请求的错开延迟，制造先后返回。 */
+const SAME_KEY_LATENCIES = [20, 40] as const;
+/** 服务端返回的 HTTP 500。 */
+const HTTP_ERROR = 500;
+/** 用例标题统一前缀。 */
+const TITLE = "[combo.powerset]";
+/** 有中间件的内置插件，按插件表顺序；envs 只在装卸时执行、不进链，不在其中。 */
+const MIDDLEWARE_PLUGINS = ["loading", "notify", "repath", "filter", "retry", "auth", "mock", "share", "cache"];
+/** 九个插件的全部子集数（含空集与全集）。 */
+const SUBSET_COUNT = 512;
 
-function _hasBit(mask: number, bit: number): boolean {
-  return (mask & (1 << bit)) !== 0;
-}
-const _hasKey = (mask: number) => _hasBit(mask, 3);
-const _hasCache = (mask: number) => _hasBit(mask, 4);
-const _hasAuth = (mask: number) => _hasBit(mask, 9);
-const _hasRetry = (mask: number) => _hasBit(mask, 10);
-
-function _describe(mask: number): string {
-  const out: string[] = [];
-  for (let i = 0; i < _names.length; i++) if (mask & (1 << i)) out.push(_names[i]);
-  return out.join('+');
-}
-
-/** Installs the subset of the 12 plugins selected by `mask`'s bits (bit i ↔
- *  `_names[i]`) onto a fresh Core, in the canonical order above.
- *  `retry`/`auth` are configured to recover in exactly 1 extra attempt so
- *  the exception-path phases stay deterministic and fast. */
-function _install(adapter: any, mask: number, tm: MutableTokenManager) {
-  const has = (bit: number) => _hasBit(mask, bit);
-  const api = Axp.create(axios.create({ adapter }));
-  const plugins = [];
-  if (has(0)) plugins.push(envs([]));
-  if (has(1)) plugins.push(repath());
-  if (has(2)) plugins.push(filter());
-  if (has(3)) plugins.push(key());
-  if (has(4)) plugins.push(cache());
-  if (has(5)) plugins.push(share({ policy: 'start' }));
-  if (has(6)) plugins.push(mock()); // enable defaults false — installed but inert, matching Dio's DiomanMock(enabled:false)
-  if (has(7)) plugins.push(cancel());
-  if (has(8)) plugins.push(loading({ loading: () => {} }));
-  if (has(9)) {
-    plugins.push(auth({
-      tokenManager: tm,
-      onRefresh: async () => { tm.set('Bearer t1'); },
-      onAccessExpired: async () => {},
-    }));
-  }
-  if (has(10)) plugins.push(retry({ max: 1, delay: 0 }));
-  if (has(11)) plugins.push(normalize());
-  use(api, plugins);
-  return api;
-}
-
-function headerOf(config: any, name: string): unknown {
-  const h = config?.headers;
-  if (!h) return undefined;
-  if (typeof h.get === 'function') return h.get(name);
-  return h[name] ?? h[name.toLowerCase()];
+/** 给请求配置加上假网络的延迟字段。 */
+function withLatency(config: AxpRequestConfig, latency: number): AxpRequestConfig {
+  return { ...config, latency } as AxpRequestConfig;
 }
 
-/** Per-request opt-in flags. `key` is deliberately gated on `_hasKey(mask)` —
- *  unlike the other flags, its VALUE (not just presence) is consumed
- *  downstream: cache's key-resolution falls back to reading `config.key`
- *  verbatim (trusting key to have overwritten it with a real hash
- *  string). Passing a literal `key: true` unconditionally would leak a
- *  stable-but-bogus cache key even when key is absent, producing a false
- *  "hit" between calls and breaking the documented no-op-without-key
- *  behavior this sweep is verifying. */
-function reqCfg(mask: number): Record<string, unknown> {
-  const cfg: Record<string, unknown> = { filter: true, cache: true };
-  if (_hasKey(mask)) cfg.key = true;
-  return cfg;
+/** 刷新实现：同步换上新 token。 */
+function refreshToken(_response: AxpResponse, tm: ITokenManager): void {
+  tm.set(TOKEN_NEW, REFRESH_TOKEN);
 }
 
-describe('axp power-set sweep — 12 plugins, 4095 combinations', () => {
-  it('every non-empty subset returns the expected value on a plain success', async () => {
-    const net = makeNetwork();
-    let lastAuthHeader: unknown;
-    net.on('GET', '/base', (config) => {
-      lastAuthHeader = headerOf(config, 'Authorization');
-      return { status: 200, data: { code: 0, data: { v: 1 }, message: '' } };
+/** 插件表：九个有中间件的内置插件，子集与用例自动展开。auth 的 onRefresh 用 countRefresh 包装，I5 才有数据。 */
+const PLUGINS: IPluginEntry[] = [
+  {
+    name: "loading",
+    make: (events) =>
+      axpLoading({
+        loading: loadingRecorder(events),
+        delay: LOADING_DELAY,
+        delayClose: LOADING_DELAY,
+      }),
+  },
+  { name: "notify", make: (events) => axpNotify<AxpResponse>(createNotifyRecorder(events)) },
+  { name: "repath", make: () => axpRepath() },
+  { name: "filter", make: () => axpFilter() },
+  { name: "retry", make: () => axpRetry({ max: RETRY_MAX, delay: 0 }) },
+  {
+    name: "auth",
+    make: (events) =>
+      axpAuth({
+        tokenManager: memoryTokens(),
+        onRefresh: countRefresh(events, refreshToken),
+        onAccessExpired: /** 过期通知不做任何事。 */ () => undefined,
+      }),
+  },
+  {
+    name: "mock",
+    make: () => axpMock({ enable: true, mock: true, mockUrl: MOCK_URL }),
+  },
+  { name: "share", make: () => axpShare() },
+  { name: "cache", make: () => axpCache() },
+];
+
+/** 枚举插件表的全部子集（含空集），剔除不满足 needs 的。
+ * @param table 插件表。
+ * @returns 按位掩码从小到大排列的子集。
+ * @example `subsetsOf(PLUGINS).length // 512`
+ */
+function subsetsOf(table: readonly IPluginEntry[]): ISubset[] {
+  const subsets: ISubset[] = [];
+  for (let mask = 0; mask < 1 << table.length; mask++) {
+    const entries = table.filter(/** 掩码的第 index 位为 1 才入选。 */ (_, index) => (mask & (1 << index)) !== 0);
+    const names = new Set(entries.map(/** 取短名。 */ (entry) => entry.name));
+    if (entries.some(/** 依赖没到齐的子集不生成。 */ (entry) => entry.needs?.some(/** 缺任一依赖即失败。 */ (need) => !names.has(need)))) continue;
+    subsets.push({
+      label: entries.length ? entries.map(/** 取短名。 */ (entry) => entry.name).join("+") : EMPTY_LABEL,
+      entries,
     });
+  }
+  return subsets;
+}
 
-    const failures: Record<string, string> = {};
-    const total = (1 << _names.length) - 1;
-    for (let mask = 1; mask <= total; mask++) {
-      const name = _describe(mask);
-      const api = _install(net.adapter, mask, new MutableTokenManager('Bearer t0'));
-      lastAuthHeader = undefined;
-      try {
-        const r: any = await api.get('/base')(undefined, reqCfg(mask));
-        if (r?.v !== 1) {
-          failures[name] = `unexpected body ${JSON.stringify(r)}`;
-        } else if (_hasAuth(mask) && lastAuthHeader !== 'Bearer t0') {
-          failures[name] = `auth installed but server saw Authorization: ${lastAuthHeader}`;
-        } else if (!_hasAuth(mask) && lastAuthHeader !== undefined) {
-          failures[name] = `no auth but server still saw Authorization: ${lastAuthHeader}`;
-        }
-      } catch (e: any) {
-        failures[name] = String(e?.message ?? e);
-      }
-    }
+/** 假网络的统一路由：按路径前缀返回 404（mock 探测）、500、网络错误、业务码 401 或 200（回显地址）。 */
+function route(config: InternalAxiosRequestConfig, hit: number): RouteResult {
+  const url = config.url ?? "";
+  if (url.startsWith(MOCK_URL)) return { status: NOT_FOUND };
+  if (url.startsWith(PATH.auth)) return authRoute(config, hit) ?? {};
+  if (url.startsWith(PATH.flaky) && hit <= FLAKY_FAILURES) return { status: HTTP_ERROR, data: { code: HTTP_ERROR, message: "flaky", data: null } };
+  if (url.startsWith(PATH.http500)) return { status: HTTP_ERROR, data: { code: HTTP_ERROR, message: "boom", data: null } };
+  if (url.startsWith(PATH.offline)) throw new AxiosError("Network Error", AxiosError.ERR_NETWORK, config);
+  return { status: 200, data: { code: 0, data: { url } } };
+}
 
-    if (Object.keys(failures).length) {
-      const sample = Object.entries(failures).slice(0, 20).map(([k, v]) => `${k}: ${v}`).join('\n');
-      throw new Error(`${Object.keys(failures).length}/${total} combinations failed (showing up to 20):\n${sample}`);
-    }
-  }, 180_000);
+/** 全部脚本化流程；每个流程只管发请求和推进时间。 */
+const FLOWS: IFlow[] = [
+  {
+    name: "成功",
+    baseline: ["ok", "ok"],
+    /** 带空查询字段的 GET，延迟跨过 loading 的显示窗口；排空后再发一次相同请求，装了 cache 时第二次命中。 */
+    async run(h) {
+      const request = { url: PATH.ok, params: { page: 1, q: "" }, ...SOURCE_OPTIONS };
+      h.launch(withLatency(request, LATENCY_MEDIUM));
+      await h.drain();
+      h.launch(withLatency(request, LATENCY_MEDIUM));
+    },
+  },
+  {
+    name: "HTTP 500",
+    baseline: ["http"],
+    /** 默认 throws 的失败路径：调用方拿到的是被抛出的 R；装了 retry 时三次都失败。 */
+    async run(h) {
+      h.launch(withLatency({ url: PATH.http500, ...SOURCE_OPTIONS }, LATENCY_SHORT));
+    },
+  },
+  {
+    name: "HTTP 500 两次后成功",
+    baseline: ["http"],
+    /** 前两次发送 500、第三次成功：装了 retry 时在预算内恢复，没装则停在第一次的失败。 */
+    async run(h) {
+      h.launch(withLatency({ url: PATH.flaky, throws: false, ...SOURCE_OPTIONS }, LATENCY_SHORT));
+    },
+  },
+  {
+    name: "business 401 刷新",
+    baseline: ["biz", "biz", "biz"],
+    /** HTTP 200 + 业务码 401：装了 auth 时单飞刷新后重放；三个请求里两个同 key、一个不同，覆盖共享与单飞。 */
+    async run(h) {
+      for (const params of AUTH_PARAMS) h.launch(withLatency({ url: PATH.auth, params, throws: false, ...SOURCE_OPTIONS }, LATENCY_SHORT));
+    },
+  },
+  {
+    name: "网络错误",
+    baseline: ["network"],
+    /** throws: false 的失败路径：失败的 R 作为返回值。 */
+    async run(h) {
+      h.launch(withLatency({ url: PATH.offline, throws: false, ...SOURCE_OPTIONS }, LATENCY_SHORT));
+    },
+  },
+  {
+    name: "并发同 key",
+    baseline: ["ok", "ok"],
+    /** 两个请求参数完全相同、返回时间错开；装了 share、cache 时在此合并。 */
+    async run(h) {
+      for (const latency of SAME_KEY_LATENCIES) h.launch(withLatency({ url: PATH.same, params: { id: 1 }, throws: false, ...SOURCE_OPTIONS }, latency));
+    },
+  },
+  {
+    name: "中途取消",
+    baseline: ["cancel", "cancel"],
+    /** 一个带调用方 signal、一个不带，请求停在半途时 cancelAll。 */
+    async run(h) {
+      h.launch(withLatency({ url: PATH.slow, ...SOURCE_OPTIONS }, LATENCY_LONG));
+      h.launch(withLatency({ url: PATH.slow, signal: new AbortController().signal, ...SOURCE_OPTIONS }, LATENCY_LONG));
+      await vi.advanceTimersByTimeAsync(CANCEL_AT);
+      h.api.cancelAll("combo");
+    },
+  },
+  {
+    name: "单个取消",
+    baseline: ["cancel", "ok"],
+    /** 同 key 的两个请求，首发在半途用自己的 signal 取消；装了 share 时跟随者不受连累。 */
+    async run(h) {
+      const leader = new AbortController();
+      h.launch(withLatency({ url: PATH.slow, signal: leader.signal, throws: false, ...SOURCE_OPTIONS }, LATENCY_LONG));
+      h.launch(withLatency({ url: PATH.slow, throws: false, ...SOURCE_OPTIONS }, LATENCY_LONG));
+      await vi.advanceTimersByTimeAsync(CANCEL_AT);
+      leader.abort();
+    },
+  },
+  {
+    name: "路径变量与空字段",
+    baseline: ["ok"],
+    /** POST 同时带路径变量、空查询字段和空请求体字段；cache、share 默认不处理 POST。 */
+    async run(h) {
+      h.launch(
+        withLatency(
+          {
+            method: "post",
+            url: PATH.user,
+            params: { id: 7, q: "", page: null },
+            data: { name: "a", note: "", tag: null, nested: { x: "" } },
+            throws: false,
+            ...SOURCE_OPTIONS,
+          },
+          LATENCY_SHORT,
+        ),
+      );
+    },
+  },
+];
 
-  it('every non-empty subset recovers correctly from a 500, a cache-populating round trip, and a 401 refresh+replay', async () => {
-    const net = makeNetwork();
-    const failures: Record<string, string> = {};
-    const total = (1 << _names.length) - 1;
+/** 全部子集：插件表有 n 项且无 needs 时共 2^n 个。 */
+const SUBSETS = subsetsOf(PLUGINS);
+/** describe.each 的用例参数：标题用 %s 展开，避免对象插值给字符串加引号。 */
+const SUBSET_CASES = SUBSETS.map(/** 转成 [子集名, 成员]。 */ (subset): [string, IPluginEntry[]] => [subset.label, subset.entries]);
+/** it.each 的用例参数：[流程名, 流程]。 */
+const FLOW_CASES = FLOWS.map(/** 转成 [流程名, 流程]。 */ (flow): [string, IFlow] => [flow.name, flow]);
 
-    for (let mask = 1; mask <= total; mask++) {
-      const name = _describe(mask);
-      const tm = new MutableTokenManager('Bearer t0');
-      const api = _install(net.adapter, mask, tm);
+/** 在假时钟上跑一个流程，排空后检查 I1–I7。
+ * @param entries 本次安装的插件表项。
+ * @param flow 脚本化流程。
+ * @returns 夹具已销毁后的每个逻辑请求结果类别，供基线核对。
+ */
+async function runFlow(entries: readonly IPluginEntry[], flow: IFlow): Promise<string[]> {
+  const events = recordEvents();
+  const h = createInvariantHarness(
+    entries.map(/** 每次运行用全新的插件对象。 */ (entry) => entry.make(events)),
+    { events },
+  );
+  h.net.fallback(route);
+  try {
+    await flow.run(h);
+    await h.drain();
+    h.assertAll();
+    return h.requests.map(/** 落定值不是响应时标成 raw，说明有 bug 被抛了出来。 */ (request) => (isAxpResponse(request.value) ? request.value.kind : "raw"));
+  } finally {
+    h.dispose();
+  }
+}
 
-      try {
-        // --- retry: 500 then recovers -------------------------------
-        if (_hasRetry(mask)) {
-          let attemptCount = 0;
-          net.on('GET', '/retry', () => {
-            attemptCount++;
-            return attemptCount < 2
-              ? { status: 500, data: { code: 1, data: null, message: 'fail' } }
-              : { status: 200, data: { code: 0, data: { v: 1 }, message: '' } };
-          });
-          const r: any = await api.get('/retry')(undefined, reqCfg(mask));
-          if (r?.v !== 1) { failures[name] = `retry: unexpected result ${JSON.stringify(r)}`; continue; }
-          if (attemptCount !== 2) { failures[name] = `retry: expected 2 attempts, got ${attemptCount}`; continue; }
-        }
+/** 所有用例共用假时钟，不做真实等待。 */
+beforeEach(() => {
+  vi.useFakeTimers();
+});
+/** 还原真实时钟。 */
+afterEach(() => {
+  vi.useRealTimers();
+});
 
-        // --- cache: 2 calls, hit iff key is also present ----------
-        if (_hasCache(mask)) {
-          let attemptCount = 0;
-          net.on('GET', '/cache', () => {
-            attemptCount++;
-            return { status: 200, data: { code: 0, data: { v: 1 }, message: '' } };
-          });
-          const c1: any = await api.get('/cache')(undefined, reqCfg(mask));
-          const c2: any = await api.get('/cache')(undefined, reqCfg(mask));
-          if (c1?.v !== 1 || c2?.v !== 1) {
-            failures[name] = `cache: unexpected body c1=${JSON.stringify(c1)} c2=${JSON.stringify(c2)}`;
-            continue;
-          }
-          const expectedAttempts = _hasKey(mask) ? 1 : 2;
-          if (attemptCount !== expectedAttempts) {
-            failures[name] = _hasKey(mask)
-              ? `cache+key: expected a cache hit (1 attempt), got ${attemptCount}`
-              : `cache without key: expected NO cache hit (2 attempts), got ${attemptCount}`;
-            continue;
-          }
-        }
+describe(`${TITLE} 子集枚举`, () => {
+  it("覆盖 2^n 个互不相同的子集，含空集与全集", /** 位掩码枚举不重不漏。 */ () => {
+    const labels = SUBSETS.map(/** 取子集名。 */ (subset) => subset.label);
+    expect(new Set(labels).size).toBe(labels.length);
+    expect(labels).toHaveLength(2 ** PLUGINS.length);
+    expect(labels).toContain(EMPTY_LABEL);
+    expect(labels).toContain(PLUGINS.map(/** 取短名。 */ (entry) => entry.name).join("+"));
+  });
+  it("插件表恰好是九个有中间件的内置插件，子集共 512 个", /** 对应 test-plan §5.3。 */ () => {
+    expect(PLUGINS.map(/** 取短名。 */ (entry) => entry.name)).toEqual(MIDDLEWARE_PLUGINS);
+    expect(SUBSETS).toHaveLength(SUBSET_COUNT);
+  });
+  it("needs 缺失的子集不生成", /** 依赖表只影响枚举。 */ () => {
+    const table: IPluginEntry[] = [
+      { name: "a", make: PLUGINS[0].make },
+      { name: "b", make: PLUGINS[0].make, needs: ["a"] },
+    ];
+    expect(subsetsOf(table).map(/** 取子集名。 */ (subset) => subset.label)).toEqual([EMPTY_LABEL, "a", "a+b"]);
+  });
+});
 
-        // --- auth: 401 then refresh+replay — run LAST, mutates tm ----
-        if (_hasAuth(mask)) {
-          let attemptCount = 0;
-          let lastAuthHeader: unknown;
-          net.on('GET', '/auth', (config) => {
-            attemptCount++;
-            lastAuthHeader = headerOf(config, 'Authorization');
-            return attemptCount < 2
-              ? { status: 401, data: { code: 1, data: null, message: 'fail' } }
-              : { status: 200, data: { code: 0, data: { v: 1 }, message: '' } };
-          });
-          const a: any = await api.get('/auth')(undefined, reqCfg(mask));
-          if (a?.v !== 1) { failures[name] = `auth: unexpected result ${JSON.stringify(a)}`; continue; }
-          if (attemptCount !== 2) { failures[name] = `auth: expected 2 attempts, got ${attemptCount}`; continue; }
-          if (lastAuthHeader !== 'Bearer t1') {
-            failures[name] = `auth: expected replay to carry the refreshed token, server saw Authorization: ${lastAuthHeader}`;
-            continue;
-          }
-          if (tm.accessToken !== 'Bearer t1') {
-            failures[name] = `auth: token manager was not actually updated by onRefresh (still ${tm.accessToken})`;
-            continue;
-          }
-        }
-      } catch (e: any) {
-        failures[name] = String(e?.message ?? e);
-      }
-    }
+describe(`${TITLE} 基线：无插件时流程确实在做它声明的事`, () => {
+  it.each(FLOW_CASES)("%s", async (_name, flow) => {
+    expect(await runFlow([], flow)).toEqual(flow.baseline);
+  });
+});
 
-    if (Object.keys(failures).length) {
-      const sample = Object.entries(failures).slice(0, 20).map(([k, v]) => `${k}: ${v}`).join('\n');
-      throw new Error(`${Object.keys(failures).length}/${total} combinations failed (showing up to 20):\n${sample}`);
-    }
-  }, 180_000);
+describe.each(SUBSET_CASES)(`${TITLE} %s`, (_label, entries) => {
+  it.each(FLOW_CASES)("× %s", async (_name, flow) => {
+    await runFlow(entries, flow);
+  });
 });

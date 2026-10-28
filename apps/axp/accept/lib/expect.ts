@@ -1,8 +1,8 @@
-import type { NetworkName, Style } from './constants.ts';
-import type { Expectation, Scenario } from './types.ts';
+import type { NetworkName, Style } from "./constants.ts";
+import type { Expectation, Scenario } from "./types.ts";
 
 /** 通配键：对所有网络生效 */
-const WILDCARD = '*';
+const WILDCARD = "*";
 
 /**
  * 按优先级给出候选键，从低到高：`*` < `*@风格` < `网络` < `网络@风格`。
@@ -23,11 +23,13 @@ export function expectKeys(network: NetworkName, style: Style): string[] {
  * @example resolveExpectation(sc, 'normal', 'business')
  */
 export function resolveExpectation(scenario: Scenario, network: NetworkName, style: Style): Expectation | null {
-  let merged: Expectation | null = null;
+  const merged: Expectation = {};
+  let matched = false;
   for (const key of expectKeys(network, style)) {
     const e = scenario.expect[key];
     if (!e) continue;
-    merged = { ...(merged ?? {}), ...e };
+    Object.assign(merged, e);
+    matched = true;
   }
-  return merged;
+  return matched ? merged : null;
 }

@@ -1,185 +1,192 @@
-import { describe, it, expect, vi } from 'vitest';
-import axios, { AxiosError } from 'axios';
-import mock from '../../src/plugins/mock';
+import { expect, it, vi } from "vitest";
+import axpMock, { type IMockOptions } from "../../src/plugins/mock";
+import type { AxpResponse } from "../../src/response";
+import type { AxpLogger } from "../../src/types";
+import { envelope, sourceClient } from "../helpers/source";
 
-/** 构造指定状态和路径的 adapter 响应。 */
-function response(config: any, status = 200) {
-    return { status, statusText: '', headers: {}, config, data: config.url };
+/** mock 服务器基址。 */
+const MOCK = "http://mock";
+/** 被 mock 的接口。 */
+const REAL = "/real";
+/** 真实接口返回值。 */
+const REAL_DATA = "from-real";
+/** mock 返回值。 */
+const MOCK_DATA = "from-mock";
+/** 探测地址。 */
+const PROBE = `${MOCK}${REAL}`;
+
+/** 可观测的调试日志。 */
+function logger() {
+  return { log: vi.fn(), warn: vi.fn(), error: vi.fn() };
+}
+/** 装好 mock 与两条路由的客户端。 */
+function mockClient(options: IMockOptions<AxpResponse> = {}, debug?: AxpLogger) {
+  const h = sourceClient([axpMock({ enable: true, mockUrl: MOCK, ...options })], debug ? { debug } : {});
+  h.net.on("get", PROBE, () => envelope(MOCK_DATA));
+  h.net.on("get", REAL, () => envelope(REAL_DATA));
+  return h;
 }
 
-describe('mock — 裸 axios.create()（非函数 adapter）', () => {
-    it('[mock.fn.axpMock] 安装不崩；mock 返回 403 时不回落真实接口', async () => {
-        const seen: string[] = [];
-        const net = vi.fn(async (config: any) => {
-            seen.push(config.url);
-            const status = String(config.url).startsWith('http://m') ? 403 : 200;
-            const resp = { status, statusText: '', headers: {}, config, data: 'x' };
-            if (status >= 400) throw Object.assign(new Error('forbidden'), { response: resp, config, isAxiosError: true });
-            return resp as any;
-        });
-        const ax = axios.create({ adapter: [net as any] });
-        mock({ enable: true, mockUrl: 'http://m' }).install(ax);
-        await expect(ax.get('/api', { mock: true })).rejects.toThrow('forbidden');
-        expect(seen).toEqual(['http://m/api']);
-    });
+it.each([
+  ["插件与请求都没有 mockUrl", { mockUrl: undefined }, true],
+  ["空串 mockUrl 视为未配置", { mockUrl: "" }, true],
+  ["请求级空串不回退到插件级", {}, { mockUrl: "" }],
+])("[mock.opt.mockUrl][mock.req.mock.mockUrl] %s：跳过 mock 直接请求真实接口，debug 下 warn", async (_label, options, mock) => {
+  const debug = logger();
+  const h = mockClient(options, debug);
+  const r = await h.send({ url: REAL, mock });
+  expect(r.data).toBe(REAL_DATA);
+  expect(h.net.calls("get", PROBE)).toBe(0);
+  expect(debug.warn).toHaveBeenCalledOnce();
+  expect(debug.warn.mock.calls[0][0]).toContain("mockUrl");
 });
 
-describe('mock — 回落决策与 adapter 配置隔离', () => {
-    it('[mock.opt.mockUrl] 缺少 mockUrl 直接发送真实请求并经自定义 sink 记录警告', async () => {
-        const sink = { log: vi.fn(), warn: vi.fn(), error: vi.fn() };
-        const adapter = vi.fn(async (c) => response(c));
-        const ax = axios.create({ adapter });
-        mock({ enable: true }).install(ax);
-        await ax.get('/real', { mock: true, debug: true, logger: sink });
-        expect(adapter).toHaveBeenCalledOnce();
-        expect(adapter.mock.calls[0][0].url).toBe('/real');
-        expect(sink.warn).toHaveBeenCalledOnce();
-    });
-    it('[mock.fn.axpMock] 真实回落失败保留真实错误，不再重复回落', async () => {
-        const first = new AxiosError('mock offline');
-        const last = new Error('real offline');
-        const adapter = vi.fn().mockRejectedValueOnce(first).mockRejectedValue(last);
-        const ax = axios.create({ adapter });
-        mock({ enable: true, mockUrl: '/mock' }).install(ax);
-        await expect(ax.get('/real', { mock: true })).rejects.toBe(last);
-        expect(adapter).toHaveBeenCalledTimes(2);
-    });
-    it('[mock.cb.fallbackWhen][mock.method.cleanup] 自定义判定抛错会拒绝，不发送真实回落；卸载后保持原 adapter', async () => {
-        const error = new Error('decide');
-        const adapter = vi.fn(async (c) => response(c));
-        const ax = axios.create({ adapter });
-        const off = mock({ enable: true, mockUrl: '/mock', fallbackWhen: () => { throw error; } }).install(ax);
-        await expect(ax.get('/real', { mock: true })).rejects.toBe(error);
-        expect(adapter).toHaveBeenCalledOnce();
-        off?.();
-        expect(ax.defaults.adapter).toBe(adapter);
-    });
+it("[mock.opt.mockUrl] 没开 debug 时跳过 mock 不输出任何日志", async () => {
+  const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+  const h = mockClient({ mockUrl: undefined });
+  expect((await h.send({ url: REAL, mock: true })).data).toBe(REAL_DATA);
+  expect(warn).not.toHaveBeenCalled();
 });
 
-/** 记录每次请求 url 的 adapter，用于判断走了 mock 还是真实。 */
-function urlAdapter() {
-    return vi.fn(async (c: any) => response(c));
-}
-
-/** 取 adapter 依次收到的 url。 */
-function urls(adapter: ReturnType<typeof urlAdapter>) {
-    return adapter.mock.calls.map((c) => c[0].url);
-}
-
-describe('mock — 插件选项边界', () => {
-    it('[mock.opt.enable][mock.method.install] enable:false 不包装 adapter，install 不返回 cleanup', () => {
-        const adapter = urlAdapter();
-        const ax = axios.create({ adapter });
-        expect(mock({ enable: false, mockUrl: '/mock' }).install(ax)).toBeUndefined();
-        expect(ax.defaults.adapter).toBe(adapter);
-    });
-
-    it('[mock.opt.enable] enable:true 但缺 mockUrl：mock:true 请求直接走真实并 warn', async () => {
-        const sink = { log: vi.fn(), warn: vi.fn(), error: vi.fn() };
-        const adapter = urlAdapter();
-        const ax = axios.create({ adapter });
-        mock({ enable: true, mock: true }).install(ax);
-        await ax.get('/a', { debug: true, logger: sink });
-        expect(urls(adapter)).toEqual(['/a']);
-        expect(sink.warn).toHaveBeenCalledOnce();
-    });
-
-    it('[mock.opt.mock] 请求 mock 为 null / 0 时回退插件级 mock 值', async () => {
-        const adapter = urlAdapter();
-        const ax = axios.create({ adapter });
-        mock({ enable: true, mock: true, mockUrl: '/mock' }).install(ax);
-        await ax.get('/a', { mock: null as any });
-        await ax.get('/b', { mock: 0 as any });
-        expect(urls(adapter)).toEqual(['/mock/a', '/mock/b']);
-
-        const adapter2 = urlAdapter();
-        const ax2 = axios.create({ adapter: adapter2 });
-        mock({ enable: true, mock: undefined, mockUrl: '/mock' }).install(ax2);
-        await ax2.get('/a', { mock: null as any });
-        expect(urls(adapter2)).toEqual(['/a']);
-    });
-
-    it('[mock.method.cleanup] cleanup 重复调用安全，卸载后 adapter 还原且可重装', async () => {
-        const adapter = urlAdapter();
-        const ax = axios.create({ adapter });
-        const off = mock({ enable: true, mockUrl: '/mock' }).install(ax) as () => void;
-        off();
-        expect(() => off()).not.toThrow();
-        expect(ax.defaults.adapter).toBe(adapter);
-        mock({ enable: true, mockUrl: '/mock' }).install(ax);
-        await ax.get('/a', { mock: true });
-        expect(urls(adapter)).toEqual(['/mock/a']);
-    });
+it.each([`${MOCK}/`, `${MOCK}///`])("[mock.opt.mockUrl] 基址 %s 结尾斜杠不产生双斜杠，绝对地址去掉原 origin 保留 query", async (base) => {
+  const h = mockClient({ mockUrl: base });
+  h.net.on("get", `${MOCK}/pet?id=1`, () => envelope(MOCK_DATA));
+  const r = await h.send({ url: "http://real.example/pet?id=1", mock: true });
+  expect(r.data).toBe(MOCK_DATA);
+  expect(r.request.url).toBe(`${MOCK}/pet?id=1`);
 });
 
-describe('mock — 请求级 mock 配置边界', () => {
-    it('[mock.req.mock] 空对象 {} 且无插件级 mockUrl：走真实；有插件级 mockUrl：沿用插件级 mock', async () => {
-        const a1 = urlAdapter();
-        const ax1 = axios.create({ adapter: a1 });
-        mock({ enable: true }).install(ax1);
-        await ax1.get('/a', { mock: {} });
-        expect(urls(a1)).toEqual(['/a']);
+it("[mock.opt.mockUrl] 请求没有 url 时探测改写 baseURL", async () => {
+  const seen: { baseURL?: string; url?: string }[] = [];
+  const h = sourceClient([axpMock({ enable: true, mockUrl: MOCK })], {}, async (config) => {
+    seen.push({ baseURL: config.baseURL, url: config.url });
+    return { status: 200, statusText: "", headers: {}, config, data: { code: 0, data: 1 } };
+  });
+  await h.send({ url: undefined, mock: true });
+  expect(seen).toEqual([{ baseURL: MOCK, url: undefined }]);
+});
 
-        const a2 = urlAdapter();
-        const ax2 = axios.create({ adapter: a2 });
-        mock({ enable: true, mockUrl: '/mock' }).install(ax2);
-        await ax2.get('/a', { mock: {} });
-        expect(urls(a2)).toEqual(['/mock/a']);
-    });
+it("[mock.cb.fallbackWhen] 判定抛错按程序 bug 抛原始异常，不发送真实回落，后续请求不受影响", async () => {
+  const bug = new Error("fallback bug");
+  const h = mockClient({
+    fallbackWhen: () => {
+      throw bug;
+    },
+  });
+  await expect(h.send({ url: REAL, mock: true })).rejects.toBe(bug);
+  expect(h.net.calls("get", REAL)).toBe(0);
+  expect((await h.send({ url: REAL, mock: false })).data).toBe(REAL_DATA);
+});
 
-    it('[mock.req.mock.mock] mock:undefined 视同未指定；mock:false 压过插件级 mock:true', async () => {
-        const adapter = urlAdapter();
-        const ax = axios.create({ adapter });
-        mock({ enable: true, mock: true, mockUrl: '/mock' }).install(ax);
-        await ax.get('/a', { mock: { mock: undefined } });
-        await ax.get('/b', { mock: { mock: false } });
-        expect(urls(adapter)).toEqual(['/mock/a', '/b']);
-    });
+it.each([
+  [1, true],
+  ["yes", true],
+  [0, false],
+  ["", false],
+])("[mock.cb.fallbackWhen] 判定返回 %j 按真值决定是否回落", async (verdict, falls) => {
+  const h = mockClient({ fallbackWhen: () => verdict as never });
+  const r = await h.send({ url: REAL, mock: true });
+  expect(r.data).toBe(falls ? REAL_DATA : MOCK_DATA);
+  expect(h.net.calls("get", REAL)).toBe(falls ? 1 : 0);
+});
 
-    it('[mock.req.mock.mockUrl] 空字符串 mockUrl 视为未配置：不 mock 且不回退到插件级', async () => {
-        const adapter = urlAdapter();
-        const ax = axios.create({ adapter });
-        mock({ enable: true, mockUrl: '/mock' }).install(ax);
-        await ax.get('/a', { mock: { mockUrl: '' } });
-        expect(urls(adapter)).toEqual(['/a']);
-    });
+it("[mock.cb.fallbackWhen] 探测期间取消：默认不回落，也不发送真实请求", async () => {
+  const controller = new AbortController();
+  const h = mockClient();
+  h.net.on("get", PROBE, () => envelope(MOCK_DATA));
+  const pending = h.send({
+    url: REAL,
+    mock: true,
+    signal: controller.signal,
+    latency: 20,
+  } as never);
+  controller.abort();
+  const r = await pending;
+  expect(r.kind).toBe("cancel");
+  expect(h.net.calls("get", REAL)).toBe(0);
+});
 
-    it('[mock.req.mock.mockUrl] mockUrl 带结尾斜杠不产生双斜杠；绝对 url 去掉原 origin 保留 query/hash', async () => {
-        const adapter = urlAdapter();
-        const ax = axios.create({ adapter });
-        mock({ enable: true, mockUrl: 'http://m/' }).install(ax);
-        await ax.get('/a', { mock: true });
-        await ax.get('http://real.com/b?x=1#h', { mock: true });
-        expect(urls(adapter)).toEqual(['http://m/a', 'http://m/b?x=1#h']);
-    });
+it("[mock.cb.fallbackWhen] 回落前调用方已取消：即使判定要求回落，真实请求也不触网", async () => {
+  const controller = new AbortController();
+  const h = mockClient({
+    fallbackWhen: () => {
+      controller.abort();
+      return true;
+    },
+  });
+  const r = await h.send({ url: REAL, mock: true, signal: controller.signal });
+  expect(r.kind).toBe("cancel");
+  expect(h.net.calls("get", REAL)).toBe(0);
+});
 
-    it('[mock.req.mock.fallbackWhen] 判定函数收到 {response}（成功）与 {error}（失败）；请求级 undefined 回退插件级', async () => {
-        const decide = vi.fn(() => false);
-        const adapter = vi.fn()
-            .mockResolvedValueOnce({ status: 200, statusText: '', headers: {}, config: {}, data: 1 })
-            .mockRejectedValueOnce(new Error('down'));
-        const ax = axios.create({ adapter });
-        mock({ enable: true, mockUrl: '/mock', fallbackWhen: decide }).install(ax);
-        await ax.get('/a', { mock: { fallbackWhen: undefined } });
-        await expect(ax.get('/b', { mock: true })).rejects.toThrow('down');
-        expect(decide.mock.calls[0][0]).toHaveProperty('response');
-        expect(decide.mock.calls[1][0]).toHaveProperty('error');
-    });
+it("[mock.fn.axpMock] 回落后真实接口失败：保留真实结果，只落定一次且不再回落", async () => {
+  const h = mockClient();
+  h.net.on("get", PROBE, () => ({ status: 404 }));
+  h.net.on("get", REAL, () => ({ status: 500 }));
+  const r = await h.send({ url: REAL, mock: true });
+  expect(r.httpStatus).toBe(500);
+  expect(h.net.calls("get", PROBE)).toBe(1);
+  expect(h.net.calls("get", REAL)).toBe(1);
+});
 
-    it('[mock.req.mock.fallbackWhen] 判定返回真值非 true（如 1）也回落；用户取消默认不回落', async () => {
-        const adapter = vi.fn()
-            .mockRejectedValueOnce(new Error('x'))
-            .mockResolvedValueOnce({ status: 200, statusText: '', headers: {}, config: {}, data: 'real' });
-        const ax = axios.create({ adapter });
-        mock({ enable: true, mockUrl: '/mock' }).install(ax);
-        const r = await ax.get('/a', { mock: { fallbackWhen: (() => 1) as any } });
-        expect(r.data).toBe('real');
+it.each([0, "yes", Number.NaN, -1, () => true])("[mock.req.mock] 未声明的请求值 %s 按省略处理，由插件级 mock 决定", async (value) => {
+  const on = mockClient({ mock: true });
+  expect((await on.send({ url: REAL, mock: value as never })).data).toBe(MOCK_DATA);
+  const off = mockClient({ mock: false });
+  expect((await off.send({ url: REAL, mock: value as never })).data).toBe(REAL_DATA);
+});
 
-        const cancel = Object.assign(new Error('c'), { code: 'ERR_CANCELED' });
-        const a2 = vi.fn().mockRejectedValue(cancel);
-        const ax2 = axios.create({ adapter: a2 });
-        mock({ enable: true, mockUrl: '/mock' }).install(ax2);
-        await expect(ax2.get('/a', { mock: true })).rejects.toBe(cancel);
-        expect(a2).toHaveBeenCalledOnce();
-    });
+it("[mock.req.mock] 空对象表示请求开启：有插件级 mockUrl 即 mock，没有则跳过；对象里的 mock 字段不再生效", async () => {
+  const h = mockClient();
+  expect((await h.send({ url: REAL, mock: {} })).data).toBe(MOCK_DATA);
+  expect((await h.send({ url: REAL, mock: { mock: false } as never })).data).toBe(MOCK_DATA);
+  const bare = mockClient({ mockUrl: undefined });
+  expect((await bare.send({ url: REAL, mock: {} })).data).toBe(REAL_DATA);
+});
+
+it("[mock.cb.fallbackWhen] 回落时在 debug 下输出一条日志", async () => {
+  const debug = logger();
+  const h = mockClient({}, debug);
+  h.net.on("get", PROBE, () => ({ status: 404 }));
+  await h.send({ url: REAL, mock: true });
+  expect(debug.log).toHaveBeenCalledOnce();
+  expect(debug.log.mock.calls[0][0]).toContain("404");
+});
+
+it("[mock.method.lifecycle] eject 重复调用安全，卸载后可用同一个插件对象重装并恢复 mock", async () => {
+  const plugin = axpMock({ enable: true, mockUrl: MOCK });
+  const h = sourceClient([plugin]);
+  h.net.on("get", PROBE, () => envelope(MOCK_DATA));
+  h.net.on("get", REAL, () => envelope(REAL_DATA));
+  expect(h.api.eject("axp:mock")).toBe(true);
+  expect(h.api.eject("axp:mock")).toBe(false);
+  expect((await h.send({ url: REAL, mock: true })).data).toBe(REAL_DATA);
+  h.api.use(plugin);
+  expect((await h.send({ url: REAL, mock: true })).data).toBe(MOCK_DATA);
+});
+
+it("[mock.cb.fallbackWhen] 探测后回落真实接口，两次发送的请求体相互独立，原地修改的 transformRequest 不会叠加", async () => {
+  const sent: unknown[] = [];
+  const h = sourceClient(
+    [axpMock({ enable: true, mockUrl: MOCK })],
+    {},
+    {
+      transformRequest: [
+        /** 原地修改嵌套元素后再序列化，模拟不规范的用户转换器。 */ (data: { qty: number }[]) => {
+          data[0].qty += 1;
+          return JSON.stringify(data);
+        },
+      ],
+    },
+  );
+  h.net.on("post", PROBE, (config) => {
+    sent.push(config.data);
+    return { status: 404, data: {} };
+  });
+  h.net.on("post", REAL, (config) => {
+    sent.push(config.data);
+    return envelope(REAL_DATA);
+  });
+  await h.send({ url: REAL, method: "post", data: [{ qty: 1 }], mock: true });
+  expect(sent).toEqual([JSON.stringify([{ qty: 2 }]), JSON.stringify([{ qty: 2 }])]);
 });

@@ -1,21 +1,31 @@
-import { FLAP_SCHEDULE } from './constants.ts';
-import { rawJson } from './http.ts';
-import type { NetworkName } from './constants.ts';
-import type { NetworkValue } from './types.ts';
+import { FLAP_SCHEDULE } from "./constants.ts";
+import { rawJson } from "./http.ts";
+import type { NetworkName } from "./constants.ts";
+import type { NetworkValue } from "./types.ts";
 
 /** netem 创建代理后的返回 */
-export interface ProxyInfo { id: string; port: number }
+export interface ProxyInfo {
+  id: string;
+  port: number;
+}
 
 /** netem 控制 API 的错误 */
 export class NetemError extends Error {
   constructor(message: string) {
     super(message);
-    this.name = 'NetemError';
+    this.name = "NetemError";
   }
 }
 
 /** netem 代理统计 */
-export interface ProxyStats { connections: number; active: number; bytes_up: number; bytes_down: number; resets: number; refused: number }
+export interface ProxyStats {
+  connections: number;
+  active: number;
+  bytes_up: number;
+  bytes_down: number;
+  resets: number;
+  refused: number;
+}
 
 /**
  * netem 控制 API 客户端（CONTRACT §6）。
@@ -26,16 +36,18 @@ export class NetemClient {
 
   /** @param controlUrl 控制地址，如 `http://127.0.0.1:47090` */
   constructor(controlUrl: string) {
-    this.controlUrl = controlUrl.replace(/\/+$/, '');
+    this.controlUrl = controlUrl.replace(/\/+$/, "");
   }
 
   /** 发控制请求并解析 JSON，非 2xx 抛 NetemError */
   async #call<T>(method: string, path: string, body?: unknown): Promise<T> {
-    const { ok, status, text } = await rawJson(
-      `${this.controlUrl}${path}`, method, body, {}, (m) => new NetemError(`netem ${method} ${path} ${m}`),
-    );
+    const { ok, status, text } = await rawJson(`${this.controlUrl}${path}`, method, body, {}, (m) => new NetemError(`netem ${method} ${path} ${m}`));
     let json: unknown = null;
-    try { json = text ? JSON.parse(text) : null; } catch { /* 非 JSON 响应交给下面的状态判断 */ }
+    try {
+      json = text ? JSON.parse(text) : null;
+    } catch {
+      /* 非 JSON 响应交给下面的状态判断 */
+    }
     if (!ok) throw new NetemError(`netem ${method} ${path} → HTTP ${status}: ${text.slice(0, 120)}`);
     return json as T;
   }
@@ -46,7 +58,7 @@ export class NetemClient {
    * @param profile 预设名或 profile 对象
    */
   createProxy(upstream: string, profile: string | Record<string, unknown>): Promise<ProxyInfo> {
-    return this.#call<ProxyInfo>('POST', '/proxies', { upstream, profile });
+    return this.#call<ProxyInfo>("POST", "/proxies", { upstream, profile });
   }
 
   /**
@@ -55,7 +67,7 @@ export class NetemClient {
    * @param profile 预设名或 profile 对象
    */
   async setProfile(id: string, profile: string | Record<string, unknown>): Promise<void> {
-    await this.#call('PUT', `/proxies/${encodeURIComponent(id)}`, { profile });
+    await this.#call("PUT", `/proxies/${encodeURIComponent(id)}`, { profile });
   }
 
   /**
@@ -64,17 +76,17 @@ export class NetemClient {
    * @param steps `[{at_ms, profile}]`
    */
   async schedule(id: string, steps: ReadonlyArray<{ at_ms: number; profile: string | Record<string, unknown> }>): Promise<void> {
-    await this.#call('POST', `/proxies/${encodeURIComponent(id)}/schedule`, steps);
+    await this.#call("POST", `/proxies/${encodeURIComponent(id)}/schedule`, steps);
   }
 
   /** 读取代理统计 */
   stats(id: string): Promise<ProxyStats> {
-    return this.#call<ProxyStats>('GET', `/proxies/${encodeURIComponent(id)}/stats`);
+    return this.#call<ProxyStats>("GET", `/proxies/${encodeURIComponent(id)}/stats`);
   }
 
   /** 关闭代理及其上的全部连接 */
   async deleteProxy(id: string): Promise<void> {
-    await this.#call('DELETE', `/proxies/${encodeURIComponent(id)}`);
+    await this.#call("DELETE", `/proxies/${encodeURIComponent(id)}`);
   }
 
   /**
@@ -84,9 +96,9 @@ export class NetemClient {
    * @param network 预设名或 profile 对象
    */
   async apply(id: string, network: NetworkValue): Promise<void> {
-    if (network === 'dns') throw new NetemError('dns 不经过 netem，应改写 baseURL 的 host');
-    if (network === 'flap') {
-      await this.setProfile(id, 'normal');
+    if (network === "dns") throw new NetemError("dns 不经过 netem，应改写 baseURL 的 host");
+    if (network === "flap") {
+      await this.setProfile(id, "normal");
       await this.schedule(id, FLAP_SCHEDULE);
       return;
     }
@@ -109,7 +121,7 @@ export interface ProxyEndpointInfo {
 export function swapHost(url: string, host: string): string {
   const u = new URL(url);
   u.hostname = host;
-  return u.toString().replace(/\/$/, '');
+  return u.toString().replace(/\/$/, "");
 }
 
 /**
@@ -118,7 +130,7 @@ export function swapHost(url: string, host: string): string {
  */
 export function upstreamOf(url: string): string {
   const u = new URL(url);
-  return `${u.hostname}:${u.port || (u.protocol === 'https:' ? '443' : '80')}`;
+  return `${u.hostname}:${u.port || (u.protocol === "https:" ? "443" : "80")}`;
 }
 
 /**
@@ -129,8 +141,8 @@ export function upstreamOf(url: string): string {
  * @param network 初始网络预设（不含 dns）
  */
 export async function openProxy(netem: NetemClient, serverUrl: string, network: NetworkName): Promise<ProxyEndpointInfo> {
-  const proxy = await netem.createProxy(upstreamOf(serverUrl), network === 'flap' ? 'normal' : network);
-  if (network === 'flap') await netem.schedule(proxy.id, FLAP_SCHEDULE);
+  const proxy = await netem.createProxy(upstreamOf(serverUrl), network === "flap" ? "normal" : network);
+  if (network === "flap") await netem.schedule(proxy.id, FLAP_SCHEDULE);
   const u = new URL(serverUrl);
   return { id: proxy.id, baseURL: `${u.protocol}//${new URL(netem.controlUrl).hostname}:${proxy.port}` };
 }
