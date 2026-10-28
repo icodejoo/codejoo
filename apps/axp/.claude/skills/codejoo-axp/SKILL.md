@@ -1,71 +1,238 @@
 ---
 name: codejoo-axp
-description: Use when working in apps/axp (@codejoo/axp) — a plugin-based HTTP client over axios. `Axp.install(axiosInstance, plugins)` wires plugins onto ANY AxiosInstance — no Core required. `Axp.create<T>()`/`Core<T>` is an optional typed dispatch layer on top, for callers who want path/payload/response inference; `T` is any structurally-matching schema, never a required global type. Plugins are independent (`install(axios)`, own cleanup, no shared orchestrator). Bundled plugins: logger, key, cache, share, retry, notify, loading, auth, mock, filter, normalize, repath, envs, cancel. Covers architecture, the hard-won invariants (esp. axios mergeConfig re-merge, LIFO/FIFO), and how to extend/test.
+description: 在 apps/axp（@codejoo/axp，基于 axios 的插件式 HTTP 客户端）里写代码、用它发请求、给它写插件或改它的源码时使用。入口是 `createAxp<S, R>({ axios, plugins, response, key, reject, debug })`；一次调用是一个逻辑请求，从外到内穿过 outer / prepare / attempt / credential / source 五个阶段的洋葱中间件，成功、失败、被抛出的都是同一种归一化响应 `IAxpResponse`（`isAxpResponse` 判断）。内置 10 个插件：loading、notify、repath、filter、retry、auth、mock、share、cache、envs；取消、key、debug、归一化是内核能力，不是插件。涵盖用法、请求级选项四种写法、`wrap` / `throws`、自定义响应与自定义插件（`{ name, stage, handle }`、`taps`、`setup`）、改源码时的不变量与验收门槛。旧 API（`Axp.install`、`Axp.create`、`Core`、`ApiError`、`axpKey`、`axpCancel`、`axpLogger`、`axpNormalize`）已删除，不要再写。
 ---
 
 # @codejoo/axp
 
-Two independent layers, usable separately or together:
+基于 axios 的插件式 HTTP 客户端。`createAxp()` 造客户端；一次调用是一个逻辑请求，从外到内穿过 5 个阶段的中间件，最里面一层才调 `axios.request`。设计导读看 `ARCHITECTURE.md`，选项表看 `README.md` / `README.zh-CN.md`，规格看 `docs/design/`，旧写法迁移看 `docs/guides/migrating-to-pipeline.md`。
 
-- **`Axp.install(axiosInstance, plugins) → AxpHandle`** — the plugin
-  orchestrator. Takes a plain `AxiosInstance`; never requires `Core`.
-- **`Axp.create<T>(axiosInstance?, opts?) → Core<T>`** — an *optional* typed
-  dispatch layer. Verb methods (`get/post/...`) are built once on the
-  prototype and dispatch through whatever plugins were installed on
-  `core.axios`, resolving into one of three shapes (raw / wrap / unwrap). `T`
-  is any type structurally matching `MethodSchema` (`types.ts`) — there is no
-  required global namespace; omit `T` for an untyped (`string`-path) client.
+## 用法
 
-Plugins are independent `{name, install(axios)}` objects — no shared registry,
-no `ctx`. `Axp.install` wires the bundled set in a fixed canonical order;
-hand-rolled orchestration (call `plugin.install(axios)` yourself) works too.
+```ts
+import axios from "axios";
+import { createAxp, axpRepath, axpRetry, axpAuth, axpCache, axpNotify, TokenManager } from "@codejoo/axp";
+import type { Schema } from "./api-schema"; // 方法优先：{ get: { "/pet/{id}": [response, [payload]] } }
 
-## File map (src/)
+const api = createAxp<Schema>({
+  axios: axios.create({ baseURL: "/api" }),
+  plugins: [
+    axpRepath(), // 填路径里的 {id}
+    axpRetry({ max: 2 }),
+    axpAuth({
+      tokenManager: new TokenManager(),
+      onRefresh: (r, tm) => refreshToken(tm), // 返回 false 或抛错算刷新失败
+      onAccessExpired: () => redirectToLogin(),
+    }),
+    axpCache({ expires: 30_000 }), // 按请求开启
+    axpNotify({ notify: (msg) => toast.error(msg) }),
+  ],
+});
 
-| File | Role |
-| --- | --- |
-| `core.ts` | `Core<T>` + `create<T>()` (the implementation `Axp.create` re-exports). Builds verb methods once (`PROTO_BUILT` module flag). `dispatch` → `shapeResponse` resolves **raw / wrap / unwrap**. `extends()` clones axios defaults (structural shallow + targeted deep) into a fresh `Core` — does NOT replay plugins onto the child. |
-| `install.ts` | `Axp.create` (re-exported from `core.ts`) + `Axp.install(axiosInstance, plugins) → AxpHandle`. `install` takes a plain `AxiosInstance` (e.g. `axios.create()`, or `core.axios` if you used `Axp.create`) — it has no dependency on `Core`. Calls each selected plugin's `install(axios)` in a hard-coded canonical order (see its class doc for the LIFO/FIFO derivation) and collects the returned `PluginCleanup`s. `AxpHandle`: `axios`/`plugins`/`plugin(name)`/`dispose()`/`prepend`/`append`/`insertBefore`/`insertAfter`. No `plugin.ts` / `PluginManager` — that orchestration layer was removed; plugins own their own teardown. |
-| `types.ts` | `Plugin` (`{name, install(axios): PluginCleanup \| void}`), `PluginCleanup`, `CoreOptions` (empty — logging moved to the `logger` plugin), `MethodSchema` (the structural shape `Core<T>`'s schema generic is checked against — NOT a reference to any named/global type) + the `HttpPrototype<T>` schema-inference machinery (`T[Mt][P]` direct literal lookup; three dispatch overloads). |
-| `helper.ts` | `pluginLog`/`pluginWarn`/`pluginError` (gated on `source.debug`, reading `source.logger ?? console`; `source` is `axios.defaults` at install time or a per-request `config`), `CONSOLE_LOGGER`, `asArray`, `isObject`/`isPrimitive` (the only type guards kept — the rest were dead code), `cloneAxiosDefaults`/`cloneAxiosHeaders`, **`resolveAdapter(axios)`** (normalizes a bare `axios.create()`'s array/string `defaults.adapter` into a callable — every adapter plugin and `Core` go through it) and **`callAdapter(adapter, config)`** (calls an adapter inside `new Promise`, so a synchronous throw becomes a rejection instead of leaking share entries / loading counts). |
-| `bag.ts` | Symbol-keyed private bag (`setInternal/getInternal/delInternal`). Invisible to for-in/JSON/serialization. **Does NOT survive `mergeConfig` re-merge** — single-request scope only; used by `cancel` for its AbortController. |
-| `objects/Response.ts` | `AxpResponse` (`successful` via static `isSuccessful` hook) + `fromResponse` (null-safe) + `ApiError extends Error`. |
-| `objects/TokenManager.ts` | `TokenManager implements ITokenManager`; stores bare tokens, `accessToken` getter prepends `Bearer `; localStorage-backed, SSR-safe. |
-| `plugins/*.ts` | One plugin each (`logger`, `key`, `cache`, `share`, `retry`, `notify`, `loading`, `auth`, `mock`, `filter`, `normalize`, `repath`, `envs`, `cancel`); each augments `AxiosRequestConfig` via `declare module 'axios'`. Exported factory names are `axp`-prefixed (`axpAuth`, `axpCache`, ...) and each plugin's own `Plugin.name` string is `` `axp:${shortName}` `` (e.g. `'axp:auth'`) — internal bag/flag constants derive from that via template literal (`` `${name}:decision` ``), not separately hardcoded. |
+const pet = await api.get("/pet/{id}")({ id: 1 }); // 成功直接得到业务 data
+const list = await api.get("/pet/findByStatus")({ status: "available" }, { cache: true });
+```
 
-## Invariants & gotchas (learned the hard way — keep these)
+- 动词是 axios 的 10 个小写方法。`delete`、`post`、`put`、`patch` 的 payload 走 `data`，其余走 `params`。`api.request<D>(config)` 是无类型的逃生口。
+- `S` 省略时路径退化为 `string`。自定义响应类型 `R` 时 `S` 和 `R` 都要写，TS 不做部分推断。需要 TypeScript ≥ 5.4。
 
-- **axios `mergeConfig` only preserves enumerable string keys.** Empirically verified: `axios.request(config)` (retry/auth re-issue) re-merges and **drops Symbol keys, non-enumerable keys, and WeakMap<config> associations** (the merged config is a *new object*). Consequences:
-  - **retry** no longer needs any config field to survive re-merge at all: it resends through a lazily-created, **reused, interceptor-less** bare `axiosLib.create()` instance (`retrier.request(config)`) inside one continuous `for` loop living entirely within a single response-interceptor invocation — the loop's attempt counter is a plain local variable, never round-trips through `mergeConfig`. (An earlier design counted attempts via an enumerable `config['axp:retry:count']` to survive `axios.request(config)` re-merges on the SAME instance; that's gone — mirrors dioman's `DiomanRetry`, which resends through a bare `Dio()` for the identical reason.) The bare `retrier` doesn't need cloned defaults either: `config` here is already the fully-resolved config for this request (baseURL/adapter/headers, etc. already merged in by axios's own `mergeConfig` on the first dispatch — `adapter` specifically uses the `defaultToConfig2` merge strategy, so it survives being replayed through any instance), so `retrier.request(config)` dispatches through the same adapter without re-cloning anything.
-  - **auth** state flags (`axp:auth:decision/protected/refreshed/denied`) are **enumerable string keys** for the same reason (refresh/replay must cross the re-issue boundary; the `refreshed` flag breaks the refresh→retry→fail loop).
-  - **cancel**'s AbortController lives in the **Symbol bag** (`bag.ts`, key `axp:cancel:ctrl`) — it's "private + GC", needs no cross-re-merge survival. Pick the storage by whether state must survive re-issue, not by taste. (One exception handled in `release`: retry's final response carries a re-merged config without the bag, so cancel falls back to looking the controller up through the enumerable `config.signal` → `selfIssued` WeakMap.)
-- **Response shape is decided by Core dispatch, not a plugin.** `shapeResponse` (core.ts): `{raw}`→envelope, `{wrap}`→`AxpResponse`, default→unwrap `{code,data}`'s `data` (non-envelope passes through).
-- **auth refresh is "one budget per request", NOT "expired vs not".** Single-flight `refreshState` (keyed by `axios` instance, WeakMap); new protected requests during the window suspend at the request interceptor; in-flight 401s join the same refresh on the response side. A 401 with `carried !== current` token → **Replay** (retry with current token, no refresh); `carried === current` → **Refresh once then replay**, and only if THAT still 401s → expire (bounded by the `axp:auth:refreshed` flag; the expire fallback fires only when `onFailure` still says `Refresh`/`Replay` after the replay — an unrelated error such as a 500 routes normally and does NOT log the user out). Don't "fix" the carried===current case to expire-immediately by default — that would wrongly log out the recoverable case (token rotated by another tab/device, a fresh refresh still works). Strict "401-on-fresh-token = dead session" is a per-app policy expressed via a custom `onFailure` returning `AuthFailureAction.Expired` (see README). Proven bounded by `test/auth.integration.test.ts` (single-flight + at-most-one-refresh convergence, including out-of-order concurrent 401s).
-- **`normalize` does NOT rewrite successful `response.data`** (keeps the raw envelope; dispatch owns shaping). On business failure it rejects an `ApiError`; on the error path it attaches `error.api`. **`auth` therefore uses `AxpResponse.fromResponse(res).successful`, never `instanceof`.** auth handles failure on **both** paths: envelope-fail in `onFulfilled`, HTTP 401/403 in `onRejected` (`axpNormalize` rejects them as errors, which auth's `onRejected` then routes).
-- **Adapter plugins must obtain `prev` via `resolveAdapter(axios)`**, never `axios.defaults.adapter as AxiosAdapter` — a bare `axios.create()` instance's adapter is an array and calling it throws "prev is not a function". Wrapped adapters that keep a promise chain on `prev(config)` (`share`, `loading`) must call it through `callAdapter`. `cache` (hit) and `share` (shared response) re-attach the *current* request's `config` onto the response they return, otherwise `cancel` (which releases by `response.config`) leaks controllers.
-- **Adapter plugins (`cache/loading/mock`) `delete config.xxx` after resolving** ("解析即弃"). A retry full-chain re-issue therefore does **not** re-trigger them. To keep loading across retries, nest retry inside loading (i.e. give retry a later canonical slot than loading — see `install.ts`). `share` is the one exception — it falls back to the plugin-level `policy` when `config.share` is absent, so a retry re-issue DOES re-enter `share`'s dedup logic every time. This is intentional and safe: `share` has no internal retry loop (removed — `SharePolicy.retry` duplicated the standalone `retry` plugin and the two could multiply retry counts when combined on the same key).
-- **`cache` stores the pristine original, hands out a copy per `clone`.** Default = **shared reference** (read-only contract, like SWR/React-Query). `clone:'shallow'` (top-level only), `'deep'` (`structuredClone`, throws if unavailable — pass a function for non-cloneable data). Never silently downgrade deep→shallow. Note: `cache: true` (boolean form) never inherits the plugin-level `clone` policy — only object form `cache: {}` does (see `$resolveCache`'s branching).
-- **A plugin owns its own cleanup — there's no shared orchestrator to revert `ctx` side-effects for you** (that PluginManager/`ctx` design was removed). `install(axios)` wires interceptors/adapter directly and returns a `PluginCleanup` (`() => void`) undoing exactly what it registered; return nothing if there's nothing to undo. `Axp.install`/`AxpHandle` just calls `install(axios)` for each selected plugin and collects the cleanups — it does not track anything a plugin does outside its own returned closure.
-- **axios splits interceptor order by direction — Dio does not.** Request interceptors run **LIFO** (last-`use()`'d runs first), response interceptors run **FIFO** (first-`use()`'d runs first), transformers append-order, adapter last-wins. `Axp.install`'s hard-coded array accounts for this (see `install.ts`'s class doc); if you hand-roll orchestration, you must too. Notably `cancel` is installed **after `retry`**, so on the response side it runs after retry settles: the controller stays tracked while retry waits/resends and `cancelAll` can still abort it.
-- **Auth double-fire caveat (retry is fixed, no longer affected).** `auth`'s `onRejected` recovers by `return axios.request(config)` — a fresh dispatch **on the same instance**, whose resolved value ALSO continues into the next link of the ORIGINAL flat response `.then()` chain. Any response-interceptor plugin registered *after* `auth` (e.g. `notify`) sees a refresh-recovered request's response **twice**, not once. Still documented as a known caveat (`notify.ts`'s doc comment, `test/notify.test.ts`), not fixed — fixing it would require restructuring how auth recovers. `retry` no longer has this problem: it resends through the bare, interceptor-less `retrier` instance (see above), which never re-enters the plugin chain at all, so a retry-recovered response only fires downstream plugins once.
-- **`fn.name` reassign needs `Object.defineProperty`** under strict-mode ESM (plain `fn.name =` throws). Used by `normalize`, `repath`, `auth` to keep the runtime `.name` aligned with the plugin's own `axp:<name>` tag after minify.
-- **`key` tests are relational** (`a===b` / `a!==b`), never literal hashes — preserve invariants (key-order-independent objects, ordered arrays, empty-container equivalence, separator anti-collision), not specific digests. Double-lane FNV-1a → ~64-bit.
-- **`Core<T>`'s schema generic is a pure structural check against `MethodSchema` (`types.ts`), not a reference to any named/global type.** `LoosePath`/`EntryFor` do `[T] extends [MethodSchema] ? T[Mt][P] lookup : fall back to string`. `T` can be method-major `{ [method]: { [path]: [resp, req] } }` from ANY source — hand-written, `@codejoo/openapi2lang`'s emitted type (which itself emits TWO views: path-major `PathRefs` for its own `Request`/`OpenApi` helpers, and the pre-expanded method-major `MethodRefs` this package's schema shape matches), or your own codegen. Don't reintroduce a hardcoded reference to a specific global namespace name here — that was deliberately removed so `Core<T>` has zero dependency on any one codegen tool's naming convention. `types/paths.d.ts` (a `declare namespace model {...}` ambient fixture) is this package's OWN dev/test fixture (consumed by `test/index.ts`, `e2e/playground/main.ts` as ONE example schema) — it is not shipped (`package.json`'s `files` omits `types/`) and `src/types.ts` no longer references it by name.
-- **Known pre-existing type debt (not introduced by the plugin work, don't "fix" it as a drive-by):** `cancel.ts`'s `config.signal` typed as axios's own `GenericAbortSignal` vs a real DOM `AbortSignal`; a couple of `erasableSyntaxOnly` violations in `core.ts`/`auth.ts`. Predates the ctx-removal/rename work; `npx tsc --noEmit` will show them alongside a handful of `TS6133`/`TS6196` unused-import lints in test files left over from the API-migration pass — none of these are regressions. (The former `IMethodOptions.retry: TRetryOptions` conflict with `retry.ts`'s `declare module 'axios'` augmentation — a legacy, unused-at-runtime shape — has been removed: `IMethodOptions` now simply inherits `retry` from `AxiosRequestConfig`.)
+## 阶段与内置插件
 
-## Build & test (the real acceptance gate)
+| 阶段         | 内置插件（外 → 内）                 | 说明                                         |
+| ------------ | ----------------------------------- | -------------------------------------------- |
+| `outer`      | `axpLoading` → `axpNotify`          | 整个逻辑请求进出一次，看到最终结果           |
+| `prepare`    | `axpRepath` → `axpFilter`           | 请求整形，只跑一次                           |
+| `attempt`    | `axpRetry`                          | 重试边界，往里每次尝试都重跑                 |
+| `credential` | `axpAuth`                           | 注入 token，401 时刷新并重放                 |
+| `source`     | `axpMock` → `axpShare` → `axpCache` | 结果来源，可以不触网直接返回                 |
+| 无           | `axpEnvs`                           | 只有 `setup`：装上时把配置写进 axios defaults |
 
-- **Gate = `npx vitest run` (all green; currently 414 passed / 4 intentionally `it.skip`'d) + `npm run build`** (`vp pack` → `dist/index.mjs`, `index.min.js`, `index.d.mts` via tsgo). Vitest include: `test/**/*.{test,spec}.ts`; helpers (e.g. `test/helpers/network.ts`, `test/helpers/install.ts`) aren't picked up.
-- **Do NOT gate on `tsgo`/`oxlint`** — dirty under the base `verbatimModuleSyntax`/`erasableSyntaxOnly` flags (param-properties, enums, value-imports-of-types, test `as any`) plus the pre-existing `GenericAbortSignal` conflict above. Only avoid adding *new* error classes.
-- **`test/helpers/install.ts`'s `use(api, plugins)`** is a test-only stand-in for the old `Core#use()` — it just calls `plugin.install(api.axios)` for each plugin, no order guarantee, no `AxpHandle`. Reach for it in ad-hoc unit/integration tests that don't care about canonical order; use `Axp.install` directly (see `test/axp-install.test.ts`) when the test IS about order.
-- **Integration tests are the high-value ones** (`test/integration.test.ts`, `test/auth.integration.test.ts`, `test/dioman-coverage.test.ts`, `test/dioman-powerset.test.ts`): they drive real `Axp.create()` + plugin stacks through `test/helpers/network.ts` (a stateful mock adapter with per-request `config.latency` for out-of-order completion, error injection, call counts). This is what caught the retry infinite-loop bug. Auth refresh/concurrency (single-flight, out-of-order 401s, in-window arrivals, anti-loop) lives in `auth.integration.test.ts`; the 12-plugin power-set sweep (`dioman-powerset.test.ts`, 4095 combinations × 2 rounds) is the combinatorial ordering regression net.
-- **e2e/** is a Playwright suite (real Chromium driving `e2e/playground`). `npm run e2e` (full, `run.mjs`) or `npm run e2e:int` (focused integration cards only, `integration.mjs`). Keep `run.mjs`'s `cases` + `integration.mjs`'s `cases` in sync with the playground's `testid`s when adding/renaming public API or integration cards.
+内置插件的位置由名字（`axp:<name>`）固定在 `src/stages.ts`，`plugins` 数组的顺序不影响它们。装上即生效，例外是 `cache`、`share`（按请求开启）和 `mock`（默认关闭）。`api.inspect()` 返回解析后的顺序 `[{ stage, name }]`。
 
-## Adding a plugin (pattern)
+## 请求级选项的四种写法
 
-1. New `src/plugins/<name>.ts`: `const name = 'axp:<name>'`; `export default function axp<Name>(opts): Plugin` returning `{ name, install(axios) { ...; return cleanup; } }`; gate on `enable` (`if (!enable) return`).
-2. Wire directly onto `axios` (`axios.interceptors.request/response.use(...)`, or wrap `axios.defaults.adapter` for adapter-level short-circuiting like `cache`/`share`/`mock`/`loading`). Return a `PluginCleanup` that ejects/restores exactly what you set up; omit if nothing needs undoing.
-3. State: close over it in `install`. Per-request flags: Symbol bag (`bag.ts`) if single-request-scoped; **enumerable string key**, named `` `${name}:<thing>` `` (e.g. `` `${name}:decision` `` → `'axp:auth:decision'`), if it must survive a retry/auth re-issue.
-4. Use `pluginLog`/`pluginWarn`/`pluginError` from `../helper` for debug output (`axios.defaults` at install time, `config` per-request) — don't roll your own console calls.
-5. Augment request config via `declare module 'axios'`.
-6. Export from `src/index.ts` (value + types) and add it to `install.ts`'s `AxpPlugins` interface + canonical order array (with a one-line justification in the class doc for why that slot). Add a unit suite in `test/` and, if it touches concurrency/adapters, an integration case. Document a section + option table in `README.md` (and `README.zh-CN.md`).
+每个插件都一样：
+
+| 写法         | 含义                                                                                                  |
+| ------------ | ----------------------------------------------------------------------------------------------------- |
+| `false`      | 本次关闭                                                                                              |
+| `true` 或省略 | 用插件级配置                                                                                          |
+| 简写         | 各插件自己规定，只覆盖主参数：retry 的数字、cache 的数字（`expires`）、share 的策略字符串、loading 的回调 |
+| 对象         | 按字段覆盖，请求级 > 插件级 > 内置默认；`null` / `undefined` 表示继承；数组整体替换；`enable: false` 等同 `false` |
+
+```ts
+api.get("/list")(undefined, { cache: true });
+api.get("/list")(undefined, { cache: 10_000 }); // 简写：expires
+api.get("/list")(undefined, { cache: { expires: 10_000, key: "pets" } });
+api.get("/list")(undefined, { retry: false, share: "race" });
+```
+
+不接受函数形式（本身就是回调的选项除外，比如 loading 的请求级回调）。内核自带的请求选项是 `wrap`、`throws`、`silent`、`key`、`signal`；插件的请求选项靠 `declare module '@codejoo/axp' { interface AxpRequestOptions { … } }` 扩展。
+
+## 返回形态与错误
+
+| 调用                | 成功                                  | 可预期的失败                        |
+| ------------------- | ------------------------------------- | ----------------------------------- |
+| 默认                | 返回 `data`                           | `throw r`，`r` 是 `IAxpResponse`    |
+| `{ wrap: true }`    | 返回 `WithData<R, D>`（`r.data`、`r.raw`） | 同上，照抛                          |
+| `{ throws: false }` | 返回 `WithData<R, D>`                 | 不抛，resolve 出 `ok` 为 `false` 的 `r` |
+
+```ts
+try {
+  await api.post("/pet")(body);
+} catch (e) {
+  if (api.isResponse(e)) toast.error(e.message); // 可预期的失败
+  else throw e; // 程序 bug，原样抛出
+}
+const res = await api.post("/pet")(body, { throws: false });
+if (!res.ok) toast.error(res.message);
+```
+
+- 失败是普通对象，不是 `Error`，默认没有 `stack`；`debug` 开启后带调用点。需要 `Error` 的生态（Sentry、TanStack Query）用 `createAxp({ reject: (r) => Object.assign(new Error(r.message), { response: r }) })`。
+- `kind`：`ok | http | biz | network | timeout | cancel | parse | auth | internal`。判断 401、403、5xx 一律读 `r.status`（逻辑状态，HTTP 200 加业务码 401 也是 401），不读 `httpStatus`。
+- `isAxpResponse(e)` 与 `api.isResponse(e)` 认的是品牌 `Symbol.for("axp.response")`，不是 `instanceof`，所以 `./min` 与根入口混用时依然成立。
+- 程序 bug（中间件、判定类回调、非 AxiosError 的拦截器异常）不会被包装成失败，原样抛出，`throws: false` 也不吞。通知类回调（loading、notify、`onAccessExpired` 等）抛错被隔离并 `console.error`。
+
+## 内核能力
+
+- **取消**：`api.cancelAll(reason?)` 中止全部在途请求并返回数量，`api.pending()` 返回在途数，单个请求传 `signal`。被取消的请求得到 `kind: 'cancel'`。`cancelToken` 已移除。
+- **key**：内核服务，cache 与 share 用它，惰性计算。`createAxp({ key: { scope, ignores, sample } })`，`scope` 可以是函数（切账号不用重建客户端）。请求级 `key`：省略或 `true` 自动算，字符串是显式 key，`false` 表示不参与 cache 与 share。
+- **debug**：`createAxp({ debug: true })` 或传自定义 logger `{ log, warn, error }`。关闭时 `ctx.log` 是空函数。
+- **生命周期**：`api.use(plugin)`、`api.eject(name)`、`api.plugin(cache)?.clear()`（`cache` 是装上去的那个插件对象，不是名字）、`api.extend(overrides, { plugins })`（默认继承插件，每个插件重新 `setup`，状态不共享）、`api.dispose()`。
+
+## 自定义响应
+
+覆盖 `ok` 和 `status` getter 即可改判定，`kind` 自动跟随：
+
+```ts
+import { AxpResponse, axpResponse, axpRetry, createAxp } from "@codejoo/axp";
+
+class MyResponse<D = unknown> extends AxpResponse<D> {
+  traceId = "";
+  get ok() {
+    return this.httpStatus < 300 && this.code === 200;
+  }
+}
+const api = createAxp<Schema, MyResponse>({
+  response: axpResponse<MyResponse>({
+    create: (init, raw) => Object.assign(new MyResponse(init), { traceId: String(raw?.headers["x-trace-id"] ?? "") }),
+  }),
+  plugins: [axpRetry({ shouldRetry: (r) => r.traceId !== "" })],
+});
+```
+
+- `R` 不是 `AxpResponse` 时 `response` 必填，且必须提供 `create`。`create` 也可以返回普通对象，内核补品牌。
+- 两个 getter 只在收到响应时求值；网络、取消、超时这类没有响应的失败，由工厂构造时把 `ok`、`kind`、`status` 写成自有属性。
+- 插件工厂是泛型的：内联写在 `createAxp<S, MyResponse>` 的 `plugins` 里会推断出 `R`，单独定义成变量时手写 `axpRetry<MyResponse>()`。
+
+## 自定义插件
+
+插件是具名对象 `{ name, stage?, enforce?, enable?, setup?, handle?, taps? }`。
+
+```ts
+import { createAxp, stateKey } from "@codejoo/axp";
+import type { AxpPlugin, AxpResponse } from "@codejoo/axp";
+
+/** 无状态：记录每次尝试的耗时 */
+const timing: AxpPlugin<AxpResponse> = {
+  name: "timing",
+  stage: "attempt", // 默认就是 attempt
+  async handle(ctx, next) {
+    const t = performance.now();
+    const r = await next();
+    ctx.log.log(`[timing] ${ctx.request.url} ${r.status} ${performance.now() - t}ms`);
+    return r;
+  },
+};
+
+/** 给内层加 trace 头：不改 ctx.request，用 next(patch) */
+const addTrace: AxpPlugin<AxpResponse> = {
+  name: "add-trace",
+  stage: "prepare",
+  handle: (ctx, next) => next({ headers: { "X-Trace": crypto.randomUUID() } }),
+};
+
+/** taps：请求侧和响应侧挂在不同阶段 */
+const audit: AxpPlugin<AxpResponse> = {
+  name: "audit",
+  taps: [
+    { stage: "credential", enforce: "post", onRequest: (ctx) => report("send", ctx.request) },
+    { stage: "outer", onResponse: (r) => report("done", r.kind) },
+  ],
+};
+
+/** 有状态：状态建在 setup 里，每个客户端各一份；api 经 client.plugin(p) 取 */
+const attemptKey = stateKey<number>("attempt"); // 请求级状态的类型化键
+const counter: AxpPlugin<AxpResponse, { count(): number }> = {
+  name: "counter",
+  setup() {
+    let total = 0;
+    return {
+      handle: (ctx, next) => {
+        total += 1;
+        ctx.set(attemptKey, total);
+        return next();
+      },
+      api: { count: () => total },
+      dispose() {
+        total = 0;
+      },
+    };
+  },
+};
+
+const api = createAxp({ plugins: [timing, addTrace, audit] });
+api.use(counter);
+api.plugin(counter)?.count();
+```
+
+- 同一阶段内：`enforce: 'pre'` 的自定义插件在内置插件之前，内置插件居中，`post`（默认）在之后；自定义插件之间按 `plugins` 数组顺序。插件名重复直接抛错，`axp:` 前缀留给内置插件。
+- 中间件不改 `ctx.request`。要给内层换请求就调 `next(patch)`：浅合并，`headers` 多合并一层，字段写 `undefined` 表示删除。`next()` 永不抛错，返回的始终是 `R`。
+- 重试、重放就是再调一次 `next()`；重发前先 `ctx.markReplayable()`，传输层才会克隆请求体。
+- 请求级状态用 `stateKey<T>()` 建键，`ctx.get(k)`、`ctx.set(k, v)` 读写。凭空造结果用 `ctx.fail({ kind, reason })`，由响应工厂保证扩展字段齐全，不要自己 `new`。
+- 状态必须建在 `setup` 里，不要放在工厂闭包，否则同一个插件对象装到多个客户端或 `extend` 时状态会串。
+
+## 文件地图（`src/`）
+
+| 文件                      | 职责                                                                                              |
+| ------------------------- | ------------------------------------------------------------------------------------------------- |
+| `client.ts`               | `createAxp`、动词分发、`request`、落定 `settle`、`extend`、`use` / `eject`、`cancelAll`、`inspect`、`dispose` |
+| `pipeline.ts`             | 插件排序、taps 编译、链组合、`next(patch)`、异常兜底                                              |
+| `stages.ts`               | `STAGE_BUILTINS`：阶段与内置插件固定次序的唯一来源                                                |
+| `context.ts`              | `AxpContext`：请求视图、`signal`、`stateKey`、`key()`、`fail()`、`markReplayable()`               |
+| `transport.ts`            | 调 `axios.request`，把响应或异常交给响应工厂判定                                                  |
+| `response.ts` / `brand.ts` | 响应契约、默认实现、工厂、`isAxpResponse`；`brand.ts` 零导入，只放 `AXP_RESPONSE` 与 `AXP_KINDS` |
+| `options.ts`              | `resolveOption`：请求级四种写法的统一解析，所有插件共用                                           |
+| `key.ts`                  | key 服务（FNV 双车道哈希，不可哈希的值返回 `null`）                                               |
+| `methods.ts` / `utils.ts` | 动词分组与方法名规整 / 共用小件                                                                   |
+| `types.ts`                | Schema 推断、请求选项、插件与客户端类型                                                           |
+| `plugins/*.ts`            | 10 个内置插件，一个插件一个文件；`retry-timing`、`auth-match`、`cache-store` 是内部算法模块，不是入口 |
+| `objects/TokenManager.ts` | `ITokenManager` 与默认实现（内存存放，镜像到 `localStorage`）                                     |
+| `index.ts`                | 包入口；`package.json` 的 `exports` 为 `.`、`./min`、10 个 `./<name>` 与 `./package.json`         |
+
+## 改源码时的不变量
+
+- **请求不可变，`next()` 不抛错。** 中间件抛出或 reject 都被包成 `kind: 'internal'` 的 `R`，落定时抛 `r.error` 原异常。别在链里 `throw` 一个自造的失败，用 `ctx.fail`。
+- **各层看到的是合并过 `defaults` 的请求。** 交给 axios 的只是差量（原始请求级配置为底，叠上各层改过的字段），层里删掉的默认 `params` 键写成 `null`、默认头写成 `false`，防止 axios 的二次合并把它们带回来。
+- **传输强制 `validateStatus: () => true`**，4xx / 5xx 是普通响应，用户 axios 实例上的错误拦截器看不到它们。
+- **判定只在传输边界做一次。** 全插件读 `r.status`、`r.kind`、`r.reason`，不要再各自判断 HTTP 码。
+- **品牌用 `Symbol.for`，识别靠 `isAxpResponse`。** `./min` 自带一份模块实例，`instanceof AxpResponse` 跨入口不可靠；缓存的深拷贝也会丢原型。
+- **插件的请求选项在自己的文件里用 `declare module "../types"` 扩展 `AxpRequestOptions`**，且该插件必须被 `index.ts` 引入，类型增强才会进入使用者的程序。产物里这个相对说明符由构建插件（`vite.config.ts` 的 `dtsAugmentationSpecifier`）改写为 `.mjs`，源码保持 `"../types"`。
+- **内置插件名固定为 `axp:<name>`**，位置在 `stages.ts` 里登记；排序按名字定位，不看插件自述的 `stage`。
+- cache 的 `clone: 'deep'` 依赖 `structuredClone`，环境没有就在发请求前抛错，不静默降级成浅拷贝。
+
+## 构建与验收
+
+- 门槛：`npm test`（`vp test`，全绿）、覆盖率达标（`vitest.config.ts`：行 95 / 分支 90 / 函数 95，内核四文件 `pipeline`、`context`、`response`、`transport` 分支 100%，加 `--coverage` 才检查）、tsgo 零错误、`npm run build`、`npm run check`。
+- 格式与 lint 用项目配置：`npm run fmt`、`npm run check`（printWidth 220，类型感知 lint）。别用不带 `-c` 的裸 `vp check`。`.gitattributes` 固定 LF，工作区里若出现 CRLF 先转回 LF。
+- 测试分六层：`test/{unit,rule,boundary,combo,integration}` 加验收 `accept/`；`test/helpers/` 放共用支撑（`client.ts`、`network.ts`、`invariants.ts` 等），不会被 vitest 当用例。规则见 `docs/guides/test-layers.md` 与 `docs/design/test-plan.md`。
+- `test/integration/dist.integration.test.ts` 验证 `dist` 而不是 `src`：`exports` 清单、子路径可导入、旧子路径与内部模块不可导入、`./min` 与根入口互认、nodenext 与 bundler 消费方类型检查；`dist` 过期会自动先 `npm run build`。
+- `e2e/` 是 Playwright 真浏览器用例，演练场在 `e2e/playground`：`npm run e2e`（全量，`run.mjs`）或 `npm run e2e:int`（只跑并发集成卡片）。增删公开 API 时，`run.mjs` 的 `cases` 要和演练场的 `data-testid` 同步。
+- `npm run accept` 先 `vp pack` 再对接 testkit 做黑盒验收；`accept/` 里的执行器直接用 Node 原生加载 `brand.ts`。
+
+## 新增内置插件
+
+1. 新建 `src/plugins/<name>.ts`，默认导出泛型工厂 `axpXxx<R extends IAxpResponse = AxpResponse>(options?): AxpPlugin<R, Api>`；`name` 取 `axp:<name>`，状态全部建在 `setup` 里，支持 `enable?: boolean`。
+2. 在 `src/stages.ts` 的 `STAGE_BUILTINS` 里登记阶段与阶段内次序。需要请求级选项就用 `AxpOption<…>` 和 `resolveOption`，类型用 `declare module "../types"` 扩展 `AxpRequestOptions`。
+3. 从 `src/index.ts` 导出（值与类型），同步 `package.json` 的 `exports`、`vite.config.ts` 的 `PLUGIN_NAMES`，以及 `index.unit.test.ts` 与 `dist.integration.test.ts` 里的清单。
+4. 补各层用例，并在 `README.md`、`README.zh-CN.md`、`docs/design/plugin-spec.md` 里写选项表；文档目录有变动时按 `docs/README.md` 更新索引。

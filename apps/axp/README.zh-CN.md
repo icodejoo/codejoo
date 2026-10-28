@@ -13,7 +13,7 @@ npm i @codejoo/axp   # peer dep: axios
 入口：
 
 - `@codejoo/axp`：不打包的 ESM。插件子路径（`@codejoo/axp/retry`、`@codejoo/axp/cache` 等）和根入口共用同一份模块，混着导入没问题。
-- `@codejoo/axp/min`：单文件压缩版，**自带一份独立的模块**，不要和根入口或子路径混用。
+- `@codejoo/axp/min`：单文件压缩版，**自带一份独立的模块**。和根入口混用时，`isAxpResponse` 仍能互认对方产出的响应（品牌用的是 `Symbol.for`），但插件状态和客户端实例不共享。一个应用里选一个用。完整清单见[产物与子路径](#产物与子路径)。
 
 类型推断需要 TypeScript ≥ 5.4。
 
@@ -658,7 +658,39 @@ const plain = api.extend({ baseURL: "/v2" }, { plugins: [axpCache()] }); // 只�
 ## 构建与测试
 
 - `npm test`：单元测试和集成测试（`test/**`）。
-- `npm run build`：产出不打包的 ESM 及类型声明，以及 `./min` 对应的压缩版。
-<!-- TODO: 待实现确认：产物目录结构和子路径清单，等 B6 打包后确认 -->
+- `npm run build`：产出不打包的 ESM 及类型声明，以及 `./min` 对应的压缩版。产物布局见下一节。
 - `npm run e2e`：Playwright 真浏览器端到端测试（`e2e/`），对接本地 mock 服务器。
 - `npm run accept`：黑盒验收，对接 [api-ws-demo testkit](https://github.com/icodejoo/api-ws-demo/tree/main/testkit)。真实 HTTP 服务器加网络条件代理，按场景、网络、响应风格、adapter 组合运行。
+
+### 产物与子路径
+
+`npm run build` 往 `dist/`（已加入 .gitignore，发包时带上）写两份产物，目标都是 ES2015：
+
+- `dist/esm/`：不打包的 ESM，每个源文件对应一个 `.mjs` 和一个 `.d.mts`。只有下表里的入口是公开的，这里其余文件都是被入口引用的内部模块。
+- `dist/index.min.js`：`./min` 对应的单文件压缩版，自己没有声明文件，类型用 `dist/esm/index.d.mts`。
+
+`package.json` 的 `exports` 共 13 个子路径：
+
+| 子路径                                                                                    | 指向                          | 导出                                                               |
+| ----------------------------------------------------------------------------------------- | ----------------------------- | ------------------------------------------------------------------ |
+| `.`                                                                                       | `dist/esm/index.mjs`          | 根入口，清单见下                                                   |
+| `./min`                                                                                   | `dist/index.min.js`           | 名字与根入口相同，单文件压缩，自带一份模块实例                     |
+| `./auth`                                                                                  | `dist/esm/plugins/auth.mjs`   | 默认导出 `axpAuth`，另有 `AuthFailureAction`、`defaultAuthFailure` |
+| `./cache`                                                                                 | `dist/esm/plugins/cache.mjs`  | 默认导出 `axpCache`，另有 `removeCache`、`clearCache`              |
+| `./envs`、`./filter`、`./loading`、`./mock`、`./notify`、`./repath`、`./retry`、`./share` | `dist/esm/plugins/<name>.mjs` | 默认导出对应的插件工厂                                             |
+| `./package.json`                                                                          | `package.json`                | 包清单                                                             |
+
+除此之外都不能导入，Node 会报 `ERR_PACKAGE_PATH_NOT_EXPORTED`。这包括内部算法模块（`retry-timing`、`auth-match`、`cache-store`），以及已经删除的 `./cancel`、`./key`、`./logger`、`./normalize`，它们的能力现在在内核里。
+
+插件子路径和根入口给出的是同一个函数，混着用没问题。`./min` 是独立的一份：跨过去 `instanceof AxpResponse` 会失败，区分响应请用 `isAxpResponse` 或 `api.isResponse`。
+
+根入口（`./min` 同）导出：
+
+- `createAxp`：客户端工厂。
+- 响应：`AxpResponse`、`axpResponse`、`isAxpResponse`、`AXP_RESPONSE`（品牌，即 `Symbol.for("axp.response")`）、`AXP_KINDS`（`kind` 的常量）。
+- `stateKey`：创建 `ctx.get`、`ctx.set` 用的类型化键，供自定义插件存请求级状态。
+- `TokenManager`：`axpAuth` 默认的令牌存放实现。
+- 插件工厂：`axpLoading`、`axpNotify`、`axpRepath`、`axpFilter`、`axpEnvs`、`axpRetry`、`axpAuth`、`axpMock`、`axpShare`、`axpCache`。
+- `AuthFailureAction`、`defaultAuthFailure`：配合 `axpAuth` 的 `onFailure`。
+- `removeCache`、`clearCache`：配合 `axpCache`。
+- 类型：所有公开类型，如 `AxpClient`、`AxpPlugin`、`AxpRequestConfig`、`IAxpResponse`、`WithData`。

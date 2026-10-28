@@ -13,7 +13,7 @@ npm i @codejoo/axp   # peer dep: axios
 Entry points:
 
 - `@codejoo/axp`: unbundled ESM. Plugin subpaths (`@codejoo/axp/retry`, `@codejoo/axp/cache`, ...) share one module instance with the root entry, so mixing them is fine.
-- `@codejoo/axp/min`: a single minified file with **its own copy** of the module. Don't mix it with the root entry or the subpaths.
+- `@codejoo/axp/min`: a single minified file with **its own copy** of the module. Mixed with the root entry, `isAxpResponse` still recognizes each other's responses (the brand is a `Symbol.for`), but plugin state and client instances are not shared. Use one of them per app. See [Output and subpaths](#output-and-subpaths).
 
 Typed inference needs TypeScript ≥ 5.4.
 
@@ -658,7 +658,39 @@ const plain = api.extend({ baseURL: "/v2" }, { plugins: [axpCache()] }); // only
 ## Build and test
 
 - `npm test`: unit and integration tests (`test/**`).
-- `npm run build`: produces the unbundled ESM with type declarations, and the minified bundle for `./min`.
-<!-- TODO: 待实现确认：产物目录结构和子路径清单，等 B6 打包后确认 -->
+- `npm run build`: produces the unbundled ESM with type declarations, and the minified bundle for `./min`. The layout is described in the next section.
 - `npm run e2e`: Playwright end-to-end tests in a real browser (`e2e/`), against a local mock server.
 - `npm run accept`: black-box acceptance against the [api-ws-demo testkit](https://github.com/icodejoo/api-ws-demo/tree/main/testkit). A real HTTP server behind a network-condition proxy, run across scenario, network, response style and adapter combinations.
+
+### Output and subpaths
+
+`npm run build` fills `dist/` (git-ignored, shipped in the package) with two builds, both targeting ES2015:
+
+- `dist/esm/`: unbundled ESM, one `.mjs` and one `.d.mts` per source file. Only the entries in the table below are public; every other file here is an internal module that the entries import.
+- `dist/index.min.js`: the single minified file behind `./min`. It has no declarations of its own and uses `dist/esm/index.d.mts`.
+
+`exports` in `package.json` lists 13 subpaths:
+
+| Subpath                                                                                   | Resolves to                   | Exports                                                                            |
+| ----------------------------------------------------------------------------------------- | ----------------------------- | ---------------------------------------------------------------------------------- |
+| `.`                                                                                       | `dist/esm/index.mjs`          | The root entry, listed below                                                       |
+| `./min`                                                                                   | `dist/index.min.js`           | Same names as the root entry, in one minified file with its own module instance    |
+| `./auth`                                                                                  | `dist/esm/plugins/auth.mjs`   | `axpAuth` as the default export, plus `AuthFailureAction` and `defaultAuthFailure` |
+| `./cache`                                                                                 | `dist/esm/plugins/cache.mjs`  | `axpCache` as the default export, plus `removeCache` and `clearCache`              |
+| `./envs`, `./filter`, `./loading`, `./mock`, `./notify`, `./repath`, `./retry`, `./share` | `dist/esm/plugins/<name>.mjs` | The plugin factory as the default export                                           |
+| `./package.json`                                                                          | `package.json`                | The manifest                                                                       |
+
+Nothing else can be imported; Node answers `ERR_PACKAGE_PATH_NOT_EXPORTED`. That covers the internal algorithm modules (`retry-timing`, `auth-match`, `cache-store`) and the removed `./cancel`, `./key`, `./logger` and `./normalize`, whose features now live in the kernel.
+
+A plugin subpath and the root entry hand out the same function, so mixing them is safe. `./min` is a separate copy: `instanceof AxpResponse` fails across the two, so tell responses apart with `isAxpResponse` or `api.isResponse`.
+
+The root entry (and `./min`) exports:
+
+- `createAxp`: the client factory.
+- Responses: `AxpResponse`, `axpResponse`, `isAxpResponse`, `AXP_RESPONSE` (the brand, `Symbol.for("axp.response")`) and `AXP_KINDS` (the constants behind `kind`).
+- `stateKey`: creates the typed keys for `ctx.get` and `ctx.set`, the per-request state of custom plugins.
+- `TokenManager`: the default token store for `axpAuth`.
+- Plugin factories: `axpLoading`, `axpNotify`, `axpRepath`, `axpFilter`, `axpEnvs`, `axpRetry`, `axpAuth`, `axpMock`, `axpShare` and `axpCache`.
+- `AuthFailureAction` and `defaultAuthFailure`, for `axpAuth`'s `onFailure`.
+- `removeCache` and `clearCache`, for `axpCache`.
+- Types: every public type, such as `AxpClient`, `AxpPlugin`, `AxpRequestConfig`, `IAxpResponse` and `WithData`.
