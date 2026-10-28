@@ -63,6 +63,7 @@ axp 具备的能力：`auth cache retry share cancel loading mock normalize noti
 | `key` 其它字符串 | 已映射 | 显式 key，原样传 |
 | `mock` | 已映射 | `mock` |
 | `normalize` | 已映射 | `normalize` |
+| `filter` `true/false` | 已映射 | `filter: true/false`（axp 的 `axpFilter` 只在请求级 `config.filter` 为真时才过滤，不写则原样发送；插件级 `filter: {}` 只装配插件、不自动生效）。中立语义只含默认剔除 null/undefined/NaN/空白字符串、保留 0/false，不含 ignoreKeys/ignoreValues/predicate |
 | `breaker` | **显式报错** | axp 没有熔断 |
 | `cancel_after_ms`（request 的同级字段） | 已映射 | 执行器给该请求配一个 `AbortController` 作为 `signal`，到点 abort |
 
