@@ -39,6 +39,7 @@ A 批（单插件规则/补丁/覆盖文件，共 16 个提交）已迁移完成
 | core（core.coverage） | 6e15e36 | 22 | 0 | 0 | 0 | 0 | 0 | 22 | 是 |
 | install（install.coverage） | 96db491 | 2 | 0 | 0 | 0 | 0 | 0 | 2 | 是 |
 | dioman-coverage（dioman-coverage.test，含 4 条 skip） | 待回填 | 48 | 2 | 4 | 0 | 0 | 0 | 42 | 是 |
+| powerset（dioman-powerset.test） | 待回填 | 2 | 0 | 0 | 0 | 0 | 0 | 2 | 是 |
 
 ## 判层备注（A 批）
 
@@ -591,3 +592,5 @@ A 批（单插件规则/补丁/覆盖文件，共 16 个提交）已迁移完成
 | test/dioman-coverage.test.ts::normalize > shouldNormalize override / ApiException.toString() — axp\'s normalize has no envelope-detection override, and ApiError\'s toString differs from Dio\'s ApiException, see file doc | — | N/A | axp 的 normalize 没有 shouldNormalize 覆盖项，ApiError 也无 Dio 的 ApiException.toString 格式，台账无对应 API |  |
 | test/dioman-coverage.test.ts::share: registerDownstreamSettler / hasMultipleDownstreamSettlers / settle() / dispose() — no axp equivalent | — | N/A | 空 describe.skip（0 用例，不计入核对）：axp 的 share 是纯 adapter 包装，没有 registerDownstreamSettler/settle/dispose 等外部结算 API |  |
 | test/dioman-coverage.test.ts::log — no logging plugin exists in axp | — | N/A | 空 describe.skip（0 用例，不计入核对）：Dio 的 DiomanLog 在 axp 无对应；axp 的 logger 插件只是日志 sink 配置，由 logger.rule 覆盖 |  |
+| test/dioman-powerset.test.ts::axp power-set sweep — 12 plugins, 4095 combinations > every non-empty subset returns the expected value on a plain success | combo/powerset.combo.test.ts::axp power-set sweep — 12 plugins, 4095 combinations > every non-empty subset returns the expected value on a plain success | move | 全插件 2^12−1 幂集扫描，多插件交互，规范 §1 指定归 combo/powerset；无单一台账 id，标题不加前缀 |  |
+| test/dioman-powerset.test.ts::axp power-set sweep — 12 plugins, 4095 combinations > every non-empty subset recovers correctly from a 500, a cache-populating round trip, and a 401 refresh+replay | combo/powerset.combo.test.ts::axp power-set sweep — 12 plugins, 4095 combinations > every non-empty subset recovers correctly from a 500, a cache-populating round trip, and a 401 refresh+replay | move | 同上：幂集下的 500 恢复 / 缓存回写 / 401 刷新重放；无单一台账 id，标题不加前缀 |  |
