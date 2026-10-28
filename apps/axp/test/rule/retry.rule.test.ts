@@ -297,3 +297,28 @@ describe('retry: business-failure loop exhaustion and error-path behavior', () =
     expect(attempts).toBe(1); // default shouldRetry excludes 404 — no retries fired
   });
 });
+
+/** 给请求加延迟（毫秒），配合 makeNetwork 制造乱序 */
+const lat = (ms: number) => ({ latency: ms } as any);
+
+describe('集成 — retry 瞬时错误恢复', () => {
+  it('[retry.opt.max] 前两次 500、第三次 200 → retry 自动恢复，对外只见成功', async () => {
+    const { net, api } = mkApi();
+    net.on('GET', '/flaky', (_c, hit) =>
+      hit < 3 ? { status: 500 } : { data: { code: 0, data: 'recovered' } },
+    );
+    use(api, [retry({ max: 5, delay: 0 })]);
+
+    const r = await api.get('/flaky')(undefined, { retry: 5, ...lat(5) });
+    expect(r).toBe('recovered');
+    expect(net.calls('GET', '/flaky')).toBe(3);  // 失败2 + 成功1
+  });
+
+  it('[retry.opt.max] 始终失败 → 耗尽重试后 reject', async () => {
+    const { net, api } = mkApi();
+    net.on('GET', '/down', () => ({ status: 503 }));
+    use(api, [retry({ max: 2, delay: 0 })]);
+    await expect(api.get('/down')(undefined, { retry: 2, ...lat(2) })).rejects.toBeTruthy();
+    expect(net.calls('GET', '/down')).toBe(3);  // 首发 + 2 次重试
+  });
+});

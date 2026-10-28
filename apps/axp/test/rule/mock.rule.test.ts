@@ -70,3 +70,19 @@ describe('mock: mockUrl redirect path', () => {
     await expect(api2.axios.get('/data', { mock: true } as any)).rejects.toBeTruthy();
   });
 });
+
+/** 给请求加延迟（毫秒），配合 makeNetwork 制造乱序 */
+const lat = (ms: number) => ({ latency: ms } as any);
+
+describe('集成 — mock 插件「客户端回落」（404 → axios 层重发真实）', () => {
+  it('[mock.fn.axpMock][mock.cb.fallbackWhen] mock 路径 404 → 插件在 axios 层改打真实路径并返回真实数据', async () => {
+    const { net, api } = mkApi();
+    net.on('GET', '/mockbase/api/data', () => ({ status: 404 }));            // mock 不存在
+    net.on('GET', '/api/data', () => ({ data: { code: 0, data: { real: true } } })); // 真实
+    use(api, mock({ enable: true, mockUrl: '/mockbase' }));
+    const r: any = await api.get('/api/data')(undefined, { mock: true, ...lat(5) });
+    expect(r.real).toBe(true);
+    expect(net.calls('GET', '/mockbase/api/data')).toBe(1);  // 先打 mock
+    expect(net.calls('GET', '/api/data')).toBe(1);           // 404 后客户端回落真实
+  });
+});

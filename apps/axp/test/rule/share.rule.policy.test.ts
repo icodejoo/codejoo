@@ -87,3 +87,40 @@ describe('share: none policy and no-key no-op', () => {
     expect(calls).toBe(2);
   });
 });
+
+/** 给请求加延迟（毫秒），配合 makeNetwork 制造乱序 */
+const lat = (ms: number) => ({ latency: ms } as any);
+
+describe('集成 — share「start」高并发去重', () => {
+  it('[share.opt.policy][share.fn.$start] 50 个并发同 key 请求 → 真实 HTTP 只发一次，全部拿到同一结果', async () => {
+    const { net, api } = mkApi();
+    net.on('GET', '/list', (_c, hit) => ({ data: { code: 0, data: { servedHit: hit } } }));
+    use(api, [key(), share({ policy: 'start' })]);
+
+    const reqs = Array.from({ length: 50 }, () =>
+      api.get('/list')(undefined, { key: true, share: 'start', ...lat(20) }),
+    );
+    const out = await Promise.all(reqs);
+
+    expect(net.calls('GET', '/list')).toBe(1);          // HTTP 只发一次
+    expect(out.every((r: any) => r.servedHit === 1)).toBe(true);  // 全部同一结果
+  });
+});
+
+describe('集成 — race 乱序 + 夹杂错误', () => {
+  it('[share.opt.policy][share.fn.$race] 三并发各自发 HTTP，前两个失败、第三个成功 → 全部拿到成功结果', async () => {
+    const { net, api } = mkApi();
+    // 同一 key 下：前两次 500，第三次成功
+    net.on('GET', '/race', (_c, hit) =>
+      hit < 3 ? { status: 500 } : { data: { code: 0, data: 'winner' } },
+    );
+    use(api, [key(), share({ policy: 'race' })]);
+
+    const reqs = Array.from({ length: 3 }, () =>
+      api.get('/race')(undefined, { key: true, share: 'race', ...lat(10) }),
+    );
+    const out = await Promise.all(reqs);
+    expect(net.calls('GET', '/race')).toBe(3);          // race：每个 caller 各发一次
+    expect(out.every((r: unknown) => r === 'winner')).toBe(true); // 第一个成功的赢家分发给所有
+  });
+});

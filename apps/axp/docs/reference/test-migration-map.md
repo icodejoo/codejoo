@@ -41,6 +41,7 @@ A 批（单插件规则/补丁/覆盖文件，共 16 个提交）已迁移完成
 | dioman-coverage（dioman-coverage.test，含 4 条 skip） | 待回填 | 48 | 2 | 4 | 0 | 0 | 0 | 42 | 是 |
 | powerset（dioman-powerset.test） | 待回填 | 2 | 0 | 0 | 0 | 0 | 0 | 2 | 是 |
 | auth.integration（auth.integration.test） | 待回填 | 24 | 0 | 0 | 0 | 0 | 0 | 24 | 是 |
+| integration（integration.test） | 待回填 | 8 | 0 | 0 | 0 | 0 | 0 | 8 | 是 |
 
 ## 判层备注（A 批）
 
@@ -617,3 +618,11 @@ A 批（单插件规则/补丁/覆盖文件，共 16 个提交）已迁移完成
 | test/auth.integration.test.ts::auth 集成 — handle 重排不丢在途刷新 > 刷新进行中 prepend 触发整体重装 → 窗口内新请求仍复用同一次刷新，onRefresh 只调一次 | integration/auth-handle.integration.test.ts::auth 集成 — handle 重排不丢在途刷新 > [public.handle.prepend][auth.cb.onRefresh] 刷新进行中 prepend 触发整体重装 → 窗口内新请求仍复用同一次刷新，onRefresh 只调一次 | rename | 装配：handle 重排（prepend）整体拆装时不丢在途刷新 |  |
 | test/auth.integration.test.ts::auth 集成 — handle 重排不丢在途刷新 > 刷新进行中 dispose 后换另一个 tokenManager 重装 → 新请求不等旧刷新，旧刷新失败也不影响 | integration/auth-handle.integration.test.ts::auth 集成 — handle 重排不丢在途刷新 > [public.handle.dispose][auth.cb.onRefresh] 刷新进行中 dispose 后换另一个 tokenManager 重装 → 新请求不等旧刷新，旧刷新失败也不影响 | rename | 装配：dispose 后换 tokenManager 重装，新旧会话互不影响 |  |
 | test/auth.integration.test.ts::auth 集成 — urlPattern 按 pathname 匹配 > urlPattern:'/me' 命中绝对 URL 与带查询串的 URL，不命中其它路径 | rule/auth.rule.test.ts::auth 集成 — urlPattern 按 pathname 匹配 > [auth.opt.urlPattern] urlPattern:'/me' 命中绝对 URL 与带查询串的 URL，不命中其它路径 | rename | 单插件声明行为：urlPattern 按 pathname 匹配（绝对 URL / 查询串 / hash） |  |
+| test/integration.test.ts::集成 — share「start」高并发去重 > 50 个并发同 key 请求 → 真实 HTTP 只发一次，全部拿到同一结果 | rule/share.rule.policy.test.ts::集成 — share「start」高并发去重 > [share.opt.policy][share.fn.$start] 50 个并发同 key 请求 → 真实 HTTP 只发一次，全部拿到同一结果 | rename | 单插件声明行为：start 策略 50 并发去重，key 仅供给共享键（rule 已有两并发变体） |  |
+| test/integration.test.ts::集成 — race 乱序 + 夹杂错误 > 三并发各自发 HTTP，前两个失败、第三个成功 → 全部拿到成功结果 | rule/share.rule.policy.test.ts::集成 — race 乱序 + 夹杂错误 > [share.opt.policy][share.fn.$race] 三并发各自发 HTTP，前两个失败、第三个成功 → 全部拿到成功结果 | rename | 单插件声明行为：race 三并发前两失败第三成功，成功者分发给所有人（rule 已有一失败一成功变体） |  |
+| test/integration.test.ts::集成 — retry 瞬时错误恢复 > 前两次 500、第三次 200 → retry 自动恢复，对外只见成功 | rule/retry.rule.test.ts::集成 — retry 瞬时错误恢复 > [retry.opt.max] 前两次 500、第三次 200 → retry 自动恢复，对外只见成功 | rename | 单插件声明行为：前两次 500、第三次 200 自动恢复（rule 已有 max=2 同形变体，输入 max=5 且请求级 retry:5，拿不准而保留） |  |
+| test/integration.test.ts::集成 — retry 瞬时错误恢复 > 始终失败 → 耗尽重试后 reject | rule/retry.rule.test.ts::集成 — retry 瞬时错误恢复 > [retry.opt.max] 始终失败 → 耗尽重试后 reject | rename | 单插件声明行为：始终失败耗尽后 reject（rule 已有同形用例，输入为 503，拿不准而保留） |  |
+| test/integration.test.ts::集成 — cache 命中（顺序） > 首发未命中→打网络；二发命中→不再打网络 | rule/cache.rule.store.test.ts::集成 — cache 命中（顺序） > [cache.fn.axpCache][cache.req.cache] 首发未命中→打网络；二发命中→不再打网络 | rename | 单插件声明行为：首发未命中、二发命中（key 仅供给缓存键，端到端） |  |
+| test/integration.test.ts::集成 — 高并发乱序夹杂错误：无串扰 > 20 个不同请求，偶数成功/奇数 400，乱序完成 → 各自结果正确、互不串扰 | integration/core.integration.test.ts::集成 — 高并发乱序夹杂错误：无串扰 > [public.member.Core.get] 20 个不同请求，偶数成功/奇数 400，乱序完成 → 各自结果正确、互不串扰 | rename | 不装任何插件的纯 Core 并发隔离，属装配层 |  |
+| test/integration.test.ts::集成 — mock 插件「客户端回落」（404 → axios 层重发真实） > mock 路径 404 → 插件在 axios 层改打真实路径并返回真实数据 | rule/mock.rule.test.ts::集成 — mock 插件「客户端回落」（404 → axios 层重发真实） > [mock.fn.axpMock][mock.cb.fallbackWhen] mock 路径 404 → 插件在 axios 层改打真实路径并返回真实数据 | rename | 单插件声明行为：mock 路径 404 在 axios 层回落真实路径 |  |
+| test/integration.test.ts::集成 — loading 并发计数 > 多并发只 show 一次、hide 一次（计数边界） | rule/loading.rule.test.ts::集成 — loading 并发计数 > [loading.fn.$wrap][loading.cb.loading] 多并发只 show 一次、hide 一次（计数边界） | rename | 单插件声明行为：多并发只 show/hide 一次（rule 已有两并发变体） |  |

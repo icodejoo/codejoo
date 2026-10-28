@@ -88,3 +88,18 @@ describe('cache management API', () => {
     expect(r1.data).not.toBe(r2.data);
   });
 });
+
+describe('集成 — cache 命中（顺序）', () => {
+  it('[cache.fn.axpCache][cache.req.cache] 首发未命中→打网络；二发命中→不再打网络', async () => {
+    const { net, api } = mkApi();
+    let n = 0;
+    net.on('GET', '/cfg', () => ({ data: { code: 0, data: { v: ++n } } }));
+    use(api, [key(), cache({ expires: 10_000 })]);
+
+    const r1: any = await api.get('/cfg')(undefined, { key: true, cache: true });
+    const r2: any = await api.get('/cfg')(undefined, { key: true, cache: true });
+    expect(r1.v).toBe(1);
+    expect(r2.v).toBe(1);                         // 命中缓存，值不变
+    expect(net.calls('GET', '/cfg')).toBe(1);     // 网络只打一次
+  });
+});

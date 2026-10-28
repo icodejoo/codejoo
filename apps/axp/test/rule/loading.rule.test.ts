@@ -4,6 +4,7 @@ import type { AxiosAdapter, AxiosRequestConfig } from 'axios';
 import loading, { $wrap, type TLoadingFunc } from '../../src/plugins/loading';
 import { Axp } from '../../src/install';
 import { makeNetwork } from '../helpers/network';
+import { use } from '../helpers/install';
 
 // ───────────────────────────────────────────────────────────────────────────
 //  $wrap：单计数器 + 按请求解析回调
@@ -361,4 +362,32 @@ describe('cancel/loading — 资源释放边界', () => {
         expect(loading({ enable: false }).install(ax)).toBeUndefined();
         expect(ax.defaults.adapter).toBe(before);
     });
+});
+
+/** 装好网络仿真的 Core 工厂 */
+function mkApi() {
+  const net = makeNetwork();
+  const api = Axp.create(axios.create({ adapter: net.adapter }));
+  return { net, api };
+}
+
+/** 给请求加延迟（毫秒），配合 makeNetwork 制造乱序 */
+const lat = (ms: number) => ({ latency: ms } as any);
+
+describe('集成 — loading 并发计数', () => {
+  it('[loading.fn.$wrap][loading.cb.loading] 多并发只 show 一次、hide 一次（计数边界）', async () => {
+    const { net, api } = mkApi();
+    net.fallback(() => ({ data: { code: 0, data: 1 } }));
+    const states: boolean[] = [];
+    use(api, [loading({ loading: (v) => states.push(v) })]);
+
+    await Promise.all(
+      Array.from({ length: 10 }, (_, i) => api.get(`/x${i}`)(undefined, { loading: true, ...lat(15) })),
+    );
+
+    expect(states.filter((v) => v === true)).toHaveLength(1);   // 仅一次 show
+    expect(states.filter((v) => v === false)).toHaveLength(1);  // 仅一次 hide
+    expect(states[0]).toBe(true);
+    expect(states[states.length - 1]).toBe(false);
+  });
 });

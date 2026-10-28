@@ -1,6 +1,8 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import axios from 'axios';
 import { create } from '../../src/core';
+import { Axp } from '../../src';
+import { makeNetwork } from '../helpers/network';
 
 afterEach(() => { vi.restoreAllMocks(); });
 
@@ -28,4 +30,44 @@ describe('Core — 合并优先级与返回形状', () => {
         create(ax);
         expect(ax.defaults.transitional).toMatchObject({ silentJSONParsing: false, clarifyTimeoutError: true });
     });
+});
+
+/** 装好网络仿真的 Core 工厂 */
+function mkApi() {
+  const net = makeNetwork();
+  const api = Axp.create(axios.create({ adapter: net.adapter }));
+  return { net, api };
+}
+
+/** 给请求加延迟（毫秒），配合 makeNetwork 制造乱序 */
+const lat = (ms: number) => ({ latency: ms } as any);
+
+describe('集成 — 高并发乱序夹杂错误：无串扰', () => {
+  it('[public.member.Core.get] 20 个不同请求，偶数成功/奇数 400，乱序完成 → 各自结果正确、互不串扰', async () => {
+    const { net, api } = mkApi();
+    net.fallback((c) => {
+      const id = Number(new URL('http://x' + c.url).searchParams.get('id'));
+      return id % 2 === 0
+        ? { data: { code: 0, data: { id, ok: true } } }
+        : { status: 400, data: { code: 'BAD', data: { id } } };
+    });
+    // 不装任何插件：纯 Core dispatch，验证并发隔离
+    const reqs = Array.from({ length: 20 }, (_, i) =>
+      api
+        .get(`/item?id=${i}`)(undefined, lat(((i * 7) % 13) + 1)) // 乱序延迟
+        .then((data: any) => ({ i, status: 'ok' as const, data }))
+        .catch((e: any) => ({ i, status: 'err' as const, id: e?.response?.data?.data?.id })),
+    );
+    const out = await Promise.all(reqs);
+
+    for (const r of out) {
+      if (r.i % 2 === 0) {
+        expect(r.status).toBe('ok');
+        expect((r as any).data.id).toBe(r.i);   // 成功值对应自己的 id（无串扰）
+      } else {
+        expect(r.status).toBe('err');
+        expect((r as any).id).toBe(r.i);        // 错误也对应自己的 id
+      }
+    }
+  });
 });
