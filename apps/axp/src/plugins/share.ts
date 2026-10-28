@@ -1,410 +1,310 @@
+import type { AxpContext } from "../context";
+import { normalizeMethod } from "../methods";
+import { resolveOption, type AxpOption, type IPluginSwitch } from "../options";
+import { AXP_KINDS, type IAxpResponse } from "../response";
+import type { AxpNext, AxpPlugin, AxpRequestPatch } from "../types";
+import { isPlainObject } from "../utils";
 
-import type { Plugin, MaybeFun } from '../types';
-import { callAdapter, pluginLog, wrapAdapter } from '../helper';
-import { AxiosError, CanceledError } from 'axios';
-import { $defaultShouldCache } from './cache';
-import type { AxiosAdapter, AxiosRequestConfig, AxiosResponse, InternalAxiosRequestConfig } from 'axios';
+/** 内置共享插件名称。 */
+const NAME = "axp:share";
+/** AbortSignal 的标准事件名。 */
+const ABORT_EVENT = "abort";
+/** 取消 axios 层超时，把超时完全交给各订阅者自己的计时器。 */
+const NO_TIMEOUT = 0;
 
+/** 共享策略：首发复用、最新者胜、最先成功者胜。 */
+export type SharePolicy = "start" | "end" | "race";
 
-const name = 'axp:share'
+/** 未指定策略时采用首发复用。 */
+const DEFAULT_POLICY: SharePolicy = "start";
+/** 合法策略名，用于过滤请求级的非法字符串。 */
+const POLICIES: ReadonlySet<string> = new Set(["start", "end", "race"]);
+/** 默认只共享不改变服务端状态的方法。 */
+const DEFAULT_METHODS = ["get", "head"];
 
-/**
- * 防抖/节流/合并多策略合一插件，按 `policy` 切换具体语义。
- * **所有策略以 `config.key` 为去重维度——key 由 `key` 插件计算。**
- *   - **start**：相同 key 的并发请求等待并复用首个的 promise（HTTP 只发一次）
- *   - **end**：后到的请求顶替前面，所有 caller 等待最后一个的 HTTP 结果
- *   - **race**：多个 caller 各自发 HTTP，第一个成功的赢家分发给所有 caller（`Promise.any`）
- *   - **none**：不参与，等同于关闭；没有 key 也走 none
- *
- * **核心实现**：每个 (key, 一轮请求) 共享一个手写 `new Promise` 取出 resolve/reject 的 promise，
- * 不同策略只是决定"哪个 HTTP 有资格 settle 它"。一经 settle，其他重复 resolve/reject
- * 自动 no-op，无需 callers 列表或显式去重。
- *
- * 失败重试请用独立的 `retry` 插件——两者不会再互相干扰：本插件不再有内部重试循环，
- * `retry` 的整链路重发会重新经过这里的去重逻辑，不会触发一次已经不存在的内部重试。
- *
- * A single plugin unifying debounce/throttle/merge strategies via `policy`. All
- * strategies dedupe on `config.key`. Each (key, round of requests) shares one
- * hand-rolled `new Promise` (resolve/reject captured; no ES2024 `Promise.withResolvers`); strategies only decide *which* HTTP call
- * may settle it — once settled, extra resolve/reject calls are automatic
- * no-ops. Failure retries belong in the standalone `retry` plugin: this plugin
- * has no internal retry loop anymore, so a `retry` resend cleanly re-enters
- * this dedup logic instead of double-triggering a retry that no longer exists.
- *
- * @param options 插件配置：enable/policy / plugin config: enable/policy
- * @returns Plugin：install 时包装 adapter 按 key+policy 去重/合并，卸载还原 adapter / a Plugin that dedupes/merges by key+policy on install, restores the adapter on teardown
+/** 共享插件的装配配置。 */
+export interface ISharedOptions extends IPluginSwitch {
+  /** 默认共享策略，默认 start。 */
+  policy?: SharePolicy;
+  /** 允许共享的方法，默认 get、head；其它方法即使请求级开启也不共享。 */
+  methods?: string[];
+}
+
+/** 请求级 share 对象写法。 */
+export interface ISharedRequestOptions extends IPluginSwitch {
+  /** 本次请求使用的共享策略。 */
+  policy?: SharePolicy;
+}
+
+/** 内置默认：首发复用，只共享 GET 与 HEAD。 */
+const DEFAULTS = {
+  /** 默认策略。 */ policy: DEFAULT_POLICY,
+  /** 默认方法。 */ methods: DEFAULT_METHODS,
+};
+
+/** 合并内置默认之后的共享配置。 */
+type TShareConfig = ISharedOptions & Required<Pick<ISharedOptions, "policy" | "methods">>;
+
+/** 一组同 key 并发请求共享的状态。 */
+interface IShareEntry<R extends IAxpResponse> {
+  /** 共享结果，永不 reject。 */
+  promise: Promise<R>;
+  /** 落定共享结果。 */
+  resolve: (response: R) => void;
+  /** 已落定或已被放弃；之后到达的结果一律丢弃。 */
+  settled: boolean;
+  /** 仍在等待的订阅者数。 */
+  subs: number;
+  /** start：共享请求的取消控制器。 */
+  controller?: AbortController;
+  /** end：已发出的请求序号，只有最新序号的结果有效。 */
+  seq: number;
+  /** race：仍在途的请求数。 */
+  inflight: number;
+}
+/** 同一策略下 key 到共享条目的索引。 */
+type TShareTable<R extends IAxpResponse> = Map<string, IShareEntry<R>>;
+/** 某个策略处理一次请求的入口。 */
+type TShareRunner = <R extends IAxpResponse>(
+  ctx: AxpContext<R>,
+  next: AxpNext<R>,
+  key: string,
+  table: TShareTable<R>,
+) => Promise<R>;
+
+/** 判断是否为合法策略名。 */
+function isPolicy(value: unknown): value is SharePolicy {
+  return POLICIES.has(value as string);
+}
+
+/** 字符串简写即策略名，非法字符串交回插件级策略。 */
+function policyShorthand(value: unknown): Partial<ISharedOptions> | undefined {
+  return isPolicy(value) ? { policy: value } : undefined;
+}
+
+/** 本次请求生效的策略；null 表示这次不共享。 */
+function resolvePolicy(value: unknown, base: TShareConfig): SharePolicy | null {
+  if (value === true) return base.policy;
+  if (typeof value !== "string" && !isPlainObject(value)) return null;
+  const resolved = resolveOption(value, base, DEFAULTS, policyShorthand);
+  if (!resolved) return null;
+  return isPolicy(resolved.policy) ? resolved.policy : base.policy;
+}
+
+/** 新建一个尚未落定的共享条目。 */
+function createEntry<R extends IAxpResponse>(): IShareEntry<R> {
+  let resolve!: (response: R) => void;
+  const promise = new Promise<R>((done) => {
+    resolve = done;
+  });
+  return { promise, resolve, settled: false, subs: 0, seq: 0, inflight: 0 };
+}
+
+/** 用共享结果落定条目并摘出索引；已落定或已放弃的条目忽略迟到的结果。 */
+function settleEntry<R extends IAxpResponse>(
+  table: TShareTable<R>,
+  key: string,
+  entry: IShareEntry<R>,
+  response: R,
+): void {
+  if (entry.settled) return;
+  entry.settled = true;
+  if (table.get(key) === entry) table.delete(key);
+  entry.resolve(response);
+}
+
+/** 读取已含实例 defaults 的有效超时毫秒数；缺省或非法按无超时处理。 */
+function timeoutOf<R extends IAxpResponse>(ctx: AxpContext<R>): number {
+  return ctx.request.timeout || NO_TIMEOUT;
+}
+
+/** 订阅一个共享条目：监听自己的取消与超时，单独离开只结束自己。
+ * @param ctx 订阅者自己的上下文。
+ * @param entry 共享条目。
+ * @param abandon 最后一个订阅者提前离开时调用，用于中止底层请求；落定后订阅者在同一轮微任务内收尾，不会再提前离开。
+ * @returns 共享结果，或订阅者自己的取消、超时响应。
  */
-export default function axpShare({ enable = true, policy = 'start' }: ISharedOptions = {}): Plugin {
-    const defaults: ISharedOptions = { policy };
-    return {
-        name,
-        install(axios) {
-            pluginLog(axios.defaults, `[${name}] enabled:${enable} policy:${policy}`);
-            if (!enable) return;
-            const map = new Map<string, IShareEntry>();
-            // 作为独立一层叠在 adapter 链上，可按任意顺序卸载
-            return wrapAdapter(axios, (prev) => (config) => {
-                const key = config.key;
-                if (!key) return prev(config);
-                const p = $resolvePolicy(config, defaults);
-                delete config.share;
-                if (p === 'none') return prev(config);
-                const run = p === 'end' ? $end : p === 'race' ? $race : $start;
-                // 共享结果对所有 caller 是同一个 promise：每个订阅者各自监听自己的取消/超时，
-                // 并拿到重绑了自己 config 的响应/错误，否则下游（如 cancel/retry）按 config 释放资源会漏、用错配置
-                return $follow(run(prev, map, key, config), config);
-            });
-        },
-    };
-}
-
-
-// ───────────────────────────────────────────────────────────────────────────
-//  订阅者视图（每个 caller 独立的取消 / 超时 / 响应与错误重绑）
-//  Per-subscriber view (own cancel / timeout / rebound response & error)
-// ───────────────────────────────────────────────────────────────────────────
-
-/** axios 运行时的 CanceledError 签名为 (message, config, request)，其类型声明偏窄，这里放宽 */
-const CanceledError_ = CanceledError as unknown as new (message?: string, config?: InternalAxiosRequestConfig) => Error;
-
-/** 超时错误文案前缀，与 axios 的 clarifyTimeoutError 文案保持一致 */
-const TIMEOUT_MSG = (ms: number) => `timeout of ${ms}ms exceeded`;
-
-/**
- * 把共享响应换成属于该订阅者的响应外壳（`config` 重绑为本次请求的 config）。
- *
- * @param r 共享响应
- * @param config 订阅者自己的 config
- * @returns `config` 已是本次请求的响应（原对象或浅拷贝）
- */
-export function $rebindResponse(r: AxiosResponse, config: AxiosRequestConfig): AxiosResponse {
-    return r.config === config ? r : { ...r, config: config as InternalAxiosRequestConfig };
-}
-
-/**
- * 给订阅者一个独立的 error：保留原型与全部自有属性（AxiosError / CanceledError 等不丢类型），
- * 并把 `config`、`response.config` 重绑为自己的 config。非对象错误原样返回。
- *
- * @param err 共享错误
- * @param config 订阅者自己的 config
- * @returns 属于该订阅者的错误；已经指向自己 config 时返回原对象
- */
-export function $rebindError(err: unknown, config: AxiosRequestConfig): unknown {
-    if (!err || typeof err !== 'object') return err;
-    const e = err as { config?: unknown; response?: { config?: unknown } };
-    if (e.config === config && (!e.response || e.response.config === config)) return err;
-    const copy = Object.create(Object.getPrototypeOf(err));
-    for (const k of Object.getOwnPropertyNames(err)) {
-        // 重绑属性单独创建，避免复制冻结描述符
-        if (k === 'config' || (k === 'response' && e.response && typeof e.response === 'object')) continue;
-        Object.defineProperty(copy, k, Object.getOwnPropertyDescriptor(err, k)!);
-    }
-    copy.config = config;
-    if (e.response && typeof e.response === 'object') copy.response = { ...e.response, config };
-    return copy;
-}
-
-/**
- * 为一个订阅者包一层“自己的”视图：监听该请求自己的 signal / cancelToken / timeout，触发时立即以
- * CanceledError / ETIMEDOUT 退出（解除订阅，不影响首发请求与其他订阅者）；共享结果落定时
- * 返回重绑了自己 config 的响应或独立错误。
- *
- * @param shared 共享 promise
- * @param config 订阅者自己的 config
- * @returns 订阅者专属 promise
- */
-export function $follow(shared: Promise<AxiosResponse>, config: InternalAxiosRequestConfig): Promise<AxiosResponse> {
-    return new Promise<AxiosResponse>((resolve, reject) => {
-        let timer: ReturnType<typeof setTimeout> | undefined;
-        const signal = config.signal as (AbortSignal | undefined);
-        const token = config.cancelToken as ({ subscribe?: (fn: () => void) => void; unsubscribe?: (fn: () => void) => void } | undefined);
-        const settle = (fn: () => void) => { cleanup(); fn(); };
-        const onAbort = () => settle(() => reject(new CanceledError_(undefined, config)));
-        function cleanup() {
-            if (timer !== undefined) clearTimeout(timer);
-            signal?.removeEventListener?.('abort', onAbort);
-            token?.unsubscribe?.(onAbort);
-        }
-        if (signal?.aborted) return onAbort();
-        signal?.addEventListener?.('abort', onAbort);
-        token?.subscribe?.(onAbort);
-        const ms = Number(config.timeout);
-        if (ms > 0) {
-            timer = setTimeout(
-                () => settle(() => reject(new AxiosError(TIMEOUT_MSG(ms), AxiosError.ETIMEDOUT, config))),
-                ms,
-            );
-        }
-        shared.then(
-            (r) => settle(() => resolve($rebindResponse(r, config))),
-            (err) => settle(() => reject($rebindError(err, config))),
-        );
-    });
-}
-
-
-// ───────────────────────────────────────────────────────────────────────────
-//  解析（对 config.share 做 MaybeFun 解包 + 与 defaults 合并）
-//  Resolution (unwraps the MaybeFun on config.share + merges with defaults)
-// ───────────────────────────────────────────────────────────────────────────
-
-/** 解开 config.share 的 MaybeFun 包装 / unwraps the MaybeFun wrapper on config.share */
-function $unwrap(config: AxiosRequestConfig): unknown {
-    const v = config.share;
-    return typeof v === 'function' ? v(config) : v;
-}
-
-/**
- * 解析本次请求生效的共享策略：请求级 `config.share` 优先，回退插件级 `defaults.policy`。
- *
- * Resolves the policy for this request: per-request `config.share` first,
- * falling back to plugin-wide `defaults.policy`.
- *
- * @internal exported for unit tests
- * @param config 请求配置 / the request config
- * @param defaults 插件级默认配置 / plugin-wide defaults
- * @returns 本次请求生效的策略 / the policy in effect for this request
- */
-export function $resolvePolicy(config: AxiosRequestConfig, defaults: ISharedOptions): SharePolicy {
-    const v = $unwrap(config);
-    const fallback = defaults.policy ?? 'start';
-    if (v === false) return 'none';
-    if (v === true || v == null) return fallback;
-    if (typeof v === 'string') return $isValidPolicy(v) ? v : fallback;
-    if (typeof v === 'object' && $isValidPolicy((v as any).policy)) return (v as any).policy;
-    return fallback;
-}
-
-/** 判断 v 是否为合法的 SharePolicy 字面量 / checks whether v is a valid SharePolicy literal */
-function $isValidPolicy(v: any): v is SharePolicy {
-    return v === 'start' || v === 'end' || v === 'race' || v === 'none';
-}
-
-
-// ───────────────────────────────────────────────────────────────────────────
-//  核心：共享 entry + 策略实现
-//  Core: shared entry + strategy implementations
-// ───────────────────────────────────────────────────────────────────────────
-
-/**
- * 创建共享 entry：手写 `new Promise` 取出 resolve/reject（不用 ES2024 的
- * `Promise.withResolvers`），配 cleanup 在 settle 后自动从 map 清理（避免下一轮命中陈旧条目）。
- *
- * Creates a shared entry by capturing resolve/reject from a hand-written
- * `new Promise` (no ES2024 `Promise.withResolvers`), with cleanup that removes
- * it from the map once settled (so the next round never hits a stale entry).
- *
- * @internal
- * @param map 该策略的共享 entry 表 / the shared-entry table for this strategy
- * @param key 本轮请求的去重 key / the dedup key for this round
- * @returns 新建的共享 entry（已写入 map） / the newly created entry (already in the map)
- */
-export function $createEntry(map: Map<string, IShareEntry>, key: string): IShareEntry {
-    let resolve!: (v: AxiosResponse) => void;
-    let reject!: (e: any) => void;
-    const promise = new Promise<AxiosResponse>((res, rej) => { resolve = res; reject = rej; });
-    const entry: IShareEntry = { promise, resolve, reject };
-    map.set(key, entry);
-    // 两个分支都跑 cleanup（语义同 finally，但 .then 不会把 rejection 传到派生 promise，
-    // 避免在 caller 没 catch 共享 promise 时触发 unhandled rejection）
-    const cleanup = () => { if (map.get(key) === entry) map.delete(key); };
-    promise.then(cleanup, cleanup);
-    return entry;
-}
-
-
-/**
- * **end**：每来一个新请求 ++seq；只有 myGen === e.seq 的 HTTP 才 settle 共享 promise。
- *
- * **end**: `++seq` per incoming request; only the call whose `myGen === e.seq`
- * settles the shared promise.
- *
- * @internal
- * @param prev 原始 adapter / the original adapter
- * @param map end 策略的共享 entry 表 / the shared-entry table for `end`
- * @param key 本轮请求的去重 key / the dedup key for this round
- * @param config 本次请求的配置 / this request's config
- * @returns 共享 promise，由最新一次请求的 HTTP 结果 settle / the shared promise, settled by the most recent request's result
- */
-export function $end(prev: AxiosAdapter, map: Map<string, IShareEntry>, key: string, config: InternalAxiosRequestConfig): Promise<AxiosResponse> {
-    const e = map.get(key) ?? Object.assign($createEntry(map, key), { seq: 0 });
-    const my = ++e.seq!;
-    callAdapter(prev, config).then(
-        (v) => { if (my === e.seq) e.resolve(v); },
-        (err) => { if (my === e.seq) e.reject(err); },
+function subscribe<R extends IAxpResponse>(
+  ctx: AxpContext<R>,
+  entry: IShareEntry<R>,
+  abandon?: () => void,
+): Promise<R> {
+  let deliver!: (response: R) => void;
+  const result = new Promise<R>((resolve) => {
+    deliver = resolve;
+  });
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  let left = false;
+  /** 离开订阅：先解除监听，再交出结果；提前离开的最后一人负责放弃共享请求。 */
+  function leave(response: R, early: boolean): void {
+    if (left) return;
+    left = true;
+    clearTimeout(timer);
+    ctx.signal.removeEventListener(ABORT_EVENT, onAbort);
+    deliver(response);
+    if (early && --entry.subs === 0) abandon?.();
+  }
+  /** 调用方取消：只让自己以 cancel 告终。 */
+  function onAbort(): void {
+    leave(ctx.fail({ kind: AXP_KINDS.CANCEL }), true);
+  }
+  entry.subs++;
+  // 首发在订阅前已调用内层，内层若同步取消了调用方，abort 事件已错过，这里补判
+  if (ctx.signal.aborted) {
+    onAbort();
+    return result;
+  }
+  ctx.signal.addEventListener(ABORT_EVENT, onAbort);
+  const limit = timeoutOf(ctx);
+  if (limit > 0) {
+    timer = setTimeout(
+      /** 调用方超时：只让自己以 timeout 告终。 */ () =>
+        leave(
+          ctx.fail({ kind: AXP_KINDS.TIMEOUT, message: `timeout of ${limit}ms exceeded` }),
+          true,
+        ),
+      limit,
     );
-    return e.promise;
+  }
+  void entry.promise.then(/** 共享结果到达。 */ (response) => leave(response, false));
+  return result;
 }
 
-
-/**
- * **race**：每个 caller 各发 HTTP，**第一个成功**的赢家分发给所有 caller（`Promise.any` 语义）；
- * 所有 in-flight 都失败才用最后一个 error reject。
- *
- * **race**: each caller sends its own HTTP call; whichever **succeeds first**
- * wins and is dispatched to everyone; rejects with the last error only once
- * every in-flight call has failed.
- *
- * @internal
- * @param prev 原始 adapter / the original adapter
- * @param map race 策略的共享 entry 表 / the shared-entry table for `race`
- * @param key 本轮请求的去重 key / the dedup key for this round
- * @param config 本次请求的配置 / this request's config
- * @returns 共享 promise，由首个成功结果 settle（或全败后用最后错误 reject） / the shared promise, settled by the first success (or rejected with the last error once all fail)
- */
-export function $race(prev: AxiosAdapter, map: Map<string, IShareEntry>, key: string, config: InternalAxiosRequestConfig): Promise<AxiosResponse> {
-    const e = map.get(key) ?? Object.assign($createEntry(map, key), { inFlight: 0 });
-    e.inFlight!++;
-    // 失败（含 business 风格的 200+非成功 code）先暂存；有成功者才算赢，全部落定仍无成功则以最后一个失败收尾
-    const settleLast = () => {
-        const l = e.last!;
-        if (l.isErr) e.reject(l.v); else e.resolve(l.v as AxiosResponse);
-    };
-    callAdapter(prev, config).then(
-        (resp) => {
-            e.inFlight!--;
-            if ($defaultShouldCache(resp)) return e.resolve(resp);
-            e.last = { isErr: false, v: resp };
-            if (e.inFlight === 0) settleLast();
-        },
-        (err) => {
-            e.inFlight!--;
-            e.last = { isErr: true, v: err };
-            if (e.inFlight === 0) settleLast();
-        },
+/** start：首发才真正发请求，后到的同 key 订阅者复用其结果。 */
+function shareStart<R extends IAxpResponse>(
+  ctx: AxpContext<R>,
+  next: AxpNext<R>,
+  key: string,
+  table: TShareTable<R>,
+): Promise<R> {
+  let entry = table.get(key);
+  if (!entry) {
+    const created = createEntry<R>();
+    entry = created;
+    created.controller = new AbortController();
+    table.set(key, created);
+    // 共享请求用独立信号，超时也交给订阅者自己的计时器，首发的取消和超时都不连累跟随者。
+    const patch: AxpRequestPatch = { signal: created.controller.signal };
+    if (timeoutOf(ctx) > 0) patch.timeout = NO_TIMEOUT;
+    void next(patch).then(
+      /** 首发结果分发给所有订阅者。 */ (response) => settleEntry(table, key, created, response),
     );
-    return e.promise;
+  }
+  const shared = entry;
+  return subscribe(
+    ctx,
+    shared,
+    /** 订阅者全部离开：摘除条目并中止底层请求。 */ () => {
+      shared.settled = true;
+      if (table.get(key) === shared) table.delete(key);
+      shared.controller!.abort();
+    },
+  );
 }
 
+/** end：每次调用都发请求，只有最新一次的结果落定共享条目。 */
+function shareEnd<R extends IAxpResponse>(
+  ctx: AxpContext<R>,
+  next: AxpNext<R>,
+  key: string,
+  table: TShareTable<R>,
+): Promise<R> {
+  let entry = table.get(key);
+  if (!entry) {
+    entry = createEntry<R>();
+    table.set(key, entry);
+  }
+  const shared = entry;
+  const mine = ++shared.seq;
+  void next().then(
+    /** 被更新的调用顶替后，这次的结果直接丢弃。 */ (response) =>
+      mine === shared.seq ? settleEntry(table, key, shared, response) : undefined,
+  );
+  return subscribe(ctx, shared);
+}
 
-/**
- * **start**：相同 key 的并发请求等待并复用首发 caller 的 promise，HTTP 只发一次。
- *
- * **start**: concurrent same-key requests wait for and reuse the first caller's
- * promise; HTTP is sent only once.
- *
- * @internal
- * @param prev 原始 adapter / the original adapter
- * @param map start 策略的共享 entry 表 / the shared-entry table for `start`
- * @param key 本轮请求的去重 key / the dedup key for this round
- * @param config 本次请求的配置 / this request's config
- * @returns 共享 promise，由首发请求的 HTTP 结果 settle / the shared promise, settled by the first request's result
+/** race：每次调用都发请求，第一个成功的胜出；全部失败时用最后一个。 */
+function shareRace<R extends IAxpResponse>(
+  ctx: AxpContext<R>,
+  next: AxpNext<R>,
+  key: string,
+  table: TShareTable<R>,
+): Promise<R> {
+  let entry = table.get(key);
+  if (!entry) {
+    entry = createEntry<R>();
+    table.set(key, entry);
+  }
+  const shared = entry;
+  shared.inflight++;
+  void next().then(
+    /** 成功立即胜出；失败要等在途的都落定，最后到达的那个收尾。 */ (response) => {
+      shared.inflight--;
+      return response.ok || shared.inflight === 0
+        ? settleEntry(table, key, shared, response)
+        : undefined;
+    },
+  );
+  return subscribe(ctx, shared);
+}
+
+/** 策略到处理入口的映射。 */
+const RUNNERS: Record<SharePolicy, TShareRunner> = {
+  start: shareStart,
+  end: shareEnd,
+  race: shareRace,
+};
+
+/** 合并同 key 的并发请求，按策略决定谁发请求、谁的结果被共享。
+ * 请求级 `share` 开启（true、策略名或 `{ policy }`）；key 不可哈希时直接放行。
+ * 共享以一次尝试为单位，retry 在外层，每次重试都会重新经过这里。
+ * @param options 总开关、默认策略与允许共享的方法。
+ * @returns source 阶段内置次序 2 的插件，每个客户端各有一套独立的共享表。
+ * @example `axpShare({ policy: 'start' })` 配合 `api.get('/pets')(undefined, { share: true })`
  */
-export function $start(
-    prev: AxiosAdapter,
-    map: Map<string, IShareEntry>,
-    key: string,
-    config: InternalAxiosRequestConfig,
-): Promise<AxiosResponse> {
-    let entry = map.get(key);
-    if (!entry) {
-        entry = $createEntry(map, key);
-        const ctrl = new AbortController();
-        entry.ctrl = ctrl;
-        entry.subs = 0;
-        // 先登记首发者（其 signal 已中止时会立刻触发“离开”并 abort 底层）
-        $subscribe(map, key, entry, config);
-        // 底层请求用独立 signal，且不带首发者的 cancelToken，避免首发者单独取消连带 follower
-        callAdapter(prev, { ...config, signal: ctrl.signal, cancelToken: undefined }).then(entry.resolve, entry.reject);
-    } else {
-        $subscribe(map, key, entry, config);
-    }
-    return entry.promise;
+export default function axpShare<R extends IAxpResponse = IAxpResponse>(
+  options: ISharedOptions = {},
+): AxpPlugin<R> {
+  const base = resolveOption<ISharedOptions, typeof DEFAULTS>(undefined, options, DEFAULTS);
+  if (!isPolicy(base.policy)) base.policy = DEFAULT_POLICY;
+  const methods = new Set(
+    base.methods.map(/** 方法名统一小写。 */ (method) => method.toLowerCase()),
+  );
+  return {
+    name: NAME,
+    enable: options.enable,
+    stage: "source",
+    /** 每个客户端各自管理三种策略的共享表。 */
+    setup() {
+      const tables: Record<SharePolicy, TShareTable<R>> = {
+        start: new Map(),
+        end: new Map(),
+        race: new Map(),
+      };
+      return {
+        /** 只处理开启了 share、方法与 key 都合格的请求。 */
+        async handle(ctx, next) {
+          const policy = resolvePolicy(ctx.request.share, base);
+          if (!policy || !methods.has(normalizeMethod(ctx.request.method))) return next();
+          const key = ctx.key();
+          if (key === null) return next();
+          if (ctx.signal.aborted) return ctx.fail({ kind: AXP_KINDS.CANCEL });
+          return RUNNERS[policy](ctx, next, key, tables[policy]);
+        },
+        /** 卸载后清空共享表，在途订阅者仍按各自结果落定。 */
+        dispose() {
+          tables.start.clear();
+          tables.end.clear();
+          tables.race.clear();
+        },
+      };
+    },
+  };
 }
 
-/**
- * 登记一个订阅者并监听其取消/超时；全部离开时 abort 底层、摘除 entry 并 reject 共享 promise。
- *
- * @internal
- * @param map start 策略的共享 entry 表
- * @param key 本轮请求的去重 key
- * @param entry 共享 entry（需已有 ctrl/subs）
- * @param config 该订阅者自己的配置
- */
-function $subscribe(map: Map<string, IShareEntry>, key: string, entry: IShareEntry, config: InternalAxiosRequestConfig): void {
-    const signal = config.signal as (AbortSignal | undefined);
-    const token = config.cancelToken as ({ subscribe?: (fn: () => void) => void; unsubscribe?: (fn: () => void) => void } | undefined);
-    let left = false;
-    let timer: ReturnType<typeof setTimeout> | undefined;
-    entry.subs!++;
-    const onAbort = () => leave(new CanceledError_(undefined, config));
-    const dispose = () => {
-        if (timer !== undefined) clearTimeout(timer);
-        signal?.removeEventListener?.('abort', onAbort);
-        token?.unsubscribe?.(onAbort);
-    };
-    function leave(error: unknown) {
-        if (left) return;
-        left = true;
-        dispose();
-        if (--entry.subs! > 0) return;
-        // 最后一个订阅者也走了：同步摘除，新来的请求不会再加入这个已死的 entry
-        if (map.get(key) === entry) map.delete(key);
-        entry.ctrl!.abort();
-        entry.reject(error);
-    }
-    if (signal?.aborted) return onAbort();
-    signal?.addEventListener?.('abort', onAbort);
-    token?.subscribe?.(onAbort);
-    const ms = Number(config.timeout);
-    if (ms > 0 && !left) {
-        timer = setTimeout(() => leave(new AxiosError(TIMEOUT_MSG(ms), AxiosError.ETIMEDOUT, config)), ms);
-    }
-    entry.promise.then(dispose, dispose);
-}
-
-
-// ───────────────────────────────────────────────────────────────────────────
-//  类型
-//  Types
-// ───────────────────────────────────────────────────────────────────────────
-
-/** 共享/去重策略字面量 / the sharing/dedup strategy literal */
-export type SharePolicy = 'start' | 'end' | 'race' | 'none';
-
-export interface ISharedOptions {
-    /** 插件级总开关；默认 true / plugin-wide kill switch; defaults to true */
-    enable?: boolean;
-    /** 默认共享策略；可由请求级 config.share 覆盖，默认 'start' / default policy; overridable per-request via config.share, defaults to 'start' */
-    policy?: SharePolicy;
-}
-
-/** 一个 (key, 一轮请求) 的共享状态 / the shared state for one (key, round of requests) */
-interface IShareEntry {
-    /** 本轮请求共享的 promise，最终由某次 HTTP settle / the promise shared by this round, settled by one HTTP call */
-    promise: Promise<AxiosResponse>;
-    /** settle 该 promise 为成功 / settles the promise as resolved */
-    resolve: (v: AxiosResponse) => void;
-    /** settle 该 promise 为失败 / settles the promise as rejected */
-    reject: (e: any) => void;
-    /** $end：单调递增序号，settle 时比对自己是否还是最新 / $end: monotonic seq, compared at settle time to check it's still latest */
-    seq?: number;
-    /** $race：还在跑的 HTTP 数，归零且未 settle 时表示全失败 / $race: in-flight count; hitting zero while unsettled means every call failed */
-    inFlight?: number;
-    /** $race：最近一次失败（reject 或 resolve 但业务失败），全部落定仍无成功时用它收尾 / $race: latest failure, used to settle when all end without success */
-    last?: { isErr: boolean; v: unknown };
-    /** $start：底层请求专用的 AbortController，订阅者全部取消/超时时 abort / $start: controller for the underlying request, aborted when all subscribers cancel or time out */
-    ctrl?: AbortController;
-    /** $start：仍在等待结果的订阅者数 / $start: number of subscribers still waiting */
-    subs?: number;
-}
-
-
-declare module 'axios' {
-    interface AxiosRequestConfig {
-        /**
-         * 共享策略（同 `config.key` 的并发请求如何处理）：
-         *   - `false` → 不共享（policy='none'）
-         *   - `true`/未指定 → 走插件级 `policy`
-         *   - 字符串 policy → 强制使用该策略
-         *   - `{ policy }` → 对象形式
-         *   - 函数 → 动态返回上述任一形式
-         *
-         * Sharing strategy for concurrent same-key requests: `false` → none;
-         * `true`/unspecified → plugin-wide `policy`; a string forces that
-         * policy; `{ policy }` object form; a function dynamically returns any
-         * of the above.
-         */
-        share?: MaybeFun<SharePolicy | boolean | { policy?: SharePolicy }>;
-    }
+declare module "../types" {
+  interface AxpRequestOptions {
+    /** false 关闭；true 沿用插件策略；策略名或 `{ policy }` 只覆盖策略，enable:false 等同 false。 */
+    share?: AxpOption<ISharedRequestOptions, SharePolicy>;
+  }
 }

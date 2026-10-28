@@ -8,10 +8,8 @@ import { customResponse, TestResponse } from "../helpers/client";
 
 declare module "../../src/types" {
   interface AxpRequestOptions {
-    /** 类型测试模拟重试插件的请求扩展。 */
+    /** 类型测试模拟重试插件的请求扩展；cache 已由真实缓存插件声明。 */
     retry?: number;
-    /** 类型测试模拟缓存插件的请求扩展。 */
-    cache?: boolean;
   }
 }
 /** 方法优先 Schema；接口无需索引签名。 */
@@ -115,7 +113,6 @@ it("[core.fn.createAxp][core.req.wrap][core.req.throws] Schema/响应泛型/插�
     expectTypeOf<TestResponse>().toExtend<IAxpResponse>();
     expectTypeOf<AxpRequestOptions>().toExtend<{
       /** retry 字段。 */ retry?: number;
-      /** cache 字段。 */ cache?: boolean;
     }>();
     const generated = createAxp<model.MethodRefs>();
     expectTypeOf(generated.get("/pet/{petId}")({ petId: 1 })).toEqualTypeOf<Promise<model.Pet>>();
