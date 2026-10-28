@@ -98,3 +98,63 @@ describe('cancelAll — 批量中止', () => {
         expect(cancelAll(ax)).toBe(0);
     });
 });
+
+describe('cancel — 插件契约边界', () => {
+    it('[cancel.opt.enable] enable:false → install 不返回 cleanup，cancelAll 返回 0；enable 缺省/undefined 视为开启', () => {
+        const off = cancel({ enable: false }).install(makeMockCtx().ax);
+        expect(off).toBeUndefined();
+        const { ax, reqHandlers } = makeMockCtx();
+        cancel({ enable: false }).install(ax);
+        expect(cancelAll(ax)).toBe(0);
+
+        const on = makeMockCtx();
+        cancel({ enable: undefined }).install(on.ax);
+        expect(on.reqHandlers).toHaveLength(1);
+    });
+
+    it('[cancel.method.install] 同一实例重复 install → 后装的覆盖集合，只中止新集合内的请求', () => {
+        const { ax, reqHandlers } = makeMockCtx();
+        cancel().install(ax);
+        const a: any = { url: '/a' };
+        reqHandlers[0](a);
+        cancel().install(ax);
+        const b: any = { url: '/b' };
+        reqHandlers[1](b);
+        expect(cancelAll(ax)).toBe(1);
+        expect(b.signal.aborted).toBe(true);
+        expect(a.signal.aborted).toBe(false);
+    });
+
+    it('[cancel.method.install] 对无 interceptors 的实例 install → 抛错（不静默吞掉）', () => {
+        expect(() => cancel().install({ defaults: {} } as any)).toThrow();
+    });
+
+    it('[cancel.method.cleanup] 重复调用 cleanup → 不抛错，仍保持已清空状态', () => {
+        const { ax, reqHandlers } = makeMockCtx();
+        const off = cancel().install(ax) as () => void;
+        reqHandlers[0]({ url: '/a' });
+        off();
+        expect(() => off()).not.toThrow();
+        expect(cancelAll(ax)).toBe(0);
+    });
+
+    it('[cancel.prop.name] name 在不同 options 下恒定，且不被实例间共享修改影响', () => {
+        expect(cancel({ enable: false }).name).toBe('axp:cancel');
+        const p = cancel();
+        p.name = 'other';
+        expect(cancel().name).toBe('axp:cancel');
+    });
+
+    it('[cancel.fn.cancelAll.reason] reason 为 undefined/空串/非字符串 → 原样透传到 signal.reason（undefined 时为默认 AbortError）', () => {
+        const { ax, reqHandlers } = makeMockCtx();
+        cancel().install(ax);
+        const a: any = { url: '/a' }, b: any = { url: '/b' }, c: any = { url: '/c' };
+        reqHandlers[0](a); cancelAll(ax);
+        expect(a.signal.aborted).toBe(true);
+        expect((a.signal.reason as any).name).toBe('AbortError');
+        reqHandlers[0](b); cancelAll(ax, '');
+        expect(b.signal.reason).toBe('');
+        reqHandlers[0](c); cancelAll(ax, 42 as any);
+        expect(c.signal.reason).toBe(42);
+    });
+});

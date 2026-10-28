@@ -213,3 +213,142 @@ describe('cache — 卸载、代次与 TTL 边界', () => {
         expect(adapter).toHaveBeenCalledTimes(4);
     });
 });
+
+describe('cache — 选项与回调边界', () => {
+    /** 建一个已装插件的实例，adapter 计数。 */
+    function setup(opts: any = {}) {
+        const adapter = vi.fn(async (c: any) => response('ok', c));
+        const ax = axios.create({ adapter });
+        const off = cache(opts).install(ax);
+        return { adapter, ax, off };
+    }
+
+    it('[cache.opt.enable] enable:false 时请求级 cache:true 也不缓存；enable:undefined 视为开启', async () => {
+        const a = setup({ enable: false });
+        await a.ax.get('/', { key: 'k', cache: true });
+        await a.ax.get('/', { key: 'k', cache: true });
+        expect(a.adapter).toHaveBeenCalledTimes(2);
+        const b = setup({ enable: undefined });
+        await b.ax.get('/', { key: 'k', cache: true });
+        await b.ax.get('/', { key: 'k', cache: true });
+        expect(b.adapter).toHaveBeenCalledTimes(1);
+    });
+
+    it.each([false, null, undefined, 0, '', 'yes'])('[cache.req.cache] cache=%j → 视为未启用，不缓存', async (v) => {
+        const { adapter, ax } = setup();
+        await ax.get('/', { key: 'k', cache: v } as any);
+        await ax.get('/', { key: 'k', cache: v } as any);
+        expect(adapter).toHaveBeenCalledTimes(2);
+        expect(removeCache(ax, 'k')).toBe(false);
+    });
+
+    it('[cache.req.cache.expires] expires 为 0/负数/NaN → 写入即视为过期，不命中；undefined 回退插件级', async () => {
+        for (const expires of [0, -5, NaN]) {
+            const { adapter, ax } = setup();
+            await ax.get('/', { key: 'k', cache: { expires } });
+            await ax.get('/', { key: 'k', cache: { expires } });
+            expect(adapter).toHaveBeenCalledTimes(2);
+        }
+        const { adapter, ax } = setup({ expires: 1000 });
+        await ax.get('/', { key: 'k', cache: { expires: undefined } });
+        await ax.get('/', { key: 'k', cache: { expires: undefined } });
+        expect(adapter).toHaveBeenCalledTimes(1);
+    });
+
+    it('[cache.req.cache.key][cache.cb.key] key 回调返回 undefined/空串 → 不缓存且不回退 config.key', async () => {
+        const { adapter, ax } = setup({ key: () => undefined });
+        await ax.get('/', { key: 'cfg', cache: true });
+        await ax.get('/', { key: 'cfg', cache: true });
+        expect(adapter).toHaveBeenCalledTimes(2);
+        expect(removeCache(ax, 'cfg')).toBe(false);
+
+        const c = setup();
+        await c.ax.get('/', { cache: { key: () => '' } });
+        await c.ax.get('/', { cache: { key: () => '' } });
+        expect(c.adapter).toHaveBeenCalledTimes(2);
+    });
+
+    it('[cache.cb.key] 插件级 key 回调抛错 → 请求以该错误拒绝且不发出；后续请求不受影响', async () => {
+        const err = new Error('key boom');
+        const { adapter, ax } = setup({ key: () => { throw err; } });
+        await expect(ax.get('/', { cache: true })).rejects.toBe(err);
+        expect(adapter).not.toHaveBeenCalled();
+        await ax.get('/', { cache: false });
+        expect(adapter).toHaveBeenCalledTimes(1);
+    });
+
+    it('[cache.req.cache.key.callback] 请求级 key 回调抛错 → 以该错误拒绝且不发出；返回 undefined → 直通不缓存', async () => {
+        const err = new Error('req key boom');
+        const { adapter, ax } = setup();
+        await expect(ax.get('/', { cache: { key: () => { throw err; } } })).rejects.toBe(err);
+        expect(adapter).not.toHaveBeenCalled();
+        await ax.get('/', { cache: { key: () => undefined } });
+        await ax.get('/', { cache: { key: () => undefined } });
+        expect(adapter).toHaveBeenCalledTimes(2);
+    });
+
+    it('[cache.cb.clone][cache.req.cache.clone.callback] clone 回调命中时抛错 → 请求拒绝，但缓存条目保留', async () => {
+        const err = new Error('clone boom');
+        let boom = false;
+        const { adapter, ax } = setup();
+        const clone = (d: any) => { if (boom) throw err; return d; };
+        await ax.get('/', { key: 'k', cache: { clone } });
+        boom = true;
+        await expect(ax.get('/', { key: 'k', cache: { clone } })).rejects.toBe(err);
+        boom = false;
+        await ax.get('/', { key: 'k', cache: { clone } });
+        expect(adapter).toHaveBeenCalledTimes(1);
+    });
+
+    it('[cache.cb.clone][cache.req.cache.clone.callback] clone 回调返回 null → 本次 data 为 null，不影响缓存原件', async () => {
+        const { ax } = setup();
+        await ax.get('/', { key: 'k', cache: { clone: () => undefined } });
+        const hit = await ax.get('/', { key: 'k', cache: { clone: () => null } });
+        expect(hit.data).toBeNull();
+        const raw = await ax.get('/', { key: 'k', cache: true });
+        expect(raw.data).toBe('ok');
+    });
+
+    it('[cache.method.install] 同一实例重复 install → 后装的接管缓存仓，旧 cleanup 不抛错', async () => {
+        const adapter = vi.fn(async (c: any) => response('ok', c));
+        const ax = axios.create({ adapter });
+        const off1 = cache().install(ax) as () => void;
+        cache().install(ax);
+        await ax.get('/', { key: 'k', cache: true });
+        expect(removeCache(ax, 'k')).toBe(true);
+        expect(() => off1()).not.toThrow();
+    });
+
+    it('[cache.method.cleanup] 重复 cleanup 不抛错，且 adapter 保持已恢复', () => {
+        const ax = axios.create({ adapter: vi.fn() as any });
+        const before = ax.defaults.adapter;
+        const off = cache().install(ax) as () => void;
+        off();
+        expect(() => off()).not.toThrow();
+        expect(ax.defaults.adapter).toBe(before);
+    });
+
+    it('[cache.prop.name] name 恒为 axp:cache，不随 options 变化（含 enable:false / 空对象）', () => {
+        expect(cache({ enable: false }).name).toBe('axp:cache');
+        expect(cache({}).name).toBe('axp:cache');
+    });
+
+    it('[cache.opt.storage][cache.cb.storage.getItem][cache.cb.storage.setItem][cache.cb.storage.removeItem][cache.cb.storage.clear] storage 方法抛错/返回 rejected Promise 也不影响缓存（工厂未消费）', async () => {
+        const boom = () => { throw new Error('x'); };
+        const storage = { getItem: vi.fn(boom), setItem: vi.fn(boom), removeItem: vi.fn(boom), clear: vi.fn(() => Promise.reject(new Error('y'))) };
+        const { adapter, ax } = setup({ storage });
+        await ax.get('/', { key: 'k', cache: true });
+        await ax.get('/', { key: 'k', cache: true });
+        removeCache(ax, 'k');
+        clearCache(ax);
+        expect(adapter).toHaveBeenCalledTimes(1);
+        for (const fn of Object.values(storage)) expect(fn).not.toHaveBeenCalled();
+    });
+
+    it('[cache.opt.memory] memory 为 null/非布尔 → 忽略，仍走进程内缓存', async () => {
+        const { adapter, ax } = setup({ memory: null });
+        await ax.get('/', { key: 'k', cache: true });
+        await ax.get('/', { key: 'k', cache: true });
+        expect(adapter).toHaveBeenCalledTimes(1);
+    });
+});

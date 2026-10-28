@@ -137,3 +137,37 @@ describe('cancel: cancelAll bookkeeping', () => {
     await expect(p).rejects.toMatchObject({ code: 'ERR_CANCELED' });
   });
 });
+
+describe('cancel — 插件契约（install / cleanup / name / reason）', () => {
+  it('[cancel.prop.name] 插件名为 axp:cancel', () => {
+    expect(cancel().name).toBe('axp:cancel');
+  });
+
+  it('[cancel.method.install] install 注册一个请求拦截器和一个响应拦截器，并返回 cleanup 函数', () => {
+    const { ax, reqHandlers, resHandlers } = makeMockCtx();
+    const off = cancel().install(ax);
+    expect(reqHandlers).toHaveLength(1);
+    expect(resHandlers).toHaveLength(1);
+    expect(typeof off).toBe('function');
+  });
+
+  it('[cancel.method.cleanup] cleanup 后 cancelAll 返回 0，在飞的 controller 不再被中止', () => {
+    const { ax, reqHandlers } = makeMockCtx();
+    const off = cancel().install(ax);
+    const config: any = { url: '/a' };
+    reqHandlers[0](config);
+    (off as () => void)();
+    expect(cancelAll(ax, 'x')).toBe(0);
+    expect(config.signal.aborted).toBe(false);
+  });
+
+  it('[cancel.fn.cancelAll.reason] reason 会成为 signal.reason', () => {
+    const { ax, reqHandlers } = makeMockCtx();
+    cancel().install(ax);
+    const config: any = { url: '/a' };
+    reqHandlers[0](config);
+    cancelAll(ax, '用户切走了页面');
+    expect(config.signal.aborted).toBe(true);
+    expect(config.signal.reason).toBe('用户切走了页面');
+  });
+});
