@@ -1,6 +1,6 @@
 import type { AxpContext } from "../context";
 import { isEnabled, type AxpOption, type IPluginSwitch } from "../options";
-import { AXP_KINDS, type IAxpResponse } from "../response";
+import { AXP_KINDS, type AxpResponse, type IAxpResponse } from "../response";
 import type { AxpPlugin } from "../types";
 import { fireNotice } from "../utils";
 
@@ -26,7 +26,7 @@ function defaultStringify<R extends IAxpResponse>(response: R, ctx: AxpContext<R
  * @returns 不构造响应的消息插件。
  * @example `axpNotify({ notify: message => toast(message) })`
  */
-export default function axpNotify<R extends IAxpResponse = IAxpResponse>(
+export default function axpNotify<R extends IAxpResponse = AxpResponse>(
   options: INotifyOptions<R>,
 ): AxpPlugin<R> {
   const stringify = options.stringify ?? defaultStringify<R>;

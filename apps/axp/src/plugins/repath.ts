@@ -1,5 +1,5 @@
 import { resolveOption, type AxpOption, type IPluginSwitch } from "../options";
-import type { IAxpResponse } from "../response";
+import type { AxpResponse, IAxpResponse } from "../response";
 import type { AxpPlugin } from "../types";
 import { isObject, isPlainObject } from "../utils";
 
@@ -56,7 +56,7 @@ function readData(data: unknown, key: string, used: IConsumedFields): unknown {
  * @returns 经 next(patch) 传递新请求视图的 prepare 插件。
  * @example `axpRepath({ removeKey: false })`
  */
-export default function axpRepath<R extends IAxpResponse = IAxpResponse>(
+export default function axpRepath<R extends IAxpResponse = AxpResponse>(
   options: IRepathOptions = {},
 ): AxpPlugin<R> {
   const base = resolveOption<IRepathOptions, typeof DEFAULTS>(undefined, options, DEFAULTS);

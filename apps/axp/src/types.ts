@@ -247,12 +247,12 @@ export interface AxpPlugin<R extends IAxpResponse = IAxpResponse, A = void> {
 interface IAxpBaseOptions<R extends IAxpResponse> {
   /** 使用现有实例，省略时创建新实例。 */
   axios?: AxiosInstance;
-  /** 初始化插件列表。 */
-  plugins?: readonly AxpPlugin<R, any>[];
+  /** 初始化插件列表；不参与推断 R，R 只由显式泛型或 response 工厂决定。 */
+  plugins?: readonly AxpPlugin<NoInfer<R>, any>[];
   /** key 服务选项。 */
   key?: IKeyOptions;
   /** 仅转换即将抛出的可预期失败。 */
-  reject?: (response: R) => unknown;
+  reject?: (response: NoInfer<R>) => unknown;
   /** 日志与调用点捕获。 */
   debug?: boolean | AxpLogger;
 }

@@ -244,7 +244,7 @@ interface AxpPlugin<R extends IAxpResponse = IAxpResponse, A = void> {
 ### 约定
 
 1. **状态必须建在 `setup` 里**，别放在工厂闭包。这样同一个插件对象能装到多个客户端，各有一份状态；`extend()` 默认继承插件列表、各自重新 `setup`，靠的就是这条。
-2. **只透传 `R`，不构造 `R`。** 内置插件工厂写成泛型 `axpRetry<R extends IAxpResponse = IAxpResponse>(opts?)`，对任意 `R` 都成立。需要凭空造结果走 `ctx.fail()`，由响应工厂保证扩展字段存在。
+2. **只透传 `R`，不构造 `R`。** 内置插件工厂写成泛型 `axpRetry<R extends IAxpResponse = AxpResponse>(opts?)`，对任意 `R` 都成立；默认值与客户端一致。需要凭空造结果走 `ctx.fail()`，由响应工厂保证扩展字段存在。
 3. **改请求用 `next(patch)`**，不要动 `ctx.request`，也不要 `delete` 请求选项。要重发请求，先 `ctx.markReplayable()`，再多调几次 `next()`。
 4. **判断函数的参数是 `R`**：判断 401/403/5xx 一律读 `r.status`（逻辑状态），失败类别读 `r.kind` / `r.reason`。
 5. 只有 `setup`、没有中间件的插件（如 envs）不进链，只在装卸时执行。

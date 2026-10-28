@@ -3,7 +3,7 @@ import { stateKey, type AxpContext } from "../context";
 import { normalizeMethod } from "../methods";
 import type { ITokenManager } from "../objects/TokenManager";
 import { resolveOption, type IPluginSwitch } from "../options";
-import { AXP_KINDS, type IAxpResponse } from "../response";
+import { AXP_KINDS, type AxpResponse, type IAxpResponse } from "../response";
 import type { AxpPlugin, AxpRequestConfig, AxpRequestPatch } from "../types";
 import { fireNotice } from "../utils";
 import { compileMethods, compileUrlPatterns, pathnameOf } from "./auth-match";
@@ -129,7 +129,7 @@ async function waitRefresh(
  * @returns credential 阶段鉴权插件。
  * @example `axpAuth({ tokenManager, onRefresh, onAccessExpired })`
  */
-export default function axpAuth<R extends IAxpResponse = IAxpResponse>(
+export default function axpAuth<R extends IAxpResponse = AxpResponse>(
   options: IAuthOptions<R>,
 ): AxpPlugin<R> {
   if (!options?.tokenManager) throw new Error(`[${NAME}] options.tokenManager is required`);

@@ -1,7 +1,7 @@
 import type { AxpContext } from "../context";
 import { normalizeMethod } from "../methods";
 import { resolveOption, type AxpOption, type IPluginSwitch } from "../options";
-import type { IAxpResponse } from "../response";
+import type { AxpResponse, IAxpResponse } from "../response";
 import type { AxpClient, AxpPlugin } from "../types";
 import { isPlainObject } from "../utils";
 import { createFreshnessBarrier, createMemoryStore, type IAxpCacheStore } from "./cache-store";
@@ -137,7 +137,7 @@ function cloneResponse<R extends IAxpResponse>(
  * @returns source 阶段内置次序 3 的插件；`client.plugin(plugin)` 得到 `{ remove, clear }`。
  * @example `axpCache({ expires: 30_000 })` 配合 `api.get('/pets')(undefined, { cache: true })`
  */
-export default function axpCache<R extends IAxpResponse = IAxpResponse>(
+export default function axpCache<R extends IAxpResponse = AxpResponse>(
   options: ICacheOptions<R> = {},
 ): AxpPlugin<R, ICacheApi> {
   const base = resolveOption<TCacheConfig<R>, typeof DEFAULTS>(undefined, options, DEFAULTS);

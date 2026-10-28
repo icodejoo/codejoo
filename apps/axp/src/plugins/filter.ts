@@ -1,5 +1,5 @@
 import { resolveOption, type AxpOption, type IPluginSwitch } from "../options";
-import type { IAxpResponse } from "../response";
+import type { AxpResponse, IAxpResponse } from "../response";
 import type { AxpPlugin } from "../types";
 import { isPlainObject } from "../utils";
 
@@ -81,7 +81,7 @@ export function $filter(
  * @returns 在 repath 之后以 patch 传递新对象的 prepare 插件。
  * @example `axpFilter({ ignoreKeys: ['nullable'] })`
  */
-export default function axpFilter<R extends IAxpResponse = IAxpResponse>(
+export default function axpFilter<R extends IAxpResponse = AxpResponse>(
   options: IFilterOptions = {},
 ): AxpPlugin<R> {
   const base = resolveOption<IFilterOptions, typeof DEFAULTS>(undefined, options, DEFAULTS);

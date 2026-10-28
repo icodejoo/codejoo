@@ -1,7 +1,7 @@
 import { assignAxiosDefaults } from "../utils";
 import type { CreateAxiosDefaults } from "axios";
 import type { IPluginSwitch } from "../options";
-import type { IAxpResponse } from "../response";
+import type { AxpResponse, IAxpResponse } from "../response";
 import type { AxpPlugin } from "../types";
 
 /** 内置环境插件名称。 */
@@ -24,7 +24,7 @@ export type IEnvsOptions = IEnvRule[] | IEnvOptions;
  * @returns 只有 setup 的环境插件。
  * @example `axpEnvs([{ rule: () => true, config: { baseURL: '/api' } }])`
  */
-export default function axpEnvs<R extends IAxpResponse = IAxpResponse>(
+export default function axpEnvs<R extends IAxpResponse = AxpResponse>(
   options: IEnvsOptions = [],
 ): AxpPlugin<R> {
   const config = Array.isArray(options) ? { rules: options } : options;

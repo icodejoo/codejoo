@@ -275,15 +275,33 @@ it("[retry.cb.shouldRetry][retry.opt.delay][auth.cb.onRefresh][auth.cb.onFailure
     });
     expectTypeOf(retry).toEqualTypeOf<AxpPlugin<TestResponse>>();
     api.use(retry);
-    // 单独定义却不写泛型：R 退回契约接口，装进自定义响应的客户端会报错。
+    // 单独定义却不写泛型：R 退回默认响应，装进自定义响应的客户端会报错。
     const bare = axpRetry({
-      shouldRetry: /** 没有上下文可推断，参数只是契约接口。 */ (r) => {
-        expectTypeOf(r).toEqualTypeOf<IAxpResponse>();
+      shouldRetry: /** 没有上下文可推断，参数是默认响应。 */ (r) => {
+        expectTypeOf(r).toEqualTypeOf<AxpResponse>();
         return false;
       },
     });
     // @ts-expect-error 单独定义的插件必须手写泛型。
     api.use(bare);
+  }
+  expect(contracts).toBeTypeOf("function");
+});
+
+it("[core.fn.createAxp][core.opt.plugins][core.opt.reject] 不写泛型时 R 只由 response 工厂决定：内联与单独定义的插件都按默认响应装配", /** 编译期契约：plugins 与 reject 不参与推断 R。 */ () => {
+  /** 只编译调用示例，避免发送真实网络请求。 */
+  function contracts() {
+    const inline = createAxp({ plugins: [axpRetry(), axpCache()] });
+    expectTypeOf(inline.isResponse).guards.toEqualTypeOf<AxpResponse>();
+    // README 的写法：插件先单独定义，再装进默认客户端。
+    const cache = axpCache();
+    expectTypeOf(cache).toExtend<AxpPlugin<AxpResponse, any>>();
+    createAxp({ plugins: [cache], reject: /** 默认响应。 */ (r) => expectTypeOf(r).toEqualTypeOf<AxpResponse>() });
+    // 只给 response 工厂时，R 从工厂推断；自定义 R 的插件回调要靠显式泛型 createAxp<S, MyResponse> 收窄。
+    const custom = createAxp({ response: customResponse() });
+    expectTypeOf(custom.isResponse).guards.toEqualTypeOf<TestResponse>();
+    // @ts-expect-error 默认响应的插件不能装进自定义响应的客户端。
+    createAxp({ response: customResponse(), plugins: [cache] });
   }
   expect(contracts).toBeTypeOf("function");
 });

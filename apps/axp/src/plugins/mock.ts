@@ -1,5 +1,5 @@
 import { resolveOption, type AxpOption, type IPluginSwitch } from "../options";
-import { AXP_KINDS, type IAxpResponse } from "../response";
+import { AXP_KINDS, type AxpResponse, type IAxpResponse } from "../response";
 import type { AxpPlugin, AxpRequestPatch } from "../types";
 import { isPlainObject } from "../utils";
 
@@ -95,7 +95,7 @@ function resolveMock<R extends IAxpResponse>(
  * @returns source 阶段内置次序 1 的插件；enable 默认 false。
  * @example `axpMock({ enable: import.meta.env.DEV, mockUrl: 'http://localhost:4523' })`
  */
-export default function axpMock<R extends IAxpResponse = IAxpResponse>(
+export default function axpMock<R extends IAxpResponse = AxpResponse>(
   options: IMockOptions<R> = {},
 ): AxpPlugin<R> {
   const base = resolveOption<IMockOptions<R>, typeof DEFAULTS>(undefined, options, DEFAULTS);

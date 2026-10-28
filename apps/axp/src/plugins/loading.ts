@@ -1,5 +1,5 @@
 import { resolveOption, type AxpOption, type IPluginSwitch } from "../options";
-import type { IAxpResponse } from "../response";
+import type { AxpResponse, IAxpResponse } from "../response";
 import type { AxpPlugin } from "../types";
 import { fireNotice, isPlainObject } from "../utils";
 
@@ -43,7 +43,7 @@ function shorthand(value: unknown): Partial<ILoadingOptions> {
  * @returns 每客户端在 setup 建立独立计数的插件。
  * @example `axpLoading({ loading: visible => spinner.toggle(visible), delay: 100 })`
  */
-export default function axpLoading<R extends IAxpResponse = IAxpResponse>(
+export default function axpLoading<R extends IAxpResponse = AxpResponse>(
   options: ILoadingOptions = {},
 ): AxpPlugin<R> {
   const base = resolveOption<ILoadingOptions, typeof DEFAULTS>(undefined, options, DEFAULTS);

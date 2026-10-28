@@ -238,7 +238,7 @@ interface AxpPlugin<R extends IAxpResponse = IAxpResponse, A = void> {
 - `handle` / `taps` 可以写在插件对象上（无状态插件），也可以由 `setup` 返回（有状态插件）；两处都写时以 `setup` 返回的为准。`handle` 与 `taps` 同时存在时各自参与排序，taps 的段名从 `<name>#0` 起编号。
 - 插件名 `axp:` 前缀保留给内置插件，内核按名字把内置插件放到固定位置。
 - **状态必须建在 `setup` 里**，不能放在工厂闭包。这样同一个插件对象可以装到多个客户端（`extend` 默认继承插件就靠这个），各自一份状态。
-- 内置插件工厂写成泛型 `axpRetry<R extends IAxpResponse = IAxpResponse>(opts?: IRetryOptions<R>)`，只透传 `R`、不构造 `R`，所以对任意 `R` 都成立。
+- 内置插件工厂写成泛型 `axpRetry<R extends IAxpResponse = AxpResponse>(opts?: IRetryOptions<R>)`，只透传 `R`、不构造 `R`，所以对任意 `R` 都成立；默认值与客户端一致，单独定义的插件不写泛型也能装进默认客户端。
 - 插件只有 `setup` 没有中间件（如 envs）时不进链，只在装卸时执行。
 
 自定义插件示例：
@@ -315,7 +315,7 @@ const res = await api.post('/pet')(body, { throws: false })        // 不写 try
 - **Schema 推断**：保留 `types.ts` 现有的方法优先 schema、O(1) 查表、`NoInfer` 机制，TS ≥ 5.4 不变。
 - **两个泛型都要显式写**：TS 不支持部分推断，写了 `S` 就推不出 `R`。`AxpOptions` 用条件类型约束：`R` 不是 `AxpResponse` 时 `response` 必填，且其产出必须是 `R`。
 - **`WithData<R, D>`** = `Omit<R, 'data'> & { readonly data: D }`：TS 没有高阶类型，`R` 里的 `data` 是 `unknown`，每个接口的具体类型靠它替换。
-- **插件工厂推断**：内联写在 `plugins` 数组里时从上下文推出 `R`；单独定义成变量时手写 `axpRetry<MyResponse>()`。用 `expectTypeOf` 守住。
+- **插件工厂推断**：`R` 只由显式泛型或 `response` 工厂决定，`plugins` 与 `reject` 用 `NoInfer` 不参与推断。内联写在 `createAxp<S, MyResponse>` 的 `plugins` 里时从上下文推出 `R`；单独定义成变量时手写 `axpRetry<MyResponse>()`，不写则是默认的 `AxpResponse`。用 `expectTypeOf` 守住。
 - **请求选项**：插件通过 `declare module '@codejoo/axp' { interface AxpRequestOptions { retry?: … } }` 扩展，不再污染 `axios` 模块的 `AxiosRequestConfig`。
 
 ## 11. 性能设计

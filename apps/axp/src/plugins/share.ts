@@ -1,7 +1,7 @@
 import type { AxpContext } from "../context";
 import { normalizeMethod } from "../methods";
 import { resolveOption, type AxpOption, type IPluginSwitch } from "../options";
-import { AXP_KINDS, type IAxpResponse } from "../response";
+import { AXP_KINDS, type AxpResponse, type IAxpResponse } from "../response";
 import type { AxpNext, AxpPlugin, AxpRequestPatch } from "../types";
 import { isPlainObject } from "../utils";
 
@@ -262,7 +262,7 @@ const RUNNERS: Record<SharePolicy, TShareRunner> = {
  * @returns source 阶段内置次序 2 的插件，每个客户端各有一套独立的共享表。
  * @example `axpShare({ policy: 'start' })` 配合 `api.get('/pets')(undefined, { share: true })`
  */
-export default function axpShare<R extends IAxpResponse = IAxpResponse>(
+export default function axpShare<R extends IAxpResponse = AxpResponse>(
   options: ISharedOptions = {},
 ): AxpPlugin<R> {
   const base = resolveOption<ISharedOptions, typeof DEFAULTS>(undefined, options, DEFAULTS);

@@ -2,7 +2,7 @@
 import type { AxpContext } from "../context";
 import { normalizeMethod } from "../methods";
 import { isEnabled, resolveOption, type AxpOption, type IPluginSwitch } from "../options";
-import { AXP_KINDS, type AxpKind, type IAxpResponse } from "../response";
+import { AXP_KINDS, type AxpKind, type AxpResponse, type IAxpResponse } from "../response";
 import type { AxpPlugin } from "../types";
 import { isPlainObject } from "../utils";
 import {
@@ -83,7 +83,7 @@ function shorthand(value: unknown): Pick<IRetryOptions, "max"> {
  * @returns 装上即生效的 attempt 插件。
  * @example `axpRetry({ max: 2, delay: 100 })`
  */
-export default function axpRetry<R extends IAxpResponse = IAxpResponse>(
+export default function axpRetry<R extends IAxpResponse = AxpResponse>(
   options: IRetryOptions<R> = {},
 ): AxpPlugin<R> {
   const base = resolveOption<IRetryOptions<R>, typeof DEFAULTS>(undefined, options, DEFAULTS);
