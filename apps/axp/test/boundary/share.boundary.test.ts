@@ -285,12 +285,29 @@ describe('share — 订阅清理与错误属性', () => {
         pending.resolve(response());
         expect((await follower).data).toBe('ok');
     });
-    it.fails('[share.fn.$rebindError] 冻结 AxiosError 仍应重绑为 follower 的独立错误', () => {
+    it('[share.fn.$rebindError] 冻结 AxiosError 仍应重绑为 follower 的独立错误', () => {
         const error = Object.freeze(new AxiosError('frozen', 'E', {} as any));
         const config = {};
         expect(($rebindError(error, config) as any).config).toBe(config);
     });
-    it.fails('[share.opt.policy][share.fn.$follow] 所有订阅者 timeout 后也应退出共享轮次并 abort 底层', async () => {
+    it('[share.fn.$rebindError] 冻结错误和响应保留原值与错误原型', () => {
+        const original = {} as InternalAxiosRequestConfig;
+        const sharedResponse = Object.freeze(response(original));
+        const error = Object.freeze(new AxiosError('frozen', 'E', original, undefined, sharedResponse));
+        const config = {};
+        const rebound = $rebindError(error, config) as AxiosError;
+        expect(rebound).not.toBe(error);
+        expect(rebound).toBeInstanceOf(AxiosError);
+        expect(rebound.message).toBe('frozen');
+        expect(rebound.code).toBe('E');
+        expect(rebound.config).toBe(config);
+        expect(rebound.response).not.toBe(sharedResponse);
+        expect(rebound.response?.config).toBe(config);
+        expect(error.config).toBe(original);
+        expect(error.response).toBe(sharedResponse);
+        expect(sharedResponse.config).toBe(original);
+    });
+    it('[share.opt.policy][share.fn.$follow] 所有订阅者 timeout 后也应退出共享轮次并 abort 底层', async () => {
         vi.useFakeTimers();
         const adapter = vi.fn((_config: any) => new Promise<any>(() => {}));
         const ax = axios.create({ adapter });
@@ -299,6 +316,33 @@ describe('share — 订阅清理与错误属性', () => {
         await vi.advanceTimersByTimeAsync(10);
         expect((await request).code).toBe('ETIMEDOUT');
         expect(adapter.mock.calls[0][0].signal.aborted).toBe(true);
+    });
+    it('[share.fn.$start][share.fn.$follow] 分批超时只在全部离开后 abort，新请求开启新轮次', async () => {
+        vi.useFakeTimers();
+        const map = new Map();
+        const { adp, pending } = deferredAdapter();
+        const subscribe = (timeout: number) => {
+            const config = { timeout } as InternalAxiosRequestConfig;
+            return $follow($start(adp, map, 'k', config), config).catch((e) => e);
+        };
+        const leader = subscribe(10);
+        const follower = subscribe(20);
+        await vi.advanceTimersByTimeAsync(10);
+        expect((await leader).code).toBe('ETIMEDOUT');
+        expect(pending[0].config.signal?.aborted).toBe(false);
+        expect(map.size).toBe(1);
+        await vi.advanceTimersByTimeAsync(10);
+        expect((await follower).code).toBe('ETIMEDOUT');
+        expect(pending[0].config.signal?.aborted).toBe(true);
+        expect(map.size).toBe(0);
+        const fresh = subscribe(30);
+        expect(adp).toHaveBeenCalledTimes(2);
+        pending[0].resolve(mockResp('old'));
+        await Promise.resolve();
+        expect(map.size).toBe(1);
+        pending[1].resolve(mockResp('new'));
+        expect((await fresh).data).toBe('new');
+        expect(vi.getTimerCount()).toBe(0);
     });
 });
 

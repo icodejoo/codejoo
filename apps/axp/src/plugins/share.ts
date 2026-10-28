@@ -95,6 +95,8 @@ export function $rebindError(err: unknown, config: AxiosRequestConfig): unknown 
     if (e.config === config && (!e.response || e.response.config === config)) return err;
     const copy = Object.create(Object.getPrototypeOf(err));
     for (const k of Object.getOwnPropertyNames(err)) {
+        // 重绑属性单独创建，避免复制冻结描述符
+        if (k === 'config' || (k === 'response' && e.response && typeof e.response === 'object')) continue;
         Object.defineProperty(copy, k, Object.getOwnPropertyDescriptor(err, k)!);
     }
     copy.config = config;
@@ -311,7 +313,7 @@ export function $start(
 }
 
 /**
- * 登记一个订阅者并监听其取消；订阅者全部离开时才 abort 底层请求、摘除 entry 并 reject 共享 promise。
+ * 登记一个订阅者并监听其取消/超时；全部离开时 abort 底层、摘除 entry 并 reject 共享 promise。
  *
  * @internal
  * @param map start 策略的共享 entry 表
@@ -323,12 +325,15 @@ function $subscribe(map: Map<string, IShareEntry>, key: string, entry: IShareEnt
     const signal = config.signal as (AbortSignal | undefined);
     const token = config.cancelToken as ({ subscribe?: (fn: () => void) => void; unsubscribe?: (fn: () => void) => void } | undefined);
     let left = false;
+    let timer: ReturnType<typeof setTimeout> | undefined;
     entry.subs!++;
+    const onAbort = () => leave(new CanceledError_(undefined, config));
     const dispose = () => {
-        signal?.removeEventListener?.('abort', leave);
-        token?.unsubscribe?.(leave);
+        if (timer !== undefined) clearTimeout(timer);
+        signal?.removeEventListener?.('abort', onAbort);
+        token?.unsubscribe?.(onAbort);
     };
-    function leave() {
+    function leave(error: unknown) {
         if (left) return;
         left = true;
         dispose();
@@ -336,11 +341,15 @@ function $subscribe(map: Map<string, IShareEntry>, key: string, entry: IShareEnt
         // 最后一个订阅者也走了：同步摘除，新来的请求不会再加入这个已死的 entry
         if (map.get(key) === entry) map.delete(key);
         entry.ctrl!.abort();
-        entry.reject(new CanceledError_(undefined, config));
+        entry.reject(error);
     }
-    if (signal?.aborted) return leave();
-    signal?.addEventListener?.('abort', leave);
-    token?.subscribe?.(leave);
+    if (signal?.aborted) return onAbort();
+    signal?.addEventListener?.('abort', onAbort);
+    token?.subscribe?.(onAbort);
+    const ms = Number(config.timeout);
+    if (ms > 0 && !left) {
+        timer = setTimeout(() => leave(new AxiosError(TIMEOUT_MSG(ms), AxiosError.ETIMEDOUT, config)), ms);
+    }
     entry.promise.then(dispose, dispose);
 }
 
@@ -374,7 +383,7 @@ interface IShareEntry {
     inFlight?: number;
     /** $race：最近一次失败（reject 或 resolve 但业务失败），全部落定仍无成功时用它收尾 / $race: latest failure, used to settle when all end without success */
     last?: { isErr: boolean; v: unknown };
-    /** $start：底层请求专用的 AbortController，仅在订阅者全部取消时 abort / $start: controller for the underlying request, aborted only when all subscribers cancel */
+    /** $start：底层请求专用的 AbortController，订阅者全部取消/超时时 abort / $start: controller for the underlying request, aborted when all subscribers cancel or time out */
     ctrl?: AbortController;
     /** $start：仍在等待结果的订阅者数 / $start: number of subscribers still waiting */
     subs?: number;
