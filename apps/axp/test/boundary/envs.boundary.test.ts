@@ -26,7 +26,16 @@ describe('envs/filter/repath — 次要分支与卸载', () => {
 });
 
 describe('envs', () => {
-    it('[envs.fn.axpEnvs] 空规则列表 → no-op', () => {
+    it.each([{}, { timeout: 0, baseURL: '' }])('[envs.opt.rules[].config] 空配置或零值配置 %s 保留其精确含义且可恢复', (config) => {
+        const ax = axios.create({ baseURL: '/before', timeout: 1000 });
+        const off = envs([{ rule: () => true, config }]).install(ax);
+        expect(ax.defaults).toMatchObject({ baseURL: '/before', timeout: 1000, ...config });
+        off?.();
+        expect(ax.defaults.baseURL).toBe('/before');
+        expect(ax.defaults.timeout).toBe(1000);
+    });
+
+    it('[envs.method.install][envs.fn.axpEnvs] 空规则列表 → no-op', () => {
         const ax = makeAx();
         const before = { ...ax.defaults };
         envs().install(ax);

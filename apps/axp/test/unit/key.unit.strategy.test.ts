@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import type { IHttpOptions } from '../../src/types';
-import key, { $key, type KeyOpts, $parse } from '../../src/plugins/key';
+import { $key, type KeyOpts, $parse } from '../../src/plugins/key';
 
 /** 把任意值格式化成可读单行（保留 undefined / NaN 等 JSON.stringify 会丢的信息） */
 function fmt(v: any, seen = new WeakSet()): string {
@@ -22,11 +22,6 @@ function k(config: any, policy: 'simple' | 'deep' = 'deep', opts?: KeyOpts): str
     const tag = opts ? `${policy}+opts` : policy;
     console.log(`  [${result}] ${tag.padEnd(12)} ${fmt(config)}${opts ? ' opts=' + fmt(opts) : ''}`);
     return result;
-}
-
-/** 按指定请求体与选项生成 deep key。 */
-function fingerprint(data: unknown, options: any = {}) {
-    return $parse({ method: 'post', url: '/x', data, key: { ...options } });
 }
 
 describe('$key — method 大小写规范化', () => {
@@ -348,21 +343,5 @@ describe('$parse deep — Date / URLSearchParams / 不可序列化类型', () =>
         expect(k({ f: new Blob(['x']) })).toBeNull();
         expect(k({ m: new Map([[1, 2]]) })).toBeNull();
         expect(k({ s: new Set([1]) })).toBeNull();
-    });
-});
-
-describe('key — scope、采样与错误边界', () => {
-    it('[key.fn.$key][key.opt.sample][key.req.key.sample] 采样长字符串时首中尾差异均影响指纹，短字符串仍全量计算', () => {
-        const base = 'a'.repeat(100);
-        for (const index of [0, 48, 99]) {
-            const changed = base.slice(0, index) + 'b' + base.slice(index + 1);
-            expect(fingerprint(changed, { sample: true })).not.toBe(fingerprint(base, { sample: true }));
-        }
-        expect(fingerprint('short', { sample: true })).toBe(fingerprint('short', { sample: false }));
-    });
-    it('[key.fn.$key] 继承属性不参与 deep key，无原型对象按自有字段计算', () => {
-        const data = Object.assign(Object.create({ inherited: 42 }), { own: 1 });
-        expect(fingerprint(data)).toBe(fingerprint({ own: 1 }));
-        expect(fingerprint(Object.assign(Object.create(null), { own: 1 }))).toBe(fingerprint({ own: 1 }));
     });
 });

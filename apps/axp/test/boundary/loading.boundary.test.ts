@@ -32,6 +32,55 @@ function response(config: any, data: unknown = 'ok') {
 describe('loading 逻辑请求与清理', () => {
     const path = '/review-loading';
 
+    it('[loading.opt.enable] 总开关关闭时请求级回调也不参与计数', async () => {
+        const net = makeNetwork();
+        const ax = axios.create({ adapter: net.adapter });
+        const fn = vi.fn();
+        loading({ enable: false }).install(ax);
+        await ax.get(path, { loading: fn });
+        expect(net.calls('get', path)).toBe(1);
+        expect(fn).not.toHaveBeenCalled();
+    });
+
+    it.each([false, { enable: false }])('[loading.req.loading][loading.req.loading.enable] 跳过配置 %s 不执行抛错回调', async (option) => {
+        const net = makeNetwork();
+        const ax = axios.create({ adapter: net.adapter });
+        const fn = vi.fn(() => { throw new Error('不可执行'); });
+        loading({ loading: fn }).install(ax);
+        await ax.get(path, { loading: option });
+        expect(net.calls('get', path)).toBe(1);
+        expect(fn).not.toHaveBeenCalled();
+    });
+
+    it.each(['函数', '对象'])('[loading.req.loading.callback][loading.req.loading.loading] 请求级%s回调抛错和拒绝不破坏下一次计数', async (form) => {
+        const net = makeNetwork();
+        const ax = axios.create({ adapter: net.adapter });
+        const fallback = vi.fn();
+        const fn = vi.fn((visible: boolean) => {
+            if (visible) throw new Error('显示失败');
+            return Promise.reject(new Error('隐藏失败'));
+        });
+        loading({ loading: fallback }).install(ax);
+        const option = form === '函数' ? fn : { loading: fn };
+        await ax.get(path, { loading: option });
+        await ax.get(path, { loading: option });
+        expect(fn.mock.calls).toEqual([[true], [false], [true], [false]]);
+        expect(fallback).not.toHaveBeenCalled();
+    });
+
+    it.each([0, -1])('[loading.req.loading.delay][loading.req.loading.delayClose] 请求级延迟 %s 覆盖默认长延迟并即时显示隐藏', async (delay) => {
+        vi.useFakeTimers();
+        const fn = vi.fn();
+        const { adp, pending } = deferredAdapter();
+        const wrapped = $wrap(adp, { loading: fn, delay: 1000, delayClose: 1000 });
+        const request = wrapped({ loading: { delay, delayClose: delay } } as any);
+        expect(fn.mock.calls).toEqual([[true]]);
+        pending[0].resolve(response(pending[0].config));
+        await request;
+        expect(fn.mock.calls).toEqual([[true], [false]]);
+        expect(vi.getTimerCount()).toBe(0);
+    });
+
     it.each([0, 1])('[loading.cb.loading][loading.opt.delay] 回调抛错与拒绝不影响请求和后续计数（delay=%i）', async (delay) => {
         const net = makeNetwork();
         const fn = vi.fn((visible: boolean) => { if (visible) throw new Error('UI failed'); return Promise.reject(new Error('UI rejected')); });
@@ -106,7 +155,7 @@ describe('loading 泄漏修复', () => {
         expect(fn.mock.calls.map(([v]) => v)).toEqual([true, false]);
     });
 
-    it('[loading.fn.axpLoading][loading.method.cleanup] 同实例两个独立 handle 各装 loading，各自计数都能归零', async () => {
+    it('[loading.method.install][loading.fn.axpLoading][loading.method.cleanup] 同实例两个独立 handle 各装 loading，各自计数都能归零', async () => {
         const net = makeNetwork();
         const ax = axios.create({ adapter: net.adapter });
         const outer = vi.fn();

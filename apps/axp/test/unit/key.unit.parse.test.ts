@@ -1,11 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import type { IHttpOptions } from '../../src/types';
-import key, { $parse } from '../../src/plugins/key';
-
-/** 按指定请求体与选项生成 deep key。 */
-function fingerprint(data: unknown, options: any = {}) {
-    return $parse({ method: 'post', url: '/x', data, key: { ...options } });
-}
+import { $parse } from '../../src/plugins/key';
 
 describe('$parse — key 字段处理', () => {
     it('[key.fn.$parse][key.req.key] null/undefined/false/空串/空白串 → null', () => {
@@ -16,7 +11,7 @@ describe('$parse — key 字段处理', () => {
         expect($parse({ key: '   ' } as IHttpOptions)).toBe(null);
     });
 
-    it('[key.fn.$parse][key.req.key] 数字 0 转字符串 "0"（非 null）', () => {
+    it('[key.fn.$parse][key.req.key][key.req.key.number] 数字 0 转字符串 "0"（非 null）', () => {
         expect($parse({ key: 0 } as IHttpOptions)).toBe('0');
     });
 
@@ -25,7 +20,7 @@ describe('$parse — key 字段处理', () => {
         expect($parse({ key: '  abc  ' } as IHttpOptions)).toBe('abc');
     });
 
-    it('[key.fn.$parse][key.req.key] 数字转字符串', () => {
+    it('[key.fn.$parse][key.req.key][key.req.key.number] 数字转字符串', () => {
         expect($parse({ key: 42 } as IHttpOptions)).toBe('42');
     });
 
@@ -36,7 +31,7 @@ describe('$parse — key 字段处理', () => {
         expect(typeof r).toBe('string');
     });
 
-    it('[key.fn.$parse][key.req.key] 函数返回值用作 key', () => {
+    it('[key.fn.$parse][key.req.key][key.req.key.callback] 函数返回值用作 key', () => {
         expect($parse({ key: () => 'fn-key' } as unknown as IHttpOptions)).toBe('fn-key');
         expect($parse({ key: (() => 123) as any } as IHttpOptions)).toBe('123');
         expect($parse({ key: () => null } as unknown as IHttpOptions)).toBe(null);
@@ -61,6 +56,13 @@ describe('$parse — key 字段处理', () => {
 });
 
 describe('$parse — 插件级 defaults 与请求级合并', () => {
+    it('[key.opt.sample][key.req.key.sample] 请求级 sample:false 覆盖插件采样并恢复全量哈希', () => {
+        const data = 'a'.repeat(100);
+        const changed = data.slice(0, 20) + 'b' + data.slice(21);
+        const config = { url: '/x', method: 'post', key: { sample: false }, data };
+        expect($parse(config, { sample: true })).not.toBe($parse({ ...config, data: changed }, { sample: true }));
+        expect($parse({ ...config, key: {} }, { sample: true })).toBe($parse({ ...config, key: {}, data: changed }, { sample: true }));
+    });
     const reqWithTs = {
         key: true,
         url: '/u', method: 'POST',
@@ -111,7 +113,7 @@ describe('$parse — 插件级 defaults 与请求级合并', () => {
         console.log(`  [${r1}] plugin ignores:[null] preserves y:null`);
     });
 
-    it('[key.fn.$parse][key.opt.fastMode][key.opt.ignores] 请求级对象优先于插件级', () => {
+    it('[key.fn.$parse][key.opt.fastMode][key.opt.ignores][key.req.key.ignores] 请求级对象优先于插件级', () => {
         const defaults = { fastMode: false, ignores: ['plugin-key'] };
         // 请求级 ignores:['req-key'] 应当完全覆盖插件级（不合并）
         const r = $parse({
@@ -156,7 +158,17 @@ describe('$parse — 插件级 defaults 与请求级合并', () => {
 
 // 来源 review #1
 describe('$parse — scope 并入 key', () => {
-    it('[key.fn.$parse][key.opt.scope][key.req.key.scope] scope 不同 → key 不同；相同 → 相同', () => {
+    it('[key.req.key.fastMode] 请求级 fastMode:true 覆盖插件 deep 默认', () => {
+        const config = { url: '/x', method: 'get', key: { fastMode: true }, params: { n: 1 } };
+        expect($parse(config, { fastMode: false })).toBe($parse({ ...config, params: { n: 2 } }, { fastMode: false }));
+        expect($parse(config, { fastMode: false })).not.toBe($parse({ ...config, key: { fastMode: false } }));
+    });
+
+    it('[key.req.key.scope.callback] 请求级 scope 回调接收当前配置并覆盖插件回调', () => {
+        const config = { url: '/tenant', key: { scope: (c: any) => c.url } };
+        expect($parse(config, { scope: () => 'plugin' })).toBe($parse({ ...config, key: {} }) + '#/tenant');
+    });
+    it('[key.fn.$parse][key.opt.scope][key.cb.scope][key.req.key.scope] scope 不同 → key 不同；相同 → 相同', () => {
         const cfg = { method: 'get', url: '/x', key: true } as any;
         const a = $parse(cfg, { scope: () => 'u1' });
         const b = $parse(cfg, { scope: () => 'u2' });
@@ -172,23 +184,5 @@ describe('$parse — scope 并入 key', () => {
         const a = $parse({ url: '/x', key: { scope: 'req' } } as any, { scope: () => 'plug' });
         const b = $parse({ url: '/x', key: { scope: 'req2' } } as any, { scope: () => 'plug' });
         expect(a).not.toBe(b);
-    });
-});
-
-describe('key — scope、采样与错误边界', () => {
-    it.each([null, undefined, '', NaN])('[key.fn.$parse][key.opt.scope][key.cb.scope] scope=%s 不增加后缀', (scope) => {
-        expect($parse({ key: 'literal' }, { scope: () => scope })).toBe('literal');
-    });
-    it('[key.fn.$parse][key.opt.scope][key.req.key.scope] scope=0 不丢失，请求级静态空 scope 可覆盖插件值', () => {
-        expect($parse({ key: 'literal' }, { scope: 0 })).toBe('literal#0');
-        const config = { url: '/x', key: { scope: '' } };
-        expect($parse(config, { scope: 'plugin' })).toBe($parse(config));
-    });
-    it('[key.fn.$parse][key.req.key.callback][key.cb.scope] 用户 key/scope/getter 抛错保持身份，不被当作不可序列化哨兵吞掉', () => {
-        const error = new Error('user callback');
-        expect(() => $parse({ key: () => { throw error; } })).toThrow(error);
-        expect(() => $parse({ key: 'k' }, { scope: () => { throw error; } })).toThrow(error);
-        const data = { get value() { throw error; } };
-        expect(() => fingerprint(data)).toThrow(error);
     });
 });

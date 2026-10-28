@@ -356,7 +356,7 @@ describe('$wrap — 请求级对象覆盖 delay/delayClose/loading/enable', () =
 });
 
 describe('cancel/loading — 资源释放边界', () => {
-    it('[loading.opt.enable] loading enable:false 不包装 adapter', () => {
+    it('[loading.method.install][loading.opt.enable] loading enable:false 不包装 adapter', () => {
         const ax = axios.create();
         const before = ax.defaults.adapter;
         expect(loading({ enable: false }).install(ax)).toBeUndefined();

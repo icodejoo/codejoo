@@ -9,7 +9,10 @@ function makeAx(): any {
 }
 
 describe('envs', () => {
-    it('[envs.fn.axpEnvs][envs.cb.rules[].rule][envs.opt.rules[].config] 选第一个匹配的规则，merge 到 defaults', () => {
+    it('[envs.prop.name] 工厂返回固定插件名称', () => {
+        expect(envs().name).toBe('axp:envs');
+    });
+    it('[envs.method.install][envs.fn.axpEnvs][envs.cb.rules[].rule][envs.opt.rules[].config] 选第一个匹配的规则，merge 到 defaults', () => {
         const ax = makeAx();
         envs([
             { rule: () => false, config: { baseURL: 'http://a' } },
