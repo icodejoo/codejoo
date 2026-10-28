@@ -66,11 +66,6 @@
       "import": "./dist/esm/plugins/cache.mjs",
       "default": "./dist/esm/plugins/cache.mjs"
     },
-    "./cancel": {
-      "types": "./dist/esm/plugins/cancel.d.mts",
-      "import": "./dist/esm/plugins/cancel.mjs",
-      "default": "./dist/esm/plugins/cancel.mjs"
-    },
     "./envs": {
       "types": "./dist/esm/plugins/envs.d.mts",
       "import": "./dist/esm/plugins/envs.mjs",
@@ -81,30 +76,15 @@
       "import": "./dist/esm/plugins/filter.mjs",
       "default": "./dist/esm/plugins/filter.mjs"
     },
-    "./key": {
-      "types": "./dist/esm/plugins/key.d.mts",
-      "import": "./dist/esm/plugins/key.mjs",
-      "default": "./dist/esm/plugins/key.mjs"
-    },
     "./loading": {
       "types": "./dist/esm/plugins/loading.d.mts",
       "import": "./dist/esm/plugins/loading.mjs",
       "default": "./dist/esm/plugins/loading.mjs"
     },
-    "./logger": {
-      "types": "./dist/esm/plugins/logger.d.mts",
-      "import": "./dist/esm/plugins/logger.mjs",
-      "default": "./dist/esm/plugins/logger.mjs"
-    },
     "./mock": {
       "types": "./dist/esm/plugins/mock.d.mts",
       "import": "./dist/esm/plugins/mock.mjs",
       "default": "./dist/esm/plugins/mock.mjs"
-    },
-    "./normalize": {
-      "types": "./dist/esm/plugins/normalize.d.mts",
-      "import": "./dist/esm/plugins/normalize.mjs",
-      "default": "./dist/esm/plugins/normalize.mjs"
     },
     "./notify": {
       "types": "./dist/esm/plugins/notify.d.mts",

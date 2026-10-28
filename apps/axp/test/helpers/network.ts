@@ -1,4 +1,4 @@
-import type { AxiosAdapter, AxiosResponse, InternalAxiosRequestConfig } from 'axios';
+import type { AxiosAdapter, AxiosResponse, InternalAxiosRequestConfig } from "axios";
 
 /**
  * 真实感网络仿真：可作为 axios `adapter` 装进真实实例，配合 `create()` + 插件栈跑集成测试。
@@ -18,10 +18,7 @@ export interface RouteResult {
   headers?: Record<string, unknown>;
 }
 
-export type RouteHandler = (
-  config: InternalAxiosRequestConfig,
-  hit: number,
-) => RouteResult | void;
+export type RouteHandler = (config: InternalAxiosRequestConfig, hit: number) => RouteResult | void;
 
 export interface CallRecord {
   method: string;
@@ -32,16 +29,20 @@ export interface CallRecord {
 }
 
 function keyOf(method: string | undefined, url: string | undefined): string {
-  return `${(method || 'get').toUpperCase()} ${url ?? ''}`;
+  return `${(method || "get").toUpperCase()} ${url ?? ""}`;
 }
 
 function headerGet(config: InternalAxiosRequestConfig, name: string): unknown {
   const h = config.headers as unknown;
   if (!h) return undefined;
-  if (typeof (h as { get?: unknown }).get === 'function') return (h as { get(n: string): unknown }).get(name);
+  if (typeof (h as { get?: unknown }).get === "function")
+    return (h as { get(n: string): unknown }).get(name);
   const rec = h as Record<string, unknown>;
   return rec[name] ?? rec[name.toLowerCase()];
 }
+
+/** 未注册路由时的默认响应：200 加空业务数据。 */
+const DEFAULT_ROUTE: RouteHandler = () => ({ status: 200, data: { code: 0, data: null } });
 
 export function makeNetwork() {
   const routes = new Map<string, RouteHandler>();
@@ -50,7 +51,7 @@ export function makeNetwork() {
   let seq = 0;
   let started = 0;
   let finished = 0;
-  let fallback: RouteHandler = () => ({ status: 200, data: { code: 0, data: null } });
+  let fallback: RouteHandler = DEFAULT_ROUTE;
 
   const adapter: AxiosAdapter = (config) =>
     new Promise<AxiosResponse>((resolve, reject) => {
@@ -59,9 +60,9 @@ export function makeNetwork() {
       counts.set(k, hit);
       started++;
       const rec: CallRecord = {
-        method: (config.method || 'get').toUpperCase(),
-        url: config.url ?? '',
-        auth: headerGet(config, 'Authorization'),
+        method: (config.method || "get").toUpperCase(),
+        url: config.url ?? "",
+        auth: headerGet(config, "Authorization"),
         startedAt: ++seq,
       };
       log.push(rec);
@@ -72,7 +73,7 @@ export function makeNetwork() {
         finished++;
         let out: RouteResult | void;
         try {
-          const handler = routes.get(k) ?? routes.get(config.url ?? '') ?? fallback;
+          const handler = routes.get(k) ?? routes.get(config.url ?? "") ?? fallback;
           out = handler(config, hit);
         } catch (e) {
           return reject(e);
@@ -80,10 +81,10 @@ export function makeNetwork() {
         const status = out?.status ?? 200;
         const response = {
           status,
-          statusText: '',
+          statusText: "",
           headers: out?.headers ?? {},
           config,
-          data: out && 'data' in out ? out.data : { code: 0, data: null },
+          data: out && "data" in out ? out.data : { code: 0, data: null },
           request: {},
         } as AxiosResponse;
 
@@ -91,9 +92,15 @@ export function makeNetwork() {
         const okStatus = validate ? validate(status) : status >= 200 && status < 300;
         if (okStatus) return resolve(response);
         const err = new Error(`Request failed with status code ${status}`) as Error & {
-          config?: unknown; response?: unknown; status?: number; isAxiosError?: boolean;
+          config?: unknown;
+          response?: unknown;
+          status?: number;
+          isAxiosError?: boolean;
         };
-        err.config = config; err.response = response; err.status = status; err.isAxiosError = true;
+        err.config = config;
+        err.response = response;
+        err.status = status;
+        err.isAxiosError = true;
         reject(err);
       }, latency);
     });
@@ -115,8 +122,12 @@ export function makeNetwork() {
       return counts.get(keyOf(method, url)) ?? 0;
     },
     /** 总发起 / 总完成数。 */
-    get totalStarted() { return started; },
-    get totalFinished() { return finished; },
+    get totalStarted() {
+      return started;
+    },
+    get totalFinished() {
+      return finished;
+    },
     log,
   };
 }
