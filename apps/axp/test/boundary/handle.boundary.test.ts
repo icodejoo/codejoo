@@ -49,7 +49,7 @@ describe('AxpHandle — 边界', () => {
         h.dispose();
         expect(h.plugin('dup')).toBeUndefined();
     });
-    it('[public.handle.dispose] 无 cleanup 的插件跳过；cleanup 抛错会中断后续并向上传播；重复 dispose 不再调用 cleanup', () => {
+    it('[public.handle.dispose] 无 cleanup 的插件跳过；cleanup 抛错不中断后续、结束后抛第一个错；重复 dispose 不再调用 cleanup', () => {
         const cleanup = vi.fn();
         const h = Axp.install(axios.create(), {
             envs: { name: 'a', install: () => cleanup },
@@ -64,7 +64,16 @@ describe('AxpHandle — 边界', () => {
         });
         cleanup.mockClear();
         expect(() => bad.dispose()).toThrow('bad cleanup');
-        expect(cleanup).not.toHaveBeenCalled();
+        expect(cleanup).toHaveBeenCalledTimes(1);
+        expect(() => bad.dispose()).not.toThrow();
+    });
+    it('[public.handle.dispose] 多个 cleanup 抛错：全部执行、列表清空，抛出第一个（倒序先执行的）错误', () => {
+        const log: string[] = [];
+        const mk = (n: string, fail: boolean) => ({ name: n, install: () => () => { log.push(n); if (fail) throw new Error('err:' + n); } });
+        const h = Axp.install(axios.create(), { envs: mk('a', true), key: mk('b', true), filter: mk('c', false) } as any);
+        expect(() => h.dispose()).toThrow(/err:/);
+        expect(log.length).toBe(3);
+        expect(h.plugins).toEqual([]);
     });
     it('[public.handle.prepend] 空 handle 上 prepend 等价于唯一插件；install 抛错时回滚到原顺序并 rethrow', () => {
         const log: string[] = [];
