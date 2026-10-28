@@ -4,6 +4,21 @@
 
 Codex 全量 review 后的修复，逐条记录见 [docs/reports/2026-10-27-codex-full-review.md](docs/reports/2026-10-27-codex-full-review.md)。
 
+### Breaking（洋葱管线重构）
+
+- **入口**：`Axp.create`、`Axp.install`、`Core` 换成 `createAxp`。插件只对 axp 客户端生效，裸 `axios` 不再带插件。
+- **错误**：没有错误类。可预期的失败直接抛归一化响应 `IAxpResponse`（不是 `Error`），`ApiError` 删除。程序 bug 仍抛原始异常，用 `api.isResponse(e)` 区分。需要 `Error` 时用 `createAxp({ reject })` 适配。
+- **成功判定**：`AxpResponse.isSuccessful` 静态钩子改为子类覆盖 `ok` 和 `status` getter。
+- **返回形态**：`raw: true` 删除，改用 `wrap: true` 后读 `r.raw`。新增 `throws: false`，`normalize: false` 改为它。
+- **插件**：删除 `axpCancel`、`axpKey`、`axpLogger`、`axpNormalize`，能力并入内核（`cancelAll`、`key` 配置、`debug` 选项、归一化）。子路径 `./cancel`、`./key`、`./logger`、`./normalize` 删除。
+- **默认值**：retry 默认 `max: 2`、指数退避、`delayMax: 10_000`；filter 装上即生效；cache 只缓存 GET 和 HEAD；`key: true` 现在包含 params 和 data。
+- **请求选项**：不再接受函数形式。`share` 的 `'none'` 策略改为 `share: false`。
+- **auth**：回调参数统一为 `(r, tm)`；`canRefresh` 删除；`authExpired` 标记改为看 `r.reason`。
+- **回调**：判定类回调抛错不再被吞，按程序 bug 抛出。
+- **派生**：`extends` 改名为 `extend`，默认继承插件，各自独立状态。
+
+完整的旧写法到新写法对照见 [迁移指南](docs/guides/migrating-to-pipeline.md)。
+
 ### Breaking
 
 - **入口**：`"."`、`main`、`module`、`types` 现在指向不打包的 `dist/esm/index.mjs`，并去掉了 `production` 条件。
