@@ -24,6 +24,7 @@ A 批（单插件规则/补丁/覆盖文件）迁移进行中，基线冻结于 
 |---|---|---|---|---|---|---|---|---|---|
 | auth（auth.test、auth.coverage） | 本批提交 | 42 | 0 | 0 | 0 | 0 | 0 | 42 | 是 |
 | retry（retry.test、retry.coverage） | 本批提交 | 74 | 0 | 0 | 0 | 0 | 0 | 74 | 是 |
+| share（share.test、share.review、share.coverage） | 本批提交 | 56 | 0 | 0 | 0 | 0 | 0 | 56 | 是 |
 
 ## 映射
 
@@ -139,3 +140,56 @@ A 批（单插件规则/补丁/覆盖文件）迁移进行中，基线冻结于 
 | test/retry.coverage.test.ts::retry — 循环终止与 Header 边界 > 错误无 config 时原样拒绝，不启动重试循环 | boundary/retry.boundary.test.ts::retry — 循环终止与 Header 边界 > [retry.fn.axpRetry] 错误无 config 时原样拒绝，不启动重试循环 | rename | 错误无 config |  |
 | test/retry.coverage.test.ts::retry — 循环终止与 Header 边界 > 卸载后不重试，enable:false 不安装任何拦截器 | rule/retry.rule.test.ts::retry — 循环终止与 Header 边界 > [retry.opt.enable][retry.method.cleanup] 卸载后不重试，enable:false 不安装任何拦截器 | rename | 总开关与卸载 |  |
 | test/retry.coverage.test.ts::retry — 循环终止与 Header 边界 > shouldRetry 抛错明确拒绝，不发出额外尝试 | boundary/retry.boundary.test.ts::retry — 循环终止与 Header 边界 > [retry.cb.shouldRetry] shouldRetry 抛错明确拒绝，不发出额外尝试 | rename | 异常回调 |  |
+| test/share.test.ts::$resolvePolicy > 未指定 → 插件默认 | unit/share.unit.test.ts::$resolvePolicy > [share.fn.$resolvePolicy][share.opt.policy] 未指定 → 插件默认 | rename | 纯函数 |  |
+| test/share.test.ts::$resolvePolicy > config.share === false → none | unit/share.unit.test.ts::$resolvePolicy > [share.fn.$resolvePolicy][share.req.share] config.share === false → none | rename | 单元层（unit） |  |
+| test/share.test.ts::$resolvePolicy > config.share === true → 插件默认 | unit/share.unit.test.ts::$resolvePolicy > [share.fn.$resolvePolicy][share.req.share] config.share === true → 插件默认 | rename | 单元层（unit） |  |
+| test/share.test.ts::$resolvePolicy > config.share 是字符串 policy → 直接使用 | unit/share.unit.test.ts::$resolvePolicy > [share.fn.$resolvePolicy][share.req.share.policy] config.share 是字符串 policy → 直接使用 | rename | 单元层（unit） |  |
+| test/share.test.ts::$resolvePolicy > config.share 字符串非法 → 回退到默认 | unit/share.unit.test.ts::$resolvePolicy > [share.fn.$resolvePolicy][share.req.share.policy] config.share 字符串非法 → 回退到默认 | rename | 单元层（unit） |  |
+| test/share.test.ts::$resolvePolicy > config.share 是对象 → 取 policy | unit/share.unit.test.ts::$resolvePolicy > [share.fn.$resolvePolicy][share.req.share.policy] config.share 是对象 → 取 policy | rename | 单元层（unit） |  |
+| test/share.test.ts::$resolvePolicy > config.share 是函数 → 调用并解析 | unit/share.unit.test.ts::$resolvePolicy > [share.fn.$resolvePolicy][share.req.share.callback] config.share 是函数 → 调用并解析 | rename | 单元层（unit） |  |
+| test/share.test.ts::$resolvePolicy > 插件无 default policy + 未指定 → start（兜底） | unit/share.unit.test.ts::$resolvePolicy > [share.fn.$resolvePolicy][share.opt.policy] 插件无 default policy + 未指定 → start（兜底） | rename | 单元层（unit） |  |
+| test/share.test.ts::$start > 单请求：正常发 HTTP，成功返回 | rule/share.rule.test.ts::$start > [share.opt.policy][share.fn.$start] 单请求：正常发 HTTP，成功返回 | rename | start 策略的声明行为；以假 adapter 直接驱动，归规则层 |  |
+| test/share.test.ts::$start > 两并发同 key：HTTP 只发一次，两个 caller 都拿到同一结果 | rule/share.rule.test.ts::$start > [share.opt.policy][share.fn.$start] 两并发同 key：HTTP 只发一次，两个 caller 都拿到同一结果 | rename | start 策略的声明行为；以假 adapter 直接驱动，归规则层 |  |
+| test/share.test.ts::$start > 失败也共享：所有 caller 都收到同一个 reject | rule/share.rule.test.ts::$start > [share.opt.policy][share.fn.$start] 失败也共享：所有 caller 都收到同一个 reject | rename | start 策略的声明行为；以假 adapter 直接驱动，归规则层 |  |
+| test/share.test.ts::$start > 完成后：相同 key 的新请求重新发 HTTP | rule/share.rule.test.ts::$start > [share.opt.policy][share.fn.$start] 完成后：相同 key 的新请求重新发 HTTP | rename | start 策略的声明行为；以假 adapter 直接驱动，归规则层 |  |
+| test/share.test.ts::$start > 不同 key：互不干扰，独立 HTTP | rule/share.rule.test.ts::$start > [share.opt.policy][share.fn.$start] 不同 key：互不干扰，独立 HTTP | rename | start 策略的声明行为；以假 adapter 直接驱动，归规则层 |  |
+| test/share.test.ts::$end > 单请求：正常返回 | rule/share.rule.test.ts::$end > [share.opt.policy][share.fn.$end] 单请求：正常返回 | rename | end 策略的声明行为 |  |
+| test/share.test.ts::$end > 两并发：两次 HTTP 都发，但只有第二次的结果分发给两个 caller | rule/share.rule.test.ts::$end > [share.opt.policy][share.fn.$end] 两并发：两次 HTTP 都发，但只有第二次的结果分发给两个 caller | rename | end 策略的声明行为 |  |
+| test/share.test.ts::$end > 三并发：仅最后一次的结果分发，前两次结果丢弃 | rule/share.rule.test.ts::$end > [share.opt.policy][share.fn.$end] 三并发：仅最后一次的结果分发，前两次结果丢弃 | rename | end 策略的声明行为 |  |
+| test/share.test.ts::$end > 最后一次失败 → 所有 caller 都 reject | rule/share.rule.test.ts::$end > [share.opt.policy][share.fn.$end] 最后一次失败 → 所有 caller 都 reject | rename | end 策略的声明行为 |  |
+| test/share.test.ts::$end > 完成后：相同 key 新请求重新计数 | rule/share.rule.test.ts::$end > [share.opt.policy][share.fn.$end] 完成后：相同 key 新请求重新计数 | rename | end 策略的声明行为 |  |
+| test/share.test.ts::$race > 两并发：先返回的赢家结果给两个 caller | rule/share.rule.test.ts::$race > [share.opt.policy][share.fn.$race] 两并发：先返回的赢家结果给两个 caller | rename | race 策略的声明行为 |  |
+| test/share.test.ts::$race > 一个失败、一个成功 → 用成功的（Promise.any 语义） | rule/share.rule.test.ts::$race > [share.opt.policy][share.fn.$race] 一个失败、一个成功 → 用成功的（Promise.any 语义） | rename | race 策略的声明行为 |  |
+| test/share.test.ts::$race > 全部失败 → 用最后一次 error reject | rule/share.rule.test.ts::$race > [share.opt.policy][share.fn.$race] 全部失败 → 用最后一次 error reject | rename | race 策略的声明行为 |  |
+| test/share.test.ts::$race > 单请求失败 → 直接 reject（in-flight 归零） | rule/share.rule.test.ts::$race > [share.opt.policy][share.fn.$race] 单请求失败 → 直接 reject（in-flight 归零） | rename | race 策略的声明行为 |  |
+| test/share.test.ts::$race > 成功后续到的失败结果被忽略 | rule/share.rule.test.ts::$race > [share.opt.policy][share.fn.$race] 成功后续到的失败结果被忽略 | rename | race 策略的声明行为 |  |
+| test/share.test.ts::$race > 赢家结算后，新请求重新比赛 | rule/share.rule.test.ts::$race > [share.opt.policy][share.fn.$race] 赢家结算后，新请求重新比赛 | rename | race 策略的声明行为 |  |
+| test/share.test.ts::$race > 单请求：正常返回（无人和它 race） | rule/share.rule.test.ts::$race > [share.opt.policy][share.fn.$race] 单请求：正常返回（无人和它 race） | rename | race 策略的声明行为 |  |
+| test/share.test.ts::share — 不依赖 Promise.withResolvers（ES2024） > 环境缺少 Promise.withResolvers 时 $createEntry 照常工作 | boundary/share.boundary.test.ts::share — 不依赖 Promise.withResolvers（ES2024） > [share.fn.$createEntry] 环境缺少 Promise.withResolvers 时 $createEntry 照常工作 | rename | 运行环境缺失 API 的兜底 |  |
+| test/share.test.ts::share — prev 同步抛错不会让条目永久挂起 > %s：首次同步抛错 → reject；同 key 第二次请求拿到结果（each） | boundary/share.boundary.test.ts::share — prev 同步抛错不会让条目永久挂起 > [share.fn.$start][share.fn.$end][share.fn.$race] %s：首次同步抛错 → reject；同 key 第二次请求拿到结果 | rename | 底层同步抛错，异常路径 |  |
+| test/share.test.ts::share — prev 同步抛错不会让条目永久挂起 > install 级：内层 cache 的 key 函数同步抛错后，同 key 后续请求不挂起（同时覆盖裸 axios.create()） | combo/cache+share.combo.test.ts::share — prev 同步抛错不会让条目永久挂起 > [cache.cb.key × share.opt.policy] install 级：内层 cache 的 key 函数同步抛错后，同 key 后续请求不挂起（同时覆盖裸 axios.create()） | rename | 两个插件交互：内层 cache 的 key 抛错不得让 share 条目挂起 |  |
+| test/share.test.ts::share — 共享响应按调用方换上各自的 config > 并发同 key 的每个 caller 拿到的 response.config 就是自己的 config，data 共享 | rule/share.rule.test.ts::share — 共享响应按调用方换上各自的 config > [share.fn.$rebindResponse] 并发同 key 的每个 caller 拿到的 response.config 就是自己的 config，data 共享 | rename | 共享响应按调用方重绑 config，文档声明行为 |  |
+| test/share.test.ts::$start 取消语义 > leader 取消：自己 canceled，follower 仍拿到结果，底层不 abort | boundary/share.boundary.test.ts::$start 取消语义 > [share.fn.$start][share.fn.$follow] leader 取消：自己 canceled，follower 仍拿到结果，底层不 abort | rename | 取消时机 |  |
+| test/share.test.ts::$start 取消语义 > 底层请求不带 leader 的 signal | boundary/share.boundary.test.ts::$start 取消语义 > [share.fn.$start][share.fn.$follow] 底层请求不带 leader 的 signal | rename | 取消时机 |  |
+| test/share.test.ts::$start 取消语义 > 全部订阅者都取消才 abort 底层，并摘除 entry | boundary/share.boundary.test.ts::$start 取消语义 > [share.fn.$start][share.fn.$follow] 全部订阅者都取消才 abort 底层，并摘除 entry | rename | 取消时机 |  |
+| test/share.test.ts::$start 取消语义 > leader 取消后新订阅者加入：仍复用同一请求并拿到结果 | boundary/share.boundary.test.ts::$start 取消语义 > [share.fn.$start][share.fn.$follow] leader 取消后新订阅者加入：仍复用同一请求并拿到结果 | rename | 取消时机 |  |
+| test/share.test.ts::$start 取消语义 > 已中止 signal 的单一订阅者：直接 canceled 且底层被 abort | boundary/share.boundary.test.ts::$start 取消语义 > [share.fn.$start][share.fn.$follow] 已中止 signal 的单一订阅者：直接 canceled 且底层被 abort | rename | 取消时机 |  |
+| test/share.test.ts::$race business 风格 > 先到的 200+code500 不算赢家，后到成功者胜出 | rule/share.rule.test.ts::$race business 风格 > [share.opt.policy][share.fn.$race] 先到的 200+code500 不算赢家，后到成功者胜出 | rename | race 对业务失败信封的判定，声明行为 |  |
+| test/share.test.ts::$race business 风格 > adapter 层 data 是未解析的 JSON 字符串时，200+code500 同样不算赢家 | rule/share.rule.test.ts::$race business 风格 > [share.opt.policy][share.fn.$race] adapter 层 data 是未解析的 JSON 字符串时，200+code500 同样不算赢家 | rename | race 对业务失败信封的判定，声明行为 |  |
+| test/share.test.ts::$race business 风格 > 先失败者之后又有 reject，再来成功者仍胜出 | rule/share.rule.test.ts::$race business 风格 > [share.opt.policy][share.fn.$race] 先失败者之后又有 reject，再来成功者仍胜出 | rename | race 对业务失败信封的判定，声明行为 |  |
+| test/share.test.ts::$race business 风格 > 全部业务失败：resolve 最后一个失败响应（与不装 share 时形态一致） | rule/share.rule.test.ts::$race business 风格 > [share.opt.policy][share.fn.$race] 全部业务失败：resolve 最后一个失败响应（与不装 share 时形态一致） | rename | race 对业务失败信封的判定，声明行为 |  |
+| test/share.test.ts::$race business 风格 > 最后落定的是 reject：以该 error reject | rule/share.rule.test.ts::$race business 风格 > [share.opt.policy][share.fn.$race] 最后落定的是 reject：以该 error reject | rename | race 对业务失败信封的判定，声明行为 |  |
+| test/share.test.ts::$race business 风格 > http 风格（无 code 信封）：首个 resolve 仍直接胜出 | rule/share.rule.test.ts::$race business 风格 > [share.opt.policy][share.fn.$race] http 风格（无 code 信封）：首个 resolve 仍直接胜出 | rename | race 对业务失败信封的判定，声明行为 |  |
+| test/share.review.test.ts::share — #9 失败时每个订阅者拿到独立 error > error.config / response.config 重绑为各自 config，保留原型 | rule/share.rule.test.ts::share — 失败时每个订阅者拿到独立 error > [share.fn.$rebindError] error.config / response.config 重绑为各自 config，保留原型 | rename | 每个订阅者拿独立 error，review #9 |  |
+| test/share.review.test.ts::share — #9 失败时每个订阅者拿到独立 error > 非对象错误原样传递 | boundary/share.boundary.test.ts::share — 失败时每个订阅者拿到独立 error > [share.fn.$rebindError] 非对象错误原样传递 | rename | 非对象错误，review #9 |  |
+| test/share.review.test.ts::share — #10 跟随者响应自己的取消 / 超时 > 跟随者 abort → 立即 CanceledError，首发与其他订阅者不受影响 | boundary/share.boundary.test.ts::share — 跟随者响应自己的取消 / 超时 > [share.fn.$follow] 跟随者 abort → 立即 CanceledError，首发与其他订阅者不受影响 | rename | 跟随者取消，review #10 |  |
+| test/share.review.test.ts::share — #10 跟随者响应自己的取消 / 超时 > 已 abort 的 signal 立即拒绝 | boundary/share.boundary.test.ts::share — 跟随者响应自己的取消 / 超时 > [share.fn.$follow] 已 abort 的 signal 立即拒绝 | rename | 已 abort 的 signal，review #10 |  |
+| test/share.review.test.ts::share — #10 跟随者响应自己的取消 / 超时 > 跟随者按自己的 timeout 退出 | boundary/share.boundary.test.ts::share — 跟随者响应自己的取消 / 超时 > [share.fn.$follow] 跟随者按自己的 timeout 退出 | rename | 跟随者 timeout，review #10 |  |
+| test/share.coverage.test.ts::share — 订阅清理与错误属性 > 相同 config 的响应和错误保持身份，不同 config 保留不可枚举属性与原型 | unit/share.unit.test.ts::share — 订阅清理与错误属性 > [share.fn.$rebindResponse][share.fn.$rebindError] 相同 config 的响应和错误保持身份，不同 config 保留不可枚举属性与原型 | rename | 纯函数 |  |
+| test/share.coverage.test.ts::share — 订阅清理与错误属性 > 共享 entry 的旧轮次落定不得删除同 key 新轮次 | boundary/share.boundary.test.ts::share — 订阅清理与错误属性 > [share.fn.$createEntry] 共享 entry 的旧轮次落定不得删除同 key 新轮次 | rename | 新旧轮次竞态 |  |
+| test/share.coverage.test.ts::share — 订阅清理与错误属性 > 订阅落定清除 timer、signal 与 cancelToken 监听，reject=%s（each） | boundary/share.boundary.test.ts::share — 订阅清理与错误属性 > [share.fn.$follow] 订阅落定清除 timer、signal 与 cancelToken 监听，reject=%s | rename | 订阅落定清理 |  |
+| test/share.coverage.test.ts::share — 订阅清理与错误属性 > CancelToken 单独取消 leader 后 follower 仍成功，底层不携带 leader token | boundary/share.boundary.test.ts::share — 订阅清理与错误属性 > [share.opt.policy][share.fn.$follow] CancelToken 单独取消 leader 后 follower 仍成功，底层不携带 leader token | rename | leader 以 CancelToken 取消 |  |
+| test/share.coverage.test.ts::share — 订阅清理与错误属性 > 冻结 AxiosError 仍应重绑为 follower 的独立错误 | boundary/share.boundary.test.ts::share — 订阅清理与错误属性 > [share.fn.$rebindError] 冻结 AxiosError 仍应重绑为 follower 的独立错误 | rename | 冻结错误，已知缺陷，原样保留 it.fails |  |
+| test/share.coverage.test.ts::share — 订阅清理与错误属性 > 所有订阅者 timeout 后也应退出共享轮次并 abort 底层 | boundary/share.boundary.test.ts::share — 订阅清理与错误属性 > [share.opt.policy][share.fn.$follow] 所有订阅者 timeout 后也应退出共享轮次并 abort 底层 | rename | 全订阅者 timeout，已知缺陷，原样保留 it.fails |  |
+| test/share.coverage.test.ts::share — 关闭与清理边界 > 未提供 key 不计算动态 policy，none 则删除 share 并直接转发 | boundary/share.boundary.test.ts::share — 关闭与清理边界 > [share.req.share.callback][share.req.share] 未提供 key 不计算动态 policy，none 则删除 share 并直接转发 | rename | 缺 key 时不计算动态 policy |  |
+| test/share.coverage.test.ts::share — 关闭与清理边界 > enable:false 不包装 adapter | rule/share.rule.test.ts::share — 关闭与清理边界 > [share.opt.enable] enable:false 不包装 adapter | rename | 总开关 |  |
