@@ -112,59 +112,11 @@ export interface AxpRequestOptions {
   /** 用户的逻辑请求取消信号。 */
   signal?: AbortSignal;
 }
-/** 排除旧 axios 模块增强字段，只保留 axios 原生字段。 */
-type TAxpAxiosConfig = Pick<
-  AxiosRequestConfig,
-  | "url"
-  | "method"
-  | "baseURL"
-  | "allowAbsoluteUrls"
-  | "transformRequest"
-  | "transformResponse"
-  | "headers"
-  | "params"
-  | "paramsSerializer"
-  | "data"
-  | "timeout"
-  | "timeoutErrorMessage"
-  | "withCredentials"
-  | "adapter"
-  | "auth"
-  | "responseType"
-  | "responseEncoding"
-  | "xsrfCookieName"
-  | "xsrfHeaderName"
-  | "onUploadProgress"
-  | "onDownloadProgress"
-  | "maxContentLength"
-  | "validateStatus"
-  | "maxBodyLength"
-  | "maxRedirects"
-  | "maxRate"
-  | "beforeRedirect"
-  | "socketPath"
-  | "httpAgent"
-  | "httpsAgent"
-  | "proxy"
-  | "decompress"
-  | "transitional"
-  | "insecureHTTPParser"
-  | "env"
-  | "formSerializer"
-  | "family"
-  | "lookup"
-  | "withXSRFToken"
-  | "fetchOptions"
-  | "allowedSocketPaths"
-  | "transport"
-  | "parseReviver"
-  | "httpVersion"
-  | "http2Options"
-  | "formDataHeaderPolicy"
-  | "redact"
-  | "sensitiveHeaders"
->;
-/** 新请求配置不接受旧 cancelToken 或旧插件字段。 */
+/** 不向调用方开放的 axios 字段：`cancelToken` 已废弃（统一用 `signal` 取消）；`signal` 由 {@link AxpRequestOptions} 以标准 `AbortSignal` 重新声明。 */
+type TAxpOmittedAxiosKeys = "cancelToken" | "signal";
+/** axios 原生请求字段；用排除法而非白名单，axios 新增字段无需同步维护。 */
+type TAxpAxiosConfig = Omit<AxiosRequestConfig, TAxpOmittedAxiosKeys>;
+/** 新请求配置：axios 原生字段（去掉 `cancelToken`、`signal`）叠加请求选项。 */
 export type AxpRequestConfig = TAxpAxiosConfig & AxpRequestOptions;
 /** 请求补丁；undefined 删除字段，headers 再合并一层。 */
 export type AxpRequestPatch = { [K in keyof AxpRequestConfig]?: AxpRequestConfig[K] | undefined };

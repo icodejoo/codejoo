@@ -1,7 +1,7 @@
 # e2e — 端到端 UI 测试
 
 用**真实 Chromium**(Playwright)驱动一个**可手动启动**的交互式演练场,对 `src/` 每个公开 API
-做端到端断言。演练场调用一个**独立 Node mock 服务**(可控延迟 / 失败 / 业务信封),因此
+做端到端断言（`createAxp` 新 API）。演练场调用一个**独立 Node mock 服务**(可控延迟 / 失败 / 业务信封),因此
 cache / share / retry / cancel / loading 这类依赖真实异步 HTTP 时序的行为能被真实验证。
 
 ```
@@ -10,7 +10,7 @@ e2e/
 ├── playground/              # 交互式演练场(vite dev, :5180)
 │   ├── index.html
 │   └── main.ts              # 每个公开 API 一张卡片 + data-testid 控件 + 结果面板
-├── run.mjs                  # Playwright 自动化：逐项点按钮并断言(37 个 case)
+├── run.mjs                  # Playwright 自动化：逐项点按钮并断言(62 个 case)
 └── README.md
 ```
 
@@ -33,34 +33,36 @@ npm run e2e:dev        # mock 后端 :4570 + 演练场 :5180(Ctrl+C 同时退出
 npm run e2e            # 若 :4570/:5180 已在跑则复用,否则自动拉起,跑完回收;失败退出码 1
 ```
 
-`run.mjs` 用安装好的 `playwright` 库启动 Chromium,导航到演练场,逐项点击 37 个动作按钮并断言
+`run.mjs` 用安装好的 `playwright` 库启动 Chromium,导航到演练场,逐项点击 62 个动作按钮并断言
 返回结果,同时监控页面是否有任何 console / pageerror。最后打印覆盖与通过情况:
 
 ```
-covered API actions: 42 | cases: 37/37 passed
+covered API actions: 68 | cases: 62/62 passed
 ALL E2E PASSED ✅
 ```
 
 > 复用方式:先跑方式一的两个服务,再开第三个终端 `npm run e2e`,会自动复用已起的服务。
 
-## API 覆盖(100% 公开导出)
+## API 覆盖(运行时公开导出)
 
-| 模块         | 覆盖的导出 / 行为                                                                                                             |
-| ------------ | ----------------------------------------------------------------------------------------------------------------------------- |
-| Core         | `create` · `Core` · `get/post/put/delete/patch/head/options` · 三态返回 `raw`/`wrap`/解包 · `use`/`eject`/`plugins`/`extends` |
-| key          | `key` · `$key`(simple / deep 双车道 64-bit)                                                                                   |
-| cache        | `cache` · `removeCache` · `clearCache`(用服务端命中数证明只发一次网络)                                                        |
-| share        | `share` 的 `start`/`race`/`end` 三策略                                                                                        |
-| retry        | `retry`(失败重试到成功 / `retry:0` 禁用)                                                                                      |
-| cancel       | `cancel` · `cancelAll`(`axios.isCancel` 验证中止)                                                                             |
-| loading      | `loading`(全局计数 0→1 / 1→0 触发)                                                                                            |
-| mock         | `mock`(URL 重写到 mockUrl;mock 不存在时默认回落真实接口)                                                                      |
-| envs         | `envs`(安装期规则合并)                                                                                                        |
-| filter       | `filter`(空字段过滤)                                                                                                          |
-| repath       | `repath`(`{id}`/`:pid` 替换)                                                                                                  |
-| normalize    | `normalize` · `ApiError`(业务失败以 ApiError reject)                                                                          |
-| TokenManager | `TokenManager`(set/get/clear,Bearer 前缀)                                                                                     |
-| ApiResponse  | `ApiResponse`(fromResponse 防 null + 成功判定)                                                                                |
+| 模块           | 覆盖的导出 / 行为                                                                                                                                 |
+| -------------- | ------------------------------------------------------------------------------------------------------------------------------------------------- |
+| createAxp      | `get/post/put/delete/patch/head/options` · 默认解包 / `wrap`(`r.raw` 逃生口) / `throws:false` · 默认抛出 `IAxpResponse`(不是 Error、默认无 stack) |
+| 客户端生命周期 | `use` / `eject` / `inspect`(内置插件按 stage 排序) / `plugin` / `extend`(默认继承、状态独立) / `dispose` / `pending` / `isResponse` / `stateKey`  |
+| key(内核服务)  | 自动 key 含 params · 请求级显式字符串 key · `createAxp({ key: { scope } })` 切账号                                                                |
+| cache          | `axpCache` · `removeCache` · `clearCache`(用服务端命中数证明只发一次网络) · POST 默认不缓存                                                       |
+| share          | `axpShare` 的 `start`/`race`/`end` 三策略 · `share:false`                                                                                         |
+| retry          | `axpRetry`(失败重试到成功 / `retry:0` 禁用)                                                                                                       |
+| 取消(内核)     | `api.cancelAll` · 用户 `signal`(取消落定为 `kind:'cancel'` 的响应)                                                                                |
+| loading        | `axpLoading`(全局计数 0→1 / 1→0 触发)                                                                                                             |
+| notify         | `axpNotify`(失败通知一次,`notify:false` / `silent` / 成功不通知)                                                                                  |
+| mock           | `axpMock`(URL 重写到 mockUrl;mock 不存在时回落真实接口;请求级 `mock:true`)                                                                        |
+| envs           | `axpEnvs`(安装期规则合并,不进中间件链)                                                                                                            |
+| filter         | `axpFilter`(装上即过滤空字段,`filter:false` 退出)                                                                                                 |
+| repath         | `axpRepath`(`{id}`/`:pid` 替换)                                                                                                                   |
+| auth           | `axpAuth`(并发 401 单飞刷新 / 刷新失败每轮只通知一次 / 刷新时间线 / 有界收敛)                                                                     |
+| 响应           | `axpResponse` · `AxpResponse` 子类覆盖 `ok` · `isAxpResponse` · `AXP_KINDS` · `reject` 适配 Error · 业务码失败 `kind:'biz'` · 空 body             |
+| TokenManager   | `TokenManager`(set/get/clear,Bearer 前缀)                                                                                                         |
 
 ## mock 服务端点速查
 
@@ -72,4 +74,4 @@ ALL E2E PASSED ✅
 | `GET/POST /api/echo`                          | 回显 method/query/body 到 `data`                              |
 | `GET /mock/*`                                 | mock 插件重写目标,`data.mocked=true`                          |
 | `GET /mock-404/*`                             | 永远 404,演示 `mock.fallback` 回落真实接口                    |
-| 其它路径                                      | 回显最终 path(验证 replace-path-vars 替换结果)                |
+| 其它路径                                      | 回显最终 path(验证 axpRepath 替换结果)                        |

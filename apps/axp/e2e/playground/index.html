@@ -3,7 +3,7 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>http-plugins · e2e playground</title>
+    <title>@codejoo/axp · e2e playground</title>
     <style>
       :root {
         color-scheme: dark;
@@ -109,11 +109,9 @@
     </style>
   </head>
   <body>
-    <h1>http-plugins · e2e playground</h1>
-    <p class="sub">演练场已接入 api-ws-demo 线上接口。逐张卡片点按钮观察结果。</p>
-    <div class="bar">
-      loading 指示器：<span class="pill off" id="loading-indicator" data-testid="loading-indicator">off</span> &nbsp;|&nbsp; 后端：<span data-testid="mock-base">https://api-ws-demo-latest.onrender.com</span>
-    </div>
+    <h1>@codejoo/axp · e2e playground</h1>
+    <p class="sub">演练场连接本地 mock 后端（:4570）。逐张卡片点按钮观察结果。</p>
+    <div class="bar">loading 指示器：<span class="pill off" id="loading-indicator" data-testid="loading-indicator">off</span> &nbsp;|&nbsp; 后端：<span data-testid="mock-base">http://localhost:4570</span></div>
     <div class="grid" id="app"></div>
     <script type="module" src="./main.ts"></script>
   </body>
