@@ -23,7 +23,6 @@ export function authHeader(c: InternalAxiosRequestConfig): string | undefined {
 export function makeTM(token?: string): ITokenManager {
   let access = token, refresh: string | undefined;
   return {
-    canRefresh: true,
     get accessToken() { return access ? `Bearer ${access}` : undefined; },
     get refreshToken() { return refresh; },
     set(a?: string, r?: string) { access = a; refresh = r; },
@@ -58,8 +57,6 @@ export function authBackend(serverToken = 'srv-1', latency = 10) {
  * @example const tm = new FakeTokenManager('t0'); tm.accessToken // 't0'
  */
 export class FakeTokenManager {
-  /** 是否允许刷新 */
-  canRefresh = true;
   #access: string | undefined;
   /** @param access 初始 access token */
   constructor(access: string | undefined) { this.#access = access; }

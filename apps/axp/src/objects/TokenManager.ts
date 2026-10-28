@@ -7,8 +7,6 @@
  * backed by a Redux/Pinia store) in place of the default `TokenManager`.
  */
 export interface ITokenManager {
-  /** 是否允许刷新；鉴权终态过期或刷新失败后置 false，登录成功后由调用方显式重置为 true，set/clear 不自动重置。 */
-  canRefresh: boolean;
   /** 当前可用于 Authorization 头的 access token，未登录为 undefined / ready for the Authorization header; undefined when not logged in. */
   get accessToken(): string | undefined;
   /** 当前的 refresh token，未登录为 undefined / undefined when not logged in. */
@@ -80,9 +78,6 @@ export default class TokenManager implements ITokenManager {
 
   static #key1 = "axp:token:access";
   static #key2 = "axp:token:refresh";
-
-  /** 刷新许可；登录方负责重新启用，写入 token 不会解除失败后的禁用状态。 */
-  canRefresh = true;
 
   /**
    * 构造时尝试从 localStorage 恢复上次会话的 access/refresh token；SSR/非浏览器

@@ -3,13 +3,13 @@ import { expect, expectTypeOf, it } from "vitest";
 import { createAxp } from "../../src/client";
 import { stateKey } from "../../src/context";
 import { AxpResponse, isAxpResponse, type IAxpResponse } from "../../src/response";
+import type { IRetryOptions } from "../../src/plugins/retry";
+import type { AxpOption } from "../../src/options";
 import type { AxpPlugin, AxpRequestOptions, WithData } from "../../src/types";
 import { customResponse, TestResponse } from "../helpers/client";
 
 declare module "../../src/types" {
   interface AxpRequestOptions {
-    /** 类型测试模拟重试插件的请求扩展。 */
-    retry?: number;
     /** 类型测试模拟缓存插件的请求扩展。 */
     cache?: boolean;
   }
@@ -114,7 +114,7 @@ it("[core.fn.createAxp][core.req.wrap][core.req.throws] Schema/响应泛型/插�
     expectTypeOf(numeric).not.toEqualTypeOf(textual);
     expectTypeOf<TestResponse>().toExtend<IAxpResponse>();
     expectTypeOf<AxpRequestOptions>().toExtend<{
-      /** retry 字段。 */ retry?: number;
+      /** retry 字段。 */ retry?: AxpOption<IRetryOptions<any>, number>;
       /** cache 字段。 */ cache?: boolean;
     }>();
     const generated = createAxp<model.MethodRefs>();
