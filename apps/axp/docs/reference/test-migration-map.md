@@ -26,6 +26,7 @@ A 批（单插件规则/补丁/覆盖文件）迁移进行中，基线冻结于 
 | retry（retry.test、retry.coverage） | 本批提交 | 74 | 0 | 0 | 0 | 0 | 0 | 74 | 是 |
 | share（share.test、share.review、share.coverage） | 本批提交 | 56 | 0 | 0 | 0 | 0 | 0 | 56 | 是 |
 | cache（cache.test、cache.review、cache.coverage） | 本批提交 | 60 | 0 | 0 | 0 | 0 | 0 | 60 | 是 |
+| key（key.test、key.review、key.coverage） | 本批提交 | 83 | 0 | 0 | 0 | 0 | 0 | 83 | 是 |
 
 ## 映射
 
@@ -244,3 +245,83 @@ A 批（单插件规则/补丁/覆盖文件）迁移进行中，基线冻结于 
 | test/cache.coverage.test.ts::cache — 卸载、代次与 TTL 边界 > TTL=%i 不命中，即使时间未推进（each） | boundary/cache.boundary.test.ts::cache — 卸载、代次与 TTL 边界 > [cache.opt.expires] TTL=%i 不命中，即使时间未推进 | rename | TTL 为零/负 |  |
 | test/cache.coverage.test.ts::cache — 卸载、代次与 TTL 边界 > TTL 恰好到期时重新发送，max=0 回退默认容量 | boundary/cache.boundary.test.ts::cache — 卸载、代次与 TTL 边界 > [cache.opt.expires][cache.opt.max] TTL 恰好到期时重新发送，max=0 回退默认容量 | rename | TTL 恰好到期、max=0 |  |
 | test/cache.coverage.test.ts::cache — 卸载、代次与 TTL 边界 > enable:false 保持 adapter 身份且不创建缓存仓 | rule/cache.rule.test.ts::cache — 卸载、代次与 TTL 边界 > [cache.opt.enable] enable:false 保持 adapter 身份且不创建缓存仓 | rename | 总开关 |  |
+| test/key.test.ts::$parse — key 字段处理 > null/undefined/false/空串/空白串 → null | unit/key.unit.parse.test.ts::$parse — key 字段处理 > [key.fn.$parse][key.req.key] null/undefined/false/空串/空白串 → null | rename | 纯函数 $parse 的 key 字段处理 |  |
+| test/key.test.ts::$parse — key 字段处理 > 数字 0 转字符串 "0"（非 null） | unit/key.unit.parse.test.ts::$parse — key 字段处理 > [key.fn.$parse][key.req.key] 数字 0 转字符串 "0"（非 null） | rename | 纯函数 $parse 的 key 字段处理 |  |
+| test/key.test.ts::$parse — key 字段处理 > 字符串去空白后保留 | unit/key.unit.parse.test.ts::$parse — key 字段处理 > [key.fn.$parse][key.req.key] 字符串去空白后保留 | rename | 纯函数 $parse 的 key 字段处理 |  |
+| test/key.test.ts::$parse — key 字段处理 > 数字转字符串 | unit/key.unit.parse.test.ts::$parse — key 字段处理 > [key.fn.$parse][key.req.key] 数字转字符串 | rename | 纯函数 $parse 的 key 字段处理 |  |
+| test/key.test.ts::$parse — key 字段处理 > 字符串 "deep" → 触发 deep 模式自动生成 | unit/key.unit.parse.test.ts::$parse — key 字段处理 > [key.fn.$parse][key.req.key] 字符串 "deep" → 触发 deep 模式自动生成 | rename | 纯函数 $parse 的 key 字段处理 |  |
+| test/key.test.ts::$parse — key 字段处理 > 函数返回值用作 key | unit/key.unit.parse.test.ts::$parse — key 字段处理 > [key.fn.$parse][key.req.key] 函数返回值用作 key | rename | 纯函数 $parse 的 key 字段处理 |  |
+| test/key.test.ts::$parse — key 字段处理 > key=true → simple 模式自动生成 | unit/key.unit.parse.test.ts::$parse — key 字段处理 > [key.fn.$parse][key.req.key] key=true → simple 模式自动生成 | rename | 纯函数 $parse 的 key 字段处理 |  |
+| test/key.test.ts::$parse — key 字段处理 > key 为对象 → 默认 deep + 透传 ignore 选项 | unit/key.unit.parse.test.ts::$parse — key 字段处理 > [key.fn.$parse][key.req.key] key 为对象 → 默认 deep + 透传 ignore 选项 | rename | 纯函数 $parse 的 key 字段处理 |  |
+| test/key.test.ts::$key — method 大小写规范化 > GET / get / Get / gEt 等价 | unit/key.unit.strategy.test.ts::$key — method 大小写规范化 > [key.fn.$key] GET / get / Get / gEt 等价 | rename | 纯函数 $key，method 规范化 |  |
+| test/key.test.ts::$key — method 大小写规范化 > 不同 method 得到不同 key | unit/key.unit.strategy.test.ts::$key — method 大小写规范化 > [key.fn.$key] 不同 method 得到不同 key | rename | 纯函数 $key，method 规范化 |  |
+| test/key.test.ts::$key — simple vs deep 策略 > simple 仅看 method+url，忽略 params 内容 | unit/key.unit.strategy.test.ts::$key — simple vs deep 策略 > [key.fn.$key][key.opt.fastMode] simple 仅看 method+url，忽略 params 内容 | rename | simple 与 deep 策略 |  |
+| test/key.test.ts::$key — simple vs deep 策略 > simple 仅看 method+url，忽略 data 内容 | unit/key.unit.strategy.test.ts::$key — simple vs deep 策略 > [key.fn.$key][key.opt.fastMode] simple 仅看 method+url，忽略 data 内容 | rename | simple 与 deep 策略 |  |
+| test/key.test.ts::$key — simple vs deep 策略 > deep 区分 params 内容 | unit/key.unit.strategy.test.ts::$key — simple vs deep 策略 > [key.fn.$key][key.opt.fastMode] deep 区分 params 内容 | rename | simple 与 deep 策略 |  |
+| test/key.test.ts::$key — simple vs deep 策略 > 无 body 时 simple === deep | unit/key.unit.strategy.test.ts::$key — simple vs deep 策略 > [key.fn.$key][key.opt.fastMode] 无 body 时 simple === deep | rename | simple 与 deep 策略 |  |
+| test/key.test.ts::$key — 空容器等价（核心约束） > undefined / null / [] / {} / 嵌套空容器都等价于无 params | unit/key.unit.strategy.test.ts::$key — 空容器等价（核心约束） > [key.fn.$key] undefined / null / [] / {} / 嵌套空容器都等价于无 params | rename | 空容器等价 |  |
+| test/key.test.ts::$key — 空容器等价（核心约束） > data 中等价空 child 与 [1] 等价 | unit/key.unit.strategy.test.ts::$key — 空容器等价（核心约束） > [key.fn.$key] data 中等价空 child 与 [1] 等价 | rename | 空容器等价 |  |
+| test/key.test.ts::$key — 空容器等价（核心约束） > 对象 value 含等价空 与 {x:1} 等价 | unit/key.unit.strategy.test.ts::$key — 空容器等价（核心约束） > [key.fn.$key] 对象 value 含等价空 与 {x:1} 等价 | rename | 空容器等价 |  |
+| test/key.test.ts::$key — falsy 默认过滤策略 > false / 0 视为有内容，互不相等且都不等于"无 data" | unit/key.unit.strategy.test.ts::$key — falsy 默认过滤策略 > [key.fn.$key] false / 0 视为有内容，互不相等且都不等于"无 data" | rename | falsy 默认过滤 |  |
+| test/key.test.ts::$key — falsy 默认过滤策略 > "" / "   " / null / undefined / NaN 全部默认过滤，与"无 data"等价 | unit/key.unit.strategy.test.ts::$key — falsy 默认过滤策略 > [key.fn.$key] "" / "   " / null / undefined / NaN 全部默认过滤，与"无 data"等价 | rename | falsy 默认过滤 |  |
+| test/key.test.ts::$key — falsy 默认过滤策略 > 用 ignores:[""] 可恢复空串作为有效值 | unit/key.unit.strategy.test.ts::$key — falsy 默认过滤策略 > [key.fn.$key][key.opt.ignores] 用 ignores:[""] 可恢复空串作为有效值 | rename | ignores 恢复空串 |  |
+| test/key.test.ts::$key — 内容差异区分 > 不同 url | unit/key.unit.strategy.test.ts::$key — 内容差异区分 > [key.fn.$key] 不同 url | rename | 内容差异区分 |  |
+| test/key.test.ts::$key — 内容差异区分 > 不同 method | unit/key.unit.strategy.test.ts::$key — 内容差异区分 > [key.fn.$key] 不同 method | rename | 内容差异区分 |  |
+| test/key.test.ts::$key — 内容差异区分 > params 内容不同 | unit/key.unit.strategy.test.ts::$key — 内容差异区分 > [key.fn.$key] params 内容不同 | rename | 内容差异区分 |  |
+| test/key.test.ts::$key — 内容差异区分 > params key 名不同 | unit/key.unit.strategy.test.ts::$key — 内容差异区分 > [key.fn.$key] params key 名不同 | rename | 内容差异区分 |  |
+| test/key.test.ts::$key — 内容差异区分 > 数组顺序不同 | unit/key.unit.strategy.test.ts::$key — 内容差异区分 > [key.fn.$key] 数组顺序不同 | rename | 内容差异区分 |  |
+| test/key.test.ts::$key — 内容差异区分 > 数组长度不同 | unit/key.unit.strategy.test.ts::$key — 内容差异区分 > [key.fn.$key] 数组长度不同 | rename | 内容差异区分 |  |
+| test/key.test.ts::$key — 对象 key 顺序无关 > 内部 sort 后 {a,b,c} ≡ {c,b,a} | unit/key.unit.strategy.test.ts::$key — 对象 key 顺序无关 > [key.fn.$key] 内部 sort 后 {a,b,c} ≡ {c,b,a} | rename | 键序无关、字段身份、分隔符碰撞 |  |
+| test/key.test.ts::$key — params/data 字段身份不互通 > params={x:1} ≠ data={x:1} | unit/key.unit.strategy.test.ts::$key — params/data 字段身份不互通 > [key.fn.$key] params={x:1} ≠ data={x:1} | rename | 键序无关、字段身份、分隔符碰撞 |  |
+| test/key.test.ts::$key — params/data 字段身份不互通 > 两边内容互换 → 不同 key | unit/key.unit.strategy.test.ts::$key — params/data 字段身份不互通 > [key.fn.$key] 两边内容互换 → 不同 key | rename | 键序无关、字段身份、分隔符碰撞 |  |
+| test/key.test.ts::$key — 边界字符串碰撞防护 > 数组分隔符防碰撞 ["ab","c"] ≠ ["a","bc"] | unit/key.unit.strategy.test.ts::$key — 边界字符串碰撞防护 > [key.fn.$key] 数组分隔符防碰撞 ["ab","c"] ≠ ["a","bc"] | rename | 键序无关、字段身份、分隔符碰撞 |  |
+| test/key.test.ts::$key — 边界字符串碰撞防护 > 对象 key/value 分隔防碰撞 {ab:1} ≠ {a:"b1"} | unit/key.unit.strategy.test.ts::$key — 边界字符串碰撞防护 > [key.fn.$key] 对象 key/value 分隔防碰撞 {ab:1} ≠ {a:"b1"} | rename | 键序无关、字段身份、分隔符碰撞 |  |
+| test/key.test.ts::$key — 边界字符串碰撞防护 > 字符串内容含分隔符：["ab,c"] ≠ ["ab","c"]（长度分帧） | unit/key.unit.strategy.test.ts::$key — 边界字符串碰撞防护 > [key.fn.$key] 字符串内容含分隔符：["ab,c"] ≠ ["ab","c"]（长度分帧） | rename | 键序无关、字段身份、分隔符碰撞 |  |
+| test/key.test.ts::$key — 边界字符串碰撞防护 > 对象键含分隔符：{"a:b":"c"} ≠ {a:"b:c"}（长度分帧） | unit/key.unit.strategy.test.ts::$key — 边界字符串碰撞防护 > [key.fn.$key] 对象键含分隔符：{"a:b":"c"} ≠ {a:"b:c"}（长度分帧） | rename | 键序无关、字段身份、分隔符碰撞 |  |
+| test/key.test.ts::$key — 边界字符串碰撞防护 > 长度分帧不破坏等价性：键序无关、同内容同 key、采样模式同样防碰撞 | unit/key.unit.strategy.test.ts::$key — 边界字符串碰撞防护 > [key.fn.$key] 长度分帧不破坏等价性：键序无关、同内容同 key、采样模式同样防碰撞 | rename | 键序无关、字段身份、分隔符碰撞 |  |
+| test/key.test.ts::$key — 长字符串采样 > 相同长串 → 同 key | unit/key.unit.strategy.test.ts::$key — 长字符串采样 > [key.fn.$key][key.opt.sample] 相同长串 → 同 key | rename | 长字符串采样 |  |
+| test/key.test.ts::$key — 长字符串采样 > 长度不同 → 不同 key（L<n> 长度标签兜底） | unit/key.unit.strategy.test.ts::$key — 长字符串采样 > [key.fn.$key][key.opt.sample] 长度不同 → 不同 key（L<n> 长度标签兜底） | rename | 长字符串采样 |  |
+| test/key.test.ts::$key — 长字符串采样 > 内容差异落在中段 → 不同 key | unit/key.unit.strategy.test.ts::$key — 长字符串采样 > [key.fn.$key][key.opt.sample] 内容差异落在中段 → 不同 key | rename | 长字符串采样 |  |
+| test/key.test.ts::$key — 长字符串采样 > 短串前后空格被 trim | unit/key.unit.strategy.test.ts::$key — 长字符串采样 > [key.fn.$key][key.opt.sample] 短串前后空格被 trim | rename | 长字符串采样 |  |
+| test/key.test.ts::$key — Buffer / ArrayBuffer-like > 空 Buffer 视为空 | unit/key.unit.strategy.test.ts::$key — Buffer / ArrayBuffer-like > [key.fn.$key] 空 Buffer 视为空 | rename | Buffer、嵌套、已知行为 |  |
+| test/key.test.ts::$key — Buffer / ArrayBuffer-like > Buffer 长度不同 → 不同 key | unit/key.unit.strategy.test.ts::$key — Buffer / ArrayBuffer-like > [key.fn.$key] Buffer 长度不同 → 不同 key | rename | Buffer、嵌套、已知行为 |  |
+| test/key.test.ts::$key — Buffer / ArrayBuffer-like > Buffer 长度相同 → 同 key | unit/key.unit.strategy.test.ts::$key — Buffer / ArrayBuffer-like > [key.fn.$key] Buffer 长度相同 → 同 key | rename | Buffer、嵌套、已知行为 |  |
+| test/key.test.ts::$key — 嵌套结构 > 嵌套对象内容不同 | unit/key.unit.strategy.test.ts::$key — 嵌套结构 > [key.fn.$key] 嵌套对象内容不同 | rename | Buffer、嵌套、已知行为 |  |
+| test/key.test.ts::$key — 嵌套结构 > 数组中嵌套对象内容不同 | unit/key.unit.strategy.test.ts::$key — 嵌套结构 > [key.fn.$key] 数组中嵌套对象内容不同 | rename | Buffer、嵌套、已知行为 |  |
+| test/key.test.ts::$key — 嵌套结构 > 深层全空 等价于不带该字段 | unit/key.unit.strategy.test.ts::$key — 嵌套结构 > [key.fn.$key] 深层全空 等价于不带该字段 | rename | Buffer、嵌套、已知行为 |  |
+| test/key.test.ts::$key — 已知行为 > 数字 1 与字符串 "1" 等价（按 String() 序列化） | unit/key.unit.strategy.test.ts::$key — 已知行为 > [key.fn.$key] 数字 1 与字符串 "1" 等价（按 String() 序列化） | rename | Buffer、嵌套、已知行为 |  |
+| test/key.test.ts::$key — ignores 按键名豁免 > 指定 key 即使 value 为 null 也参与 hash | unit/key.unit.ignores.test.ts::$key — ignores 按键名豁免 > [key.fn.$key][key.opt.ignores] 指定 key 即使 value 为 null 也参与 hash | rename | ignores 按键名/按值/混合 |  |
+| test/key.test.ts::$key — ignores 按键名豁免 > 被保留的 key 即使 value 为空容器也参与 hash | unit/key.unit.ignores.test.ts::$key — ignores 按键名豁免 > [key.fn.$key][key.opt.ignores] 被保留的 key 即使 value 为空容器也参与 hash | rename | ignores 按键名/按值/混合 |  |
+| test/key.test.ts::$key — ignores 按键名豁免 > value 非空时 ignores 不影响（与无 opts 等价） | unit/key.unit.ignores.test.ts::$key — ignores 按键名豁免 > [key.fn.$key][key.opt.ignores] value 非空时 ignores 不影响（与无 opts 等价） | rename | ignores 按键名/按值/混合 |  |
+| test/key.test.ts::$key — ignores 按键名豁免 > 未在对象中的 ignores 键名项无副作用 | unit/key.unit.ignores.test.ts::$key — ignores 按键名豁免 > [key.fn.$key][key.opt.ignores] 未在对象中的 ignores 键名项无副作用 | rename | ignores 按键名/按值/混合 |  |
+| test/key.test.ts::$key — ignores 按键名豁免 > 多个键名同时生效 | unit/key.unit.ignores.test.ts::$key — ignores 按键名豁免 > [key.fn.$key][key.opt.ignores] 多个键名同时生效 | rename | ignores 按键名/按值/混合 |  |
+| test/key.test.ts::$key — ignores 按值豁免 > 保留 null 值，使 {x:null} ≠ 无 data | unit/key.unit.ignores.test.ts::$key — ignores 按值豁免 > [key.fn.$key][key.opt.ignores] 保留 null 值，使 {x:null} ≠ 无 data | rename | ignores 按键名/按值/混合 |  |
+| test/key.test.ts::$key — ignores 按值豁免 > 保留 null 时 key 名仍参与 hash | unit/key.unit.ignores.test.ts::$key — ignores 按值豁免 > [key.fn.$key][key.opt.ignores] 保留 null 时 key 名仍参与 hash | rename | ignores 按键名/按值/混合 |  |
+| test/key.test.ts::$key — ignores 按值豁免 > 保留 NaN（NaN-aware 比较） | unit/key.unit.ignores.test.ts::$key — ignores 按值豁免 > [key.fn.$key][key.opt.ignores] 保留 NaN（NaN-aware 比较） | rename | ignores 按键名/按值/混合 |  |
+| test/key.test.ts::$key — ignores 按值豁免 > 保留 undefined | unit/key.unit.ignores.test.ts::$key — ignores 按值豁免 > [key.fn.$key][key.opt.ignores] 保留 undefined | rename | ignores 按键名/按值/混合 |  |
+| test/key.test.ts::$key — ignores 按值豁免 > 保留多个值类型并存 | unit/key.unit.ignores.test.ts::$key — ignores 按值豁免 > [key.fn.$key][key.opt.ignores] 保留多个值类型并存 | rename | ignores 按键名/按值/混合 |  |
+| test/key.test.ts::$key — ignores 按值豁免 > 数组中的 null 在 ignores:[null] 下保留 | unit/key.unit.ignores.test.ts::$key — ignores 按值豁免 > [key.fn.$key][key.opt.ignores] 数组中的 null 在 ignores:[null] 下保留 | rename | ignores 按键名/按值/混合 |  |
+| test/key.test.ts::$key — ignores 按值豁免 > 未命中 ignores 的 falsy 值仍被过滤 | unit/key.unit.ignores.test.ts::$key — ignores 按值豁免 > [key.fn.$key][key.opt.ignores] 未命中 ignores 的 falsy 值仍被过滤 | rename | ignores 按键名/按值/混合 |  |
+| test/key.test.ts::$key — ignores 混合键名/值 > 同一个 ignores 数组里键名和值两种豁免同时生效 | unit/key.unit.ignores.test.ts::$key — ignores 混合键名/值 > [key.fn.$key][key.opt.ignores] 同一个 ignores 数组里键名和值两种豁免同时生效 | rename | ignores 按键名/按值/混合 |  |
+| test/key.test.ts::$key — ignores 混合键名/值 > 对象形式 key 默认走 deep + 透传 opts | unit/key.unit.ignores.test.ts::$key — ignores 混合键名/值 > [key.fn.$key][key.opt.ignores] 对象形式 key 默认走 deep + 透传 opts | rename | ignores 按键名/按值/混合 |  |
+| test/key.test.ts::$parse — 插件级 defaults 与请求级合并 > 插件级 fastMode:false 让 key:true 走 deep | unit/key.unit.parse.test.ts::$parse — 插件级 defaults 与请求级合并 > [key.fn.$parse][key.opt.fastMode][key.opt.ignores] 插件级 fastMode:false 让 key:true 走 deep | rename | 插件级 defaults 与请求级合并 |  |
+| test/key.test.ts::$parse — 插件级 defaults 与请求级合并 > 插件级 ignores 键名在 key:true + fastMode:false 时生效 | unit/key.unit.parse.test.ts::$parse — 插件级 defaults 与请求级合并 > [key.fn.$parse][key.opt.fastMode][key.opt.ignores] 插件级 ignores 键名在 key:true + fastMode:false 时生效 | rename | 插件级 defaults 与请求级合并 |  |
+| test/key.test.ts::$parse — 插件级 defaults 与请求级合并 > 插件级 ignores 按值在 key:"deep" 时生效 | unit/key.unit.parse.test.ts::$parse — 插件级 defaults 与请求级合并 > [key.fn.$parse][key.opt.fastMode][key.opt.ignores] 插件级 ignores 按值在 key:"deep" 时生效 | rename | 插件级 defaults 与请求级合并 |  |
+| test/key.test.ts::$parse — 插件级 defaults 与请求级合并 > 请求级对象优先于插件级 | unit/key.unit.parse.test.ts::$parse — 插件级 defaults 与请求级合并 > [key.fn.$parse][key.opt.fastMode][key.opt.ignores] 请求级对象优先于插件级 | rename | 插件级 defaults 与请求级合并 |  |
+| test/key.test.ts::$parse — 插件级 defaults 与请求级合并 > 请求级未指定的字段回退到插件级 | unit/key.unit.parse.test.ts::$parse — 插件级 defaults 与请求级合并 > [key.fn.$parse][key.opt.fastMode][key.opt.ignores] 请求级未指定的字段回退到插件级 | rename | 插件级 defaults 与请求级合并 |  |
+| test/key.test.ts::$parse — 插件级 defaults 与请求级合并 > 无 defaults 时行为与之前一致（向后兼容） | unit/key.unit.parse.test.ts::$parse — 插件级 defaults 与请求级合并 > [key.fn.$parse][key.opt.fastMode][key.opt.ignores] 无 defaults 时行为与之前一致（向后兼容） | rename | 插件级 defaults 与请求级合并 |  |
+| test/key.review.test.ts::$parse deep — #16 Date / URLSearchParams / 不可序列化类型 > 不同 Date → 不同 key；相同 Date → 同 key | unit/key.unit.strategy.test.ts::$parse deep — Date / URLSearchParams / 不可序列化类型 > [key.fn.$parse] 不同 Date → 不同 key；相同 Date → 同 key | rename | 特殊类型指纹，review #16 |  |
+| test/key.review.test.ts::$parse deep — #16 Date / URLSearchParams / 不可序列化类型 > 顶层 Date 也区分 | unit/key.unit.strategy.test.ts::$parse deep — Date / URLSearchParams / 不可序列化类型 > [key.fn.$parse] 顶层 Date 也区分 | rename | 特殊类型指纹，review #16 |  |
+| test/key.review.test.ts::$parse deep — #16 Date / URLSearchParams / 不可序列化类型 > URLSearchParams 按内容区分 | unit/key.unit.strategy.test.ts::$parse deep — Date / URLSearchParams / 不可序列化类型 > [key.fn.$parse] URLSearchParams 按内容区分 | rename | 特殊类型指纹，review #16 |  |
+| test/key.review.test.ts::$parse deep — #16 Date / URLSearchParams / 不可序列化类型 > FormData / Blob / Map / Set 等不可序列化 → 返回 null（宁可不命中） | unit/key.unit.strategy.test.ts::$parse deep — Date / URLSearchParams / 不可序列化类型 > [key.fn.$parse] FormData / Blob / Map / Set 等不可序列化 → 返回 null（宁可不命中） | rename | 特殊类型指纹，review #16 |  |
+| test/key.review.test.ts::$parse deep — #16 Date / URLSearchParams / 不可序列化类型 > 被 ignores 命中的字段不影响（即便是 Blob） | unit/key.unit.ignores.test.ts::$parse deep — Date / URLSearchParams / 不可序列化类型 > [key.fn.$parse][key.opt.ignores] 被 ignores 命中的字段不影响（即便是 Blob） | rename | review #16 |  |
+| test/key.review.test.ts::$parse — #1 scope 并入 key > scope 不同 → key 不同；相同 → 相同 | unit/key.unit.parse.test.ts::$parse — scope 并入 key > [key.fn.$parse][key.opt.scope][key.req.key.scope] scope 不同 → key 不同；相同 → 相同 | rename | scope 并入 key，review #1 |  |
+| test/key.review.test.ts::$parse — #1 scope 并入 key > scope 对字符串 / 函数 key 也生效；返回空值则不并入 | unit/key.unit.parse.test.ts::$parse — scope 并入 key > [key.fn.$parse][key.opt.scope][key.req.key.scope] scope 对字符串 / 函数 key 也生效；返回空值则不并入 | rename | scope 并入 key，review #1 |  |
+| test/key.review.test.ts::$parse — #1 scope 并入 key > 请求级 key 对象的 scope 优先于插件级 | unit/key.unit.parse.test.ts::$parse — scope 并入 key > [key.fn.$parse][key.opt.scope][key.req.key.scope] 请求级 key 对象的 scope 优先于插件级 | rename | scope 并入 key，review #1 |  |
+| test/key.coverage.test.ts::key — scope、采样与错误边界 > scope=%s 不增加后缀（each） | unit/key.unit.parse.test.ts::key — scope、采样与错误边界 > [key.fn.$parse][key.opt.scope][key.cb.scope] scope=%s 不增加后缀 | rename | 纯函数 |  |
+| test/key.coverage.test.ts::key — scope、采样与错误边界 > scope=0 不丢失，请求级静态空 scope 可覆盖插件值 | unit/key.unit.parse.test.ts::key — scope、采样与错误边界 > [key.fn.$parse][key.opt.scope][key.req.key.scope] scope=0 不丢失，请求级静态空 scope 可覆盖插件值 | rename | 单元层（unit） |  |
+| test/key.coverage.test.ts::key — scope、采样与错误边界 > 采样长字符串时首中尾差异均影响指纹，短字符串仍全量计算 | unit/key.unit.strategy.test.ts::key — scope、采样与错误边界 > [key.fn.$key][key.opt.sample][key.req.key.sample] 采样长字符串时首中尾差异均影响指纹，短字符串仍全量计算 | rename | 单元层（unit） |  |
+| test/key.coverage.test.ts::key — scope、采样与错误边界 > 继承属性不参与 deep key，无原型对象按自有字段计算 | unit/key.unit.strategy.test.ts::key — scope、采样与错误边界 > [key.fn.$key] 继承属性不参与 deep key，无原型对象按自有字段计算 | rename | 单元层（unit） |  |
+| test/key.coverage.test.ts::key — scope、采样与错误边界 > 用户 key/scope/getter 抛错保持身份，不被当作不可序列化哨兵吞掉 | unit/key.unit.parse.test.ts::key — scope、采样与错误边界 > [key.fn.$parse][key.req.key.callback][key.cb.scope] 用户 key/scope/getter 抛错保持身份，不被当作不可序列化哨兵吞掉 | rename | 单元层（unit） |  |
+| test/key.coverage.test.ts::key — scope、采样与错误边界 > 忽略值可以保留 false、空字符串等特殊标签，避免与缺失项等价 | unit/key.unit.ignores.test.ts::key — scope、采样与错误边界 > [key.fn.$key][key.opt.ignores] 忽略值可以保留 false、空字符串等特殊标签，避免与缺失项等价 | rename | 单元层（unit） |  |
+| test/key.coverage.test.ts::key — scope、采样与错误边界 > install 将不支持的 body 对应 key 清空；cleanup 后不再计算 key | rule/key.rule.test.ts::key — scope、采样与错误边界 > [key.fn.axpKey][key.method.cleanup] install 将不支持的 body 对应 key 清空；cleanup 后不再计算 key | rename | 带 axios 实例，装配后的单插件行为 |  |
