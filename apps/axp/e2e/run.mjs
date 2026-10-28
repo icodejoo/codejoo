@@ -5,7 +5,7 @@
  *   - 若 mock(:4570) 与 dev(:5180) 已在运行 → 复用(配合手动 `npm run e2e:server` + `npm run e2e:dev`)
  *   - 否则自动拉起两个服务,跑完再回收
  *
- * 每个 case 对应演练场上的一个按钮(= 一个公开 API 动作),动作契约由页面与 runner 共同校验，覆盖基础 API 与并发失败场景。
+ * 每个 case 对应演练场上的一个按钮(= 一个公开 API 动作),动作契约由页面与 runner 共同校验，覆盖 createAxp 基础 API 与并发失败场景。
  * 任一断言失败 → 退出码 1。
  *
  * 运行：`npm run e2e`
@@ -27,56 +27,136 @@ const ok = (c, msg) => {
  * 每个 case：{ action(按钮 testid), result(结果面板 testid), exports(本 case 覆盖的导出), check(j) }
  */
 const cases = [
-  // ── Core verbs + 三态 ──
-  { action: "core-get", result: "core-result", exports: ["create", "Core", "get"], check: (j) => eq(j.query.q, "1", "get query") },
+  // ── createAxp：七个动词 + 三种返回形态 ──
+  { action: "core-get", result: "core-result", exports: ["createAxp", "get"], check: (j) => eq(j.query.q, "1", "get query") },
   { action: "core-post", result: "core-result", exports: ["post"], check: (j) => eq(j.body.name, "x", "post body") },
   { action: "core-put", result: "core-result", exports: ["put"], check: (j) => eq(j.body.v, 1, "put body") },
   { action: "core-patch", result: "core-result", exports: ["patch"], check: (j) => eq(j.body.v, 2, "patch body") },
   { action: "core-delete", result: "core-result", exports: ["delete"], check: (j) => eq(j.body.del, 1, "delete body") },
   { action: "core-head", result: "core-result", exports: ["head"], check: (j) => eq(j.head, "resolved", "head") },
   { action: "core-options", result: "core-result", exports: ["options"], check: (j) => eq(j.options, "resolved", "options") },
-  { action: "core-plain", result: "core-result", exports: ["plain shape"], check: (j) => eq(j.query.shape, "plain", "plain unwrap") },
-  { action: "core-raw", result: "core-result", exports: ["raw shape"], check: (j) => ok(j.code === "0000" && j.data && "message" in j, "raw envelope") },
-  { action: "core-wrap", result: "core-result", exports: ["wrap shape"], check: (j) => ok(j.__type === "ApiResponse" && j.successful === true, "wrap ApiResponse") },
+  { action: "core-plain", result: "core-result", exports: ["默认解包 data"], check: (j) => eq(j.query.shape, "plain", "plain unwrap") },
+  {
+    action: "core-raw",
+    result: "core-result",
+    exports: ["wrap → r.raw"],
+    check: (j) => {
+      ok(j.code === "0000" && j.data && "message" in j, "envelope fields on r");
+      eq(j.rawStatus, 200, "raw AxiosResponse status");
+      eq(j.rawEnvelope.code, "0000", "raw keeps the original envelope");
+    },
+  },
+  {
+    action: "core-wrap",
+    result: "core-result",
+    exports: ["wrap", "isAxpResponse"],
+    check: (j) => {
+      ok(j.ok === true && j.kind === "ok" && j.status === 200, "wrap ok");
+      ok(j.isResponse === true && j.isBrand === true, "brand recognized by api.isResponse / isAxpResponse");
+      eq(j.data.method, "GET", "business data under r.data");
+    },
+  },
+  {
+    action: "core-throws-false",
+    result: "core-result",
+    exports: ["throws:false"],
+    check: (j) => {
+      ok(j.resolved === true && j.ok === false, "failure resolves, ok=false");
+      eq([j.kind, j.status, j.httpStatus], ["http", 400, 400], "http failure fields");
+    },
+  },
+  {
+    action: "core-throw",
+    result: "core-result",
+    exports: ["默认抛出 IAxpResponse"],
+    check: (j) => {
+      ok(j.thrown === true && j.isResponse === true, "failure is thrown as IAxpResponse");
+      ok(j.isError === false && j.hasStack === false, "plain object, no stack by default");
+      eq([j.kind, j.status], ["http", 400], "http failure fields");
+    },
+  },
 
-  // ── lifecycle ──
+  // ── use / eject / inspect / plugin / extend / dispose ──
   {
     action: "lifecycle-use",
     result: "lifecycle-result",
     exports: ["use"],
-    check: (j) =>
-      eq(
-        j.map((p) => p.name),
-        ["logging", "tracer"],
-        "use",
-      ),
+    check: (j) => {
+      eq(j.names, ["logging", "tracer"], "use");
+      eq(j.stages, ["attempt", "attempt"], "custom plugins default to the attempt stage");
+    },
   },
   {
     action: "lifecycle-eject",
     result: "lifecycle-result",
     exports: ["eject"],
-    check: (j) =>
-      eq(
-        j.map((p) => p.name),
-        ["tracer"],
-        "eject",
-      ),
+    check: (j) => {
+      ok(j.ejected === true && j.again === false, "eject returns whether it existed");
+      eq(j.names, ["tracer"], "eject keeps the others");
+    },
   },
-  { action: "lifecycle-plugins", result: "lifecycle-result", exports: ["plugins"], check: (j) => eq(j.length, 2, "plugins snapshot") },
   {
-    action: "lifecycle-extends",
+    action: "lifecycle-inspect",
     result: "lifecycle-result",
-    exports: ["extends"],
+    exports: ["inspect"],
+    check: (j) => {
+      eq(j.names, ["axp:loading", "axp:notify", "axp:repath", "axp:filter", "axp:retry", "axp:auth", "axp:mock", "axp:share", "axp:cache"], "built-in plugins ordered by stage, not by array order");
+      ok(j.snapshotIsCopy === true, "inspect returns a fresh copy");
+    },
+  },
+  {
+    action: "lifecycle-extend",
+    result: "lifecycle-result",
+    exports: ["extend"],
     check: (j) => {
       eq(j.parent, ["logging"], "parent");
-      eq(j.child, ["logging", "tracer"], "child");
+      eq(j.child, ["logging", "tracer"], "child inherits parent plugins, then adds its own");
+    },
+  },
+  {
+    action: "lifecycle-extend-state",
+    result: "lifecycle-result",
+    exports: ["extend (independent state)"],
+    check: (j) => {
+      eq(j.parentHits, 1, "parent cache hit");
+      eq(j.childHits, 2, "child has its own empty cache");
+    },
+  },
+  {
+    action: "lifecycle-plugin",
+    result: "lifecycle-result",
+    exports: ["plugin", "stateKey"],
+    check: (j) => {
+      eq([j.before, j.after], [0, 1], "plugin api sees the request");
+      eq(j.seen, ["/api/echo"], "plugin api state");
+      ok(j.missing === true, "plugin not installed → undefined");
+    },
+  },
+  {
+    action: "lifecycle-dispose",
+    result: "lifecycle-result",
+    exports: ["dispose", "pending"],
+    check: (j) => {
+      eq(j.pendingBefore, 1, "one in flight");
+      eq(j.kind, "cancel", "dispose aborts in-flight requests");
+      eq(j.pendingAfter, 0, "nothing pending after dispose");
+      eq(j.afterDispose, "rejected", "disposed client refuses new requests");
     },
   },
 
-  // ── buildKey / $key ──
-  { action: "key-simple", result: "key-result", exports: ["$key (simple)"], check: (j) => ok(j.equal === true, "simple ignores params") },
-  { action: "key-deep", result: "key-result", exports: ["$key (deep)"], check: (j) => ok(j.equal === false, "deep distinguishes params") },
-  { action: "key-plugin", result: "key-result", exports: ["buildKey"], check: (j) => ok(typeof j.capturedKey === "string" && j.capturedKey.includes("-"), "buildKey writes 64-bit key") },
+  // ── key（内核服务）──
+  { action: "key-same", result: "key-result", exports: ["key (auto, same params)"], check: (j) => eq(j.serverHits, 1, "same params share one key") },
+  { action: "key-params", result: "key-result", exports: ["key (auto, params in key)"], check: (j) => eq(j.serverHits, 2, "different params are different keys") },
+  { action: "key-explicit", result: "key-result", exports: ["key (explicit string)"], check: (j) => eq(j.serverHits, 1, "explicit key overrides auto key") },
+  {
+    action: "key-scope",
+    result: "key-result",
+    exports: ["key (scope)"],
+    check: (j) => {
+      eq(j.sameAccount, 1, "same scope shares the entry");
+      eq(j.afterSwitch, 2, "scope function re-evaluated per request");
+    },
+  },
 
   // ── cache ──
   {
@@ -97,7 +177,16 @@ const cases = [
       eq(j.serverHits, 2, "refetch after remove");
     },
   },
-  { action: "cache-clear", result: "cache-result", exports: ["clearCache"], check: (j) => ok(j.cleared >= 1, "clearCache count") },
+  {
+    action: "cache-clear",
+    result: "cache-result",
+    exports: ["clearCache"],
+    check: (j) => {
+      ok(j.cleared >= 1, "clearCache count");
+      ok(j.withoutPlugin === false, "removeCache without the plugin returns false");
+    },
+  },
+  { action: "cache-post", result: "cache-result", exports: ["cache (POST off by default)"], check: (j) => eq(j.serverHits, 2, "POST is not cached") },
 
   // ── share ──
   {
@@ -112,7 +201,18 @@ const cases = [
       );
     },
   },
-  { action: "share-race", result: "share-result", exports: ["share (race)"], check: (j) => eq(j.serverHits, 3, "race each sends") },
+  {
+    action: "share-race",
+    result: "share-result",
+    exports: ["share (race)"],
+    check: (j) => {
+      eq(j.serverHits, 3, "race each sends");
+      ok(
+        j.results.every((r) => r.hits === j.results[0].hits),
+        "all callers get the winner",
+      );
+    },
+  },
   {
     action: "share-end",
     result: "share-result",
@@ -122,6 +222,7 @@ const cases = [
       eq(j.sameResult, 1, "end one result");
     },
   },
+  { action: "share-off", result: "share-result", exports: ["share:false"], check: (j) => eq(j.serverHits, 3, "share:false opts out") },
 
   // ── retry ──
   {
@@ -139,15 +240,44 @@ const cases = [
     exports: ["retry:0"],
     check: (j) => {
       ok(j.rejected === true, "retry:0 rejects");
+      eq([j.kind, j.status], ["http", 500], "http failure");
       eq(j.serverHits, 1, "no retry");
     },
   },
 
-  // ── cancel ──
-  { action: "cancel-run", result: "cancel-result", exports: ["cancel", "cancelAll"], check: (j) => ok(j.canceled === true, "cancelAll aborts") },
+  // ── cancel（内核）──
+  {
+    action: "cancel-run",
+    result: "cancel-result",
+    exports: ["cancelAll"],
+    check: (j) => {
+      ok(j.canceled === true, "cancelAll aborts");
+      eq([j.pendingBefore, j.cancelled, j.again, j.pendingAfter], [1, 1, 0, 0], "counts: 1 in flight → 1 cancelled → none left");
+    },
+  },
+  {
+    action: "cancel-signal",
+    result: "cancel-result",
+    exports: ["signal"],
+    check: (j) => {
+      ok(j.canceled === true, "user signal cancels");
+      eq(j.pendingAfter, 0, "nothing pending");
+    },
+  },
 
   // ── loading ──
   { action: "loading-run", result: "loading-result", exports: ["loading"], check: (j) => eq(j.toggles, [true, false], "loading toggles once") },
+
+  // ── notify ──
+  {
+    action: "notify-run",
+    result: "notify-result",
+    exports: ["notify"],
+    check: (j) => {
+      eq(j.failed, 1, "a failed request notifies once");
+      eq(j.afterSuppressed, 1, "notify:false, silent and success do not notify");
+    },
+  },
 
   // ── mock ──
   { action: "mock-run", result: "mock-result", exports: ["mock"], check: (j) => ok(j.mocked === true && j.path.includes("/mock"), "mock rewrite") },
@@ -161,6 +291,15 @@ const cases = [
       ok(!j.mocked, "not from mock");
     },
   },
+  {
+    action: "mock-request",
+    result: "mock-result",
+    exports: ["mock (per request)"],
+    check: (j) => {
+      ok(j.offMocked === false && j.offPath === "/api/echo", "plugin mock:false by default → real route");
+      ok(j.onMocked === true, "request-level mock:true → mock route");
+    },
+  },
 
   // ── envs ──
   {
@@ -170,34 +309,64 @@ const cases = [
     check: (j) => {
       eq(j.baseURL, MOCK, "baseURL unchanged");
       eq(j.xEnv, "prod", "env header merged");
+      eq(j.chain, [], "envs is not part of the middleware chain");
     },
   },
 
-  // ── normalizeRequest ──
+  // ── filter ──
   {
     action: "filter-run",
     result: "filter-result",
-    exports: ["normalizeRequest"],
+    exports: ["filter"],
     check: (j) => {
       eq(j.query.a, "1", "keep a");
       eq(j.query.e, "0", "keep 0");
       ok(!("b" in j.query) && !("c" in j.query) && !("d" in j.query), "drop empties");
     },
   },
+  { action: "filter-off", result: "filter-result", exports: ["filter:false"], check: (j) => ok("b" in j.query && j.query.e === "0", "filter:false keeps empties") },
 
   // ── repath ──
   { action: "pathvars-run", result: "pathvars-result", exports: ["repath"], check: (j) => eq(j.path, "/users/7/posts/9", "path vars substituted") },
 
-  // ── normalizeResponse ──
-  { action: "normalize-ok", result: "normalize-result", exports: ["normalizeResponse (ok)"], check: (j) => eq(j.query.ok, "1", "success passes through") },
+  // ── 归一化响应（替代旧 normalize 插件、ApiError、ApiResponse）──
+  { action: "response-ok", result: "response-result", exports: ["response (ok)"], check: (j) => eq(j.query.ok, "1", "success passes through") },
   {
-    action: "normalize-fail",
-    result: "normalize-result",
-    exports: ["normalizeResponse (fail)", "ApiError"],
+    action: "response-biz",
+    result: "response-result",
+    exports: ["response (biz failure)", "AXP_KINDS"],
     check: (j) => {
-      ok(j.rejected === true, "rejects");
-      ok(j.isApiError === true, "ApiError instance");
-      eq(j.response.code, "5001", "carries ApiResponse");
+      ok(j.rejected === true && j.isResponse === true, "rejects with an IAxpResponse");
+      ok(j.isError === false, "not an Error");
+      eq([j.kind, j.code, j.ok], ["biz", "5001", false], "carries the business code");
+    },
+  },
+  {
+    action: "response-reject",
+    result: "response-result",
+    exports: ["reject"],
+    check: (j) => {
+      ok(j.rejected === true && j.isError === true, "reject adapts the failure into an Error");
+      ok(j.isResponse === true && j.kind === "biz", "the response rides on error.response");
+    },
+  },
+  {
+    action: "response-empty",
+    result: "response-result",
+    exports: ["response (empty body)"],
+    check: (j) => {
+      ok(j.ok === true && j.kind === "ok", "204 with no body is a success");
+      eq(j.httpStatus, 204, "http status");
+    },
+  },
+  {
+    action: "response-custom",
+    result: "response-result",
+    exports: ["axpResponse", "AxpResponse"],
+    check: (j) => {
+      eq(j.defaultKind, "biz", "default rule rejects code 7777");
+      ok(j.customOk === true && j.customKind === "ok", "subclass overrides ok, kind follows");
+      ok(j.isBrand === true && j.isSubclass === true, "still recognized, still the subclass");
     },
   },
 
@@ -213,16 +382,17 @@ const cases = [
   },
   { action: "token-clear", result: "token-result", exports: ["TokenManager.clear"], check: (j) => ok(!j.accessToken && !j.refreshToken, "cleared") },
 
-  // ── ApiResponse / ApiError ──
+  // ── 演练场自检：真实后端计数 ──
   {
-    action: "apiresponse-run",
-    result: "apiresponse-result",
-    exports: ["ApiResponse"],
+    action: "harness-counters",
+    result: "harness-result",
+    exports: ["mock server counters"],
     check: (j) => {
-      ok(j.okSuccessful === true, "ok successful");
-      ok(j.nullSuccessful === true, "null body no crash");
-      ok(j.errIsError === true, "ApiError is Error");
-      ok(j.isCoreCtor === true, "Core ctor");
+      eq(j.statuses, [500, 500], "first two hits fail");
+      eq([j.thirdStatus, j.thirdHits], [200, 3], "third succeeds and counts every hit");
+      eq(j.reads, [3, 3], "reading does not add hits");
+      eq(j.afterReset, 0, "reset zeroes the counter");
+      eq(j.failAgainAfterReset, 500, "fail sequence restarts after reset");
     },
   },
 
@@ -297,6 +467,8 @@ const cases = [
     check: (j) => {
       ok(j.pass === true, "all reject");
       ok(j.allRejected === true, "no replay");
+      eq(j.expired, 1, "onAccessExpired fires once per round, not once per request");
+      eq(j.reasons, ["auth/expired"], "every caller gets kind:auth reason:expired");
     },
   },
   {
@@ -316,7 +488,7 @@ const cases = [
     check: (j) => {
       ok(j.pass === true, "bounded");
       ok(j.refreshCalls >= 1 && j.refreshCalls <= 10, "≤1 refresh/request (no infinite loop)");
-      ok(j.expired === 10, "all converge to expire");
+      eq(j.expired, 1, "one expired notification for the whole round");
     },
   },
 ];

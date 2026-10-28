@@ -8,7 +8,7 @@
  * 通用查询控制（任意端点可叠加）：
  *   ?delay=ms       延迟响应（演示 loading / cancel / 慢请求）
  *   ?status=NNN     强制 HTTP 状态码
- *   ?code=XXXX      覆盖业务 code（如 5001 → normalize-response 判失败）
+ *   ?code=XXXX      覆盖业务 code（如 5001 → 归一化响应判为 kind:biz 失败）
  *   ?fail=N         前 N 次（按 id 计数）返回 500，第 N+1 次起成功（演示 retry / share-retry）
  *   ?id=KEY         命中计数 / fail 计数的分组键（默认 'default'）
  *
@@ -17,7 +17,7 @@
  *   POST /api/echo     回显 body 到 data
  *   GET  /api/echo     回显 query / method / path 到 data
  *   GET  /mock/*       专供 mock 插件重写后的目标，data.mocked=true
- *   ANY  /users/*等    回显最终 path（演示 replace-path-vars 替换结果）
+ *   ANY  /users/*等    回显最终 path（演示 axpRepath 替换结果）
  *   POST /api/hits/reset  清空全部计数器
  */
 import http from "node:http";
@@ -173,7 +173,7 @@ export function createMockServer() {
       return finish(200, forcedCode ? envelope(data, forcedCode) : envelope(data));
     }
 
-    // 兜底：回显最终 path（演示 replace-path-vars 的替换结果）
+    // 兜底：回显最终 path（演示 axpRepath 的替换结果）
     const data = {
       method: req.method,
       path,
