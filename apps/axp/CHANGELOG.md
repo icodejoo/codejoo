@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.2.0（尚未发布到 npm）
 
 内核重构为洋葱管线：一次调用是一个逻辑请求，从外到内穿过 outer / prepare / attempt / credential / source 五个阶段的中间件，成功、失败、被抛出的都是同一种归一化响应。Codex 全量 review 的逐条记录见 [docs/reports/2026-10-27-codex-full-review.md](docs/reports/2026-10-27-codex-full-review.md)。
 
