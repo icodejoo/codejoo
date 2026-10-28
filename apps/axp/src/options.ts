@@ -33,11 +33,7 @@ export function isEnabled(requestValue: unknown): boolean {
  * @returns 生效配置的新对象，关闭时返回 null。
  * @example `resolveOption({ delay: 0 }, { delay: 20 }, { delay: 0 })`
  */
-export function resolveOption<T extends object, D extends Partial<T>>(
-  request: undefined,
-  plugin: Partial<T>,
-  defaults: D,
-): T & Required<Pick<T, keyof D & keyof T>>;
+export function resolveOption<T extends object, D extends Partial<T>>(request: undefined, plugin: Partial<T>, defaults: D): T & Required<Pick<T, keyof D & keyof T>>;
 export function resolveOption<T extends object, D extends Partial<T>>(
   request: unknown,
   plugin: Partial<T>,
@@ -51,9 +47,7 @@ export function resolveOption<T extends object, D extends Partial<T>>(
   shorthand?: (value: unknown) => (Partial<T> & IPluginSwitch) | undefined,
 ): (T & Required<Pick<T, keyof D & keyof T>>) | null {
   if (request === false) return null;
-  const override = (isPlainObject(request) ? request : shorthand?.(request)) as
-    | (Partial<T> & IPluginSwitch)
-    | undefined;
+  const override = (isPlainObject(request) ? request : shorthand?.(request)) as (Partial<T> & IPluginSwitch) | undefined;
   if (override?.enable === false) return null;
   const resolved: Partial<T> = { ...defaults };
   for (const source of [plugin, override]) {

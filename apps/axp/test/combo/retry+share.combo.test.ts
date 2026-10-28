@@ -52,21 +52,14 @@ function client(max: number) {
 }
 /** 同 key 并发发出调用方请求。 */
 function burst(h: ReturnType<typeof client>, count = CALLERS) {
-  return Array.from({ length: count }, () =>
-    h.send({ url: URL, share: true, latency: LATENCY } as never),
-  );
+  return Array.from({ length: count }, () => h.send({ url: URL, share: true, latency: LATENCY } as never));
 }
 
 it.each([false, true])(
   "[retry.opt.max × share.req.share] 并发同 key：每一轮尝试只发一次网络请求，重试时各调用方重新合并到新一轮共享，最终拿到同一个结果（business=%s）",
   /** 共享以一次尝试为单位，retry 在 share 外层。 */ async (business) => {
     const h = client(ONE_RETRY);
-    h.net.on(
-      "get",
-      URL,
-      /** 第一轮失败，第二轮成功。 */ (_config, hit) =>
-        hit <= FAILED_SENDS ? failure(HTTP_ERROR, business) : envelope(DATA),
-    );
+    h.net.on("get", URL, /** 第一轮失败，第二轮成功。 */ (_config, hit) => (hit <= FAILED_SENDS ? failure(HTTP_ERROR, business) : envelope(DATA)));
     const results = await settleAll(...burst(h));
     expect(results.every(/** 全部成功。 */ (r) => r.ok)).toBe(true);
     expect(new Set(results).size).toBe(1);
@@ -91,17 +84,8 @@ it("[retry.opt.max × share.req.share] 重试耗尽：每轮仍只发一次（�
 
 it("[retry.opt.max × share.req.share] 请求级 share:false 在每次重试里都保留：各调用方各发各的，没有合并（承接旧用例）", /** 重试各轮读到的仍是同一份请求级开关。 */ async () => {
   const h = client(ONE_RETRY);
-  h.net.on(
-    "get",
-    URL,
-    /** 各调用方的首发都失败，其后成功。 */ (_config, hit) =>
-      hit <= NO_SHARE_CALLERS ? failure(HTTP_ERROR) : envelope(DATA),
-  );
-  const results = await settleAll(
-    ...Array.from({ length: NO_SHARE_CALLERS }, () =>
-      h.send({ url: URL, share: false, latency: LATENCY } as never),
-    ),
-  );
+  h.net.on("get", URL, /** 各调用方的首发都失败，其后成功。 */ (_config, hit) => (hit <= NO_SHARE_CALLERS ? failure(HTTP_ERROR) : envelope(DATA)));
+  const results = await settleAll(...Array.from({ length: NO_SHARE_CALLERS }, () => h.send({ url: URL, share: false, latency: LATENCY } as never)));
   expect(results.every(/** 全部成功。 */ (r) => r.ok)).toBe(true);
   expect(h.net.totalStarted).toBe(NO_SHARE_CALLERS * ROUNDS_AFTER_RETRY);
 });
@@ -115,17 +99,9 @@ it.each([
   "[retry.opt.max × share.req.share][cancel.fn.cancelAll] %s首发调用方取消：只有它以 cancel 告终，其余调用方照常合并到同一轮并成功",
   /** 取消只离开自己，不连累共享，也不影响别人的重试。 */ async (_label, abortAfter, attempts) => {
     const h = client(ONE_RETRY);
-    h.net.on(
-      "get",
-      URL,
-      /** 第一轮失败，第二轮成功。 */ (_config, hit) =>
-        hit <= FAILED_SENDS ? failure(HTTP_ERROR) : envelope(DATA),
-    );
+    h.net.on("get", URL, /** 第一轮失败，第二轮成功。 */ (_config, hit) => (hit <= FAILED_SENDS ? failure(HTTP_ERROR) : envelope(DATA)));
     const leader = new AbortController();
-    const pending = [
-      h.send({ url: URL, share: true, latency: LATENCY, signal: leader.signal } as never),
-      ...burst(h, CALLERS - 1),
-    ];
+    const pending = [h.send({ url: URL, share: true, latency: LATENCY, signal: leader.signal } as never), ...burst(h, CALLERS - 1)];
     // 第一轮在 LATENCY 时落定，退避到 LATENCY + DELAY；取消时刻相对第一轮落定计算。
     await vi.advanceTimersByTimeAsync(LATENCY + abortAfter);
     leader.abort();

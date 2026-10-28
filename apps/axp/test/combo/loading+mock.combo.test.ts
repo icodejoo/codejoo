@@ -20,9 +20,7 @@ const LABEL = "main";
 /** 装好 loading 与 mock；探测 404 回落真实接口。 */
 function client(loadingOptions: { delay?: number } = {}) {
   const h = sourceClient([]);
-  h.api.use(
-    axpLoading<AxpResponse>({ loading: loadingRecorder(h.events, LABEL), ...loadingOptions }),
-  );
+  h.api.use(axpLoading<AxpResponse>({ loading: loadingRecorder(h.events, LABEL), ...loadingOptions }));
   h.api.use(axpMock<AxpResponse>({ enable: true, mockUrl: MOCK }));
   h.net.on("get", `${MOCK}${REAL}`, () => ({ status: 404 }));
   h.net.on("get", REAL, () => envelope("real"));

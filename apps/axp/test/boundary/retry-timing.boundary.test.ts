@@ -20,20 +20,14 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
-it.each([undefined, null, false, "300", {}])(
-  "[retry.fn.computeDelay] 非数字回调返回 %s 视为零",
-  (value) => {
-    expect(computeDelay(() => value, 1, MAX, RESPONSE)).toBe(0);
-  },
-);
+it.each([undefined, null, false, "300", {}])("[retry.fn.computeDelay] 非数字回调返回 %s 视为零", (value) => {
+  expect(computeDelay(() => value, 1, MAX, RESPONSE)).toBe(0);
+});
 
-it.each([0, -1, NaN, Infinity])(
-  "[retry.fn.computeDelay] 数字 %s 沿用旧计算语义不归一化",
-  (value) => {
-    expect(computeDelay(value, 1, MAX, RESPONSE)).toBe(value);
-    expect(computeDelay(() => value, 1, MAX, RESPONSE)).toBe(value);
-  },
-);
+it.each([0, -1, NaN, Infinity])("[retry.fn.computeDelay] 数字 %s 沿用旧计算语义不归一化", (value) => {
+  expect(computeDelay(value, 1, MAX, RESPONSE)).toBe(value);
+  expect(computeDelay(() => value, 1, MAX, RESPONSE)).toBe(value);
+});
 
 it.each([NaN, Infinity, -1])("[retry.fn.applyJitter] 非有限或负抖动 %s 回退原始延迟", (value) => {
   expect(applyJitter(DELAY, () => value, Infinity)).toBe(DELAY);
@@ -81,34 +75,22 @@ it("[retry.fn.computeDelay][retry.fn.applyJitter] 回调 bug 原样抛出且无�
   expect(vi.getTimerCount()).toBe(0);
 });
 
-it.each([
-  undefined,
-  null,
-  {},
-  { [HEADER]: undefined },
-  { [HEADER]: null },
-  { [HEADER]: "invalid" },
-  { [HEADER]: Infinity },
-  { [HEADER]: true },
-  { [HEADER]: {} },
-])("[retry.fn.retryAfterMs] 缺失和非法头 %j 返回 undefined", (headers) => {
-  expect(retryAfterMs(headers, Infinity)).toBeUndefined();
-});
-
-it.each(["0", "-1", "", "   "])(
-  "[retry.fn.retryAfterMs] 数字头 %j 返回零（沿用旧 Number 兼容行为）",
-  (value) => {
-    expect(retryAfterMs({ [HEADER]: value }, Infinity)).toBe(0);
+it.each([undefined, null, {}, { [HEADER]: undefined }, { [HEADER]: null }, { [HEADER]: "invalid" }, { [HEADER]: Infinity }, { [HEADER]: true }, { [HEADER]: {} }])(
+  "[retry.fn.retryAfterMs] 缺失和非法头 %j 返回 undefined",
+  (headers) => {
+    expect(retryAfterMs(headers, Infinity)).toBeUndefined();
   },
 );
+
+it.each(["0", "-1", "", "   "])("[retry.fn.retryAfterMs] 数字头 %j 返回零（沿用旧 Number 兼容行为）", (value) => {
+  expect(retryAfterMs({ [HEADER]: value }, Infinity)).toBe(0);
+});
 
 it("[retry.fn.retryAfterMs] 过去日期和零上限返回零，get 缺值不回退普通字段", () => {
   const date = new Date(0).toUTCString();
   expect(retryAfterMs({ [HEADER]: date }, Infinity, () => DELAY)).toBe(0);
   expect(retryAfterMs({ [HEADER]: ONE_SECOND_HEADER }, 0)).toBe(0);
-  expect(
-    retryAfterMs({ get: () => undefined, [HEADER]: ONE_SECOND_HEADER }, Infinity),
-  ).toBeUndefined();
+  expect(retryAfterMs({ get: () => undefined, [HEADER]: ONE_SECOND_HEADER }, Infinity)).toBeUndefined();
 });
 
 it("[retry.fn.waitFor] 无信号时到期完成，提前 1ms 不完成并清空计时器", async () => {
@@ -124,31 +106,28 @@ it("[retry.fn.waitFor] 无信号时到期完成，提前 1ms 不完成并清空�
   expect(vi.getTimerCount()).toBe(0);
 });
 
-it.each([true, false])(
-  "[retry.fn.waitFor] 等待完成（abort=%s）清理同一监听器与计时器",
-  async (abort) => {
-    const controller = new AbortController();
-    const add = vi.spyOn(controller.signal, "addEventListener");
-    const remove = vi.spyOn(controller.signal, "removeEventListener");
-    let completions = 0;
-    const waiting = waitFor(DELAY, controller.signal).then(() => {
-      return ++completions;
-    });
-    if (abort) {
-      await vi.advanceTimersByTimeAsync(DELAY / MAX);
-      expect(completions).toBe(0);
-      controller.abort();
-      expect(vi.getTimerCount()).toBe(0);
-    } else await vi.advanceTimersByTimeAsync(DELAY);
-    await waiting;
-    expect(add).toHaveBeenCalledWith(ABORT_EVENT, expect.any(Function), { once: true });
-    expect(remove).toHaveBeenCalledWith(ABORT_EVENT, add.mock.calls[0][1]);
-    expect(vi.getTimerCount()).toBe(0);
+it.each([true, false])("[retry.fn.waitFor] 等待完成（abort=%s）清理同一监听器与计时器", async (abort) => {
+  const controller = new AbortController();
+  const add = vi.spyOn(controller.signal, "addEventListener");
+  const remove = vi.spyOn(controller.signal, "removeEventListener");
+  let completions = 0;
+  const waiting = waitFor(DELAY, controller.signal).then(() => {
+    return ++completions;
+  });
+  if (abort) {
+    await vi.advanceTimersByTimeAsync(DELAY / MAX);
+    expect(completions).toBe(0);
     controller.abort();
-    await vi.runAllTimersAsync();
-    expect(completions).toBe(1);
-  },
-);
+    expect(vi.getTimerCount()).toBe(0);
+  } else await vi.advanceTimersByTimeAsync(DELAY);
+  await waiting;
+  expect(add).toHaveBeenCalledWith(ABORT_EVENT, expect.any(Function), { once: true });
+  expect(remove).toHaveBeenCalledWith(ABORT_EVENT, add.mock.calls[0][1]);
+  expect(vi.getTimerCount()).toBe(0);
+  controller.abort();
+  await vi.runAllTimersAsync();
+  expect(completions).toBe(1);
+});
 
 it("[retry.fn.waitFor] 预先中止立即完成，不登记监听器或计时器", async () => {
   const controller = new AbortController();

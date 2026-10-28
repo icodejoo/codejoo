@@ -11,6 +11,7 @@ npm i @codejoo/axp   # peer dep: axios
 ```
 
 入口：
+
 - `@codejoo/axp`：不打包的 ESM。插件子路径（`@codejoo/axp/retry`、`@codejoo/axp/cache` 等）和根入口共用同一份模块，混着导入没问题。
 - `@codejoo/axp/min`：单文件压缩版，**自带一份独立的模块**，不要和根入口或子路径混用。
 
@@ -19,14 +20,14 @@ npm i @codejoo/axp   # peer dep: axios
 ## 快速开始
 
 ```ts
-import axios from 'axios';
-import { createAxp, axpRepath, axpRetry, axpAuth, axpCache, TokenManager } from '@codejoo/axp';
-import type { Schema } from './api-schema'; // 你的接口类型，结构与旧版 MethodSchema 一致
+import axios from "axios";
+import { createAxp, axpRepath, axpRetry, axpAuth, axpCache, TokenManager } from "@codejoo/axp";
+import type { Schema } from "./api-schema"; // 你的接口类型，结构与旧版 MethodSchema 一致
 
 const api = createAxp<Schema>({
-  axios: axios.create({ baseURL: '/api' }),
+  axios: axios.create({ baseURL: "/api" }),
   plugins: [
-    axpRepath(),                           // 替换路径里的 {id}，装上才生效
+    axpRepath(), // 替换路径里的 {id}，装上才生效
     axpRetry({ max: 2 }),
     axpAuth({
       tokenManager: new TokenManager(),
@@ -38,9 +39,9 @@ const api = createAxp<Schema>({
 });
 
 // 类型化调用：成功直接拿到业务数据
-const pet = await api.get('/pet/{id}')({ id: 1 });                                  // Pet
+const pet = await api.get("/pet/{id}")({ id: 1 }); // Pet
 // 缓存需要按请求开启
-const list = await api.get('/pet/findByStatus')({ status: 'available' }, { cache: true });
+const list = await api.get("/pet/findByStatus")({ status: "available" }, { cache: true });
 ```
 
 要用自定义响应 `R` 时，`S` 和 `R` 都要显式写出：TypeScript 不做部分推断，只写 `S` 推不出 `R`。不传 `S` 时，路径退化为 `string`。
@@ -49,61 +50,62 @@ const list = await api.get('/pet/findByStatus')({ status: 'available' }, { cache
 
 一次调用的结果取决于两个开关：`wrap` 和 `throws`。
 
-| 调用 | 成功 | 失败 |
-| --- | --- | --- |
-| 默认 | 返回 `data` | `throw r`，`r` 是 `IAxpResponse` |
-| `{ wrap: true }` | 返回 `WithData<R, D>`：和响应同形，`data` 是业务类型 | 同上，抛出 |
-| `{ throws: false }` | 返回 `WithData<R, D>` | 不抛出，resolve 出 `ok` 为 `false` 的 `R` |
+| 调用                | 成功                                                 | 失败                                      |
+| ------------------- | ---------------------------------------------------- | ----------------------------------------- |
+| 默认                | 返回 `data`                                          | `throw r`，`r` 是 `IAxpResponse`          |
+| `{ wrap: true }`    | 返回 `WithData<R, D>`：和响应同形，`data` 是业务类型 | 同上，抛出                                |
+| `{ throws: false }` | 返回 `WithData<R, D>`                                | 不抛出，resolve 出 `ok` 为 `false` 的 `R` |
 
 失败抛出的不是 `Error`。默认没有 `stack`，开启 `debug` 后才会附上调用点。程序 bug（中间件、用户回调、拦截器里抛出的非 axios 异常）不会被当成请求失败：它会原样抛出，`throws: false` 也不会吞掉它。
 
 ```ts
 // 默认：catch 到的失败是 IAxpResponse，程序 bug 原样抛出
 try {
-  await api.post('/pet')(body);
+  await api.post("/pet")(body);
 } catch (e) {
-  if (api.isResponse(e)) toast(e.message);   // 可预期的失败
-  else throw e;                              // 程序 bug
+  if (api.isResponse(e))
+    toast(e.message); // 可预期的失败
+  else throw e; // 程序 bug
 }
 
 // throws: false：失败也 resolve，用 ok 判断
-const res = await api.post('/pet')(body, { throws: false });
+const res = await api.post("/pet")(body, { throws: false });
 if (!res.ok) toast(res.message);
 
 // wrap: true：需要原始响应时使用
-const out = await api.get('/pet/{id}')({ id: 1 }, { wrap: true });
-out.data;   // Pet
-out.raw;    // 原始 AxiosResponse（逃生口）
+const out = await api.get("/pet/{id}")({ id: 1 }, { wrap: true });
+out.data; // Pet
+out.raw; // 原始 AxiosResponse（逃生口）
 ```
 
 `IAxpResponse` 的字段：
 
-| 字段 | 说明 |
-| --- | --- |
-| `ok` | 成功判定，开放点见下一节 |
-| `kind` | 类别，见下表 |
-| `status` | 逻辑状态。判断 401、403、5xx 一律读它。默认实现里，HTTP 2xx 但业务码是 400–599 的数字时，等于业务码 |
-| `httpStatus` | 原始 HTTP 状态，没有响应时为 `0` |
-| `code` / `message` / `data` | 业务码、消息、数据。非信封响应的 `code` 是 `undefined` |
-| `reason` | 细分原因，如 auth 的 `expired`、`denied`、`unauthenticated` |
-| `request` | 实际发出的请求。命中 share 或 cache 时，是发出那一次的请求 |
-| `stack` | 只在 `debug` 开启、且失败被抛出时存在，见下文 |
-| `raw` | 原始 `AxiosResponse` |
-| `error` | 原始异常，网络错误的 stack 在这里 |
+| 字段                        | 说明                                                                                                |
+| --------------------------- | --------------------------------------------------------------------------------------------------- |
+| `ok`                        | 成功判定，开放点见下一节                                                                            |
+| `kind`                      | 类别，见下表                                                                                        |
+| `status`                    | 逻辑状态。判断 401、403、5xx 一律读它。默认实现里，HTTP 2xx 但业务码是 400–599 的数字时，等于业务码 |
+| `httpStatus`                | 原始 HTTP 状态，没有响应时为 `0`                                                                    |
+| `code` / `message` / `data` | 业务码、消息、数据。非信封响应的 `code` 是 `undefined`                                              |
+| `reason`                    | 细分原因，如 auth 的 `expired`、`denied`、`unauthenticated`                                         |
+| `request`                   | 实际发出的请求。命中 share 或 cache 时，是发出那一次的请求                                          |
+| `stack`                     | 只在 `debug` 开启、且失败被抛出时存在，见下文                                                       |
+| `raw`                       | 原始 `AxiosResponse`                                                                                |
+| `error`                     | 原始异常，网络错误的 stack 在这里                                                                   |
 
 `kind` 的取值：
 
-| kind | 含义 |
-| --- | --- |
-| `ok` | 成功 |
-| `http` | 非 2xx |
-| `biz` | HTTP 2xx，但业务判定失败 |
-| `network` | 网络错误 |
-| `timeout` | 超时 |
-| `cancel` | 被取消（`cancelAll` 或 `signal`） |
-| `parse` | 响应解析失败。开启 `expectJson` 时，2xx 却拿到未解析的 JSON 文本 |
-| `auth` | 鉴权失败，细分看 `reason` |
-| `internal` | 程序 bug 的内部包装。落定时会抛出原始异常，正常情况下你拿不到它 |
+| kind       | 含义                                                             |
+| ---------- | ---------------------------------------------------------------- |
+| `ok`       | 成功                                                             |
+| `http`     | 非 2xx                                                           |
+| `biz`      | HTTP 2xx，但业务判定失败                                         |
+| `network`  | 网络错误                                                         |
+| `timeout`  | 超时                                                             |
+| `cancel`   | 被取消（`cancelAll` 或 `signal`）                                |
+| `parse`    | 响应解析失败。开启 `expectJson` 时，2xx 却拿到未解析的 JSON 文本 |
+| `auth`     | 鉴权失败，细分看 `reason`                                        |
+| `internal` | 程序 bug 的内部包装。落定时会抛出原始异常，正常情况下你拿不到它  |
 
 三个配套能力：
 
@@ -123,21 +125,25 @@ out.raw;    // 原始 AxiosResponse（逃生口）
 默认实现是 `AxpResponse`。要加字段或改判定，继承它，覆盖 `ok` 或 `status` 这两个 getter 即可。`kind` 会跟着 `ok` 自动推导，不需要另外改。
 
 ```ts
-import { AxpResponse, axpResponse, axpRetry, createAxp } from '@codejoo/axp';
+import { AxpResponse, axpResponse, axpRetry, createAxp } from "@codejoo/axp";
 
 class MyResponse<D = unknown> extends AxpResponse<D> {
-  traceId = '';
-  get ok() { return this.httpStatus < 300 && this.code === 200; }   // 我们的成功码是 200
-  get status() { return this.code === 'TOKEN_EXPIRED' ? 401 : super.status; }
+  traceId = "";
+  get ok() {
+    return this.httpStatus < 300 && this.code === 200;
+  } // 我们的成功码是 200
+  get status() {
+    return this.code === "TOKEN_EXPIRED" ? 401 : super.status;
+  }
 }
 
 const response = axpResponse<MyResponse>({
-  create: (init, raw) => Object.assign(new MyResponse(init), { traceId: raw?.headers['x-trace-id'] ?? '' }),
+  create: (init, raw) => Object.assign(new MyResponse(init), { traceId: raw?.headers["x-trace-id"] ?? "" }),
 });
 
 const api = createAxp<Schema, MyResponse>({
   response,
-  plugins: [axpRetry({ shouldRetry: (r) => r.traceId !== '' })],
+  plugins: [axpRetry({ shouldRetry: (r) => r.traceId !== "" })],
 });
 ```
 
@@ -149,11 +155,11 @@ const api = createAxp<Schema, MyResponse>({
 
 默认工厂 `axpResponse(options?)` 的选项：
 
-| 选项 | 默认 | 说明 |
-| --- | --- | --- |
-| `envelope` | `{ code: 'code', data: 'data', message: 'message' }` | 信封字段名。`false` 关闭信封识别 |
-| `expectJson` | `false` | 声明了 JSON 却解析失败时，判为 `parse` |
-| `create(init, raw?)` | `new AxpResponse(init)` | 扩展点，返回子类或带额外字段的对象 |
+| 选项                 | 默认                                                 | 说明                                   |
+| -------------------- | ---------------------------------------------------- | -------------------------------------- |
+| `envelope`           | `{ code: 'code', data: 'data', message: 'message' }` | 信封字段名。`false` 关闭信封识别       |
+| `expectJson`         | `false`                                              | 声明了 JSON 却解析失败时，判为 `parse` |
+| `create(init, raw?)` | `new AxpResponse(init)`                              | 扩展点，返回子类或带额外字段的对象     |
 
 默认的成功判定：HTTP 2xx，并且没有业务码，或者业务码落在 `[0, '0000']` 之内。
 
@@ -161,14 +167,14 @@ const api = createAxp<Schema, MyResponse>({
 
 10 个内置插件。装上即生效，除了 `cache` 和 `share` 需要按请求开启，`mock` 默认关闭。内置插件的先后顺序由阶段决定，你不需要排序。
 
-| 阶段 | 内置插件（外 → 内） | 说明 |
-| --- | --- | --- |
-| `outer` | `axpLoading` → `axpNotify` | 每个逻辑请求进出一次，看到最终结果 |
-| `prepare` | `axpRepath` → `axpFilter` | 请求整形，只跑一次 |
-| `attempt` | `axpRetry` | 重试边界，里面的每次尝试都会重跑 |
-| `credential` | `axpAuth` | 注入凭证，401 时刷新后重放 |
-| `source` | `axpMock` → `axpShare` → `axpCache` | 结果来源，可以不触网直接返回 |
-| 无 | `axpEnvs` | 只在装上时执行，不进中间件链 |
+| 阶段         | 内置插件（外 → 内）                 | 说明                               |
+| ------------ | ----------------------------------- | ---------------------------------- |
+| `outer`      | `axpLoading` → `axpNotify`          | 每个逻辑请求进出一次，看到最终结果 |
+| `prepare`    | `axpRepath` → `axpFilter`           | 请求整形，只跑一次                 |
+| `attempt`    | `axpRetry`                          | 重试边界，里面的每次尝试都会重跑   |
+| `credential` | `axpAuth`                           | 注入凭证，401 时刷新后重放         |
+| `source`     | `axpMock` → `axpShare` → `axpCache` | 结果来源，可以不触网直接返回       |
+| 无           | `axpEnvs`                           | 只在装上时执行，不进中间件链       |
 
 ### 通用约定
 
@@ -176,12 +182,12 @@ const api = createAxp<Schema, MyResponse>({
 
 请求级选项有四种写法：
 
-| 写法 | 含义 |
-| --- | --- |
-| `false` | 本次关闭 |
-| `true` 或省略 | 用插件级配置 |
-| 简写 | 各插件单独注明，如 retry 的数字、share 的策略字符串、loading 的回调函数，只覆盖主参数 |
-| 对象 | 按字段覆盖，优先级：请求级 > 插件级 > 内置默认。字段写 `null` 或 `undefined` 表示继承。数组字段整体替换。`enable: false` 等同于 `false` |
+| 写法          | 含义                                                                                                                                    |
+| ------------- | --------------------------------------------------------------------------------------------------------------------------------------- |
+| `false`       | 本次关闭                                                                                                                                |
+| `true` 或省略 | 用插件级配置                                                                                                                            |
+| 简写          | 各插件单独注明，如 retry 的数字、share 的策略字符串、loading 的回调函数，只覆盖主参数                                                   |
+| 对象          | 按字段覆盖，优先级：请求级 > 插件级 > 内置默认。字段写 `null` 或 `undefined` 表示继承。数组字段整体替换。`enable: false` 等同于 `false` |
 
 补充：
 
@@ -202,11 +208,11 @@ const api = createAxp<Schema, MyResponse>({
 
 阶段：`outer`（内置次序 1）。按逻辑请求计数，显示和隐藏成对出现。
 
-| 选项 | 默认 | 说明 |
-| --- | --- | --- |
-| `loading(visible)` | — | 显示和隐藏的回调 |
-| `delay` | `0` | 计数从 0 变成 1 后延迟显示。期间回落到 0 就不显示 |
-| `delayClose` | `0` | 计数从 1 变成 0 后延迟隐藏。期间有新请求就不隐藏 |
+| 选项               | 默认 | 说明                                              |
+| ------------------ | ---- | ------------------------------------------------- |
+| `loading(visible)` | —    | 显示和隐藏的回调                                  |
+| `delay`            | `0`  | 计数从 0 变成 1 后延迟显示。期间回落到 0 就不显示 |
+| `delayClose`       | `0`  | 计数从 1 变成 0 后延迟隐藏。期间有新请求就不隐藏  |
 
 请求级：`false`、`true`、一个函数（本次使用的回调），或 `{ enable, loading, delay, delayClose }`。
 
@@ -219,18 +225,18 @@ const api = createAxp<Schema, MyResponse>({
 
 ```ts
 axpLoading({ loading: (v) => setSpinner(v), delay: 200, delayClose: 200 });
-api.get('/list')(undefined, { loading: true });
-api.get('/quiet')(undefined, { loading: { delay: 0 } });   // 本次跳过防闪烁延迟
+api.get("/list")(undefined, { loading: true });
+api.get("/quiet")(undefined, { loading: { delay: 0 } }); // 本次跳过防闪烁延迟
 ```
 
 ### `axpNotify(options)`
 
 阶段：`outer`（内置次序 2）。每个逻辑请求最多通知一次。
 
-| 选项 | 默认 | 说明 |
-| --- | --- | --- |
+| 选项                 | 默认     | 说明               |
+| -------------------- | -------- | ------------------ |
 | `notify(message, r)` | **必填** | 拿到非空消息时调用 |
-| `stringify(r, ctx)` | 见下 | 返回空串表示不通知 |
+| `stringify(r, ctx)`  | 见下     | 返回空串表示不通知 |
 
 默认的 `stringify`：`r.ok`、`r.kind === 'cancel'`，或者 `ctx.request.silent` 为真时返回 `''`；其它情况返回 `r.message || \`${r.kind} ${r.status}\``。
 
@@ -241,19 +247,19 @@ api.get('/quiet')(undefined, { loading: { delay: 0 } });   // 本次跳过防闪
 ```ts
 axpNotify({
   notify: (msg) => toast.error(msg),
-  stringify: (r, ctx) => (r.ok || r.kind === 'cancel' || ctx.request.silent ? '' : r.message),
+  stringify: (r, ctx) => (r.ok || r.kind === "cancel" || ctx.request.silent ? "" : r.message),
 });
-api.post('/pet')(body, { silent: true });   // 这一次不弹提示
+api.post("/pet")(body, { silent: true }); // 这一次不弹提示
 ```
 
 ### `axpRepath(options?)`
 
 阶段：`prepare`（内置次序 1）。
 
-| 选项 | 默认 | 说明 |
-| --- | --- | --- |
-| `pattern` | 匹配 `{id}`、`:id`、`[id]` | 占位符的匹配规则 |
-| `removeKey` | `true` | 替换后删除已经用掉的参数 |
+| 选项        | 默认                       | 说明                     |
+| ----------- | -------------------------- | ------------------------ |
+| `pattern`   | 匹配 `{id}`、`:id`、`[id]` | 占位符的匹配规则         |
+| `removeKey` | `true`                     | 替换后删除已经用掉的参数 |
 
 - 只处理 pathname，查询串和 hash 不动。
 - 先从 `params` 取值，取不到再从 `data` 取。
@@ -264,17 +270,17 @@ api.post('/pet')(body, { silent: true });   // 这一次不弹提示
 
 ```ts
 axpRepath();
-api.get('/pet/:id')(undefined, { params: { id: 5 } });   // → GET /pet/5
+api.get("/pet/:id")(undefined, { params: { id: 5 } }); // → GET /pet/5
 ```
 
 ### `axpFilter(options?)`
 
 阶段：`prepare`（内置次序 2）。装上即生效。
 
-| 选项 | 默认 | 说明 |
-| --- | --- | --- |
-| `predicate([k, v])` | 丢弃 `null`、`undefined`、`NaN`、空白串 | 严格返回 `true` 的字段会被剥掉 |
-| `ignoreKeys` / `ignoreValues` | — | 豁免过滤的键名或值，`ignoreValues` 认得 `NaN` |
+| 选项                          | 默认                                    | 说明                                          |
+| ----------------------------- | --------------------------------------- | --------------------------------------------- |
+| `predicate([k, v])`           | 丢弃 `null`、`undefined`、`NaN`、空白串 | 严格返回 `true` 的字段会被剥掉                |
+| `ignoreKeys` / `ignoreValues` | —                                       | 豁免过滤的键名或值，`ignoreValues` 认得 `NaN` |
 
 只看 `params` 和 `data`（纯对象）的顶层字段，不递归。剥掉空字段后生成新对象交给内层，`FormData` 这类特殊请求体保持原样。
 
@@ -282,25 +288,25 @@ api.get('/pet/:id')(undefined, { params: { id: 5 } });   // → GET /pet/5
 
 ```ts
 axpFilter();
-api.get('/search')(undefined, { params: { q: 'x', page: '' } });   // 发出 ?q=x
+api.get("/search")(undefined, { params: { q: "x", page: "" } }); // 发出 ?q=x
 ```
 
 ### `axpRetry(options?)`
 
 阶段：`attempt`。装上即生效，默认最多重试 2 次。
 
-| 选项 | 默认 | 说明 |
-| --- | --- | --- |
-| `max` | `2` | 最多重试次数 |
-| `methods` | `get put head delete options trace` | 硬性否决：方法不在表里一律不重试，`shouldRetry` 说了也不算 |
-| `statusCodes` | `[408, 429, 500, 502, 503, 504]` | 对照 `r.status`（逻辑状态） |
-| `shouldRetry(r, attempt, ctx)` | — | 返回布尔值即采用，其它返回值（含 `undefined`）则继续往下判断 |
-| `delay` | `attempt => 300 * 2 ** (attempt - 1)` | 数字，或函数 `(attempt, max, r) => number`，返回非数字按 0 算 |
-| `jitter` | — | `true`（在 0 到 delay 之间均匀随机），或 `(delay) => number`（返回负数、`NaN`、`Infinity` 时沿用原 delay） |
-| `delayMax` | `10_000` | 只封顶插件自己算出来的 delay，抖动之后再封顶 |
-| `respectRetryAfter` | `true` | 是否采用响应里的 `Retry-After` |
-| `afterStatusCodes` | `[413, 429, 503]` | 只有这些状态码才信 `Retry-After`，对照 `r.status` |
-| `retryAfterMax` | `Infinity` | 从 `Retry-After` 换算出的等待时间的上限 |
+| 选项                           | 默认                                  | 说明                                                                                                       |
+| ------------------------------ | ------------------------------------- | ---------------------------------------------------------------------------------------------------------- |
+| `max`                          | `2`                                   | 最多重试次数                                                                                               |
+| `methods`                      | `get put head delete options trace`   | 硬性否决：方法不在表里一律不重试，`shouldRetry` 说了也不算                                                 |
+| `statusCodes`                  | `[408, 429, 500, 502, 503, 504]`      | 对照 `r.status`（逻辑状态）                                                                                |
+| `shouldRetry(r, attempt, ctx)` | —                                     | 返回布尔值即采用，其它返回值（含 `undefined`）则继续往下判断                                               |
+| `delay`                        | `attempt => 300 * 2 ** (attempt - 1)` | 数字，或函数 `(attempt, max, r) => number`，返回非数字按 0 算                                              |
+| `jitter`                       | —                                     | `true`（在 0 到 delay 之间均匀随机），或 `(delay) => number`（返回负数、`NaN`、`Infinity` 时沿用原 delay） |
+| `delayMax`                     | `10_000`                              | 只封顶插件自己算出来的 delay，抖动之后再封顶                                                               |
+| `respectRetryAfter`            | `true`                                | 是否采用响应里的 `Retry-After`                                                                             |
+| `afterStatusCodes`             | `[413, 429, 503]`                     | 只有这些状态码才信 `Retry-After`，对照 `r.status`                                                          |
+| `retryAfterMax`                | `Infinity`                            | 从 `Retry-After` 换算出的等待时间的上限                                                                    |
 
 `Retry-After` 的规则：
 
@@ -332,25 +338,25 @@ api.get('/search')(undefined, { params: { q: 'x', page: '' } });   // 发出 ?q=
 
 ```ts
 axpRetry({ max: 3, statusCodes: [500, 502, 503, 504], jitter: true, delayMax: 10_000 });
-api.get('/flaky')(undefined, { retry: 3 });                                         // 本次最多重试 3 次
-api.get('/flaky')(undefined, { retry: { max: 2, shouldRetry: (r) => r.code !== 0 } });
-api.get('/flaky')(undefined, { retry: false });                                     // 本次不重试
+api.get("/flaky")(undefined, { retry: 3 }); // 本次最多重试 3 次
+api.get("/flaky")(undefined, { retry: { max: 2, shouldRetry: (r) => r.code !== 0 } });
+api.get("/flaky")(undefined, { retry: false }); // 本次不重试
 ```
 
 ### `axpAuth(options)`
 
 阶段：`credential`。负责令牌守卫、401/403 的单飞刷新和重放。
 
-| 选项 | 默认 | 说明 |
-| --- | --- | --- |
-| `tokenManager` | **必填** | `ITokenManager` 实例 |
-| `onRefresh(r, tm)` | **必填** | 返回 `false` 或抛错即刷新失败。同一时刻只跑一个刷新 |
-| `onAccessExpired(r, tm)` | **必填** | 会话过期。401、刷新失败这条路径上，每一轮只通知一次 |
-| `onAccessDenied(r, tm)` | 同 `onAccessExpired` | 越权（403），或本地没有 token。本地没有 token 时，每个受保护请求都会调用一次，不去重 |
-| `onFailure(r, tm, ctx)` | `defaultAuthFailure` | 返回 `AuthFailureAction` 之一 |
-| `methods` / `urlPattern` | `'*'` | 判断是否受保护。`urlPattern` 只匹配 pathname，使用 URLPattern 语法，`!` 表示否定 |
-| `isProtected(request)` | — | 返回布尔值即为最终结果。每次尝试入口求一次值，重试的每一轮都会重新判断，刷新后的重放不再判断 |
-| `ready(tm, request)` | 写入 `Authorization` 头 | 返回一个 `AxpRequestPatch` |
+| 选项                     | 默认                    | 说明                                                                                         |
+| ------------------------ | ----------------------- | -------------------------------------------------------------------------------------------- |
+| `tokenManager`           | **必填**                | `ITokenManager` 实例                                                                         |
+| `onRefresh(r, tm)`       | **必填**                | 返回 `false` 或抛错即刷新失败。同一时刻只跑一个刷新                                          |
+| `onAccessExpired(r, tm)` | **必填**                | 会话过期。401、刷新失败这条路径上，每一轮只通知一次                                          |
+| `onAccessDenied(r, tm)`  | 同 `onAccessExpired`    | 越权（403），或本地没有 token。本地没有 token 时，每个受保护请求都会调用一次，不去重         |
+| `onFailure(r, tm, ctx)`  | `defaultAuthFailure`    | 返回 `AuthFailureAction` 之一                                                                |
+| `methods` / `urlPattern` | `'*'`                   | 判断是否受保护。`urlPattern` 只匹配 pathname，使用 URLPattern 语法，`!` 表示否定             |
+| `isProtected(request)`   | —                       | 返回布尔值即为最终结果。每次尝试入口求一次值，重试的每一轮都会重新判断，刷新后的重放不再判断 |
+| `ready(tm, request)`     | 写入 `Authorization` 头 | 返回一个 `AxpRequestPatch`                                                                   |
 
 `AuthFailureAction` 是一个常量对象，有五个动作：`Refresh`（`'refresh'`）、`Replay`（`'replay'`）、`Deny`（`'deny'`）、`Expired`（`'expired'`）、`Others`（`'others'`，与鉴权无关的失败，原样返回）。`onFailure` 返回 `null`、`undefined` 或不认识的值，效果和 `Others` 一样。
 
@@ -382,23 +388,23 @@ api.get('/flaky')(undefined, { retry: false });                                 
 ```ts
 axpAuth({
   tokenManager: new TokenManager(),
-  urlPattern: ['/api/*', '!/api/public/*'],
+  urlPattern: ["/api/*", "!/api/public/*"],
   onRefresh: (r, tm) => refreshToken(tm),
   onAccessExpired: () => redirectToLogin(),
 });
-api.get('/public/banner')(undefined, { protected: false });   // 本次不做鉴权
+api.get("/public/banner")(undefined, { protected: false }); // 本次不做鉴权
 ```
 
 ### `axpMock(options?)`
 
 阶段：`source`（内置次序 1）。默认关闭。
 
-| 选项 | 默认 | 说明 |
-| --- | --- | --- |
-| `enable` | `false` | 通常写成 `import.meta.env.DEV` |
-| `mock` | `false` | `true` 时全部请求走 mock |
-| `mockUrl` | — | mock 服务器的基址。没配置（或是空串）时跳过 mock，直接请求真实接口 |
-| `fallbackWhen(r)` | `r.httpStatus === 404 \|\| r.kind === 'network'` | 为真时回落到真实接口 |
+| 选项              | 默认                                             | 说明                                                               |
+| ----------------- | ------------------------------------------------ | ------------------------------------------------------------------ |
+| `enable`          | `false`                                          | 通常写成 `import.meta.env.DEV`                                     |
+| `mock`            | `false`                                          | `true` 时全部请求走 mock                                           |
+| `mockUrl`         | —                                                | mock 服务器的基址。没配置（或是空串）时跳过 mock，直接请求真实接口 |
+| `fallbackWhen(r)` | `r.httpStatus === 404 \|\| r.kind === 'network'` | 为真时回落到真实接口                                               |
 
 请求级：`false` 或 `{ enable: false }` 关闭；`true` 或任意对象（含空对象）为这次请求开启，对象可以覆盖 `mockUrl` 和 `fallbackWhen`。前提是插件级 `enable` 为真，请求级打不开关着的插件。
 
@@ -407,18 +413,18 @@ api.get('/public/banner')(undefined, { protected: false });   // 本次不做鉴
 运行时的行为：先把请求改写到 `mockUrl` 上探测一次（`cache: false`、`share: false`，探测结果不写入缓存，也不占用共享条目）。如果 `fallbackWhen(r)` 为真，再走真实接口。改写规则：相对地址拼在 `mockUrl` 后面；绝对地址去掉原来的 origin，保留路径、query 和 hash；请求没有 `url` 时改写 `baseURL`。
 
 ```ts
-axpMock({ enable: import.meta.env.DEV, mockUrl: 'http://localhost:4000' });
-api.get('/pet/1')(undefined, { mock: true });
-api.get('/pet/1')(undefined, { mock: { fallbackWhen: (r) => r.httpStatus >= 500 } });
+axpMock({ enable: import.meta.env.DEV, mockUrl: "http://localhost:4000" });
+api.get("/pet/1")(undefined, { mock: true });
+api.get("/pet/1")(undefined, { mock: { fallbackWhen: (r) => r.httpStatus >= 500 } });
 ```
 
 ### `axpShare(options?)`
 
 阶段：`source`（内置次序 2）。默认关闭，按请求开启。
 
-| 选项 | 默认 | 说明 |
-| --- | --- | --- |
-| `policy` | `'start'` | `'start'`、`'end'` 或 `'race'` |
+| 选项      | 默认              | 说明                           |
+| --------- | ----------------- | ------------------------------ |
+| `policy`  | `'start'`         | `'start'`、`'end'` 或 `'race'` |
 | `methods` | `['get', 'head']` | 其它方法即使请求级开启也不共享 |
 
 请求级：`true`、策略字符串、`{ policy }`，或 `false`。缓存键为 `null` 时（见 key 一节）直接发送，不做共享。
@@ -430,23 +436,23 @@ api.get('/pet/1')(undefined, { mock: { fallbackWhen: (r) => r.httpStatus >= 500 
 跟随者拿到的是同一个只读的 `R`，`r.request` 是首发那次的请求。跟随者自己的请求在它自己的 `ctx.request` 上。跟随者超时得到 `kind: 'timeout'`，被取消得到 `kind: 'cancel'`。
 
 ```ts
-axpShare({ policy: 'start' });
-api.get('/list')(undefined, { share: true });
-api.get('/list')(undefined, { share: 'race' });
+axpShare({ policy: "start" });
+api.get("/list")(undefined, { share: true });
+api.get("/list")(undefined, { share: "race" });
 ```
 
 ### `axpCache(options?)`
 
 阶段：`source`（内置次序 3）。默认关闭，按请求开启。
 
-| 选项 | 默认 | 说明 |
-| --- | --- | --- |
-| `expires` | `60_000` | 过期时间，单位毫秒 |
-| `max` | `500` | LRU 容量。`Infinity` 表示不限，小于 1 时回退为 500。注入 `store` 后不再生效 |
-| `methods` | `['get', 'head']` | 其它方法即使请求级开启也不缓存 |
-| `clone` | — | `'shallow'`、`'deep'`，或 `(data) => data`，作用于 `r.data`。默认不拷贝，共享同一个引用 |
-| `shouldCache(r)` | `r.ok` | 决定哪些结果写入缓存 |
-| `store` | 内存 LRU | 实现 `IAxpCacheStore<R>`（同步的 `get`、`set`、`delete`、`clear`、`size`）。持久化实现以后再做 |
+| 选项             | 默认              | 说明                                                                                           |
+| ---------------- | ----------------- | ---------------------------------------------------------------------------------------------- |
+| `expires`        | `60_000`          | 过期时间，单位毫秒                                                                             |
+| `max`            | `500`             | LRU 容量。`Infinity` 表示不限，小于 1 时回退为 500。注入 `store` 后不再生效                    |
+| `methods`        | `['get', 'head']` | 其它方法即使请求级开启也不缓存                                                                 |
+| `clone`          | —                 | `'shallow'`、`'deep'`，或 `(data) => data`，作用于 `r.data`。默认不拷贝，共享同一个引用        |
+| `shouldCache(r)` | `r.ok`            | 决定哪些结果写入缓存                                                                           |
+| `store`          | 内存 LRU          | 实现 `IAxpCacheStore<R>`（同步的 `get`、`set`、`delete`、`clear`、`size`）。持久化实现以后再做 |
 
 请求级：`true`；数字表示 `expires`；对象 `{ expires, key, clone, shouldCache }`，其中 `key` 是显式缓存键；`false` 关闭。显式键不经过 key 服务，所以不带 `scope`，也优先于请求级 `key: false`；空串或非字符串的键会退回 key 服务。
 
@@ -464,9 +470,9 @@ api.get('/list')(undefined, { share: 'race' });
 
 ```ts
 axpCache({ expires: 30_000 });
-api.get('/list')(undefined, { cache: true });                 // 用插件级的 expires
-api.get('/list')(undefined, { cache: 10_000 });               // 只改这次的 expires
-api.get('/list')(undefined, { cache: { expires: 10_000, key: 'pets' } });
+api.get("/list")(undefined, { cache: true }); // 用插件级的 expires
+api.get("/list")(undefined, { cache: 10_000 }); // 只改这次的 expires
+api.get("/list")(undefined, { cache: { expires: 10_000, key: "pets" } });
 
 const cache = axpCache();
 const api2 = createAxp({ plugins: [cache] });
@@ -479,8 +485,8 @@ api2.plugin(cache)?.clear();
 
 ```ts
 axpEnvs([
-  { rule: () => import.meta.env.DEV, config: { baseURL: 'http://dev' } },
-  { rule: () => import.meta.env.PROD, config: { baseURL: 'http://prod' } },
+  { rule: () => import.meta.env.DEV, config: { baseURL: "http://dev" } },
+  { rule: () => import.meta.env.PROD, config: { baseURL: "http://prod" } },
 ]);
 ```
 
@@ -505,14 +511,14 @@ axpEnvs([
 
 客户端级配置：
 
-| 选项 | 默认 | 说明 |
-| --- | --- | --- |
-| `scope` | — | 并入每个 key，比如账号 id，缓存和共享不会跨账号串数据。可以是字符串、数字，或者返回它们的函数 `(request) => 值`。函数在每次算 key 时求值，切换账号不用重建客户端。返回 `null`、`undefined`、空串、`NaN` 时不附加 |
-| `ignores` | — | 豁免空值过滤的键名或值 |
-| `sample` | `false` | 超过 64 字符的字符串采样计算，而不是全量 |
+| 选项      | 默认    | 说明                                                                                                                                                                                                             |
+| --------- | ------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `scope`   | —       | 并入每个 key，比如账号 id，缓存和共享不会跨账号串数据。可以是字符串、数字，或者返回它们的函数 `(request) => 值`。函数在每次算 key 时求值，切换账号不用重建客户端。返回 `null`、`undefined`、空串、`NaN` 时不附加 |
+| `ignores` | —       | 豁免空值过滤的键名或值                                                                                                                                                                                           |
+| `sample`  | `false` | 超过 64 字符的字符串采样计算，而不是全量                                                                                                                                                                         |
 
 ```ts
-const api = createAxp({ key: { scope: () => session.userId } });   // 每次算 key 时取当前用户
+const api = createAxp({ key: { scope: () => session.userId } }); // 每次算 key 时取当前用户
 ```
 
 请求级 `key`：省略则自动计算；传字符串则作为显式的键（同样会带上 `scope`，空白串等同于 `false`）；`false` 表示这次请求不参与 cache 和 share。`true` 和省略等价，都是自动计算，保留它是为了让旧代码的 `key: true, cache: true` 不用改；新代码直接省略即可。自动计算的 key 包含参数。
@@ -527,17 +533,17 @@ const api = createAxp({ key: { scope: () => session.userId } });   // 每次算 
 
 ```ts
 const controller = new AbortController();
-api.get('/list')(undefined, { signal: controller.signal });
-controller.abort();                // 只取消这一个请求
+api.get("/list")(undefined, { signal: controller.signal });
+controller.abort(); // 只取消这一个请求
 
-api.cancelAll('页面已离开');        // 取消全部在途请求
+api.cancelAll("页面已离开"); // 取消全部在途请求
 ```
 
 ### debug
 
 ```ts
-createAxp({ debug: true });        // 输出插件日志，并记录失败的调用点
-createAxp({ debug: myLogger });    // 用自己的 logger 输出
+createAxp({ debug: true }); // 输出插件日志，并记录失败的调用点
+createAxp({ debug: myLogger }); // 用自己的 logger 输出
 ```
 
 - 关闭时插件的 `ctx.log` 是空函数，没有额外开销。
@@ -553,11 +559,11 @@ createAxp({ debug: myLogger });    // 用自己的 logger 输出
 ```ts
 interface AxpPlugin<R, A> {
   readonly name: string;
-  readonly enable?: boolean;                                                 // false 时不 setup、不进链
-  readonly stage?: 'outer' | 'prepare' | 'attempt' | 'credential' | 'source'; // 默认 'attempt'，只有 taps 时忽略
-  readonly enforce?: 'pre' | 'post';                                         // 默认 'post'
-  setup?(client): AxpPluginInstance<R, A> | void;   // 每个客户端调用一次，状态建在这里
-  handle?: (ctx, next) => Promise<R>;                // 无状态插件可以直接给
+  readonly enable?: boolean; // false 时不 setup、不进链
+  readonly stage?: "outer" | "prepare" | "attempt" | "credential" | "source"; // 默认 'attempt'，只有 taps 时忽略
+  readonly enforce?: "pre" | "post"; // 默认 'post'
+  setup?(client): AxpPluginInstance<R, A> | void; // 每个客户端调用一次，状态建在这里
+  handle?: (ctx, next) => Promise<R>; // 无状态插件可以直接给
   taps?: readonly AxpTap<R>[];
 }
 ```
@@ -571,12 +577,12 @@ interface AxpPlugin<R, A> {
 5. `api.inspect()` 返回解析后的完整顺序，调试顺序问题只看它。
 
 ```ts
-import type { AxpPlugin } from '@codejoo/axp';
+import type { AxpPlugin } from "@codejoo/axp";
 
 /** 记录每次尝试的耗时 */
 const timing: AxpPlugin = {
-  name: 'timing',
-  stage: 'attempt',
+  name: "timing",
+  stage: "attempt",
   async handle(ctx, next) {
     const t = performance.now();
     const r = await next();
@@ -587,18 +593,18 @@ const timing: AxpPlugin = {
 
 /** 请求侧和响应侧处在不同深度 */
 const audit: AxpPlugin = {
-  name: 'audit',
+  name: "audit",
   taps: [
-    { stage: 'credential', enforce: 'post', onRequest: (ctx) => report('send', ctx.request) },
-    { stage: 'outer', onResponse: (r) => report('done', r.kind) },
+    { stage: "credential", enforce: "post", onRequest: (ctx) => report("send", ctx.request) },
+    { stage: "outer", onResponse: (r) => report("done", r.kind) },
   ],
 };
 
 /** 给内层的请求加上 trace 头，通过 next(patch) 交给下一层 */
 const addTrace: AxpPlugin = {
-  name: 'add-trace',
-  stage: 'prepare',
-  handle: (ctx, next) => next({ headers: { 'X-Trace': crypto.randomUUID() } }),
+  name: "add-trace",
+  stage: "prepare",
+  handle: (ctx, next) => next({ headers: { "X-Trace": crypto.randomUUID() } }),
 };
 ```
 
@@ -617,34 +623,34 @@ const addTrace: AxpPlugin = {
 function createAxp<S = unknown, R extends IAxpResponse = AxpResponse>(options?: AxpOptions<R>): AxpClient<S, R>;
 ```
 
-| 选项 | 默认 | 说明 |
-| --- | --- | --- |
-| `axios` | `axios.create()` | 底层实例 |
-| `plugins` | `[]` | 插件数组 |
-| `response` | `axpResponse()` | 响应工厂。`R` 不是 `AxpResponse` 时必填 |
-| `key` | — | key 服务配置，见"内核能力" |
-| `reject` | `(r) => r` | 可预期的失败抛出前的转换 |
-| `debug` | `false` | `true` 或自定义 logger |
+| 选项       | 默认             | 说明                                    |
+| ---------- | ---------------- | --------------------------------------- |
+| `axios`    | `axios.create()` | 底层实例                                |
+| `plugins`  | `[]`             | 插件数组                                |
+| `response` | `axpResponse()`  | 响应工厂。`R` 不是 `AxpResponse` 时必填 |
+| `key`      | —                | key 服务配置，见"内核能力"              |
+| `reject`   | `(r) => r`       | 可预期的失败抛出前的转换                |
+| `debug`    | `false`          | `true` 或自定义 logger                  |
 
 客户端的成员：
 
-| 成员 | 说明 |
-| --- | --- |
-| `api.get(path, methodConfig?)(payload?, callConfig?)` 等 | axios 的 10 个小写动词。`delete`、`post`、`put`、`patch` 的 payload 走 `data`，其它走 `params`。`wrap` 和 `throws` 以调用配置为先，没写就继承方法配置 |
-| `api.request<D>(config)` | 无类型的逃生口，同样支持 `wrap` 和 `throws` |
-| `api.axios` | 底层的 `AxiosInstance` |
-| `api.extend(overrides?, opts?)` | 克隆 axios 的 defaults，再写入 `overrides`（按顶层字段整体覆盖）。默认继承插件（`opts.plugins: 'inherit'`），每个插件重新 `setup`，状态不共享。也可以传入新的插件数组。`key`、`reject`、`debug`、`response` 一并继承。`overrides` 在插件 `setup` 之后才写入，所以优先于 `axpEnvs` 写进去的配置 |
-| `api.use(plugin)` | 装上一个插件，链会重新编译 |
-| `api.eject(name)` | 按名字卸下插件并清理它的实例，返回是否卸下成功。在途请求不受影响，继续沿用发起时的链 |
-| `api.plugin(p)` | 取得插件实例的 `api`，比如 cache 的 `clear()`。传的是插件对象，不是名字。没装返回 `undefined` |
-| `api.cancelAll(reason?)` / `api.pending()` | 见"取消" |
-| `api.inspect()` | 返回 `[{ stage, name }]`，即解析后的插件顺序 |
-| `api.isResponse(e)` | 见"返回形态与错误处理" |
-| `api.dispose()` | 先中止全部在途请求（它们按 `kind: 'cancel'` 落定），再按注册的逆序卸载插件，释放定时器等资源。可以重复调用，后面的调用什么也不做。销毁后不能再发请求、`use` 或 `extend`。某个插件清理时抛错不影响其余插件，最后抛出第一个异常 |
+| 成员                                                     | 说明                                                                                                                                                                                                                                                                                           |
+| -------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `api.get(path, methodConfig?)(payload?, callConfig?)` 等 | axios 的 10 个小写动词。`delete`、`post`、`put`、`patch` 的 payload 走 `data`，其它走 `params`。`wrap` 和 `throws` 以调用配置为先，没写就继承方法配置                                                                                                                                          |
+| `api.request<D>(config)`                                 | 无类型的逃生口，同样支持 `wrap` 和 `throws`                                                                                                                                                                                                                                                    |
+| `api.axios`                                              | 底层的 `AxiosInstance`                                                                                                                                                                                                                                                                         |
+| `api.extend(overrides?, opts?)`                          | 克隆 axios 的 defaults，再写入 `overrides`（按顶层字段整体覆盖）。默认继承插件（`opts.plugins: 'inherit'`），每个插件重新 `setup`，状态不共享。也可以传入新的插件数组。`key`、`reject`、`debug`、`response` 一并继承。`overrides` 在插件 `setup` 之后才写入，所以优先于 `axpEnvs` 写进去的配置 |
+| `api.use(plugin)`                                        | 装上一个插件，链会重新编译                                                                                                                                                                                                                                                                     |
+| `api.eject(name)`                                        | 按名字卸下插件并清理它的实例，返回是否卸下成功。在途请求不受影响，继续沿用发起时的链                                                                                                                                                                                                           |
+| `api.plugin(p)`                                          | 取得插件实例的 `api`，比如 cache 的 `clear()`。传的是插件对象，不是名字。没装返回 `undefined`                                                                                                                                                                                                  |
+| `api.cancelAll(reason?)` / `api.pending()`               | 见"取消"                                                                                                                                                                                                                                                                                       |
+| `api.inspect()`                                          | 返回 `[{ stage, name }]`，即解析后的插件顺序                                                                                                                                                                                                                                                   |
+| `api.isResponse(e)`                                      | 见"返回形态与错误处理"                                                                                                                                                                                                                                                                         |
+| `api.dispose()`                                          | 先中止全部在途请求（它们按 `kind: 'cancel'` 落定），再按注册的逆序卸载插件，释放定时器等资源。可以重复调用，后面的调用什么也不做。销毁后不能再发请求、`use` 或 `extend`。某个插件清理时抛错不影响其余插件，最后抛出第一个异常                                                                  |
 
 ```ts
-const admin = api.extend({ baseURL: '/admin' });                         // 继承插件，状态各自独立
-const plain = api.extend({ baseURL: '/v2' }, { plugins: [axpCache()] }); // 只用指定的插件
+const admin = api.extend({ baseURL: "/admin" }); // 继承插件，状态各自独立
+const plain = api.extend({ baseURL: "/v2" }, { plugins: [axpCache()] }); // 只用指定的插件
 ```
 
 ---

@@ -18,14 +18,7 @@ const BIZ_STATUS_MAX = 600;
 /** 未配置 envelope 时识别的信封字段名。 */
 const DEFAULT_ENVELOPE: IAxpEnvelope = { code: "code", data: "data", message: "message" };
 /** 没有收到响应的类别。 */
-const FAILURE_KINDS = new Set<AxpKind>([
-  AXP_KINDS.NETWORK,
-  AXP_KINDS.TIMEOUT,
-  AXP_KINDS.CANCEL,
-  AXP_KINDS.PARSE,
-  AXP_KINDS.AUTH,
-  AXP_KINDS.INTERNAL,
-]);
+const FAILURE_KINDS = new Set<AxpKind>([AXP_KINDS.NETWORK, AXP_KINDS.TIMEOUT, AXP_KINDS.CANCEL, AXP_KINDS.PARSE, AXP_KINDS.AUTH, AXP_KINDS.INTERNAL]);
 
 /** 成功或失败的归一化类别。 */
 export type AxpKind = (typeof AXP_KINDS)[keyof typeof AXP_KINDS];
@@ -107,20 +100,11 @@ export class AxpResponse<D = unknown> implements IAxpResponse<D> {
 
   /** 默认成功：2xx 且无业务码、数字零或字符串 0000。 */
   get ok(): boolean {
-    return (
-      isHttpOk(this.httpStatus) &&
-      (this.code === undefined || this.code === 0 || this.code === "0000")
-    );
+    return isHttpOk(this.httpStatus) && (this.code === undefined || this.code === 0 || this.code === "0000");
   }
   /** 2xx 业务失败中的数字 4xx/5xx 映射为逻辑状态。 */
   get status(): number {
-    return !this.ok &&
-      isHttpOk(this.httpStatus) &&
-      typeof this.code === "number" &&
-      this.code >= BIZ_STATUS_MIN &&
-      this.code < BIZ_STATUS_MAX
-      ? this.code
-      : this.httpStatus;
+    return !this.ok && isHttpOk(this.httpStatus) && typeof this.code === "number" && this.code >= BIZ_STATUS_MIN && this.code < BIZ_STATUS_MAX ? this.code : this.httpStatus;
   }
   /** 类别跟随可覆盖的成功判定。 */
   get kind(): AxpKind {
@@ -189,10 +173,7 @@ export interface IAxpResponseOptions<R extends IAxpResponse> {
   create?: (init: AxpResponseInit<R>, raw?: AxiosResponse) => R;
 }
 /** 自定义响应类型必须提供构造回调。 */
-type TAxpResponseOptions<R extends IAxpResponse> = IAxpResponseOptions<R> &
-  (TAxpDefaultResponse<R> extends true
-    ? unknown
-    : { /** 自定义响应构造器。 */ create: NonNullable<IAxpResponseOptions<R>["create"]> });
+type TAxpResponseOptions<R extends IAxpResponse> = IAxpResponseOptions<R> & (TAxpDefaultResponse<R> extends true ? unknown : { /** 自定义响应构造器。 */ create: NonNullable<IAxpResponseOptions<R>["create"]> });
 
 /** 判断 HTTP 状态是否成功。 */
 function isHttpOk(status: number): boolean {
@@ -220,11 +201,7 @@ function resolveInit<R extends IAxpResponse>(init: AxpResponseInit<R>): AxpRespo
 }
 
 /** 无响应失败通过实例字段遮住判定 getter。 */
-function defineFailure(
-  target: object,
-  kind: AxpKind | undefined,
-  status: number | undefined,
-): void {
+function defineFailure(target: object, kind: AxpKind | undefined, status: number | undefined): void {
   if (kind !== undefined && FAILURE_KINDS.has(kind)) {
     Object.defineProperties(target, {
       ok: { value: false, enumerable: true, configurable: true },
@@ -259,9 +236,7 @@ function brandResponse<R extends IAxpResponse>(response: R): R {
  * @returns 用于 createAxp 的响应工厂。
  * @example `axpResponse({ envelope: false, expectJson: true })`
  */
-export function axpResponse<R extends IAxpResponse = AxpResponse>(
-  ...[options = {} as TAxpResponseOptions<R>]: TAxpArgs<R, TAxpResponseOptions<R>>
-): IAxpResponseFactory<R> {
+export function axpResponse<R extends IAxpResponse = AxpResponse>(...[options = {} as TAxpResponseOptions<R>]: TAxpArgs<R, TAxpResponseOptions<R>>): IAxpResponseFactory<R> {
   const envelope = options.envelope ?? DEFAULT_ENVELOPE;
   /** 集中补齐请求、品牌和失败字段。 */
   function build(init: AxpResponseInit<R>, ctx: AxpContext<R>): R {
@@ -279,13 +254,7 @@ export function axpResponse<R extends IAxpResponse = AxpResponse>(
     /** 解析信封，保持非信封数据原样。 */
     fromResponse(res, ctx) {
       const body = res.data as unknown;
-      if (
-        options.expectJson &&
-        isHttpOk(res.status) &&
-        typeof body === "string" &&
-        body.trim() !== "" &&
-        JSON_CONTENT_TYPE.test(String(res.headers?.["content-type"] ?? ""))
-      ) {
+      if (options.expectJson && isHttpOk(res.status) && typeof body === "string" && body.trim() !== "" && JSON_CONTENT_TYPE.test(String(res.headers?.["content-type"] ?? ""))) {
         return build(
           {
             kind: AXP_KINDS.PARSE,
@@ -299,8 +268,7 @@ export function axpResponse<R extends IAxpResponse = AxpResponse>(
           ctx,
         );
       }
-      const wrapped =
-        envelope !== false && isObject(body) && envelope.code in body && envelope.data in body;
+      const wrapped = envelope !== false && isObject(body) && envelope.code in body && envelope.data in body;
       const record = body as Record<string, unknown>;
       return build(
         {
@@ -317,14 +285,9 @@ export function axpResponse<R extends IAxpResponse = AxpResponse>(
     /** 分类取消、超时、解析、网络与程序异常。 */
     fromError(error, ctx) {
       let kind: AxpKind;
-      if (isCancel(error) || (error instanceof Error && error.name === "AbortError"))
-        kind = AXP_KINDS.CANCEL;
+      if (isCancel(error) || (error instanceof Error && error.name === "AbortError")) kind = AXP_KINDS.CANCEL;
       else if (!isAxiosError(error)) kind = AXP_KINDS.INTERNAL;
-      else if (
-        error.code === "ETIMEDOUT" ||
-        (error.code === "ECONNABORTED" && /timeout/i.test(error.message))
-      )
-        kind = AXP_KINDS.TIMEOUT;
+      else if (error.code === "ETIMEDOUT" || (error.code === "ECONNABORTED" && /timeout/i.test(error.message))) kind = AXP_KINDS.TIMEOUT;
       else if (error.code === "ERR_BAD_RESPONSE") kind = AXP_KINDS.PARSE;
       else kind = AXP_KINDS.NETWORK;
       return build(
@@ -351,9 +314,7 @@ export const DEFAULT_RESPONSE_FACTORY = axpResponse();
  * @returns 工厂异常始终转为保留原异常的 internal，产出均带品牌。
  * @example `guardFactory(customResponse())`
  */
-export function guardFactory<R extends IAxpResponse>(
-  factory: IAxpResponseFactory<R>,
-): IAxpResponseFactory<R> {
+export function guardFactory<R extends IAxpResponse>(factory: IAxpResponseFactory<R>): IAxpResponseFactory<R> {
   const fallback = DEFAULT_RESPONSE_FACTORY as unknown as IAxpResponseFactory<R>;
   /** 工厂抛错时用默认工厂造 internal；fail 入口本就是 internal 时沿用它携带的原异常。 */
   function recover(error: unknown, ctx: AxpContext<R>, init?: AxpResponseInit<R>): R {

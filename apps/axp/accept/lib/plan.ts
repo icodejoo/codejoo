@@ -1,9 +1,9 @@
-import { ALL_ADAPTERS, ALL_STYLES, SUPPORTED_CAPABILITIES } from './constants.ts';
-import type { AdapterName } from './constants.ts';
-import type { Filters } from './config.ts';
-import { resolveExpectation } from './expect.ts';
-import { validateScenarioMapping } from './mapping.ts';
-import type { PlanEntry, Scenario } from './types.ts';
+import { ALL_ADAPTERS, ALL_STYLES, SUPPORTED_CAPABILITIES } from "./constants.ts";
+import type { AdapterName } from "./constants.ts";
+import type { Filters } from "./config.ts";
+import { resolveExpectation } from "./expect.ts";
+import { validateScenarioMapping } from "./mapping.ts";
+import type { PlanEntry, Scenario } from "./types.ts";
 
 /** 计划汇总 */
 export interface PlanSummary {
@@ -50,11 +50,7 @@ export function matchesIdFilter(id: string, prefixes: string[]): boolean {
  * @returns 计划条目，顺序：场景、网络、风格、adapter
  * @example buildPlan(scenarios, { ids: ['auth.'], networks: [], styles: [], adapters: ['http'] })
  */
-export function buildPlan(
-  scenarios: Scenario[],
-  filters: Filters,
-  supported: ReadonlySet<string> = SUPPORTED_CAPABILITIES,
-): PlanEntry[] {
+export function buildPlan(scenarios: Scenario[], filters: Filters, supported: ReadonlySet<string> = SUPPORTED_CAPABILITIES): PlanEntry[] {
   const entries: PlanEntry[] = [];
   for (const sc of scenarios) {
     if (!matchesIdFilter(sc.id, filters.ids)) continue;
@@ -70,15 +66,15 @@ export function buildPlan(
           const key = `${sc.id}|${network}|${style}|${adapter}`;
           const base = { key, scenario: sc, network, style, adapter, issues };
           if (missing.length) {
-            entries.push({ ...base, decision: { kind: 'skip', category: 'missing-capability', reason: `missing ${missing.join('+')}` } });
+            entries.push({ ...base, decision: { kind: "skip", category: "missing-capability", reason: `missing ${missing.join("+")}` } });
             continue;
           }
           const exp = resolveExpectation(sc, network, style);
           if (exp?.skip) {
-            entries.push({ ...base, decision: { kind: 'skip', category: 'not-applicable', reason: `not applicable: ${exp.skip}` } });
+            entries.push({ ...base, decision: { kind: "skip", category: "not-applicable", reason: `not applicable: ${exp.skip}` } });
             continue;
           }
-          entries.push({ ...base, decision: { kind: 'run' } });
+          entries.push({ ...base, decision: { kind: "run" } });
         }
       }
     }
@@ -95,7 +91,7 @@ export function summarizePlan(entries: PlanEntry[]): PlanSummary {
   const byAdapter: Record<string, number> = {};
   let toRun = 0;
   for (const e of entries) {
-    if (e.decision.kind === 'skip') skipReasons[e.decision.reason] = (skipReasons[e.decision.reason] ?? 0) + 1;
+    if (e.decision.kind === "skip") skipReasons[e.decision.reason] = (skipReasons[e.decision.reason] ?? 0) + 1;
     else {
       toRun++;
       byAdapter[e.adapter] = (byAdapter[e.adapter] ?? 0) + 1;

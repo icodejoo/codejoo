@@ -2,24 +2,9 @@ import { create as createAxios, mergeConfig, type AxiosRequestConfig } from "axi
 import { AxpContext, NO_LOG } from "./context";
 import { BODY_METHODS, NO_BODY_METHODS, normalizeMethod } from "./methods";
 import { composePipeline, sortPipeline, type IAxpRegistration, type IAxpLayer } from "./pipeline";
-import {
-  AXP_KINDS,
-  AxpResponse,
-  DEFAULT_RESPONSE_FACTORY,
-  guardFactory,
-  isAxpResponse,
-  type IAxpResponse,
-  type IAxpResponseFactory,
-} from "./response";
+import { AXP_KINDS, AxpResponse, DEFAULT_RESPONSE_FACTORY, guardFactory, isAxpResponse, type IAxpResponse, type IAxpResponseFactory } from "./response";
 import { createTransport } from "./transport";
-import type {
-  AxpClient,
-  AxpOptions,
-  AxpPlugin,
-  AxpRequestConfig,
-  HttpMethodLower,
-  TAxpArgs,
-} from "./types";
+import type { AxpClient, AxpOptions, AxpPlugin, AxpRequestConfig, HttpMethodLower, TAxpArgs } from "./types";
 import { assignAxiosDefaults, cloneAxiosDefaults, effectiveHeaders } from "./utils";
 
 /** AbortSignal 的标准事件名。 */
@@ -41,12 +26,7 @@ export interface IAxpSettleOptions<R extends IAxpResponse> {
  * @returns 业务数据或响应，失败时抛出约定对象。
  * @example `settle(response, ctx, {})`
  */
-export function settle<R extends IAxpResponse>(
-  response: R,
-  ctx: AxpContext<R>,
-  options: IAxpSettleOptions<R>,
-  callsite?: Error | string,
-): unknown {
+export function settle<R extends IAxpResponse>(response: R, ctx: AxpContext<R>, options: IAxpSettleOptions<R>, callsite?: Error | string): unknown {
   if (response.kind === AXP_KINDS.INTERNAL) throw response.error;
   const throws = ctx.request.throws ?? true;
   if (!response.ok && throws) {
@@ -64,27 +44,13 @@ export function settle<R extends IAxpResponse>(
  * @returns 具有十个柯里化动词的独立客户端。
  * @example `const api = createAxp(); await api.get('/pets')()`
  */
-export function createAxp<S = unknown, R extends IAxpResponse = AxpResponse>(
-  ...args: TAxpArgs<R, AxpOptions<R>>
-): AxpClient<S, R>;
+export function createAxp<S = unknown, R extends IAxpResponse = AxpResponse>(...args: TAxpArgs<R, AxpOptions<R>>): AxpClient<S, R>;
 /** @internal extend 在插件装配完成后应用显式默认配置。 */
-export function createAxp<S = unknown, R extends IAxpResponse = AxpResponse>(
-  options: AxpOptions<R>,
-  overrides: AxiosRequestConfig,
-): AxpClient<S, R>;
-export function createAxp<S = unknown, R extends IAxpResponse = AxpResponse>(
-  options: AxpOptions<R> = {} as AxpOptions<R>,
-  defaultOverrides?: AxiosRequestConfig,
-): AxpClient<S, R> {
+export function createAxp<S = unknown, R extends IAxpResponse = AxpResponse>(options: AxpOptions<R>, overrides: AxiosRequestConfig): AxpClient<S, R>;
+export function createAxp<S = unknown, R extends IAxpResponse = AxpResponse>(options: AxpOptions<R> = {} as AxpOptions<R>, defaultOverrides?: AxiosRequestConfig): AxpClient<S, R> {
   const axios = options.axios ?? createAxios();
-  const factory = guardFactory(
-    (options.response ?? DEFAULT_RESPONSE_FACTORY) as IAxpResponseFactory<R>,
-  );
-  const log = options.debug
-    ? typeof options.debug === "boolean"
-      ? console
-      : options.debug
-    : NO_LOG;
+  const factory = guardFactory((options.response ?? DEFAULT_RESPONSE_FACTORY) as IAxpResponseFactory<R>);
+  const log = options.debug ? (typeof options.debug === "boolean" ? console : options.debug) : NO_LOG;
   const registrations: IAxpRegistration<R>[] = [];
   const pending = new Set<AbortController>();
   const transport = createTransport(axios, factory);
@@ -100,9 +66,7 @@ export function createAxp<S = unknown, R extends IAxpResponse = AxpResponse>(
   }
   /** 按客户端内唯一名称查找注册项，供装卸和管理 API 共用。 */
   function findRegistration(name: string): IAxpRegistration<R> | undefined {
-    return registrations.find(
-      /** 匹配目标插件的唯一名称。 */ (entry) => entry.plugin.name === name,
-    );
+    return registrations.find(/** 匹配目标插件的唯一名称。 */ (entry) => entry.plugin.name === name);
   }
   /** 销毁后的客户端不能继续执行新工作。 */
   function assertActive(): void {
@@ -113,8 +77,7 @@ export function createAxp<S = unknown, R extends IAxpResponse = AxpResponse>(
     assertActive();
     // 先用静态信息校验重名与阶段，非法插件不会触发 setup 副作用。
     sortPipeline([...registrations, { plugin, instance: {} }]);
-    const instance =
-      plugin.enable === false ? {} : (plugin.setup?.(client as AxpClient<unknown, R>) ?? {});
+    const instance = plugin.enable === false ? {} : (plugin.setup?.(client as AxpClient<unknown, R>) ?? {});
     const registration = { plugin, instance };
     try {
       // 再用真实实例校验 setup 动态返回的 handle / taps，失败则清理刚建立的实例。
@@ -164,9 +127,7 @@ export function createAxp<S = unknown, R extends IAxpResponse = AxpResponse>(
         key: options.key,
         origin: config,
       });
-      response = controller.signal.aborted
-        ? ctx.fail({ kind: AXP_KINDS.CANCEL })
-        : await snapshot(ctx);
+      response = controller.signal.aborted ? ctx.fail({ kind: AXP_KINDS.CANCEL }) : await snapshot(ctx);
     } finally {
       pending.delete(controller);
       if (signal && abort) signal.removeEventListener(ABORT_EVENT, abort);
@@ -185,16 +146,8 @@ export function createAxp<S = unknown, R extends IAxpResponse = AxpResponse>(
     ) {
       assertActive();
       const childAxios = createAxios(cloneAxiosDefaults(axios.defaults as AxiosRequestConfig));
-      const plugins =
-        opts.plugins === undefined || opts.plugins === "inherit"
-          ? registrations.map(
-              /** 提取已登记插件定义，供子客户端重新 setup。 */ (entry) => entry.plugin,
-            )
-          : opts.plugins;
-      return createAxp<S, R>(
-        { ...options, axios: childAxios, plugins } as AxpOptions<R>,
-        overrides,
-      );
+      const plugins = opts.plugins === undefined || opts.plugins === "inherit" ? registrations.map(/** 提取已登记插件定义，供子客户端重新 setup。 */ (entry) => entry.plugin) : opts.plugins;
+      return createAxp<S, R>({ ...options, axios: childAxios, plugins } as AxpOptions<R>, overrides);
     },
     use,
     /** 卸载实例并重编译，在途执行器保持快照。 */
@@ -224,10 +177,7 @@ export function createAxp<S = unknown, R extends IAxpResponse = AxpResponse>(
     /** 返回尚未落定的请求数量。 */
     pending: () => pending.size,
     /** 返回副本，调用者不能改变编译快照。 */
-    inspect: () =>
-      inspection.map(
-        /** 仅暴露插件名字与阶段，隔离内部排序字段。 */ ({ name, stage }) => ({ name, stage }),
-      ),
+    inspect: () => inspection.map(/** 仅暴露插件名字与阶段，隔离内部排序字段。 */ ({ name, stage }) => ({ name, stage })),
     /** 按共享品牌收窄为当前 R。 */
     isResponse: isAxpResponse<R>,
     /** 中止在途请求并卸载所有实例；重复调用无副作用。 */
@@ -279,8 +229,7 @@ export function createAxp<S = unknown, R extends IAxpResponse = AxpResponse>(
   bindMethods(NO_BODY_METHODS, "params");
   try {
     for (const plugin of options.plugins ?? []) register(plugin, false);
-    if (defaultOverrides)
-      assignAxiosDefaults(axios.defaults as AxiosRequestConfig, defaultOverrides);
+    if (defaultOverrides) assignAxiosDefaults(axios.defaults as AxiosRequestConfig, defaultOverrides);
     compile();
   } catch (error) {
     client.dispose();

@@ -1,15 +1,7 @@
 import { mergePatch, requestContext, type AxpContext } from "./context";
 import { AXP_KINDS, type IAxpResponse } from "./response";
 import { STAGE_BUILTINS } from "./stages";
-import type {
-  AxpMiddleware,
-  AxpNext,
-  AxpPlugin,
-  AxpPluginInstance,
-  AxpStage,
-  AxpTap,
-  IAxpInspection,
-} from "./types";
+import type { AxpMiddleware, AxpNext, AxpPlugin, AxpPluginInstance, AxpStage, AxpTap, IAxpInspection } from "./types";
 
 /** 未指定阶段的自定义插件所在阶段。 */
 const DEFAULT_STAGE: AxpStage = "attempt";
@@ -48,14 +40,10 @@ export interface IAxpLayer<R extends IAxpResponse> extends IAxpInspection {
 const passThrough: AxpMiddleware<any> = (_ctx, next) => next();
 
 /** 按实际写了哪些回调选择中间件变体，缺失的回调不 await。 */
-function tapMiddleware<R extends IAxpResponse>({
-  onRequest,
-  onResponse,
-}: AxpTap<R>): AxpMiddleware<R> {
+function tapMiddleware<R extends IAxpResponse>({ onRequest, onResponse }: AxpTap<R>): AxpMiddleware<R> {
   if (!onRequest && !onResponse) return passThrough;
   if (!onResponse) {
-    return /** 只在进入内层前补丁请求。 */ async (ctx, next) =>
-      next((await onRequest!(ctx)) || undefined);
+    return /** 只在进入内层前补丁请求。 */ async (ctx, next) => next((await onRequest!(ctx)) || undefined);
   }
   if (!onRequest) {
     return /** 只在内层返回后改写响应。 */ async (ctx, next) => {
@@ -81,9 +69,7 @@ function position(stage: AxpStage, enforce: AxpPlugin["enforce"]): IAxpPosition 
  * @returns 按阶段和阶段内位置稳定排序的挂载层。
  * @example `const layers = sortPipeline(registrations)`
  */
-export function sortPipeline<R extends IAxpResponse>(
-  registrations: readonly IAxpRegistration<R>[],
-): IAxpLayer<R>[] {
+export function sortPipeline<R extends IAxpResponse>(registrations: readonly IAxpRegistration<R>[]): IAxpLayer<R>[] {
   const names = new Set<string>();
   const layers: (IAxpLayer<R> & IAxpPosition)[] = [];
   for (const { plugin, instance } of registrations) {
@@ -104,17 +90,11 @@ export function sortPipeline<R extends IAxpResponse>(
       });
     }
   }
-  return layers.toSorted(
-    /** 阶段优先，同位置保持注册次序。 */ (a, b) =>
-      a.stageOrder - b.stageOrder || a.order - b.order,
-  );
+  return layers.toSorted(/** 阶段优先，同位置保持注册次序。 */ (a, b) => a.stageOrder - b.stageOrder || a.order - b.order);
 }
 
 /** 给一层中间件加上异常边界：同步抛错与异步拒绝都转为 internal 响应。 */
-function guardLayer<R extends IAxpResponse>(
-  handle: AxpMiddleware<R>,
-  inner: (ctx: AxpContext<R>) => Promise<R>,
-): (ctx: AxpContext<R>) => Promise<R> {
+function guardLayer<R extends IAxpResponse>(handle: AxpMiddleware<R>, inner: (ctx: AxpContext<R>) => Promise<R>): (ctx: AxpContext<R>) => Promise<R> {
   return /** 本层执行器：外层总能拿到响应，不会收到拒绝。 */ async (ctx) => {
     /** 无补丁直接复用上下文，有补丁才派生；合并补丁时的同步异常（如 getter 抛错）转 internal。 */
     const next: AxpNext<R> = (patch) => {
@@ -140,10 +120,7 @@ function guardLayer<R extends IAxpResponse>(
  * @returns 可供逻辑请求复用的执行器。
  * @example `const run = composePipeline(layers, transport)`
  */
-export function composePipeline<R extends IAxpResponse>(
-  layers: readonly IAxpLayer<R>[],
-  transport: (ctx: AxpContext<R>) => Promise<R>,
-): (ctx: AxpContext<R>) => Promise<R> {
+export function composePipeline<R extends IAxpResponse>(layers: readonly IAxpLayer<R>[], transport: (ctx: AxpContext<R>) => Promise<R>): (ctx: AxpContext<R>) => Promise<R> {
   let run = transport;
   for (let index = layers.length - 1; index >= 0; index--) {
     run = guardLayer(layers[index]!.handle, run);

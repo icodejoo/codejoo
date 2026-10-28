@@ -1,9 +1,4 @@
-import {
-  create as createAxios,
-  type AxiosAdapter,
-  type AxiosRequestConfig,
-  type CreateAxiosDefaults,
-} from "axios";
+import { create as createAxios, type AxiosAdapter, type AxiosRequestConfig, type CreateAxiosDefaults } from "axios";
 import { expect } from "vitest";
 import { createAxp } from "../../src/client";
 import { AxpResponse, axpResponse, type IAxpResponse } from "../../src/response";
@@ -58,11 +53,7 @@ export function createTestClient<R extends IAxpResponse = AxpResponse>(
   transport?: AxiosAdapter | AxiosRequestConfig | CreateAxiosDefaults,
 ) {
   const net = makeNetwork();
-  net.on(
-    "post",
-    "/echo",
-    /** 把请求体原样放进信封回显。 */ (config) => ({ data: { code: 0, data: config.data } }),
-  );
+  net.on("post", "/echo", /** 把请求体原样放进信封回显。 */ (config) => ({ data: { code: 0, data: config.data } }));
   const overrides = typeof transport === "function" ? { adapter: transport } : transport;
   const axios = opts.axios ?? createAxios({ adapter: net.adapter, ...overrides });
   return {
@@ -80,10 +71,7 @@ export function assertInvariants(api: AxpClient, events: ITestEvents): void {
   for (const count of events.settled.values()) expect(count).toBe(1);
   for (const values of events.loading.values()) {
     expect(values.length % 2).toBe(0);
-    values.forEach(
-      /** 显示与隐藏必须成对出现，且以显示开头。 */ (value, index) =>
-        expect(value).toBe(index % 2 === 0),
-    );
+    values.forEach(/** 显示与隐藏必须成对出现，且以显示开头。 */ (value, index) => expect(value).toBe(index % 2 === 0));
   }
   expect(api.pending()).toBe(0);
   expect(events.listeners).toBe(0);

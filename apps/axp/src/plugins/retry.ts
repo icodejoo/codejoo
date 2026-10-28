@@ -22,20 +22,11 @@ import {
 /** 内置重试插件名。 */
 const NAME = "axp:retry";
 /** 用户回调不能覆盖的失败类别。 */
-const NO_RETRY_KINDS = new Set<AxpKind>([
-  AXP_KINDS.CANCEL,
-  AXP_KINDS.AUTH,
-  AXP_KINDS.INTERNAL,
-  AXP_KINDS.PARSE,
-]);
+const NO_RETRY_KINDS = new Set<AxpKind>([AXP_KINDS.CANCEL, AXP_KINDS.AUTH, AXP_KINDS.INTERNAL, AXP_KINDS.PARSE]);
 /** 首次失败后的重试判定，非布尔值沿用默认规则。
  * @example `const shouldRetry: TShouldRetry = r => r.status === 503`
  */
-export type TShouldRetry<R extends IAxpResponse = IAxpResponse> = (
-  response: R,
-  attempt: number,
-  ctx: AxpContext<R>,
-) => boolean | null | undefined | void;
+export type TShouldRetry<R extends IAxpResponse = IAxpResponse> = (response: R, attempt: number, ctx: AxpContext<R>) => boolean | null | undefined | void;
 /** 重试延迟策略，异常由内核按程序错误落定。
  * @example `const delay: TRetryDelay = attempt => attempt * 300`
  */
@@ -83,9 +74,7 @@ function shorthand(value: unknown): Pick<IRetryOptions, "max"> {
  * @returns 装上即生效的 attempt 插件。
  * @example `axpRetry({ max: 2, delay: 100 })`
  */
-export default function axpRetry<R extends IAxpResponse = AxpResponse>(
-  options: IRetryOptions<R> = {},
-): AxpPlugin<R> {
+export default function axpRetry<R extends IAxpResponse = AxpResponse>(options: IRetryOptions<R> = {}): AxpPlugin<R> {
   const base = resolveOption<IRetryOptions<R>, typeof DEFAULTS>(undefined, options, DEFAULTS);
   base.methods = base.methods.slice();
   base.statusCodes = base.statusCodes.slice();
@@ -99,47 +88,19 @@ export default function axpRetry<R extends IAxpResponse = AxpResponse>(
     async handle(ctx, next) {
       const value = ctx.request.retry;
       if (!isEnabled(value)) return next();
-      const config =
-        typeof value === "number" || isPlainObject(value)
-          ? resolveOption<IRetryOptions<R>, typeof DEFAULTS>(value, base, DEFAULTS, shorthand)!
-          : base;
+      const config = typeof value === "number" || isPlainObject(value) ? resolveOption<IRetryOptions<R>, typeof DEFAULTS>(value, base, DEFAULTS, shorthand)! : base;
       const allowed =
-        config === base
-          ? methods.has(normalizeMethod(ctx.request.method))
-          : config.methods.some(
-              /** 请求级列表仍按小写方法比较。 */ (method) =>
-                normalizeMethod(method) === normalizeMethod(ctx.request.method),
-            );
+        config === base ? methods.has(normalizeMethod(ctx.request.method)) : config.methods.some(/** 请求级列表仍按小写方法比较。 */ (method) => normalizeMethod(method) === normalizeMethod(ctx.request.method));
       if (!allowed) return next();
       ctx.markReplayable();
       let response = await next();
       for (let attempt = 1; attempt <= config.max; attempt++) {
         if (NO_RETRY_KINDS.has(response.kind)) return response;
         const decision = config.shouldRetry?.(response, attempt, ctx);
-        const retry =
-          typeof decision === "boolean"
-            ? decision
-            : response.kind === AXP_KINDS.NETWORK ||
-              response.kind === AXP_KINDS.TIMEOUT ||
-              config.statusCodes.includes(response.status);
+        const retry = typeof decision === "boolean" ? decision : response.kind === AXP_KINDS.NETWORK || response.kind === AXP_KINDS.TIMEOUT || config.statusCodes.includes(response.status);
         if (!retry) return response;
-        const after = isRetryAfterEligible(
-          response.status,
-          config.afterStatusCodes,
-          config.respectRetryAfter,
-        )
-          ? retryAfterMs(
-              response.raw?.headers as IRetryAfterHeaders | undefined,
-              config.retryAfterMax,
-            )
-          : undefined;
-        const ms =
-          after ??
-          applyJitter(
-            computeDelay(config.delay, attempt, config.max, response),
-            config.jitter,
-            config.delayMax,
-          );
+        const after = isRetryAfterEligible(response.status, config.afterStatusCodes, config.respectRetryAfter) ? retryAfterMs(response.raw?.headers as IRetryAfterHeaders | undefined, config.retryAfterMax) : undefined;
+        const ms = after ?? applyJitter(computeDelay(config.delay, attempt, config.max, response), config.jitter, config.delayMax);
         await waitFor(ms, ctx.signal);
         if (ctx.signal.aborted) return ctx.fail({ kind: AXP_KINDS.CANCEL });
         response = await next();

@@ -3,14 +3,7 @@ import axpShare, { type ISharedOptions } from "../../src/plugins/share";
 import { AXP_KINDS, type AxpResponse } from "../../src/response";
 import type { AxpPlugin } from "../../src/types";
 import { customResponse, TestResponse } from "../helpers/client";
-import {
-  customSourceClient,
-  envelope,
-  signalAdapter,
-  sourceClient,
-  trackAbortListeners,
-  type IWireCall,
-} from "../helpers/source";
+import { customSourceClient, envelope, signalAdapter, sourceClient, trackAbortListeners, type IWireCall } from "../helpers/source";
 
 /** 共享边界依赖精确的超时与到达顺序，统一用假时钟。 */
 beforeEach(() => {
@@ -139,10 +132,7 @@ it("[share.fn.subscribe] 分批超时：只在全部订阅者都离开后才中�
 
 it("[share.fn.subscribe] 非法 timeout（NaN、负数）按无超时处理，不装计时器", async () => {
   const h = signalClient();
-  const [a, b] = await settled(
-    h.send({ url: URL, share: true, timeout: Number.NaN }),
-    h.send({ url: URL, share: true, timeout: -1 }),
-  );
+  const [a, b] = await settled(h.send({ url: URL, share: true, timeout: Number.NaN }), h.send({ url: URL, share: true, timeout: -1 }));
   expect([a.ok, b.ok]).toEqual([true, true]);
 });
 
@@ -206,10 +196,7 @@ it("[share.fn.axpShare] 共享以一次尝试为单位：retry 在外层，每�
   };
   const h = sourceClient([axpShare<AxpResponse>(), retryOnce]);
   h.net.on("get", URL, (_config, hit) => (hit === 1 ? { status: 500 } : envelope(`hit-${hit}`)));
-  const [a, b] = await settled(
-    h.send({ url: URL, share: true, latency: 10 } as never),
-    h.send({ url: URL, share: true, latency: 10 } as never),
-  );
+  const [a, b] = await settled(h.send({ url: URL, share: true, latency: 10 } as never), h.send({ url: URL, share: true, latency: 10 } as never));
   expect(h.net.calls("get", URL)).toBe(2);
   expect([a.ok, b.ok]).toEqual([true, true]);
   expect(a).toBe(b);
@@ -249,11 +236,7 @@ it("[share.fn.axpShare] 自定义 R：share 合成的取消与超时响应也带
       .then(() => vi.runAllTimersAsync()),
   ]);
   expect([cancelled, timedOut, shared].every((r) => r instanceof TestResponse)).toBe(true);
-  expect([cancelled.kind, timedOut.kind, shared.kind]).toEqual([
-    AXP_KINDS.CANCEL,
-    AXP_KINDS.TIMEOUT,
-    AXP_KINDS.OK,
-  ]);
+  expect([cancelled.kind, timedOut.kind, shared.kind]).toEqual([AXP_KINDS.CANCEL, AXP_KINDS.TIMEOUT, AXP_KINDS.OK]);
 });
 
 it("[share.method.lifecycle] 重名 use 被拒绝；eject 重复调用安全，卸载后可用同一插件对象重装", async () => {
@@ -268,34 +251,28 @@ it("[share.method.lifecycle] 重名 use 被拒绝；eject 重复调用安全，�
   expect(h.net.calls("get", URL)).toBe(1);
 });
 
-it.each(["start", "end", "race"] as const)(
-  "[share.opt.policy][share.fn.axpShare] %s：整轮内层都出现程序 bug 时所有订阅者拿到原始异常，条目不残留，修复后下一次请求恢复正常",
-  async (policy) => {
-    const bug = new Error("inner bug");
-    let armed = true;
-    const bomb: AxpPlugin<AxpResponse> = {
-      name: "bomb",
-      stage: "source",
-      enforce: "post",
-      /** 武装期间每次都抛出程序异常。 */
-      async handle(_ctx, next) {
-        if (armed) throw bug;
-        return next();
-      },
-    };
-    const h = sourceClient([axpShare<AxpResponse>({ policy }), bomb]);
-    h.net.on("get", URL, () => envelope("ok"));
-    const caught = [
-      h.send({ url: URL, share: true }).catch((error: unknown) => error),
-      h.send({ url: URL, share: true }).catch((error: unknown) => error),
-    ];
-    await vi.runAllTimersAsync();
-    expect(await Promise.all(caught)).toEqual([bug, bug]);
-    armed = false;
-    const [again] = await settled(h.send({ url: URL, share: true }));
-    expect(again!.ok).toBe(true);
-  },
-);
+it.each(["start", "end", "race"] as const)("[share.opt.policy][share.fn.axpShare] %s：整轮内层都出现程序 bug 时所有订阅者拿到原始异常，条目不残留，修复后下一次请求恢复正常", async (policy) => {
+  const bug = new Error("inner bug");
+  let armed = true;
+  const bomb: AxpPlugin<AxpResponse> = {
+    name: "bomb",
+    stage: "source",
+    enforce: "post",
+    /** 武装期间每次都抛出程序异常。 */
+    async handle(_ctx, next) {
+      if (armed) throw bug;
+      return next();
+    },
+  };
+  const h = sourceClient([axpShare<AxpResponse>({ policy }), bomb]);
+  h.net.on("get", URL, () => envelope("ok"));
+  const caught = [h.send({ url: URL, share: true }).catch((error: unknown) => error), h.send({ url: URL, share: true }).catch((error: unknown) => error)];
+  await vi.runAllTimersAsync();
+  expect(await Promise.all(caught)).toEqual([bug, bug]);
+  armed = false;
+  const [again] = await settled(h.send({ url: URL, share: true }));
+  expect(again!.ok).toBe(true);
+});
 
 it("[share.opt.policy] end 与 race 中只有部分调用撞上程序 bug：订阅者仍拿到成功结果，不被个别尝试的 bug 连累", async () => {
   for (const policy of ["end", "race"] as const) {
@@ -316,10 +293,7 @@ it("[share.opt.policy] end 与 race 中只有部分调用撞上程序 bug：订�
     const h = sourceClient([axpShare<AxpResponse>({ policy }), bomb]);
     h.net.on("get", URL, () => envelope("ok"));
     // oxlint-disable-next-line no-await-in-loop -- 两种策略依次核对。
-    const [a, b] = await settled(
-      h.send({ url: URL, share: true }),
-      h.send({ url: URL, share: true }),
-    );
+    const [a, b] = await settled(h.send({ url: URL, share: true }), h.send({ url: URL, share: true }));
     expect([a!.ok, b!.ok]).toEqual([true, true]);
   }
 });

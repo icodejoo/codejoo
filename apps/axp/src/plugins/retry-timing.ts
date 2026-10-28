@@ -55,12 +55,7 @@ export function defaultDelay(attempt: number): number {
  * @returns 数字结果，非数字为零；回调异常原样抛出。
  * @example computeDelay(defaultDelay, 1, 2, { status: 503 });
  */
-export function computeDelay<R>(
-  delay: TRetryDelay<R>,
-  attempt: number,
-  max: number,
-  response: R,
-): number {
+export function computeDelay<R>(delay: TRetryDelay<R>, attempt: number, max: number, response: R): number {
   if (typeof delay === "number") return delay;
   const result = delay(attempt, max, response);
   return typeof result === "number" ? result : 0;
@@ -75,12 +70,7 @@ export function computeDelay<R>(
  * @returns 封顶后的非负延迟，NaN 与负数归 0；回调异常原样抛出。
  * @example applyJitter(300, true, 10000, () => 0.5); // 150
  */
-export function applyJitter(
-  ms: number,
-  jitter?: TRetryJitter,
-  delayMax = DEFAULT_DELAY_MAX,
-  random = Math.random,
-): number {
+export function applyJitter(ms: number, jitter?: TRetryJitter, delayMax = DEFAULT_DELAY_MAX, random = Math.random): number {
   let result = ms;
   if (jitter === true) result = random() * ms;
   else if (typeof jitter === "function") {
@@ -99,11 +89,7 @@ export function applyJitter(
  * @returns 是否允许解析服务端延迟。
  * @example isRetryAfterEligible(429); // true
  */
-export function isRetryAfterEligible(
-  status: number | undefined,
-  afterStatusCodes: readonly number[] = DEFAULT_AFTER_STATUS_CODES,
-  respect = true,
-): boolean {
+export function isRetryAfterEligible(status: number | undefined, afterStatusCodes: readonly number[] = DEFAULT_AFTER_STATUS_CODES, respect = true): boolean {
   return respect && typeof status === "number" && afterStatusCodes.includes(status);
 }
 
@@ -115,13 +101,8 @@ export function isRetryAfterEligible(
  * @returns 非负封顶延迟，缺失或无法解析返回 undefined。
  * @example retryAfterMs({ 'retry-after': '2' }, Infinity); // 2000
  */
-export function retryAfterMs(
-  headers: IRetryAfterHeaders | null | undefined,
-  cap: number,
-  now = Date.now,
-): number | undefined {
-  const raw =
-    typeof headers?.get === "function" ? headers.get(RETRY_AFTER) : headers?.[RETRY_AFTER];
+export function retryAfterMs(headers: IRetryAfterHeaders | null | undefined, cap: number, now = Date.now): number | undefined {
+  const raw = typeof headers?.get === "function" ? headers.get(RETRY_AFTER) : headers?.[RETRY_AFTER];
   if (raw == null) return undefined;
   if (typeof raw !== "string" && typeof raw !== "number") return undefined;
   const seconds = Number(raw);

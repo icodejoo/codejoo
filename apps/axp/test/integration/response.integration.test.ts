@@ -32,9 +32,7 @@ it("[core.method.toJSON] 真实 HTTP 响应排除传输循环引用并保留判�
     );
     const response = await api.get(url)(undefined, { wrap: true });
     expect(response.raw?.request).toBeDefined();
-    expect(
-      /** 尝试直接序列化原始循环引用。 */ () => JSON.stringify(response.raw?.request),
-    ).toThrow();
+    expect(/** 尝试直接序列化原始循环引用。 */ () => JSON.stringify(response.raw?.request)).toThrow();
     const text = JSON.stringify(response);
     expect(JSON.parse(text)).toEqual({
       ok: true,

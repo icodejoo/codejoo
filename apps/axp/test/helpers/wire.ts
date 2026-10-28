@@ -17,10 +17,7 @@ export interface IWireCall {
  * @returns 客户端、原 axios 实例和发送记录。
  * @example `const h = wireClient({ params: { tenant: 'a' } }, [axpFilter()])`
  */
-export function wireClient(
-  defaults: CreateAxiosDefaults = {},
-  plugins: AxpPlugin<AxpResponse>[] = [],
-) {
+export function wireClient(defaults: CreateAxiosDefaults = {}, plugins: AxpPlugin<AxpResponse>[] = []) {
   const calls: IWireCall[] = [];
   const { api } = createTestClient(
     plugins,

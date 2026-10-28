@@ -1,16 +1,16 @@
-import fs from 'node:fs';
-import path from 'node:path';
-import { spawnSync } from 'node:child_process';
-import type { Scenario } from './types.ts';
+import fs from "node:fs";
+import path from "node:path";
+import { spawnSync } from "node:child_process";
+import type { Scenario } from "./types.ts";
 
 /** 校验脚本相对场景目录的位置（testkit/tools/validate.mjs） */
-const VALIDATE_REL = path.join('..', 'tools', 'validate.mjs');
+const VALIDATE_REL = path.join("..", "tools", "validate.mjs");
 
 /** 场景加载/校验失败 */
 export class LoaderError extends Error {
   constructor(message: string) {
     super(message);
-    this.name = 'LoaderError';
+    this.name = "LoaderError";
   }
 }
 
@@ -31,8 +31,8 @@ export interface ValidateResult {
 export function validateScenarios(dir: string): ValidateResult {
   const script = path.resolve(dir, VALIDATE_REL);
   if (!fs.existsSync(script)) return { ran: false, ok: true, output: `未找到 ${script}，跳过校验` };
-  const r = spawnSync(process.execPath, [script, dir], { encoding: 'utf8' });
-  const output = `${r.stdout ?? ''}${r.stderr ?? ''}`.trim();
+  const r = spawnSync(process.execPath, [script, dir], { encoding: "utf8" });
+  const output = `${r.stdout ?? ""}${r.stderr ?? ""}`.trim();
   return { ran: true, ok: r.status === 0, output };
 }
 
@@ -49,12 +49,15 @@ export function loadScenarios(dir: string, opts: { validate?: boolean } = {}): S
     const v = validateScenarios(dir);
     if (!v.ok) throw new LoaderError(`场景校验失败:\n${v.output}`);
   }
-  const files = fs.readdirSync(dir).filter((f) => f.endsWith('.json')).sort();
+  const files = fs
+    .readdirSync(dir)
+    .filter((f) => f.endsWith(".json"))
+    .sort();
   const all: Scenario[] = [];
   for (const f of files) {
     let data: unknown;
     try {
-      data = JSON.parse(fs.readFileSync(path.join(dir, f), 'utf8'));
+      data = JSON.parse(fs.readFileSync(path.join(dir, f), "utf8"));
     } catch (e) {
       throw new LoaderError(`${f} 不是合法 JSON: ${(e as Error).message}`);
     }
@@ -66,5 +69,5 @@ export function loadScenarios(dir: string, opts: { validate?: boolean } = {}): S
 
 /** 场景所属领域：取 id 里第一个点之前的部分，如 `auth.deny-403` → `auth` */
 export function domainOf(scenarioId: string): string {
-  return scenarioId.split('.')[0] ?? scenarioId;
+  return scenarioId.split(".")[0] ?? scenarioId;
 }

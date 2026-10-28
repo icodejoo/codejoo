@@ -35,14 +35,10 @@ it("[envs.opt.rules][envs.prop.name] 第一个命中配置浅合并，不再读�
 });
 it("[envs.opt.enable][envs.cb.noMatch] 插件关闭不求值，未命中不修改 defaults", /** 总开关和未匹配。 */ () => {
   const rule = vi.fn(/** 不应求值的规则。 */ () => true);
-  const { api } = createTestClient<AxpResponse>([
-    axpEnvs<AxpResponse>({ enable: false, rules: [{ rule, config: { baseURL: "/disabled" } }] }),
-  ]);
+  const { api } = createTestClient<AxpResponse>([axpEnvs<AxpResponse>({ enable: false, rules: [{ rule, config: { baseURL: "/disabled" } }] })]);
   expect(rule).not.toHaveBeenCalled();
   api.eject(NAME);
-  api.use(
-    axpEnvs<AxpResponse>([{ rule: /** 不匹配。 */ () => false, config: { baseURL: "/unused" } }]),
-  );
+  api.use(axpEnvs<AxpResponse>([{ rule: /** 不匹配。 */ () => false, config: { baseURL: "/unused" } }]));
   expect(api.axios.defaults.baseURL).toBeUndefined();
   api.dispose();
 });

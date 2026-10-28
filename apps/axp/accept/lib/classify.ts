@@ -1,16 +1,16 @@
-import type { AxpKind, IAxpResponse } from '../../src/response.ts';
-import { AXP_RESPONSE, AXP_KINDS } from '../../src/brand.ts';
-import type { Style } from './constants.ts';
+import type { AxpKind, IAxpResponse } from "../../src/response.ts";
+import { AXP_RESPONSE, AXP_KINDS } from "../../src/brand.ts";
+import type { Style } from "./constants.ts";
 
 /** 鉴权原因及其优先顺序的唯一来源。 */
-const AUTH_CLASSES = ['expired', 'denied', 'unauthenticated'] as const;
+const AUTH_CLASSES = ["expired", "denied", "unauthenticated"] as const;
 
 /** 具体错误类别里不带参数的固定取值（CONTRACT §7） */
 const CLASS = {
-  CANCELED: 'canceled',
-  TIMEOUT: 'timeout',
-  NETWORK: 'network',
-  PARSE: 'parse',
+  CANCELED: "canceled",
+  TIMEOUT: "timeout",
+  NETWORK: "network",
+  PARSE: "parse",
 } as const;
 
 /** 类别 `unknown:` 里消息部分的最大长度 */
@@ -55,7 +55,7 @@ function unknownClass(name: string, message: string): string {
  * @example hasAxpBrand(await api.get('/x').catch((e) => e)) // true
  */
 export function hasAxpBrand(e: unknown): e is IAxpResponse {
-  return typeof e === 'object' && e !== null && Reflect.get(e, AXP_RESPONSE) === true;
+  return typeof e === "object" && e !== null && Reflect.get(e, AXP_RESPONSE) === true;
 }
 
 /**
@@ -108,9 +108,9 @@ export function classifyError(err: unknown, ctx: ClassifyContext = {}): string {
  * @example errorMatches('status:401', 'business:401', 'business') // true
  */
 export function errorMatches(expected: string, actual: string, style: Style): boolean {
-  if (expected === 'any') return true;
+  if (expected === "any") return true;
   const m = /^status:(\d{3})$/.exec(expected);
-  if (m) return actual === (style === 'http' ? httpClass(m[1]) : businessClass(m[1]));
+  if (m) return actual === (style === "http" ? httpClass(m[1]) : businessClass(m[1]));
   return expected === actual;
 }
 
@@ -126,7 +126,7 @@ export function errorMatchesAny(expected: string | string[], actual: string, sty
 
 // ===== B7 删除区 =====
 
-import { AUTH_DENIED_MESSAGE, AUTH_REFRESH_FAILED_MESSAGE } from './constants.ts';
+import { AUTH_DENIED_MESSAGE, AUTH_REFRESH_FAILED_MESSAGE } from "./constants.ts";
 
 /** 旧鉴权回调使用的请求标签。 */
 export type AuthTag = (typeof AUTH_CLASSES)[number];
@@ -141,13 +141,10 @@ interface LegacyClassifyContext {
 }
 
 /** B7 删除：旧 API 形态。解析错误打的标记（由 client-factory 的 parseGuard 设置） */
-export const PARSE_MARK = 'testkitParse';
+export const PARSE_MARK = "testkitParse";
 
 /** B7 删除：旧 API 形态。网络类错误码（含 undici 的 cause.code） */
-const NETWORK_CODES = new Set([
-  'ERR_NETWORK', 'ECONNREFUSED', 'ECONNRESET', 'ENOTFOUND', 'EAI_AGAIN', 'EPIPE',
-  'UND_ERR_SOCKET', 'UND_ERR_CONNECT_TIMEOUT', 'EHOSTUNREACH', 'ENETUNREACH',
-]);
+const NETWORK_CODES = new Set(["ERR_NETWORK", "ECONNREFUSED", "ECONNRESET", "ENOTFOUND", "EAI_AGAIN", "EPIPE", "UND_ERR_SOCKET", "UND_ERR_CONNECT_TIMEOUT", "EHOSTUNREACH", "ENETUNREACH"]);
 /** B7 删除：旧 API 形态。网络类错误消息关键词 */
 const NETWORK_MESSAGE_RE = /network error|socket hang up|fetch failed|terminated|stream has been aborted|aborted|ECONNRESET|ECONNREFUSED|ENOTFOUND/i;
 /** B7 删除：旧 API 形态。超时类错误消息关键词 */
@@ -166,24 +163,24 @@ interface ErrorLike {
 
 /** B7 删除：旧 API 形态。读取 ErrorLike */
 function asLike(e: unknown): ErrorLike {
-  return (e && typeof e === 'object' ? e : { message: String(e) }) as ErrorLike;
+  return (e && typeof e === "object" ? e : { message: String(e) }) as ErrorLike;
 }
 
 /** B7 删除：旧 API 形态。是否为取消错误 */
 function isCanceled(e: ErrorLike): boolean {
-  return e.code === 'ERR_CANCELED' || e.name === 'CanceledError' || e.name === 'AbortError';
+  return e.code === "ERR_CANCELED" || e.name === "CanceledError" || e.name === "AbortError";
 }
 
 /** B7 删除：旧 API 形态。是否为旧 axp 的 ApiError（normalize 业务失败，response 是 AxpResponse） */
 function isApiError(e: ErrorLike): boolean {
-  return e.name === 'ApiError' && !!e.response && 'code' in e.response;
+  return e.name === "ApiError" && !!e.response && "code" in e.response;
 }
 
 /** 旧 axp 与 axios 错误形状的过渡分类器。 */
 function classifyLegacyError(err: unknown, ctx: ClassifyContext): string {
   for (const tag of TAG_PRIORITY) if (ctx.tags?.has(tag)) return tag;
   const e = asLike(err);
-  const msg = String(e.message ?? '');
+  const msg = String(e.message ?? "");
   if (msg.startsWith(AUTH_REFRESH_FAILED_MESSAGE)) return AUTH_CLASSES[0];
   if (msg.startsWith(AUTH_DENIED_MESSAGE)) return AUTH_CLASSES[2];
   if (isCanceled(e)) return CLASS.CANCELED;
@@ -193,11 +190,11 @@ function classifyLegacyError(err: unknown, ctx: ClassifyContext): string {
     const status = Number(r.status ?? 0);
     return status >= 400 ? httpClass(status) : businessClass(r.code);
   }
-  const status = e.response?.status ?? (typeof e.status === 'number' ? e.status : undefined);
-  if (typeof status === 'number' && status >= 400) return httpClass(status);
-  if (e.code === 'ETIMEDOUT' || (e.code === 'ECONNABORTED' && TIMEOUT_MESSAGE_RE.test(msg)) || (!e.response && TIMEOUT_MESSAGE_RE.test(msg))) return CLASS.TIMEOUT;
+  const status = e.response?.status ?? (typeof e.status === "number" ? e.status : undefined);
+  if (typeof status === "number" && status >= 400) return httpClass(status);
+  if (e.code === "ETIMEDOUT" || (e.code === "ECONNABORTED" && TIMEOUT_MESSAGE_RE.test(msg)) || (!e.response && TIMEOUT_MESSAGE_RE.test(msg))) return CLASS.TIMEOUT;
   const causeCode = e.cause?.code;
-  if ((e.code && NETWORK_CODES.has(e.code)) || (causeCode && NETWORK_CODES.has(causeCode)) || NETWORK_MESSAGE_RE.test(msg) || e.code === 'ECONNABORTED') return CLASS.NETWORK;
-  if (e.code === 'ERR_BAD_RESPONSE' || e.name === 'SyntaxError') return CLASS.PARSE;
-  return unknownClass(e.name ?? 'Error', msg);
+  if ((e.code && NETWORK_CODES.has(e.code)) || (causeCode && NETWORK_CODES.has(causeCode)) || NETWORK_MESSAGE_RE.test(msg) || e.code === "ECONNABORTED") return CLASS.NETWORK;
+  if (e.code === "ERR_BAD_RESPONSE" || e.name === "SyntaxError") return CLASS.PARSE;
+  return unknownClass(e.name ?? "Error", msg);
 }

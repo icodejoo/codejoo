@@ -30,17 +30,7 @@ it("[filter.req.body] 非纯对象 params/data 保持身份，无原型字典生
   const { api } = preparedClient([axpFilter<AxpResponse>()], {
     transformRequest: /** 不让 axios 序列化特殊数据。 */ (value) => value,
   });
-  for (const value of [
-    undefined,
-    null,
-    [],
-    NONEMPTY_TEXT,
-    0,
-    new FormData(),
-    new Blob([NONEMPTY_TEXT]),
-    new Date(),
-    new URLSearchParams("a=1"),
-  ]) {
+  for (const value of [undefined, null, [], NONEMPTY_TEXT, 0, new FormData(), new Blob([NONEMPTY_TEXT]), new Date(), new URLSearchParams("a=1")]) {
     const r = await api.request({ params: value, data: value, throws: false });
     if (Array.isArray(value)) expect(r.request.params).toEqual(value);
     else expect(r.request.params).toBe(value);
@@ -57,9 +47,7 @@ it("[filter.cb.error][filter.method.lifecycle][filter.opt.enable] 总开关、�
   const bug = new Error("predicate bug");
   const { api, net } = preparedClient([axpFilter<AxpResponse>({ enable: false })]);
   expect(api.inspect()).toEqual([]);
-  expect(
-    (await api.request({ filter: true, params: { nil: null }, throws: false })).request.params,
-  ).toEqual({ nil: null });
+  expect((await api.request({ filter: true, params: { nil: null }, throws: false })).request.params).toEqual({ nil: null });
   api.eject("axp:filter");
   const plugin = axpFilter<AxpResponse>({
     predicate: /** 判定故障。 */ () => {

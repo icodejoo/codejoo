@@ -10,9 +10,7 @@ import { testContext } from "../helpers/context";
 const passthrough: NonNullable<AxpPlugin<AxpResponse>["handle"]> = (_ctx, next) => next();
 /** 从纯插件对象构造排序记录，不调用客户端。 */
 function sort(plugins: AxpPlugin<AxpResponse>[]) {
-  return sortPipeline(
-    plugins.map(/** 把插件定义包成无实例的注册记录。 */ (plugin) => ({ plugin, instance: {} })),
-  );
+  return sortPipeline(plugins.map(/** 把插件定义包成无实例的注册记录。 */ (plugin) => ({ plugin, instance: {} })));
 }
 
 describe("管线与上下文", /** 管线与上下文的用例集合。 */ () => {
@@ -60,22 +58,10 @@ describe("管线与上下文", /** 管线与上下文的用例集合。 */ () =>
     expect(AXP_STAGES).toEqual(["outer", "prepare", "attempt", "credential", "source"]);
   });
   it("[core.fn.sortPipeline] 五阶段、固定内置顺序及自定义 pre/post 数组次序", /** 五阶段、固定内置顺序及自定义 pre/post 数组次序。 */ () => {
-    const builtins = [
-      "axp:cache",
-      "axp:share",
-      "axp:mock",
-      "axp:auth",
-      "axp:retry",
-      "axp:filter",
-      "axp:repath",
-      "axp:notify",
-      "axp:loading",
-    ];
+    const builtins = ["axp:cache", "axp:share", "axp:mock", "axp:auth", "axp:retry", "axp:filter", "axp:repath", "axp:notify", "axp:loading"];
     const layers = sort([
       ...builtins.map(
-        /** 为每个内置名称造一个自称 source 阶段的插件，验证按名字定位。 */ (
-          name,
-        ): AxpPlugin<AxpResponse> => ({
+        /** 为每个内置名称造一个自称 source 阶段的插件，验证按名字定位。 */ (name): AxpPlugin<AxpResponse> => ({
           name,
           stage: "source",
           enforce: "pre",
@@ -104,32 +90,19 @@ describe("管线与上下文", /** 管线与上下文的用例集合。 */ () =>
     ]);
   });
   it("[core.fn.sortPipeline] taps 独立排序命名，setup-only 无层，禁用不进链", /** taps 独立排序命名，setup-only 无层，禁用不进链。 */ () => {
-    const layers = sort([
-      { name: "audit", taps: [{ stage: "credential" }, { stage: "outer", enforce: "pre" }] },
-      { name: "disabled", enable: false, handle: passthrough },
-      { name: "setup-only" },
-    ]);
+    const layers = sort([{ name: "audit", taps: [{ stage: "credential" }, { stage: "outer", enforce: "pre" }] }, { name: "disabled", enable: false, handle: passthrough }, { name: "setup-only" }]);
     expect(layers.map(/** 取层名与阶段。 */ ({ name, stage }) => ({ name, stage }))).toEqual([
       { name: "audit#1", stage: "outer" },
       { name: "audit#0", stage: "credential" },
     ]);
-    expect(/** 重名插件应使校验失败。 */ () => sort([{ name: "same" }, { name: "same" }])).toThrow(
-      "Duplicate",
-    );
-    expect(
-      /** 未知阶段应使校验失败。 */ () =>
-        sort([{ name: "unknown", stage: "wrong" as AxpStage, handle: passthrough }]),
-    ).toThrow("Unknown");
+    expect(/** 重名插件应使校验失败。 */ () => sort([{ name: "same" }, { name: "same" }])).toThrow("Duplicate");
+    expect(/** 未知阶段应使校验失败。 */ () => sort([{ name: "unknown", stage: "wrong" as AxpStage, handle: passthrough }])).toThrow("Unknown");
   });
   it("[core.fn.composePipeline] 零插件直达传输，短路无需调用传输", /** 零插件直达传输，短路无需调用传输。 */ async () => {
     const ctx = testContext();
     const response = ctx.fail({ httpStatus: 200, data: 1 });
-    expect(await composePipeline([], /** 传输直接返回预置响应。 */ async () => response)(ctx)).toBe(
-      response,
-    );
-    const layers = sort([
-      { name: "short", handle: /** 短路中间件不调用 next，直接给出响应。 */ async () => response },
-    ]);
+    expect(await composePipeline([], /** 传输直接返回预置响应。 */ async () => response)(ctx)).toBe(response);
+    const layers = sort([{ name: "short", handle: /** 短路中间件不调用 next，直接给出响应。 */ async () => response }]);
     expect(
       await composePipeline(
         layers,
@@ -163,10 +136,7 @@ describe("管线与上下文", /** 管线与上下文的用例集合。 */ () =>
         return inner.fail({ httpStatus: 200 });
       },
     )(ctx);
-    expect(seen.map(/** 取内层看到的请求视图。 */ (inner) => inner.request)).toEqual([
-      { url: "/patched", headers: { original: "yes", added: "yes" } },
-      ctx.request,
-    ]);
+    expect(seen.map(/** 取内层看到的请求视图。 */ (inner) => inner.request)).toEqual([{ url: "/patched", headers: { original: "yes", added: "yes" } }, ctx.request]);
     // 带补丁派生新的上下文实例；无补丁时直接复用外层实例，请求视图保持同一引用。
     expect(seen[0]).toBeInstanceOf(AxpContext);
     expect(seen[0]).not.toBe(ctx);
@@ -196,10 +166,7 @@ describe("管线与上下文", /** 管线与上下文的用例集合。 */ () =>
           },
         },
       ]);
-      const response = await composePipeline(
-        layers,
-        /** 传输返回空响应。 */ async (ctx) => ctx.fail({}),
-      )(testContext());
+      const response = await composePipeline(layers, /** 传输返回空响应。 */ async (ctx) => ctx.fail({}))(testContext());
       expect(response.error).toBe(bug);
       expect(events).toEqual(["enter", "internal"]);
     },
@@ -218,14 +185,7 @@ describe("管线与上下文", /** 管线与上下文的用例集合。 */ () =>
         },
       },
     ]);
-    expect(
-      (
-        await composePipeline(
-          layers,
-          /** 传输返回空响应。 */ async (ctx) => ctx.fail({}),
-        )(testContext())
-      ).error,
-    ).toBe(bug);
+    expect((await composePipeline(layers, /** 传输返回空响应。 */ async (ctx) => ctx.fail({}))(testContext())).error).toBe(bug);
   });
   it("[core.fn.composePipeline] taps 请求补丁与响应替换、无回调透传", /** taps 请求补丁与响应替换、无回调透传。 */ async () => {
     const ctx = testContext();
@@ -236,8 +196,7 @@ describe("管线与上下文", /** 管线与上下文的用例集合。 */ () =>
           {
             stage: "outer",
             onRequest: /** 请求侧返回补丁，改写 url。 */ () => ({ url: "/tap" }),
-            onResponse: /** 响应侧用新响应替换内层结果。 */ (_r, context) =>
-              context.fail({ httpStatus: 200, data: "replaced" }),
+            onResponse: /** 响应侧用新响应替换内层结果。 */ (_r, context) => context.fail({ httpStatus: 200, data: "replaced" }),
           },
           { stage: "source", onResponse: /** 响应侧不返回值时保留内层响应。 */ () => undefined },
           { stage: "source" },
@@ -293,12 +252,7 @@ describe("管线与上下文", /** 管线与上下文的用例集合。 */ () =>
     });
     expect(original.headers.Delete).toBe("old");
     expect(mergePatch(original, { headers: undefined }).headers).toBeUndefined();
-    expect(
-      mergePatch(
-        { headers: new AxiosHeaders({ A: "1" }) },
-        { headers: new AxiosHeaders({ B: "2" }) },
-      ).headers,
-    ).toEqual({ A: "1", B: "2" });
+    expect(mergePatch({ headers: new AxiosHeaders({ A: "1" }) }, { headers: new AxiosHeaders({ B: "2" }) }).headers).toEqual({ A: "1", B: "2" });
     expect(mergePatch({}, { headers: { A: "1" } }).headers).toEqual({ A: "1" });
     const before = new AxiosHeaders({ Delete: "old", Keep: "yes" });
     const patchHeaders = new AxiosHeaders({ Disable: false });

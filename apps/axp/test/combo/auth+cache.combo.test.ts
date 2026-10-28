@@ -1,15 +1,7 @@
 import { beforeEach, expect, it, vi } from "vitest";
 import axpCache, { clearCache } from "../../src/plugins/cache";
 import type { AxpResponse } from "../../src/response";
-import {
-  authClient,
-  failure,
-  guarded,
-  REFRESH_TOKEN,
-  REQUEST_URL,
-  run,
-  TOKEN_NEW,
-} from "../helpers/b3";
+import { authClient, failure, guarded, REFRESH_TOKEN, REQUEST_URL, run, TOKEN_NEW } from "../helpers/b3";
 import { countingCacheStore, settleAll } from "../helpers/source";
 
 /** 请求级显式缓存键，沿用旧用例的写法。 */
@@ -86,18 +78,12 @@ it("[auth.reason.expired × cache.req.cache] 刷新失败落定为 auth 过期�
 
 it("[auth.cb.onRefresh × cache.req.cache] 并发 401（未开 share）：单飞刷新、各自重放，缓存里只有一条成功结果，之后命中缓存", /** I5 在缓存介入时仍成立。 */ async () => {
   const h = client();
-  const results = await settleAll(
-    ...Array.from({ length: CALLERS }, () =>
-      h.send({ url: REQUEST_URL, cache: true, latency: LATENCY } as never),
-    ),
-  );
+  const results = await settleAll(...Array.from({ length: CALLERS }, () => h.send({ url: REQUEST_URL, cache: true, latency: LATENCY } as never)));
   expect(results.every(/** 全部成功。 */ (r) => r.ok)).toBe(true);
   expect(h.settings.onRefresh).toHaveBeenCalledTimes(1);
   expect(h.net.totalStarted).toBe(CALLERS * SENDS_PER_REFRESH);
   expect(h.cache.entries.size).toBe(1);
-  expect(
-    [...h.cache.entries.values()].every(/** 缓存里没有失败结果。 */ (e) => e.response.ok),
-  ).toBe(true);
+  expect([...h.cache.entries.values()].every(/** 缓存里没有失败结果。 */ (e) => e.response.ok)).toBe(true);
   const before = h.net.totalStarted;
   const [hit] = await settleAll(h.send({ url: REQUEST_URL, cache: true }));
   expect(hit!.ok).toBe(true);

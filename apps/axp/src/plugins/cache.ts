@@ -60,9 +60,7 @@ export interface ICacheApi {
 }
 
 /** 合并默认之后的缓存配置，含请求级显式键。 */
-type TCacheConfig<R extends IAxpResponse> = ICacheOptions<R> &
-  Pick<ICacheRequestOptions, "key"> &
-  Required<Pick<ICacheOptions<R>, "expires" | "methods" | "shouldCache">>;
+type TCacheConfig<R extends IAxpResponse> = ICacheOptions<R> & Pick<ICacheRequestOptions, "key"> & Required<Pick<ICacheOptions<R>, "expires" | "methods" | "shouldCache">>;
 
 /** 默认写入判定：只缓存成功响应。
  * @param response 归一化响应。
@@ -112,22 +110,14 @@ function expiresShorthand(value: unknown): { /** 有效期（毫秒）。 */ exp
 }
 
 /** 本次请求生效的缓存配置；null 表示这次不缓存（cache 必须由请求开启）。 */
-function resolveCache<R extends IAxpResponse>(
-  value: unknown,
-  base: TCacheConfig<R>,
-): TCacheConfig<R> | null {
+function resolveCache<R extends IAxpResponse>(value: unknown, base: TCacheConfig<R>): TCacheConfig<R> | null {
   if (value === true) return base;
-  if (typeof value === "number" || isPlainObject(value))
-    return resolveOption<TCacheConfig<R>, typeof DEFAULTS>(value, base, DEFAULTS, expiresShorthand);
+  if (typeof value === "number" || isPlainObject(value)) return resolveOption<TCacheConfig<R>, typeof DEFAULTS>(value, base, DEFAULTS, expiresShorthand);
   return null;
 }
 
 /** 按拷贝策略派生响应，data 为拷贝，其余字段沿用来源。 */
-function cloneResponse<R extends IAxpResponse>(
-  ctx: AxpContext<R>,
-  response: R,
-  cloneFn: TCloneFn,
-): R {
+function cloneResponse<R extends IAxpResponse>(ctx: AxpContext<R>, response: R, cloneFn: TCloneFn): R {
   return ctx.fail({ from: response, data: cloneFn(response.data) });
 }
 
@@ -137,13 +127,9 @@ function cloneResponse<R extends IAxpResponse>(
  * @returns source 阶段内置次序 3 的插件；`client.plugin(plugin)` 得到 `{ remove, clear }`。
  * @example `axpCache({ expires: 30_000 })` 配合 `api.get('/pets')(undefined, { cache: true })`
  */
-export default function axpCache<R extends IAxpResponse = AxpResponse>(
-  options: ICacheOptions<R> = {},
-): AxpPlugin<R, ICacheApi> {
+export default function axpCache<R extends IAxpResponse = AxpResponse>(options: ICacheOptions<R> = {}): AxpPlugin<R, ICacheApi> {
   const base = resolveOption<TCacheConfig<R>, typeof DEFAULTS>(undefined, options, DEFAULTS);
-  const methods = new Set(
-    base.methods.map(/** 方法名统一小写。 */ (method) => method.toLowerCase()),
-  );
+  const methods = new Set(base.methods.map(/** 方法名统一小写。 */ (method) => method.toLowerCase()));
   return {
     name: NAME,
     enable: options.enable,
@@ -164,8 +150,7 @@ export default function axpCache<R extends IAxpResponse = AxpResponse>(
           const hit = store.get(key);
           if (hit) {
             // 第三方存储可能不处理过期，读取时再确认一次。
-            if (hit.expiresAt > Date.now())
-              return cloneFn ? cloneResponse(ctx, hit.response, cloneFn) : hit.response;
+            if (hit.expiresAt > Date.now()) return cloneFn ? cloneResponse(ctx, hit.response, cloneFn) : hit.response;
             store.delete(key);
           }
           const ticket = barrier.begin(key);

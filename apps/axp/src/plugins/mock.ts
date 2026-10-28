@@ -75,14 +75,10 @@ export function $rewriteUrl(url: string | undefined, mockUrl: string): AxpReques
 }
 
 /** 合并内置默认之后的 mock 配置。 */
-type TMockConfig<R extends IAxpResponse> = IMockOptions<R> &
-  Required<Pick<IMockOptions<R>, "fallbackWhen">>;
+type TMockConfig<R extends IAxpResponse> = IMockOptions<R> & Required<Pick<IMockOptions<R>, "fallbackWhen">>;
 
 /** 本次请求生效的 mock 配置；null 表示这次不走 mock。 */
-function resolveMock<R extends IAxpResponse>(
-  value: unknown,
-  base: TMockConfig<R>,
-): TMockConfig<R> | null {
+function resolveMock<R extends IAxpResponse>(value: unknown, base: TMockConfig<R>): TMockConfig<R> | null {
   if (value === true) return base;
   if (isPlainObject(value)) return resolveOption(value, base, DEFAULTS);
   // 省略、false 以及未声明的值：只看插件级 mock。
@@ -95,9 +91,7 @@ function resolveMock<R extends IAxpResponse>(
  * @returns source 阶段内置次序 1 的插件；enable 默认 false。
  * @example `axpMock({ enable: import.meta.env.DEV, mockUrl: 'http://localhost:4523' })`
  */
-export default function axpMock<R extends IAxpResponse = AxpResponse>(
-  options: IMockOptions<R> = {},
-): AxpPlugin<R> {
+export default function axpMock<R extends IAxpResponse = AxpResponse>(options: IMockOptions<R> = {}): AxpPlugin<R> {
   const base = resolveOption<IMockOptions<R>, typeof DEFAULTS>(undefined, options, DEFAULTS);
   return {
     name: NAME,

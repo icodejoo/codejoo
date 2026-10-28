@@ -8,23 +8,23 @@
  *
  * 环境变量：TESTKIT_SERVER、TESTKIT_NETEM、TESTKIT_SCENARIOS（见 lib/constants.ts）。
  */
-import crypto from 'node:crypto';
-import fs from 'node:fs';
-import path from 'node:path';
-import { fileURLToPath } from 'node:url';
-import { parseConfig } from './lib/config.ts';
-import type { AcceptConfig } from './lib/config.ts';
-import { analyzeDryRun, renderDryRun } from './lib/dry-run.ts';
-import { loadScenarios, LoaderError } from './lib/loader.ts';
-import { buildPlan } from './lib/plan.ts';
-import { buildMatrix, formatLine, formatReasons, renderMatrix, skippedResult, totalsOf, writeJsonReport } from './lib/report.ts';
-import type { Report } from './lib/report.ts';
-import type { PlanEntry, RunResult } from './lib/types.ts';
+import crypto from "node:crypto";
+import fs from "node:fs";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
+import { parseConfig } from "./lib/config.ts";
+import type { AcceptConfig } from "./lib/config.ts";
+import { analyzeDryRun, renderDryRun } from "./lib/dry-run.ts";
+import { loadScenarios, LoaderError } from "./lib/loader.ts";
+import { buildPlan } from "./lib/plan.ts";
+import { buildMatrix, formatLine, formatReasons, renderMatrix, skippedResult, totalsOf, writeJsonReport } from "./lib/report.ts";
+import type { Report } from "./lib/report.ts";
+import type { PlanEntry, RunResult } from "./lib/types.ts";
 
 /** accept/ 目录绝对路径 */
 const ACCEPT_DIR = path.dirname(fileURLToPath(import.meta.url));
 /** 被测产物入口（打包后的 esm） */
-const DIST_ENTRY = path.resolve(ACCEPT_DIR, '..', 'dist', 'esm', 'index.mjs');
+const DIST_ENTRY = path.resolve(ACCEPT_DIR, "..", "dist", "esm", "index.mjs");
 /** 每完成多少个运行输出一次进度 */
 const PROGRESS_EVERY = 50;
 /** 退出码：有失败 */
@@ -42,20 +42,20 @@ async function preflight(cfg: AcceptConfig): Promise<string | null> {
       return `${label} 不可达（${url}）: ${(e as Error).message}`;
     }
   };
-  return (await probe('测试服务器', `${cfg.server}/t/ping`)) ?? (await probe('netem 控制面', `${cfg.netem}/presets`));
+  return (await probe("测试服务器", `${cfg.server}/t/ping`)) ?? (await probe("netem 控制面", `${cfg.netem}/presets`));
 }
 
 /** 执行全部待跑条目，边跑边输出，返回包含跳过项的完整结果 */
 async function execute(cfg: AcceptConfig, plan: PlanEntry[]): Promise<RunResult[]> {
-  const { runEntry, mapPool } = await import('./lib/runner.ts');
-  const { NetemClient } = await import('./lib/netem-client.ts');
-  const deps = { config: cfg, netem: new NetemClient(cfg.netem), session: crypto.randomBytes(3).toString('hex') };
-  const toRun = plan.filter((e) => e.decision.kind === 'run');
+  const { runEntry, mapPool } = await import("./lib/runner.ts");
+  const { NetemClient } = await import("./lib/netem-client.ts");
+  const deps = { config: cfg, netem: new NetemClient(cfg.netem), session: crypto.randomBytes(3).toString("hex") };
+  const toRun = plan.filter((e) => e.decision.kind === "run");
   let done = 0;
   const ran = await mapPool(toRun, cfg.jobs, async (entry, i) => {
     const r = await runEntry(entry, i + 1, deps);
     done++;
-    if (r.status === 'failed') console.log(`${formatLine(r)}\n${formatReasons(r)}`);
+    if (r.status === "failed") console.log(`${formatLine(r)}\n${formatReasons(r)}`);
     else if (cfg.verbose) console.log(formatLine(r));
     else if (done % PROGRESS_EVERY === 0) console.log(`  ... ${done}/${toRun.length}`);
     return r;
@@ -71,7 +71,10 @@ async function main(): Promise<number> {
   try {
     plan = buildPlan(loadScenarios(cfg.scenarios), cfg.filters);
   } catch (e) {
-    if (e instanceof LoaderError) { console.error(e.message); return EXIT_ENV; }
+    if (e instanceof LoaderError) {
+      console.error(e.message);
+      return EXIT_ENV;
+    }
     throw e;
   }
   if (cfg.dry) {
@@ -83,7 +86,10 @@ async function main(): Promise<number> {
     return EXIT_ENV;
   }
   const env = await preflight(cfg);
-  if (env) { console.error(env); return EXIT_ENV; }
+  if (env) {
+    console.error(env);
+    return EXIT_ENV;
+  }
 
   const results = await execute(cfg, plan);
   const totals = totalsOf(results);
@@ -94,10 +100,18 @@ async function main(): Promise<number> {
   const report: Report = {
     generatedAt: new Date().toISOString(),
     config: { server: cfg.server, netem: cfg.netem, scenarios: cfg.scenarios, filters: cfg.filters },
-    totals, matrix, runs: results,
+    totals,
+    matrix,
+    runs: results,
   };
   console.log(`JSON 报告: ${writeJsonReport(cfg.reportDir, report)}`);
   return totals.failed ? EXIT_FAILED : 0;
 }
 
-main().then((code) => process.exit(code), (e) => { console.error(e); process.exit(EXIT_ENV); });
+main().then(
+  (code) => process.exit(code),
+  (e) => {
+    console.error(e);
+    process.exit(EXIT_ENV);
+  },
+);

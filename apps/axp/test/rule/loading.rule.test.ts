@@ -48,15 +48,7 @@ it("[loading.req.loading] 四种写法、空值继承和缺少回调", /** 按�
   const main = loadingRecorder(h.events);
   const custom = loadingRecorder(h.events, CUSTOM_LABEL);
   h.api.use(axpLoading<AxpResponse>({ loading: main }));
-  for (const loading of [
-    undefined,
-    null,
-    true,
-    custom,
-    { loading: custom },
-    false,
-    { enable: false },
-  ]) {
+  for (const loading of [undefined, null, true, custom, { loading: custom }, false, { enable: false }]) {
     const pending = h.send({ loading });
     await vi.runAllTimersAsync();
     await pending;
@@ -78,12 +70,7 @@ it("[loading.cb.concurrent] 并发同回调只显示一轮，各回调独立配�
   const custom = loadingRecorder(h.events, CUSTOM_LABEL);
   h.api.use(axpLoading<AxpResponse>({ loading: main }));
   h.net.on("get", FAILURE_URL, /** 并发失败。 */ () => ({ status: 500 }));
-  const requests = [
-    h.send(SLOW),
-    h.send({ url: FAILURE_URL }),
-    h.send({ loading: false }),
-    h.send({ ...SLOW, loading: custom }),
-  ];
+  const requests = [h.send(SLOW), h.send({ url: FAILURE_URL }), h.send({ loading: false }), h.send({ ...SLOW, loading: custom })];
   expect(h.events.loading.get(LOADING_LABEL)).toEqual([true]);
   expect(h.events.loading.get(CUSTOM_LABEL)).toEqual([true]);
   await vi.runAllTimersAsync();
@@ -130,9 +117,7 @@ it.each([0, -1])(
   "[loading.req.delay] 请求级延迟 %i 覆盖插件长延迟",
   /** 零和负数即时切换。 */ async (delay) => {
     const h = uiClient();
-    h.api.use(
-      axpLoading<AxpResponse>({ loading: loadingRecorder(h.events), delay: 100, delayClose: 100 }),
-    );
+    h.api.use(axpLoading<AxpResponse>({ loading: loadingRecorder(h.events), delay: 100, delayClose: 100 }));
     const pending = h.send({ loading: { delay, delayClose: delay } });
     expect(h.events.loading.get(LOADING_LABEL)).toEqual([true]);
     await vi.runAllTimersAsync();

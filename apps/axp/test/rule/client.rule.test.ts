@@ -7,18 +7,7 @@ import { assertInvariants, createTestClient } from "../helpers/client";
 /** 无状态层。 */
 const through: NonNullable<AxpPlugin<AxpResponse>["handle"]> = (_ctx, next) => next();
 /** 全部运行期动词。 */
-const METHODS: HttpMethodLower[] = [
-  "get",
-  "head",
-  "options",
-  "purge",
-  "link",
-  "unlink",
-  "delete",
-  "post",
-  "put",
-  "patch",
-];
+const METHODS: HttpMethodLower[] = ["get", "head", "options", "purge", "link", "unlink", "delete", "post", "put", "patch"];
 /** 数据回显 URL。 */
 const URL = "/dispatch";
 
@@ -35,9 +24,7 @@ describe("客户端", /** 客户端的用例集合。 */ () => {
       data: 1,
     });
     net.fallback(/** 返回 HTTP 失败。 */ () => ({ status: 500 }));
-    await expect(
-      api.get(URL, { throws: false })(undefined, { throws: true }),
-    ).rejects.toMatchObject({ kind: "http" });
+    await expect(api.get(URL, { throws: false })(undefined, { throws: true })).rejects.toMatchObject({ kind: "http" });
     expect(await api.get(URL, { throws: true })(undefined, { throws: false })).toMatchObject({
       kind: "http",
     });
@@ -115,9 +102,7 @@ describe("客户端", /** 客户端的用例集合。 */ () => {
     await expect(api.get(URL)()).rejects.toMatchObject({ kind: "http", status: 500 });
   });
   it("[core.method.use][core.method.eject][core.method.plugin][core.method.inspect] 装卸、API 与一次性 setup/dispose", /** 装卸、API 与一次性 setup/dispose。 */ async () => {
-    const setup = vi.fn(
-      /** 每个客户端建立独立实例与 API。 */ () => ({ handle: through, api: { value: 1 }, dispose }),
-    );
+    const setup = vi.fn(/** 每个客户端建立独立实例与 API。 */ () => ({ handle: through, api: { value: 1 }, dispose }));
     const dispose = vi.fn();
     const plugin: AxpPlugin<AxpResponse, { /** value 字段。 */ value: number }> = {
       name: "dynamic",
@@ -175,9 +160,7 @@ describe("客户端", /** 客户端的用例集合。 */ () => {
   });
   it("[core.opt.debug] 关闭时空日志、开启传自定义 logger 并记录调用点", /** 关闭时空日志、开启传自定义 logger 并记录调用点。 */ async () => {
     const logger = { log: vi.fn(), warn: vi.fn(), error: vi.fn() };
-    const spy = vi
-      .spyOn(console, "log")
-      .mockImplementation(/** 屏蔽 console 输出，仅记录调用。 */ () => {});
+    const spy = vi.spyOn(console, "log").mockImplementation(/** 屏蔽 console 输出，仅记录调用。 */ () => {});
     const plugin: AxpPlugin<AxpResponse> = {
       name: "log",
       /** 通过上下文日志器输出三个级别。 */ async handle(ctx, next) {
@@ -209,9 +192,7 @@ describe("客户端", /** 客户端的用例集合。 */ () => {
     assertInvariants(api, events);
   });
   it("[core.cb.reject] 适配可预期失败为 Error", /** 适配可预期失败为 Error。 */ async () => {
-    const reject = vi.fn(
-      /** 把失败响应转为带消息的 Error。 */ (response: AxpResponse) => new Error(response.message),
-    );
+    const reject = vi.fn(/** 把失败响应转为带消息的 Error。 */ (response: AxpResponse) => new Error(response.message));
     const { api, net } = createTestClient([], {
       reject,
       response: axpResponse({ expectJson: true }),

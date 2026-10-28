@@ -1,4 +1,4 @@
-import { BYPASS_TIMEOUT_MS } from './constants.ts';
+import { BYPASS_TIMEOUT_MS } from "./constants.ts";
 
 /**
  * 等待指定毫秒。
@@ -30,14 +30,8 @@ export interface RawReply {
  * @returns 状态码与响应文本
  * @example const r = await rawJson('http://127.0.0.1:47090/presets', 'GET', undefined, {}, (m) => new Error(m));
  */
-export async function rawJson(
-  url: string,
-  method: string,
-  body: unknown,
-  headers: Record<string, string>,
-  onConnectError: (message: string) => Error,
-): Promise<RawReply> {
-  const h = body === undefined ? { ...headers } : { ...headers, 'content-type': 'application/json' };
+export async function rawJson(url: string, method: string, body: unknown, headers: Record<string, string>, onConnectError: (message: string) => Error): Promise<RawReply> {
+  const h = body === undefined ? { ...headers } : { ...headers, "content-type": "application/json" };
   let res: Response;
   try {
     res = await fetch(url, {

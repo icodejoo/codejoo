@@ -35,8 +35,7 @@ function keyOf(method: string | undefined, url: string | undefined): string {
 function headerGet(config: InternalAxiosRequestConfig, name: string): unknown {
   const h = config.headers as unknown;
   if (!h) return undefined;
-  if (typeof (h as { get?: unknown }).get === "function")
-    return (h as { get(n: string): unknown }).get(name);
+  if (typeof (h as { get?: unknown }).get === "function") return (h as { get(n: string): unknown }).get(name);
   const rec = h as Record<string, unknown>;
   return rec[name] ?? rec[name.toLowerCase()];
 }

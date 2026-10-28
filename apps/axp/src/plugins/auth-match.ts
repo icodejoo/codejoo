@@ -21,11 +21,7 @@ const GLOBAL_REGEX_FLAGS = "g";
  * @example pathnameOf('https://example.com/me?q=1'); // '/me'
  */
 export function pathnameOf(url: string): string {
-  return (
-    url
-      .replace(/^([a-z][a-z\d+\-.]*:)?\/\/[^/?#]*/i, EMPTY_INPUT)
-      .replace(/[?#].*$/, EMPTY_INPUT) || "/"
-  );
+  return url.replace(/^([a-z][a-z\d+\-.]*:)?\/\/[^/?#]*/i, EMPTY_INPUT).replace(/[?#].*$/, EMPTY_INPUT) || "/";
 }
 
 /**
@@ -118,9 +114,7 @@ export function patternToRegex(pat: string): RegExp | null {
       STAR = " STAR ";
     const tokenized = pat.replace(/:[A-Za-z_$][\w$]*/g, NAMED).replace(/\*/g, STAR);
     const escaped = tokenized.replace(/[.+?^${}()|[\]\\]/g, "\\$&");
-    const body = escaped
-      .replace(new RegExp(NAMED, GLOBAL_REGEX_FLAGS), "[^/]+")
-      .replace(new RegExp(STAR, GLOBAL_REGEX_FLAGS), ".*");
+    const body = escaped.replace(new RegExp(NAMED, GLOBAL_REGEX_FLAGS), "[^/]+").replace(new RegExp(STAR, GLOBAL_REGEX_FLAGS), ".*");
     return new RegExp(`^${body}/?$`);
   } catch {
     return null;

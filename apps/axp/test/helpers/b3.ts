@@ -21,10 +21,7 @@ export const RETRY_NAME = "axp:retry";
  * @returns 可直接交给 auth 的管理器。
  * @example `memoryTokens(TOKEN_OLD)`
  */
-export function memoryTokens(
-  access: string | undefined = TOKEN_OLD,
-  refresh: string | undefined = REFRESH_TOKEN,
-): ITokenManager {
+export function memoryTokens(access: string | undefined = TOKEN_OLD, refresh: string | undefined = REFRESH_TOKEN): ITokenManager {
   return {
     /** 当前注入值。 */ get accessToken() {
       return access;
@@ -52,10 +49,7 @@ function defaultRefresh(_r: AxpResponse, tm: ITokenManager): void {
  * @returns 配置和可直接断言的回调。
  * @example `authSettings({ onRefresh: () => false }, h.events)`
  */
-export function authSettings(
-  overrides: Partial<IAuthOptions<AxpResponse>> = {},
-  events?: ITestEvents,
-) {
+export function authSettings(overrides: Partial<IAuthOptions<AxpResponse>> = {}, events?: ITestEvents) {
   const refresh = overrides.onRefresh ?? defaultRefresh;
   let round = 0;
   let active = 0;
@@ -65,10 +59,7 @@ export function authSettings(
     onAccessDenied: vi.fn(),
     ...overrides,
     onRefresh: vi.fn(
-      /** 记录刷新轮次：同一轮重叠调用累加，轮次间各自为一。 */ async (
-        r: AxpResponse,
-        tm: ITokenManager,
-      ) => {
+      /** 记录刷新轮次：同一轮重叠调用累加，轮次间各自为一。 */ async (r: AxpResponse, tm: ITokenManager) => {
         if (events) {
           if (active === 0) round++;
           active++;
@@ -89,10 +80,7 @@ export function authSettings(
  * @returns 通过 send 发起请求的测试夹具。
  * @example `b3Client([axpRetry()])`
  */
-export function b3Client(
-  plugins: readonly AxpPlugin<AxpResponse, any>[] = [],
-  options: AxpOptions = {},
-) {
+export function b3Client(plugins: readonly AxpPlugin<AxpResponse, any>[] = [], options: AxpOptions = {}) {
   const h = uiClient(plugins, options);
   h.api.use({
     name: "b3-observe",
@@ -132,11 +120,7 @@ export function b3Client(
  * @returns 客户端夹具、鉴权设置与会话管理器。
  * @example `const h = authClient({ onRefresh: () => false })`
  */
-export function authClient(
-  overrides: Partial<IAuthOptions<AxpResponse>> = {},
-  plugins: readonly AxpPlugin<AxpResponse, any>[] = [],
-  options: AxpOptions = {},
-) {
+export function authClient(overrides: Partial<IAuthOptions<AxpResponse>> = {}, plugins: readonly AxpPlugin<AxpResponse, any>[] = [], options: AxpOptions = {}) {
   const h = b3Client(plugins, options);
   const settings = authSettings(overrides, h.events);
   const plugin = axpAuth<AxpResponse>(settings);
@@ -159,8 +143,7 @@ export function failure(status: number, business = false): RouteResult {
  * @example `net.on('get', URL, guarded(() => TOKEN_NEW))`
  */
 export function guarded(accept: () => string | undefined, business = false): RouteHandler {
-  return /** 对比本次请求头与认可值。 */ (config) =>
-    authHeader(config) === accept() ? { data: { code: 0, data: "ok" } } : failure(401, business);
+  return /** 对比本次请求头与认可值。 */ (config) => (authHeader(config) === accept() ? { data: { code: 0, data: "ok" } } : failure(401, business));
 }
 /** 发起默认受保护路由的请求并推进假时钟直到落定。
  * @param h 带 send 的测试夹具。
@@ -168,10 +151,7 @@ export function guarded(accept: () => string | undefined, business = false): Rou
  * @returns 落定后的响应。
  * @example `const r = await run(h, { retry: 1 })`
  */
-export async function run<T>(
-  h: { send(config?: AxpRequestConfig): Promise<T> },
-  config: AxpRequestConfig = {},
-): Promise<T> {
+export async function run<T>(h: { send(config?: AxpRequestConfig): Promise<T> }, config: AxpRequestConfig = {}): Promise<T> {
   const pending = h.send({ url: REQUEST_URL, ...config });
   // 推进时钟期间失败的请求先标记为已观察，避免被当成未处理拒绝；调用方 await 时仍照常收到拒绝。
   pending.catch(/** 仅标记已观察。 */ () => undefined);

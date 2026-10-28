@@ -76,8 +76,7 @@ const CASES: [string, AxpRequestConfig][] = [
 ];
 
 for (const [name, request] of CASES) {
-  if (requestKey(request) !== referenceRequestKey(request))
-    throw new Error("基准指纹不一致：" + name);
+  if (requestKey(request) !== referenceRequestKey(request)) throw new Error("基准指纹不一致：" + name);
   describe(
     name,
     /** 为每组输入测量三轮新旧实现。 */ () => {

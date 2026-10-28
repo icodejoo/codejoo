@@ -59,30 +59,15 @@ function listenerFlags(options?: boolean | AddEventListenerOptions): {
  */
 export function trackSignalListeners(signal: AbortSignal): ISignalListenerTracker {
   const records: ISignalListenerRecord[] = [];
-  const add = signal.addEventListener.bind(signal) as (
-    type: string,
-    listener: EventListenerOrEventListenerObject,
-    options?: boolean | AddEventListenerOptions,
-  ) => void;
-  const remove = signal.removeEventListener.bind(signal) as (
-    type: string,
-    listener: EventListenerOrEventListenerObject,
-    options?: boolean | EventListenerOptions,
-  ) => void;
+  const add = signal.addEventListener.bind(signal) as (type: string, listener: EventListenerOrEventListenerObject, options?: boolean | AddEventListenerOptions) => void;
+  const remove = signal.removeEventListener.bind(signal) as (type: string, listener: EventListenerOrEventListenerObject, options?: boolean | EventListenerOptions) => void;
   /** 按类型、回调、捕获标志找已登记的监听。 */
-  const indexOf = (type: string, listener: unknown, capture: boolean) =>
-    records.findIndex(
-      (item) => item.type === type && item.listener === listener && item.capture === capture,
-    );
+  const indexOf = (type: string, listener: unknown, capture: boolean) => records.findIndex((item) => item.type === type && item.listener === listener && item.capture === capture);
   Object.defineProperty(signal, "addEventListener", {
     configurable: true,
     writable: true,
     /** 与 DOM 一致：同身份的监听重复注册只算一条。 */
-    value(
-      type: string,
-      listener: EventListenerOrEventListenerObject,
-      options?: boolean | AddEventListenerOptions,
-    ) {
+    value(type: string, listener: EventListenerOrEventListenerObject, options?: boolean | AddEventListenerOptions) {
       const { capture, once } = listenerFlags(options);
       if (indexOf(type, listener, capture) < 0) records.push({ type, listener, capture, once });
       add(type, listener, options);
@@ -92,21 +77,14 @@ export function trackSignalListeners(signal: AbortSignal): ISignalListenerTracke
     configurable: true,
     writable: true,
     /** 注销时同步删掉登记，没登记过的注销忽略。 */
-    value(
-      type: string,
-      listener: EventListenerOrEventListenerObject,
-      options?: boolean | EventListenerOptions,
-    ) {
+    value(type: string, listener: EventListenerOrEventListenerObject, options?: boolean | EventListenerOptions) {
       const index = indexOf(type, listener, listenerFlags(options).capture);
       if (index >= 0) records.splice(index, 1);
       remove(type, listener, options);
     },
   });
   return {
-    live: () =>
-      records.filter(
-        /** 一次性监听在中止后已被事件循环摘除。 */ (item) => !(item.once && signal.aborted),
-      ).length,
+    live: () => records.filter(/** 一次性监听在中止后已被事件循环摘除。 */ (item) => !(item.once && signal.aborted)).length,
     /** 删除自有属性，回到原型上的原始方法。 */
     restore() {
       Reflect.deleteProperty(signal, "addEventListener");
@@ -120,10 +98,7 @@ export function trackSignalListeners(signal: AbortSignal): ISignalListenerTracke
  * @param label 失败时说明监听挂在哪类信号上。
  * @example `assertSignalsReleased(chain.signals.values(), '逻辑请求 signal')`
  */
-export function assertSignalsReleased(
-  trackers: Iterable<ISignalListenerTracker>,
-  label: string,
-): void {
+export function assertSignalsReleased(trackers: Iterable<ISignalListenerTracker>, label: string): void {
   for (const tracker of trackers) expect(tracker.live(), `${label}上有残留监听`).toBe(0);
 }
 
@@ -180,8 +155,7 @@ export function createChainProbe(events: ITestEvents): IChainProbe {
           bump(probe.calls, name);
           if (name === outermost) {
             bump(probe.entered, ctx.id);
-            if (!probe.signals.has(ctx.id))
-              probe.signals.set(ctx.id, trackSignalListeners(ctx.signal));
+            if (!probe.signals.has(ctx.id)) probe.signals.set(ctx.id, trackSignalListeners(ctx.signal));
           }
           let response: IAxpResponse;
           try {
@@ -238,16 +212,9 @@ export interface ILogicalRequest {
  * @param chain 探针汇总。
  * @example `assertSettledOnce(h.requests, h.events, h.chain)`
  */
-export function assertSettledOnce(
-  requests: readonly ILogicalRequest[],
-  events: ITestEvents,
-  chain: IChainProbe,
-): void {
+export function assertSettledOnce(requests: readonly ILogicalRequest[], events: ITestEvents, chain: IChainProbe): void {
   for (const request of requests) {
-    expect(
-      events.settled.get(request.id),
-      `逻辑请求 ${request.tag} 应恰好落定一次（0 表示一直没落定）`,
-    ).toBe(1);
+    expect(events.settled.get(request.id), `逻辑请求 ${request.tag} 应恰好落定一次（0 表示一直没落定）`).toBe(1);
   }
   for (const [id, count] of chain.entered) {
     expect(count, `ctx.id=${id} 进入管线次数`).toBe(1);
@@ -272,9 +239,7 @@ export interface INotifyRecorder<R extends IAxpResponse = AxpResponse> {
  * @returns 传给 axpNotify 的 notify 与 stringify。
  * @example `axpNotify(createNotifyRecorder(events))`
  */
-export function createNotifyRecorder<R extends IAxpResponse = AxpResponse>(
-  events: ITestEvents,
-): INotifyRecorder<R> {
+export function createNotifyRecorder<R extends IAxpResponse = AxpResponse>(events: ITestEvents): INotifyRecorder<R> {
   let current = 0;
   return {
     /** 通知落在最近一次 stringify 标记的逻辑请求上。 */
@@ -284,9 +249,7 @@ export function createNotifyRecorder<R extends IAxpResponse = AxpResponse>(
     /** 标记身份并复刻默认的跳过规则。 */
     stringify(response, ctx) {
       current = ctx.id;
-      return response.ok || response.kind === AXP_KINDS.CANCEL || ctx.request.silent
-        ? ""
-        : response.message || `${response.kind} ${response.status}`;
+      return response.ok || response.kind === AXP_KINDS.CANCEL || ctx.request.silent ? "" : response.message || `${response.kind} ${response.status}`;
     },
   };
 }
@@ -300,15 +263,10 @@ export function createNotifyRecorder<R extends IAxpResponse = AxpResponse>(
  * @returns 与原函数同参数的包装，作为 auth 的 onRefresh 使用。
  * @example `axpAuth({ onRefresh: countRefresh(events, async () => { tm.set('t1') }) })`
  */
-export function countRefresh<A extends unknown[], T>(
-  events: ITestEvents,
-  onRefresh: (...args: A) => T,
-): (...args: A) => Promise<Awaited<T>> {
+export function countRefresh<A extends unknown[], T>(events: ITestEvents, onRefresh: (...args: A) => T): (...args: A) => Promise<Awaited<T>> {
   let round = 0;
   let inflight = 0;
-  return /** 进入时登记所属轮次，结束后释放在途计数。 */ async (
-    ...args: A
-  ): Promise<Awaited<T>> => {
+  return /** 进入时登记所属轮次，结束后释放在途计数。 */ async (...args: A): Promise<Awaited<T>> => {
     if (inflight === 0) round++;
     inflight++;
     bump(events.refresh, round);
@@ -429,10 +387,7 @@ export interface IInvariantHarness<R extends IAxpResponse = AxpResponse> {
  * h.dispose();
  * ```
  */
-export function createInvariantHarness<R extends IAxpResponse = AxpResponse>(
-  plugins: readonly AxpPlugin<R, any>[] = [],
-  config: IInvariantHarnessOptions<R> = {},
-): IInvariantHarness<R> {
+export function createInvariantHarness<R extends IAxpResponse = AxpResponse>(plugins: readonly AxpPlugin<R, any>[] = [], config: IInvariantHarnessOptions<R> = {}): IInvariantHarness<R> {
   const events = config.events ?? recordEvents();
   const chain = createChainProbe(events);
   const sends: IRecordedSend[] = [];
@@ -447,11 +402,7 @@ export function createInvariantHarness<R extends IAxpResponse = AxpResponse>(
   const requests: ILogicalRequest[] = [];
   const userSignals = new Map<AbortSignal, ISignalListenerTracker>();
   /** 逻辑 signal 与调用方 signal 上仍有效的监听总数。 */
-  const liveListeners = () =>
-    [...chain.signals.values(), ...userSignals.values()].reduce(
-      (sum, tracker) => sum + tracker.live(),
-      0,
-    );
+  const liveListeners = () => [...chain.signals.values(), ...userSignals.values()].reduce((sum, tracker) => sum + tracker.live(), 0);
   return {
     api,
     net: fixture.net,
@@ -475,15 +426,12 @@ export function createInvariantHarness<R extends IAxpResponse = AxpResponse>(
             url: `${DEFAULT_URL_PREFIX}${id}`,
             ...request,
             signal,
-            headers: new AxiosHeaders(
-              request.headers as ConstructorParameters<typeof AxiosHeaders>[0],
-            ).set(REQUEST_TAG_HEADER, tag),
+            headers: new AxiosHeaders(request.headers as ConstructorParameters<typeof AxiosHeaders>[0]).set(REQUEST_TAG_HEADER, tag),
             wrap: true,
           })
           .then(
             /** 成功落定。 */ (value) => settle("resolved", value),
-            /** 失败落定，包括 internal 抛出的原始异常。 */ (error: unknown) =>
-              settle("rejected", error),
+            /** 失败落定，包括 internal 抛出的原始异常。 */ (error: unknown) => settle("rejected", error),
           ),
       };
       /** 每次落定计一次；同一逻辑请求重复落定会让 I1 失败。 */

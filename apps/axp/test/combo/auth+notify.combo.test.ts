@@ -62,11 +62,7 @@ it("[notify.cb.notify][auth.reason.unauthenticated] 本地无 token：不触网�
 it("[notify.cb.notify][auth.cb.onAccessExpired] 并发请求同时过期：每个逻辑请求各通知一次，onAccessExpired 只通知一次", /** I4：每逻辑请求 notify ≤ 1。 */ async () => {
   const h = notifyAuthClient({ onRefresh: () => false });
   h.net.on("get", REQUEST_URL, () => failure(401));
-  const all = [
-    h.send({ url: REQUEST_URL }),
-    h.send({ url: REQUEST_URL }),
-    h.send({ url: REQUEST_URL }),
-  ];
+  const all = [h.send({ url: REQUEST_URL }), h.send({ url: REQUEST_URL }), h.send({ url: REQUEST_URL })];
   await vi.runAllTimersAsync();
   await Promise.all(all);
   expect(h.notify).toHaveBeenCalledTimes(3);

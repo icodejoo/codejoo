@@ -13,10 +13,7 @@ const PROBE = `${MOCK}${REAL}`;
 
 /** 装好 mock 与 cache；mock 默认成功，真实接口返回 real。 */
 function client() {
-  const h = sourceClient([
-    axpMock<AxpResponse>({ enable: true, mockUrl: MOCK }),
-    axpCache<AxpResponse>(),
-  ]);
+  const h = sourceClient([axpMock<AxpResponse>({ enable: true, mockUrl: MOCK }), axpCache<AxpResponse>()]);
   h.net.on("get", PROBE, () => envelope("mock"));
   h.net.on("get", REAL, () => envelope("real"));
   return h;

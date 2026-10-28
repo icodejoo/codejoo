@@ -4,18 +4,7 @@ import axpAuth, { AuthFailureAction } from "../../src/plugins/auth";
 import { isAxpResponse, type AxpResponse } from "../../src/response";
 import type { AxpRequestConfig } from "../../src/types";
 import { authHeader } from "../helpers/auth";
-import {
-  AUTH_NAME,
-  authClient,
-  failure,
-  guarded,
-  memoryTokens,
-  REFRESH_TOKEN,
-  REQUEST_URL,
-  run,
-  TOKEN_NEW,
-  TOKEN_OLD,
-} from "../helpers/b3";
+import { AUTH_NAME, authClient, failure, guarded, memoryTokens, REFRESH_TOKEN, REQUEST_URL, run, TOKEN_NEW, TOKEN_OLD } from "../helpers/b3";
 
 /** 公开路由，不在受保护范围内。 */
 const PUBLIC_URL = "/public";
@@ -54,11 +43,7 @@ describe("请求侧：保护判定与凭证注入", () => {
     const h = authClient({ urlPattern: API_PATTERN });
     h.tm.clear();
     const seen: unknown[] = [];
-    h.net.on(
-      "get",
-      PUBLIC_URL,
-      /** 记录公开请求是否带凭证。 */ (config) => void seen.push(authHeader(config)),
-    );
+    h.net.on("get", PUBLIC_URL, /** 记录公开请求是否带凭证。 */ (config) => void seen.push(authHeader(config)));
     expect((await run(h, { url: PUBLIC_URL })).ok).toBe(true);
     expect((await run(h, { url: "/api/me", protected: false })).ok).toBe(true);
     const forced = await run(h, { url: PUBLIC_URL, protected: true });
@@ -73,13 +58,7 @@ describe("请求侧：保护判定与凭证注入", () => {
     ["methods 命中不区分大小写", { methods: ["POST"] }, "post", REQUEST_URL, true],
     ["methods 未命中则公开", { methods: ["POST"] }, "get", REQUEST_URL, false],
     ["methods 字符串通配", { methods: "*" }, "delete", REQUEST_URL, true],
-    [
-      "urlPattern 命中绝对 URL 与查询串",
-      { urlPattern: "/me" },
-      "get",
-      "https://example.com/me?q=1",
-      true,
-    ],
+    ["urlPattern 命中绝对 URL 与查询串", { urlPattern: "/me" }, "get", "https://example.com/me?q=1", true],
     ["urlPattern 未命中其它路径", { urlPattern: "/me" }, "get", "/me/other", false],
     ["urlPattern 否定模式放行", { urlPattern: ["!/me/public"] }, "get", "/me/public", false],
     ["urlPattern 否定模式之外仍受保护", { urlPattern: ["!/me/public"] }, "get", "/me/x", true],
@@ -92,13 +71,7 @@ describe("请求侧：保护判定与凭证注入", () => {
     ["urlPattern 为 null：回退默认全部受保护", { urlPattern: null }, "get", REQUEST_URL, true],
   ] as const)(
     "[auth.opt.methods][auth.opt.urlPattern] %s",
-    /** 无 token 时受保护请求以 unauthenticated 失败，公开请求照常发出。 */ async (
-      _label,
-      options,
-      method,
-      url,
-      isProtected,
-    ) => {
+    /** 无 token 时受保护请求以 unauthenticated 失败，公开请求照常发出。 */ async (_label, options, method, url, isProtected) => {
       const h = authClient(options as Partial<IAuthOptions<AxpResponse>>);
       h.tm.clear();
       const result = await run(h, { url, method });
@@ -109,10 +82,7 @@ describe("请求侧：保护判定与凭证注入", () => {
   );
 
   it("[auth.cb.isProtected] 布尔结果为终值；其它值回落到 methods/urlPattern；请求级 protected 优先于它", /** 三级判定优先级。 */ async () => {
-    const isProtected = vi.fn(
-      /** 范围外放行，/api 之下强制公开。 */ (request: Readonly<AxpRequestConfig>) =>
-        request.url === PUBLIC_URL ? true : request.url?.startsWith("/api/") ? false : undefined,
-    );
+    const isProtected = vi.fn(/** 范围外放行，/api 之下强制公开。 */ (request: Readonly<AxpRequestConfig>) => (request.url === PUBLIC_URL ? true : request.url?.startsWith("/api/") ? false : undefined));
     const h = authClient({ urlPattern: "/me", isProtected });
     h.tm.clear();
     expect(await run(h, { url: PUBLIC_URL })).toMatchObject({
@@ -142,10 +112,7 @@ describe("请求侧：保护判定与凭证注入", () => {
 
   it("[auth.cb.ready] 自定义 ready 的补丁写入自定义头，401 路由按本次注入的 token 判断，与头名无关", /** 状态键记录注入快照。 */ async () => {
     const ready = vi.fn(
-      /** 自定义凭证头，异步返回补丁。 */ async (
-        tm: { accessToken?: string },
-        request: Readonly<AxpRequestConfig>,
-      ) => ({
+      /** 自定义凭证头，异步返回补丁。 */ async (tm: { accessToken?: string }, request: Readonly<AxpRequestConfig>) => ({
         headers: { "X-Token": tm.accessToken, "X-Url": request.url },
       }),
     );
@@ -169,11 +136,7 @@ describe("请求侧：保护判定与凭证注入", () => {
   it("[auth.cb.ready] ready 不返回补丁时不改请求，仍照常发出", /** 空补丁等价于不注入。 */ async () => {
     const h = authClient({ ready: () => undefined });
     const seen: unknown[] = [];
-    h.net.on(
-      "get",
-      REQUEST_URL,
-      /** 记录凭证头。 */ (config) => void seen.push(authHeader(config)),
-    );
+    h.net.on("get", REQUEST_URL, /** 记录凭证头。 */ (config) => void seen.push(authHeader(config)));
     expect((await run(h)).ok).toBe(true);
     expect(seen).toEqual([undefined]);
   });
@@ -185,9 +148,7 @@ describe("本地无 token", () => {
     /** 本地拒绝不触网。 */ async (throws) => {
       const h = authClient();
       h.tm.clear();
-      const pending = h
-        .send({ url: REQUEST_URL, throws })
-        .catch(/** 失败的 R 作为值观察。 */ (error: unknown) => error);
+      const pending = h.send({ url: REQUEST_URL, throws }).catch(/** 失败的 R 作为值观察。 */ (error: unknown) => error);
       await vi.runAllTimersAsync();
       const result = await pending;
       expect(isAxpResponse(result)).toBe(true);
@@ -237,10 +198,7 @@ describe.each([
     expect(result.ok).toBe(true);
     expect(result.reason).toBeUndefined();
     expect(seen).toEqual([TOKEN_OLD, TOKEN_NEW]);
-    expect(h.settings.onRefresh).toHaveBeenCalledExactlyOnceWith(
-      expect.objectContaining({ status: 401, ok: false }),
-      h.tm,
-    );
+    expect(h.settings.onRefresh).toHaveBeenCalledExactlyOnceWith(expect.objectContaining({ status: 401, ok: false }), h.tm);
     expect(h.settings.onAccessExpired).not.toHaveBeenCalled();
     expect(h.settings.onAccessDenied).not.toHaveBeenCalled();
   });
@@ -252,10 +210,7 @@ describe.each([
     expect(result).toMatchObject({ ok: false, kind: "auth", reason: "expired", status: 401 });
     expect(h.tm.accessToken).toBeUndefined();
     expect(h.tm.refreshToken).toBeUndefined();
-    expect(h.settings.onAccessExpired).toHaveBeenCalledExactlyOnceWith(
-      expect.objectContaining({ status: 401, kind: business ? "biz" : "http" }),
-      h.tm,
-    );
+    expect(h.settings.onAccessExpired).toHaveBeenCalledExactlyOnceWith(expect.objectContaining({ status: 401, kind: business ? "biz" : "http" }), h.tm);
     expect(h.settings.onAccessDenied).not.toHaveBeenCalled();
     expect(h.net.totalStarted).toBe(1);
   });
@@ -266,10 +221,7 @@ describe.each([
     const result = await run(h);
     expect(result).toMatchObject({ ok: false, kind: "auth", reason: "denied", status: 403 });
     expect(h.tm.accessToken).toBe(TOKEN_OLD);
-    expect(h.settings.onAccessDenied).toHaveBeenCalledExactlyOnceWith(
-      expect.objectContaining({ status: 403 }),
-      h.tm,
-    );
+    expect(h.settings.onAccessDenied).toHaveBeenCalledExactlyOnceWith(expect.objectContaining({ status: 403 }), h.tm);
     expect(h.settings.onRefresh).not.toHaveBeenCalled();
     expect(h.settings.onAccessExpired).not.toHaveBeenCalled();
     expect(h.net.totalStarted).toBe(1);
@@ -293,11 +245,7 @@ describe("响应侧路由：其它入口", () => {
     const h = authClient();
     expect((await run(h)).ok).toBe(true);
     expect(h.net.totalStarted).toBe(1);
-    for (const callback of [
-      h.settings.onRefresh,
-      h.settings.onAccessExpired,
-      h.settings.onAccessDenied,
-    ]) {
+    for (const callback of [h.settings.onRefresh, h.settings.onAccessExpired, h.settings.onAccessDenied]) {
       expect(callback).not.toHaveBeenCalled();
     }
   });
@@ -341,24 +289,13 @@ describe("响应侧路由：其它入口", () => {
     /** onFailure 收到 (r, tm, ctx)。 */ async (status, action, reason) => {
       const onFailure = vi.fn(/** 固定返回目标动作。 */ () => action);
       const h = authClient({ onFailure });
-      h.net.on(
-        "get",
-        REQUEST_URL,
-        /** 首发失败，重放成功。 */ (_config, hit) => (hit === 1 ? failure(status) : {}),
-      );
+      h.net.on("get", REQUEST_URL, /** 首发失败，重放成功。 */ (_config, hit) => (hit === 1 ? failure(status) : {}));
       const result = await run(h);
       if (reason) expect(result).toMatchObject({ kind: "auth", reason, status });
-      else if (action === AuthFailureAction.Others)
-        expect(result).toMatchObject({ ok: false, status });
+      else if (action === AuthFailureAction.Others) expect(result).toMatchObject({ ok: false, status });
       else expect(result.ok).toBe(true);
-      expect(onFailure).toHaveBeenCalledWith(
-        expect.objectContaining({ status }),
-        h.tm,
-        expect.objectContaining({ signal: expect.any(AbortSignal) }),
-      );
-      expect(h.settings.onRefresh).toHaveBeenCalledTimes(
-        action === AuthFailureAction.Refresh ? 1 : 0,
-      );
+      expect(onFailure).toHaveBeenCalledWith(expect.objectContaining({ status }), h.tm, expect.objectContaining({ signal: expect.any(AbortSignal) }));
+      expect(h.settings.onRefresh).toHaveBeenCalledTimes(action === AuthFailureAction.Refresh ? 1 : 0);
     },
   );
 
@@ -406,11 +343,7 @@ describe("插件生命周期", () => {
     expect(h.api.inspect()).not.toContainEqual(expect.objectContaining({ name: AUTH_NAME }));
     h.tm.clear();
     const seen: unknown[] = [];
-    h.net.on(
-      "get",
-      REQUEST_URL,
-      /** 记录凭证头。 */ (config) => void seen.push(authHeader(config)),
-    );
+    h.net.on("get", REQUEST_URL, /** 记录凭证头。 */ (config) => void seen.push(authHeader(config)));
     expect((await run(h, { protected: true })).ok).toBe(true);
     expect(seen).toEqual([undefined]);
     expect(h.settings.onAccessDenied).not.toHaveBeenCalled();
@@ -420,11 +353,7 @@ describe("插件生命周期", () => {
 
   it("[auth.method.cleanup] eject 之后请求不再注入、也不走 401 路由；重名安装被拒绝", /** 卸载即停止所有行为。 */ async () => {
     const h = authClient();
-    expect(() =>
-      h.api.use(
-        axpAuth({ tokenManager: memoryTokens(), onRefresh: () => true, onAccessExpired: () => {} }),
-      ),
-    ).toThrow("Duplicate plugin");
+    expect(() => h.api.use(axpAuth({ tokenManager: memoryTokens(), onRefresh: () => true, onAccessExpired: () => {} }))).toThrow("Duplicate plugin");
     expect(h.api.eject(AUTH_NAME)).toBe(true);
     expect(h.api.eject(AUTH_NAME)).toBe(false);
     h.net.on("get", REQUEST_URL, () => failure(401));

@@ -22,11 +22,7 @@ it("[filter.fn.axpFilter][filter.req.filter] 装上即生效，布尔和对象�
     const config = Object.freeze({ params: SOURCE, data: SOURCE, filter });
     const r = await api.request({ ...config, throws: false });
     expect(r.request.filter).toEqual(filter);
-    expect(r.request.params).toEqual(
-      filter === false || (typeof filter === "object" && filter?.enable === false)
-        ? SOURCE
-        : { zero: 0, bool: false, nested: SOURCE.nested },
-    );
+    expect(r.request.params).toEqual(filter === false || (typeof filter === "object" && filter?.enable === false) ? SOURCE : { zero: 0, bool: false, nested: SOURCE.nested });
     expect(r.request.data).toEqual(r.request.params);
     expect(config.params).toBe(SOURCE);
   }
@@ -36,9 +32,7 @@ it("[filter.fn.axpFilter][filter.req.filter] 装上即生效，布尔和对象�
 });
 it("[filter.req.predicate][filter.req.ignoreKeys][filter.req.ignoreValues] 字段覆盖插件配置，空数组清空豁免", /** 请求覆盖和 nullish 继承。 */ async () => {
   const predicate = vi.fn<TPredicate>(/** 默认把全部字段视为可丢弃。 */ () => true);
-  const { api } = preparedClient([
-    axpFilter<AxpResponse>({ predicate, ignoreKeys: ["keep"], ignoreValues: [NaN] }),
-  ]);
+  const { api } = preparedClient([axpFilter<AxpResponse>({ predicate, ignoreKeys: ["keep"], ignoreValues: [NaN] })]);
   const params = { keep: null, nan: NaN, zero: 0 };
   const configs = [
     { filter: {}, expected: { keep: null, nan: NaN } },

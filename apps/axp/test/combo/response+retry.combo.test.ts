@@ -46,10 +46,7 @@ function coded(code: string, trace: string) {
 
 it("[retry.opt.statusCodes][retry.business.retryAfter] business 失败（HTTP 200 + 业务码 500）由 retry 先处理：重试恢复后调用方直接拿到数据，不会先抛失败", /** D3：retry 先于落定看到 R。 */ async () => {
   const h = b3Client([axpRetry<DefaultResponse>({ max: 2, delay: RETRY_WAIT })]);
-  h.net.fallback(
-    /** 前两次业务失败，第三次成功。 */ (_config, hit) =>
-      hit < 3 ? failure(500, true) : { data: { code: 0, data: "payload" } },
-  );
+  h.net.fallback(/** 前两次业务失败，第三次成功。 */ (_config, hit) => (hit < 3 ? failure(500, true) : { data: { code: 0, data: "payload" } }));
   const pending = h.api.request({ url: REQUEST_URL });
   await vi.runAllTimersAsync();
   expect(await pending).toBe("payload");
@@ -71,10 +68,7 @@ it("[retry.opt.statusCodes][retry.cb.shouldRetry] 自定义 R 的逻辑状态驱
     ],
     bizOptions(),
   );
-  h.net.fallback(
-    /** 首次繁忙，其后成功。 */ (_config, hit) =>
-      hit === 1 ? coded("BUSY", "t-busy") : { data: { code: 0, data: "ok" } },
-  );
+  h.net.fallback(/** 首次繁忙，其后成功。 */ (_config, hit) => (hit === 1 ? coded("BUSY", "t-busy") : { data: { code: 0, data: "ok" } }));
   const result = await run(h);
   expect(result.ok).toBe(true);
   expect(h.net.totalStarted).toBe(2);
@@ -84,12 +78,7 @@ it("[retry.opt.statusCodes][retry.cb.shouldRetry] 自定义 R 的逻辑状态驱
 
 it("[auth.cb.onRefresh][auth.reason.expired] 自定义 R 的逻辑状态驱动鉴权：业务码 TOKEN_EXPIRED 映射为 401 → 刷新后重放成功；刷新失败时落定的 auth 响应仍是自定义 R，且保留追踪标识", /** 合成响应经工厂，扩展字段不丢。 */ async () => {
   const refreshed = authClient({}, [], bizOptions());
-  refreshed.net.on(
-    "get",
-    REQUEST_URL,
-    /** 旧 token 得到过期码，新 token 成功。 */ (config) =>
-      config.headers.get("Authorization") === TOKEN_NEW ? {} : coded("TOKEN_EXPIRED", "t-401"),
-  );
+  refreshed.net.on("get", REQUEST_URL, /** 旧 token 得到过期码，新 token 成功。 */ (config) => (config.headers.get("Authorization") === TOKEN_NEW ? {} : coded("TOKEN_EXPIRED", "t-401")));
   expect((await run(refreshed)).ok).toBe(true);
   expect(refreshed.settings.onRefresh).toHaveBeenCalledTimes(1);
 
@@ -123,11 +112,7 @@ it("[auth.reason.unauthenticated][retry.priority.kind] 无 from 的合成响应�
   expect(local).toBeInstanceOf(BizResponse);
   expect(local).toMatchObject({ kind: "auth", reason: "unauthenticated", traceId: "" });
 
-  const waiting = authClient(
-    {},
-    [axpRetry<DefaultResponse>({ max: 1, delay: RETRY_WAIT })],
-    bizOptions(),
-  );
+  const waiting = authClient({}, [axpRetry<DefaultResponse>({ max: 1, delay: RETRY_WAIT })], bizOptions());
   waiting.net.fallback(/** 可重试失败。 */ () => failure(500));
   const pending = waiting.send({ url: REQUEST_URL });
   await vi.advanceTimersByTimeAsync(RETRY_WAIT / 2);

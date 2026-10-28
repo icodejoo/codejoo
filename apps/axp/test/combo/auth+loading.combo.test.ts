@@ -2,16 +2,7 @@ import { AxiosError } from "axios";
 import { beforeEach, expect, it, vi } from "vitest";
 import axpLoading from "../../src/plugins/loading";
 import type { AxpResponse } from "../../src/response";
-import {
-  authClient,
-  deferred,
-  failure,
-  guarded,
-  REFRESH_TOKEN,
-  REQUEST_URL,
-  run,
-  TOKEN_NEW,
-} from "../helpers/b3";
+import { authClient, deferred, failure, guarded, REFRESH_TOKEN, REQUEST_URL, run, TOKEN_NEW } from "../helpers/b3";
 import { loadingRecorder } from "../helpers/ui";
 
 /** 默认回调的事件标签。 */

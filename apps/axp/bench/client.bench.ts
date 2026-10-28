@@ -102,13 +102,7 @@ async function hit(): Promise<void> {
 }
 /** 启动一百个同 key 的 start 共享请求，等整组落定。 */
 async function concurrent(): Promise<void> {
-  await Promise.all(
-    Array.from(
-      { length: CONCURRENCY },
-      /** 每个订阅者使用相同的显式 key。 */ () =>
-        shared.get(BENCH_URL)(undefined, { key: SHARE_KEY, share: true }),
-    ),
-  );
+  await Promise.all(Array.from({ length: CONCURRENCY }, /** 每个订阅者使用相同的显式 key。 */ () => shared.get(BENCH_URL)(undefined, { key: SHARE_KEY, share: true })));
 }
 
 /** 取出信封解包后的业务值。 */
@@ -124,8 +118,7 @@ async function verify(): Promise<void> {
     sends = INITIAL_SENDS;
     // oxlint-disable-next-line no-await-in-loop -- 发送计数按场景核对，必须串行。
     const result = businessValue(await api.get(BENCH_URL)());
-    if (sends !== SENDS_PER_SCENARIO || result !== VALUE || api.inspect().length !== count)
-      throw new Error(`B2 基准路径自检失败：${count} 层`);
+    if (sends !== SENDS_PER_SCENARIO || result !== VALUE || api.inspect().length !== count) throw new Error(`B2 基准路径自检失败：${count} 层`);
   }
   // B4：预先填充后再次请求不得触网。
   await hit();

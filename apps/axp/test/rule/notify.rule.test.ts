@@ -42,13 +42,7 @@ it("[notify.req.notify][notify.req.silent] 请求关闭与 silent 默认静默�
   const notify = vi.fn(notifyRecorder(h.events));
   h.api.use(axpNotify<AxpResponse>({ notify }));
   h.net.fallback(/** 失败供静默规则判断。 */ () => ({ status: 500 }));
-  for (const config of [
-    { notify: false },
-    { notify: { enable: false } },
-    { silent: true },
-    { notify: null },
-    {},
-  ]) {
+  for (const config of [{ notify: false }, { notify: { enable: false } }, { silent: true }, { notify: null }, {}]) {
     const pending = h.send(config);
     await vi.runAllTimersAsync();
     const response = await pending;
@@ -87,11 +81,7 @@ it("[notify.cb.stringify] 自定义收到 r 和 ctx，可为成功生成消息�
 });
 
 it("[notify.cb.network] 无 HTTP 响应时 r.status 为零且仍传给 stringify", /** 网络异常归一化。 */ async () => {
-  const h = uiClient(
-    [],
-    {},
-    /** 标准网络错误。 */ () => Promise.reject(new AxiosError("offline", "ERR_NETWORK")),
-  );
+  const h = uiClient([], {}, /** 标准网络错误。 */ () => Promise.reject(new AxiosError("offline", "ERR_NETWORK")));
   const notify = vi.fn(notifyRecorder(h.events));
   const stringify = vi.fn(/** 从统一响应生成网络消息。 */ (r) => `${r.kind} ${r.status}`);
   h.api.use(axpNotify<AxpResponse>({ notify, stringify }));

@@ -1,11 +1,11 @@
-import path from 'node:path';
-import { fileURLToPath } from 'node:url';
-import { defineConfig } from 'vitest/config';
+import path from "node:path";
+import { fileURLToPath } from "node:url";
+import { defineConfig } from "vitest/config";
 
 /** accept/ 目录 */
 const ACCEPT_DIR = path.dirname(fileURLToPath(import.meta.url));
 /** 被测打包产物入口：验收对象是 dist/esm，而不是 src */
-const DIST_ENTRY = path.resolve(ACCEPT_DIR, '..', 'dist', 'esm', 'index.mjs');
+const DIST_ENTRY = path.resolve(ACCEPT_DIR, "..", "dist", "esm", "index.mjs");
 
 /**
  * 验收执行器自己的单元测试配置，与根目录 vitest.config.ts（测 src）完全分开。
@@ -14,10 +14,10 @@ const DIST_ENTRY = path.resolve(ACCEPT_DIR, '..', 'dist', 'esm', 'index.mjs');
  */
 export default defineConfig({
   root: ACCEPT_DIR,
-  resolve: { alias: { '@codejoo/axp': DIST_ENTRY } },
+  resolve: { alias: { "@codejoo/axp": DIST_ENTRY } },
   test: {
-    include: ['unit/**/*.test.ts'],
+    include: ["unit/**/*.test.ts"],
     disableConsoleIntercept: true,
-    reporters: ['verbose'],
+    reporters: ["verbose"],
   },
 });

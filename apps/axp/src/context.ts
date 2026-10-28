@@ -24,10 +24,7 @@ export function stateKey<T>(description: string): AxpStateKey<T> {
 }
 
 /** 复制可枚举头字段，保留 undefined 删除指令和 false 禁用值。 */
-function mergeHeaders(
-  base: AxpRequestConfig["headers"],
-  patch: AxpRequestConfig["headers"],
-): Record<string, unknown> {
+function mergeHeaders(base: AxpRequestConfig["headers"], patch: AxpRequestConfig["headers"]): Record<string, unknown> {
   const headers: Record<string, unknown> = { ...base };
   const updates: Record<string, unknown> = { ...patch };
   for (const name of Object.keys(updates)) {
@@ -47,19 +44,12 @@ function mergeHeaders(
  * @returns 新请求视图，不修改输入。
  * @example `mergePatch(request, { timeout: undefined, headers: { Authorization: 'token' } })`
  */
-export function mergePatch(
-  request: Readonly<AxpRequestConfig>,
-  patch: AxpRequestPatch,
-): AxpRequestConfig {
+export function mergePatch(request: Readonly<AxpRequestConfig>, patch: AxpRequestPatch): AxpRequestConfig {
   const merged = { ...request } as Record<string, unknown>;
   for (const key of Object.keys(patch)) {
     const value = (patch as Record<string, unknown>)[key];
     if (value === undefined) delete merged[key];
-    else
-      merged[key] =
-        key === "headers"
-          ? mergeHeaders(request.headers, value as AxpRequestConfig["headers"])
-          : value;
+    else merged[key] = key === "headers" ? mergeHeaders(request.headers, value as AxpRequestConfig["headers"]) : value;
   }
   return merged as AxpRequestConfig;
 }
@@ -124,11 +114,7 @@ export class AxpContext<R extends IAxpResponse = IAxpResponse> {
    * @param patch 派生本层的补丁，用于记录传输差量。
    * @example `new AxpContext({ id, client, request, signal, log, factory })`
    */
-  constructor(
-    init: IAxpContextInit<R> | AxpContext<R>,
-    request = init.request,
-    patch?: AxpRequestPatch,
-  ) {
+  constructor(init: IAxpContextInit<R> | AxpContext<R>, request = init.request, patch?: AxpRequestPatch) {
     this.id = init.id;
     this.client = init.client;
     this.request = request;
@@ -215,10 +201,6 @@ export class AxpContext<R extends IAxpResponse = IAxpResponse> {
  * @returns request 独立、状态共享的 AxpContext 实例。
  * @example `requestContext(ctx, mergePatch(ctx.request, patch))`
  */
-export function requestContext<R extends IAxpResponse>(
-  context: AxpContext<R>,
-  request: Readonly<AxpRequestConfig>,
-  patch: AxpRequestPatch = request,
-): AxpContext<R> {
+export function requestContext<R extends IAxpResponse>(context: AxpContext<R>, request: Readonly<AxpRequestConfig>, patch: AxpRequestPatch = request): AxpContext<R> {
   return new AxpContext(context, request, patch);
 }

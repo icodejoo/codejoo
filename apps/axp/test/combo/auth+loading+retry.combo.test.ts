@@ -2,15 +2,7 @@ import { beforeEach, expect, it, vi } from "vitest";
 import axpLoading from "../../src/plugins/loading";
 import axpRetry from "../../src/plugins/retry";
 import type { AxpResponse } from "../../src/response";
-import {
-  authClient,
-  deferred,
-  failure,
-  guarded,
-  REFRESH_TOKEN,
-  REQUEST_URL,
-  TOKEN_NEW,
-} from "../helpers/b3";
+import { authClient, deferred, failure, guarded, REFRESH_TOKEN, REQUEST_URL, TOKEN_NEW } from "../helpers/b3";
 import { loadingRecorder } from "../helpers/ui";
 
 /** 默认回调的事件标签。 */
@@ -35,12 +27,7 @@ it("[loading.cb.loading][auth.cb.onRefresh][retry.opt.max] 500 → 重试等待 
   );
   h.api.use(axpLoading<AxpResponse>({ loading: loadingRecorder(h.events) }));
   const route = guarded(() => TOKEN_NEW);
-  h.net.on(
-    "get",
-    REQUEST_URL,
-    /** 首发 500，其后按 token 放行。 */ (config, hit) =>
-      hit === 1 ? failure(500) : route(config, hit),
-  );
+  h.net.on("get", REQUEST_URL, /** 首发 500，其后按 token 放行。 */ (config, hit) => (hit === 1 ? failure(500) : route(config, hit)));
   const pending = h.send({ url: REQUEST_URL });
   await vi.advanceTimersByTimeAsync(RETRY_WAIT / 2);
   expect(h.events.loading.get(LOADING_LABEL)).toEqual([true]);

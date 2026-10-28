@@ -3,14 +3,7 @@ import { BODY_METHODS, isBodyMethod, NO_BODY_METHODS } from "../../src/methods";
 
 it("请求体方法与查询参数方法互斥，合计覆盖 axios 的十个小写方法", /** 两组方法不重叠，合起来正好十个。 */ () => {
   expect([...BODY_METHODS].toSorted()).toEqual(["delete", "patch", "post", "put"]);
-  expect([...NO_BODY_METHODS].toSorted()).toEqual([
-    "get",
-    "head",
-    "link",
-    "options",
-    "purge",
-    "unlink",
-  ]);
+  expect([...NO_BODY_METHODS].toSorted()).toEqual(["get", "head", "link", "options", "purge", "unlink"]);
   expect(new Set([...BODY_METHODS, ...NO_BODY_METHODS]).size).toBe(10);
 });
 it("isBodyMethod 只认请求体方法的小写名称", /** 判定只针对规范化后的小写方法名。 */ () => {

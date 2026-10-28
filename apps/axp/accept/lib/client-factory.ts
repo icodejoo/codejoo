@@ -1,5 +1,5 @@
-import axios, { AxiosError } from 'axios';
-import type { AxiosInstance, AxiosResponse } from 'axios';
+import axios, { AxiosError } from "axios";
+import type { AxiosInstance, AxiosResponse } from "axios";
 import {
   ACCESS_DENIED_CODE,
   Axp,
@@ -21,14 +21,14 @@ import {
   axpShare,
   cancelAll,
   clearCache,
-} from '@codejoo/axp';
-import type { AxpPlugins } from '@codejoo/axp';
-import { classifyError, PARSE_MARK } from './classify.ts';
-import { HEADER_RUN, HEADER_STYLE, MOCK_PREFIX, DEFAULT_RETRY_METHODS, DEFAULT_RETRY_STATUSES, DEFAULT_CACHE_METHODS } from './constants.ts';
-import type { AdapterName, Style } from './constants.ts';
-import { authUrlPatterns, effectiveRetryStatuses, lowerMethods, mapRequestOptions } from './mapping.ts';
-import type { TokenStore } from './tokens.ts';
-import type { PluginConfigs, RequestSpec } from './types.ts';
+} from "@codejoo/axp";
+import type { AxpPlugins } from "@codejoo/axp";
+import { classifyError, PARSE_MARK } from "./classify.ts";
+import { HEADER_RUN, HEADER_STYLE, MOCK_PREFIX, DEFAULT_RETRY_METHODS, DEFAULT_RETRY_STATUSES, DEFAULT_CACHE_METHODS } from "./constants.ts";
+import type { AdapterName, Style } from "./constants.ts";
+import { authUrlPatterns, effectiveRetryStatuses, lowerMethods, mapRequestOptions } from "./mapping.ts";
+import type { TokenStore } from "./tokens.ts";
+import type { PluginConfigs, RequestSpec } from "./types.ts";
 
 /** 被测客户端向执行器上报事件用的回调集合 */
 export interface ClientHooks {
@@ -80,21 +80,21 @@ export interface ClientHandle {
 }
 
 /** 带 body 的方法 */
-const BODY_METHODS = new Set(['post', 'put', 'patch', 'delete']);
+const BODY_METHODS = new Set(["post", "put", "patch", "delete"]);
 /** 刷新接口路径 */
-const REFRESH_PATH = '/t/auth/refresh';
+const REFRESH_PATH = "/t/auth/refresh";
 /** 业务失败也以 HTTP 200 送达，retry 读取 Retry-After 时需要把 200 也算进去 */
 const RETRY_AFTER_STATUSES = [200, 413, 429, 503];
 
 /** 读取请求标签 */
 function reqTagOf(config: unknown): string | undefined {
   const t = (config as { tkReq?: unknown } | undefined)?.tkReq;
-  return typeof t === 'string' ? t : undefined;
+  return typeof t === "string" ? t : undefined;
 }
 
 /** 响应体 envelope 的 code */
 function bodyCode(data: unknown): unknown {
-  return data && typeof data === 'object' ? (data as { code?: unknown }).code : undefined;
+  return data && typeof data === "object" ? (data as { code?: unknown }).code : undefined;
 }
 
 /**
@@ -105,7 +105,7 @@ function bodyCode(data: unknown): unknown {
  */
 export function logicalStatus(status: number, data: unknown): number {
   const code = bodyCode(data);
-  if (status >= 200 && status < 300 && typeof code === 'number' && code !== 0) return code;
+  if (status >= 200 && status < 300 && typeof code === "number" && code !== 0) return code;
   return status;
 }
 
@@ -114,9 +114,9 @@ export function logicalStatus(status: number, data: unknown): number {
  * @param body 响应体
  */
 export function reasonOf(body: unknown): string | undefined {
-  const d = body && typeof body === 'object' ? (body as { data?: unknown }).data : undefined;
-  const r = d && typeof d === 'object' ? (d as { reason?: unknown }).reason : undefined;
-  return typeof r === 'string' ? r : undefined;
+  const d = body && typeof body === "object" ? (body as { data?: unknown }).data : undefined;
+  const r = d && typeof d === "object" ? (d as { reason?: unknown }).reason : undefined;
+  return typeof r === "string" ? r : undefined;
 }
 
 /**
@@ -132,11 +132,11 @@ export function makeOnFailure(tm: TokenStore, hooks: ClientHooks) {
   const base = authFailureFactory();
   return (_tm: unknown, resp: AxiosResponse): string => {
     const logical = logicalStatus(resp.status, resp.data);
-    if (logical === 403) return 'deny';
-    if (logical !== 401) return 'others';
-    if (reasonOf(resp.data) === 'missing' && !tm.refreshToken) {
+    if (logical === 403) return "deny";
+    if (logical !== 401) return "others";
+    if (reasonOf(resp.data) === "missing" && !tm.refreshToken) {
       hooks.unauthenticated(reqTagOf(resp.config));
-      return 'others';
+      return "others";
     }
     return base(tm, { status: 401, config: resp.config });
   };
@@ -151,12 +151,12 @@ export function makeOnFailure(tm: TokenStore, hooks: ClientHooks) {
 export function makeShouldRetry(defaultStatuses: number[]) {
   return (response?: AxiosResponse, err?: AxiosError): boolean => {
     const cfg = (response?.config ?? err?.config) as { retry?: unknown } | undefined;
-    const reqLevel = cfg && typeof cfg.retry === 'object' && cfg.retry ? (cfg.retry as { statusCodes?: number[] }).statusCodes : undefined;
+    const reqLevel = cfg && typeof cfg.retry === "object" && cfg.retry ? (cfg.retry as { statusCodes?: number[] }).statusCodes : undefined;
     const statuses = effectiveRetryStatuses(reqLevel, defaultStatuses);
     if (response) return statuses.includes(logicalStatus(response.status, response.data));
     if (err?.response) return statuses.includes(err.response.status);
     const kind = classifyError(err);
-    return kind === 'network' || kind === 'timeout';
+    return kind === "network" || kind === "timeout";
   };
 }
 
@@ -170,12 +170,12 @@ export function makeShouldRetry(defaultStatuses: number[]) {
  */
 export function notifyText(data: unknown, message: string, status: number, config: unknown): string {
   const cfg = config as { silent?: boolean; signal?: { aborted?: boolean } } | undefined;
-  if (cfg?.silent === true || cfg?.signal?.aborted === true) return '';
-  if (!status) return message || 'request failed';
+  if (cfg?.silent === true || cfg?.signal?.aborted === true) return "";
+  if (!status) return message || "request failed";
   const code = bodyCode(data);
   if (status >= 400) return message || `HTTP ${status}`;
-  if (typeof code === 'number' && code !== 0) return message || `code ${code}`;
-  return '';
+  if (typeof code === "number" && code !== 0) return message || `code ${code}`;
+  return "";
 }
 
 /**
@@ -185,10 +185,14 @@ export function notifyText(data: unknown, message: string, status: number, confi
 export function makeShouldCache(methods: string[]) {
   const allow = new Set(methods.map((m) => m.toUpperCase()));
   return (res: AxiosResponse): boolean => {
-    if (!allow.has(String(res.config?.method ?? 'get').toUpperCase())) return false;
+    if (!allow.has(String(res.config?.method ?? "get").toUpperCase())) return false;
     let body: unknown = res.data;
-    if (typeof body === 'string' && body.trim().startsWith('{')) {
-      try { body = JSON.parse(body); } catch { /* 非 JSON 当普通文本 */ }
+    if (typeof body === "string" && body.trim().startsWith("{")) {
+      try {
+        body = JSON.parse(body);
+      } catch {
+        /* 非 JSON 当普通文本 */
+      }
     }
     return AxpResponse.fromResponse({ status: res.status, data: body }).successful;
   };
@@ -204,12 +208,12 @@ export function makeShouldCache(methods: string[]) {
  * @param status HTTP 状态码
  */
 export function parseGuard(this: unknown, data: unknown, headers: unknown, status?: number): unknown {
-  if (typeof status === 'number' && status >= 400) return data;
-  if (typeof data !== 'string' || data.trim() === '') return data;
+  if (typeof status === "number" && status >= 400) return data;
+  if (typeof data !== "string" || data.trim() === "") return data;
   const h = headers as { get?: (k: string) => unknown; [k: string]: unknown } | undefined;
-  const ct = String((typeof h?.get === 'function' ? h.get('content-type') : h?.['content-type']) ?? '');
+  const ct = String((typeof h?.get === "function" ? h.get("content-type") : h?.["content-type"]) ?? "");
   if (!/json|html/i.test(ct)) return data;
-  const err = new AxiosError('response body is not valid JSON', AxiosError.ERR_BAD_RESPONSE, this as never);
+  const err = new AxiosError("response body is not valid JSON", AxiosError.ERR_BAD_RESPONSE, this as never);
   (err as unknown as Record<string, unknown>)[PARSE_MARK] = true;
   throw err;
 }
@@ -228,11 +232,15 @@ function buildAuth(opts: ClientOptions, cfg: Record<string, unknown>, getBase: (
       if (!refresh) return false;
       hooks.refresh();
       try {
-        const res = await bare.post(REFRESH_PATH, { refresh_token: refresh }, {
-          baseURL: getBase(),
-          params: refreshQuery,
-          headers: { [HEADER_RUN]: opts.runId, [HEADER_STYLE]: opts.getStyle() },
-        });
+        const res = await bare.post(
+          REFRESH_PATH,
+          { refresh_token: refresh },
+          {
+            baseURL: getBase(),
+            params: refreshQuery,
+            headers: { [HEADER_RUN]: opts.runId, [HEADER_STYLE]: opts.getStyle() },
+          },
+        );
         const body = res.data as { code?: unknown; data?: { access_token?: string; refresh_token?: string } } | undefined;
         if (body?.code !== 0 || !body.data?.access_token) return false;
         tokens.set(body.data.access_token, body.data.refresh_token);
@@ -271,7 +279,7 @@ export function createClient(opts: ClientOptions): ClientHandle {
   if (p.auth) slots.auth = buildAuth(opts, p.auth, () => baseURL);
   if (p.key) {
     const scope = (p.key as { scope?: string }).scope;
-    slots.key = axpKey(scope === 'user' ? { scope: () => opts.tokens.user } : {});
+    slots.key = axpKey(scope === "user" ? { scope: () => opts.tokens.user } : {});
   }
   if (p.filter) slots.filter = axpFilter({});
   if (p.repath) slots.repath = axpRepath({});
@@ -299,7 +307,7 @@ export function createClient(opts: ClientOptions): ClientHandle {
       shouldCache: makeShouldCache(c.methods ?? [...DEFAULT_CACHE_METHODS]),
     });
   }
-  if (p.share) slots.share = axpShare({ policy: (p.share as { policy?: 'start' | 'end' | 'race' }).policy });
+  if (p.share) slots.share = axpShare({ policy: (p.share as { policy?: "start" | "end" | "race" }).policy });
   if (p.mock) {
     const fb = (p.mock as { fallback_on_404?: boolean }).fallback_on_404;
     slots.mock = axpMock({
@@ -328,7 +336,7 @@ export function createClient(opts: ClientOptions): ClientHandle {
   return {
     axios: instance,
     send(spec, extra) {
-      const method = (spec.method ?? 'GET').toLowerCase();
+      const method = (spec.method ?? "GET").toLowerCase();
       const config: Record<string, unknown> = {
         params: spec.query,
         headers: { [HEADER_RUN]: opts.runId, [HEADER_STYLE]: opts.getStyle(), ...spec.headers },

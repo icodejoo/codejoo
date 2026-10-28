@@ -41,21 +41,12 @@ function prepareOptions(options: IFilterOptions & typeof DEFAULTS) {
   };
 }
 /** 用已准备的集合过滤，每个字段至多分配一个共享元组。 */
-function filterFields(
-  source: Record<string, any>,
-  options: ReturnType<typeof prepareOptions>,
-  dropped?: TDroppedKV[],
-): Record<string, any> {
+function filterFields(source: Record<string, any>, options: ReturnType<typeof prepareOptions>, dropped?: TDroppedKV[]): Record<string, any> {
   const entries: TDroppedKV[] = [];
   for (const key of Object.keys(source)) {
     const value = source[key];
     let entry: TDroppedKV | undefined;
-    const drop =
-      !options.ignoreKeys.has(key) &&
-      !options.ignoreValues.has(value) &&
-      (options.predicate === defaultPredicate
-        ? isEmptyValue(value)
-        : options.predicate((entry = [key, value])) === true);
+    const drop = !options.ignoreKeys.has(key) && !options.ignoreValues.has(value) && (options.predicate === defaultPredicate ? isEmptyValue(value) : options.predicate((entry = [key, value])) === true);
     if (drop) {
       if (dropped) dropped.push(entry ?? [key, value]);
     } else entries.push(entry ?? [key, value]);
@@ -69,11 +60,7 @@ function filterFields(
  * @returns 新的顶层字典。
  * @example `$filter({ id: 0, name: '' }, { predicate: defaultPredicate }) // { id: 0 }`
  */
-export function $filter(
-  source: Record<string, any>,
-  options: IFilterOptions & typeof DEFAULTS,
-  dropped?: TDroppedKV[],
-): Record<string, any> {
+export function $filter(source: Record<string, any>, options: IFilterOptions & typeof DEFAULTS, dropped?: TDroppedKV[]): Record<string, any> {
   return filterFields(source, prepareOptions(options), dropped);
 }
 /** 装上即过滤纯对象的顶层字段，特殊请求体保持原引用。
@@ -81,9 +68,7 @@ export function $filter(
  * @returns 在 repath 之后以 patch 传递新对象的 prepare 插件。
  * @example `axpFilter({ ignoreKeys: ['nullable'] })`
  */
-export default function axpFilter<R extends IAxpResponse = AxpResponse>(
-  options: IFilterOptions = {},
-): AxpPlugin<R> {
+export default function axpFilter<R extends IAxpResponse = AxpResponse>(options: IFilterOptions = {}): AxpPlugin<R> {
   const base = resolveOption<IFilterOptions, typeof DEFAULTS>(undefined, options, DEFAULTS);
   base.ignoreKeys = base.ignoreKeys?.slice();
   base.ignoreValues = base.ignoreValues?.slice();

@@ -66,12 +66,9 @@ function client(notify: (message: string, response: AxpResponse) => unknown = ()
   const seen = {
     /** outer 段 onRequest 的进入次数。 */ outerRequests: 0,
     /** outer 段 onResponse 看到的响应。 */ outerResponses: [] as AxpResponse[],
-    /** prepare 前置 tap 看到的请求，在 repath 与 filter 之前。 */ prepareBefore:
-      [] as IRequestView[],
-    /** prepare 后置 tap 看到的请求，在 repath 与 filter 之后。 */ prepareAfter:
-      [] as IRequestView[],
-    /** credential 前置 tap 看到的请求，在 auth 注入之前。 */ credentialBefore:
-      [] as IRequestView[],
+    /** prepare 前置 tap 看到的请求，在 repath 与 filter 之前。 */ prepareBefore: [] as IRequestView[],
+    /** prepare 后置 tap 看到的请求，在 repath 与 filter 之后。 */ prepareAfter: [] as IRequestView[],
+    /** credential 前置 tap 看到的请求，在 auth 注入之前。 */ credentialBefore: [] as IRequestView[],
     /** credential 后置 tap 看到的请求，在 auth 注入之后。 */ credentialAfter: [] as IRequestView[],
   };
   const audit: AxpPlugin<AxpResponse> = {
@@ -146,9 +143,7 @@ function row(stage: AxpStage, name: string) {
 
 it("[core.method.inspect][core.opt.plugins] taps 各段与全部内置插件的顺序与 inspect() 一致：阶段固定，阶段内 pre、内置、post", /** 注册顺序打乱也不影响排序。 */ () => {
   const h = client();
-  expect(
-    h.api.inspect().filter(/** 去掉夹具自带的观测插件。 */ (item) => item.name !== OBSERVER),
-  ).toEqual([
+  expect(h.api.inspect().filter(/** 去掉夹具自带的观测插件。 */ (item) => item.name !== OBSERVER)).toEqual([
     row("outer", `${AUDIT}#1`),
     row("outer", NAME.loading),
     row("outer", NAME.notify),
@@ -169,12 +164,7 @@ it("[core.method.inspect][core.opt.plugins] taps 各段与全部内置插件的�
 
 it("[core.opt.plugins][retry.opt.max][auth.cb.onRefresh] 500 → 401 → 刷新 → 成功：outer 段只进出一次并看到最终响应，credential 前置段每次尝试一次且无凭证，后置段每次进入内层一次且带当次 token", /** 各 tap 的触发次数与内置插件的行为一一对应。 */ async () => {
   const h = client();
-  h.net.on(
-    "get",
-    RESOLVED_URL,
-    /** 第一次 500，第二次旧 token 得到 401，之后按新 token 放行。 */ (config, hit) =>
-      hit === 1 ? failure(500) : guarded(() => TOKEN_NEW)(config, hit),
-  );
+  h.net.on("get", RESOLVED_URL, /** 第一次 500，第二次旧 token 得到 401，之后按新 token 放行。 */ (config, hit) => (hit === 1 ? failure(500) : guarded(() => TOKEN_NEW)(config, hit)));
   const [result] = await settleAll(h.send({ url: TEMPLATE_URL, params: PARAMS }));
   expect(result!.ok).toBe(true);
   expect(h.net.totalStarted).toBe(3);
@@ -207,9 +197,7 @@ it("[core.opt.plugins][repath.fn.axpRepath][filter.fn.axpFilter] prepare 前置 
   expect(result!.ok).toBe(true);
   // 前置 tap 看到的是调用方原样的请求；它补上的 `tail: ""` 随后被 filter 剥离。
   expect(h.seen.prepareBefore).toEqual([{ url: TEMPLATE_URL, params: PARAMS, token: undefined }]);
-  expect(h.seen.prepareAfter).toEqual([
-    { url: RESOLVED_URL, params: SHAPED_PARAMS, token: undefined },
-  ]);
+  expect(h.seen.prepareAfter).toEqual([{ url: RESOLVED_URL, params: SHAPED_PARAMS, token: undefined }]);
   expect(result!.request.url).toBe(RESOLVED_URL);
 });
 

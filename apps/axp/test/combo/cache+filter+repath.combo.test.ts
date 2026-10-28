@@ -10,11 +10,7 @@ const URL = "/pet/{id}";
 
 /** 按 repath → filter → cache 装配；路由按路径返回命中序号。 */
 function client() {
-  const h = sourceClient([
-    axpCache<AxpResponse>(),
-    axpFilter<AxpResponse>(),
-    axpRepath<AxpResponse>(),
-  ]);
+  const h = sourceClient([axpCache<AxpResponse>(), axpFilter<AxpResponse>(), axpRepath<AxpResponse>()]);
   h.net.on("get", "/pet/1", (_config, hit) => envelope(`one-${hit}`));
   h.net.on("get", "/pet/2", (_config, hit) => envelope(`two-${hit}`));
   return h;

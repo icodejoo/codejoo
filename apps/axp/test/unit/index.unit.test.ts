@@ -65,13 +65,7 @@ import axpNotify from "../../src/plugins/notify";
 import axpRepath from "../../src/plugins/repath";
 import axpRetry from "../../src/plugins/retry";
 import axpShare from "../../src/plugins/share";
-import {
-  AXP_KINDS,
-  AXP_RESPONSE,
-  AxpResponse,
-  axpResponse,
-  isAxpResponse,
-} from "../../src/response";
+import { AXP_KINDS, AXP_RESPONSE, AxpResponse, axpResponse, isAxpResponse } from "../../src/response";
 import { stateKey } from "../../src/context";
 import TokenManager from "../../src/objects/TokenManager";
 
@@ -101,19 +95,7 @@ const PUBLIC_VALUES = [
   "stateKey",
 ];
 /** 已随洋葱管线删除、不得再从入口导出的旧名字。 */
-const REMOVED_NAMES = new Set([
-  "Axp",
-  "Core",
-  "ApiError",
-  "axpCancel",
-  "axpKey",
-  "axpLogger",
-  "axpNormalize",
-  "cancelAll",
-  "pluginLog",
-  "pluginWarn",
-  "pluginError",
-]);
+const REMOVED_NAMES = new Set(["Axp", "Core", "ApiError", "axpCancel", "axpKey", "axpLogger", "axpNormalize", "cancelAll", "pluginLog", "pluginWarn", "pluginError"]);
 /** 入口里各名字应与源文件是同一个引用。 */
 const IDENTITIES: Array<[keyof typeof entry, unknown]> = [
   ["createAxp", createAxpDirect],
@@ -234,13 +216,9 @@ it("[index.const.augmentation] 带 declare module 扩展的插件文件都由入
   const source = readFileSync(INDEX_SOURCE, "utf8");
   const augmenting = readdirSync(PLUGINS_DIR)
     .filter((file) => file.endsWith(".ts"))
-    .filter((file) =>
-      readFileSync(`${PLUGINS_DIR}${file}`, "utf8").includes('declare module "../types"'),
-    )
+    .filter((file) => readFileSync(`${PLUGINS_DIR}${file}`, "utf8").includes('declare module "../types"'))
     .map((file) => file.replace(/\.ts$/, ""));
-  expect(augmenting.toSorted()).toEqual(
-    ["auth", "cache", "filter", "loading", "mock", "notify", "repath", "retry", "share"].toSorted(),
-  );
+  expect(augmenting.toSorted()).toEqual(["auth", "cache", "filter", "loading", "mock", "notify", "repath", "retry", "share"].toSorted());
   for (const name of augmenting) expect(source).toContain(`from "./plugins/${name}"`);
 });
 
@@ -298,8 +276,6 @@ it("[index.type.exports] 入口的类型导出齐全，AuthFailureAction 同名�
     WithData<IAxpResponse, string>,
   ];
   expectTypeOf<Surface>().not.toBeNever();
-  expectTypeOf<entry.AuthFailureAction>().toEqualTypeOf<
-    "refresh" | "replay" | "deny" | "expired" | "others"
-  >();
+  expectTypeOf<entry.AuthFailureAction>().toEqualTypeOf<"refresh" | "replay" | "deny" | "expired" | "others">();
   expectTypeOf(entry.AuthFailureAction.Refresh).toEqualTypeOf<"refresh">();
 });

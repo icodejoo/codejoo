@@ -186,19 +186,19 @@ summary: 汇总旧测试逐声明去向、计数差异、删除机制和需终�
 
 40 条【存疑】按主题裁决如下，规格文档已同步；明细表里的【存疑】标记已改为指向本节。
 
-| 主题 | 行数 | 裁决 | 规格出处 |
-|---|---:|---|---|
-| 插件级 `enable` | 19 | 每个插件工厂都保留 `enable?: boolean`（默认 true，mock 默认 false）；`false` 时插件不进链、不 `setup`、`inspect()` 不列出；请求级开关不能重新打开 | plugin-spec §0 |
-| mock 请求级对象里的 `mock` 字段 | 5 | 改用通用写法：`false` 或 `{ enable: false }` 关闭，对象只保留 `mockUrl`、`fallbackWhen` | plugin-spec §0、§6.1 |
-| 请求级 `null` / `0` 等未声明值 | 1 | `null` 与 `undefined` 都按"省略"处理（回退插件级），其它未声明值类型上报错、运行时也按省略处理 | plugin-spec §0 |
-| cache `storage` / `memory` 预留选项 | 4 | 删除（旧版只有类型、工厂从不消费），持久化走 `store` 注入；这 4 行改为验证 `store` | plugin-spec §6.3 |
-| `removeCache` / `clearCache` 返回值 | 4 | 沿用旧契约：`removeCache(client, key): boolean`、`clearCache(client): number`；客户端没装 cache 时分别返回 `false` / `0` | plugin-spec §6.3 |
-| purge / link / unlink 动词 | 3 | **保留**：客户端提供 axios 全部 10 个小写动词，分派规则不变（delete/post/put/patch 走 data，其余走 params） | core-architecture §9 |
-| `nullable` 选项 | 2 | 删除（旧版只影响类型、运行时无效）；`data` 为 null/undefined 时原样返回的运行时语义保留 | core-architecture §9 |
-| loading 多回调配对 | 1 | 按回调各自计数：每个回调都看到成对的 true/false，不再出现"A 显示、B 隐藏" | plugin-spec §2.1 |
-| cache `max < 1` | 1 | 沿用旧行为，回退默认 500；不限容量用 `Infinity` | plugin-spec §6.3 |
-| 请求体克隆失败 | 1 | **不抛错**，沿用旧行为回退为原引用，debug 模式下打 warn；`structuredClone` 不存在时同样回退 | core-architecture §11 P4 |
-| retry 的 `delay` / `jitter` 回调抛错 | 1 | 归入判定类回调，按 bug 抛原始异常，同时清掉等待定时器 | core-architecture N13、plugin-spec §0 |
+| 主题                                 | 行数 | 裁决                                                                                                                                              | 规格出处                              |
+| ------------------------------------ | ---: | ------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------- |
+| 插件级 `enable`                      |   19 | 每个插件工厂都保留 `enable?: boolean`（默认 true，mock 默认 false）；`false` 时插件不进链、不 `setup`、`inspect()` 不列出；请求级开关不能重新打开 | plugin-spec §0                        |
+| mock 请求级对象里的 `mock` 字段      |    5 | 改用通用写法：`false` 或 `{ enable: false }` 关闭，对象只保留 `mockUrl`、`fallbackWhen`                                                           | plugin-spec §0、§6.1                  |
+| 请求级 `null` / `0` 等未声明值       |    1 | `null` 与 `undefined` 都按"省略"处理（回退插件级），其它未声明值类型上报错、运行时也按省略处理                                                    | plugin-spec §0                        |
+| cache `storage` / `memory` 预留选项  |    4 | 删除（旧版只有类型、工厂从不消费），持久化走 `store` 注入；这 4 行改为验证 `store`                                                                | plugin-spec §6.3                      |
+| `removeCache` / `clearCache` 返回值  |    4 | 沿用旧契约：`removeCache(client, key): boolean`、`clearCache(client): number`；客户端没装 cache 时分别返回 `false` / `0`                          | plugin-spec §6.3                      |
+| purge / link / unlink 动词           |    3 | **保留**：客户端提供 axios 全部 10 个小写动词，分派规则不变（delete/post/put/patch 走 data，其余走 params）                                       | core-architecture §9                  |
+| `nullable` 选项                      |    2 | 删除（旧版只影响类型、运行时无效）；`data` 为 null/undefined 时原样返回的运行时语义保留                                                           | core-architecture §9                  |
+| loading 多回调配对                   |    1 | 按回调各自计数：每个回调都看到成对的 true/false，不再出现"A 显示、B 隐藏"                                                                         | plugin-spec §2.1                      |
+| cache `max < 1`                      |    1 | 沿用旧行为，回退默认 500；不限容量用 `Infinity`                                                                                                   | plugin-spec §6.3                      |
+| 请求体克隆失败                       |    1 | **不抛错**，沿用旧行为回退为原引用，debug 模式下打 warn；`structuredClone` 不存在时同样回退                                                       | core-architecture §11 P4              |
+| retry 的 `delay` / `jitter` 回调抛错 |    1 | 归入判定类回调，按 bug 抛原始异常，同时清掉等待定时器                                                                                             | core-architecture N13、plugin-spec §0 |
 
 与 Codex 倾向不同的只有两处：purge/link/unlink 保留（Codex 倾向改用 `request`），克隆失败回退原引用（Codex 倾向抛错）。前者零成本且避免无谓破坏，后者沿用已验收的 R2-1 行为、不让含函数字段的请求体直接失败。
 

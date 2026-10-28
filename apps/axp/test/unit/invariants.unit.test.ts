@@ -36,11 +36,7 @@ function ctxOf(id: number, silent = false): AxpContext<AxpResponse> {
   return { id, request: { silent } } as unknown as AxpContext<AxpResponse>;
 }
 /** 与 notify 插件相同的调用序列：先 stringify，非空再 notify。 */
-function fire(
-  recorder: INotifyRecorder,
-  ctx: AxpContext<AxpResponse>,
-  response: AxpResponse,
-): void {
+function fire(recorder: INotifyRecorder, ctx: AxpContext<AxpResponse>, response: AxpResponse): void {
   const message = recorder.stringify(response, ctx);
   if (message) recorder.notify(message, response);
 }
@@ -62,10 +58,7 @@ function replay(first: unknown, second: unknown): AxpPlugin<AxpResponse> {
 const harnesses: IInvariantHarness[] = [];
 
 /** 创建夹具并登记回收。 */
-function harness(
-  plugins: readonly AxpPlugin<AxpResponse, any>[] = [],
-  config: IInvariantHarnessOptions<AxpResponse> = {},
-): IInvariantHarness {
+function harness(plugins: readonly AxpPlugin<AxpResponse, any>[] = [], config: IInvariantHarnessOptions<AxpResponse> = {}): IInvariantHarness {
   const h = createInvariantHarness(plugins, config);
   harnesses.push(h);
   return h;
@@ -90,9 +83,7 @@ describe("[invariants.fn.createInvariantHarness] 无故障时通过 I1–I7", ()
     expect(request.outcome).toBe("resolved");
     expect(h.chain.signals.size).toBe(1);
     expect(h.chain.calls.size).toBe(PROBE_COUNT);
-    expect(
-      [...h.chain.calls.values()].every(/** 每个位置恰好经手一次。 */ (count) => count === 1),
-    ).toBe(true);
+    expect([...h.chain.calls.values()].every(/** 每个位置恰好经手一次。 */ (count) => count === 1)).toBe(true);
     expect(h.sends.map(/** 取标识。 */ (send) => send.tag)).toEqual([request.tag]);
   });
   it("probes: false 时不挂探针", /** 需要核对 inspect 顺序的用例可关掉探针。 */ async () => {
@@ -208,9 +199,7 @@ describe("[invariants.fn.createNotifyRecorder] I4", () => {
     expect(recorder.stringify(new AxpResponse({ kind: AXP_KINDS.CANCEL }), ctxOf(1))).toBe("");
     expect(recorder.stringify(failure, ctxOf(1, true))).toBe("");
     expect(recorder.stringify(failure, ctxOf(1))).toBe("http 500");
-    expect(
-      recorder.stringify(new AxpResponse({ httpStatus: 500, message: "boom" }), ctxOf(1)),
-    ).toBe("boom");
+    expect(recorder.stringify(new AxpResponse({ httpStatus: 500, message: "boom" }), ctxOf(1))).toBe("boom");
   });
   it("接入真实 notify 插件：一个失败请求恰好记一次", /** 记录器与插件的调用顺序吻合。 */ async () => {
     const events = recordEvents();
@@ -271,9 +260,7 @@ describe("[invariants.fn.createChainProbe] I6", () => {
   it("next 拒绝时累加 rejectedNext，并以 internal 收口", /** 内核保证不会发生，这里直接给探针一个会拒绝的 next。 */ async () => {
     const events = recordEvents();
     const chain = createChainProbe(events);
-    const outermost = chain.plugins.find(
-      /** 找最外层探针。 */ (plugin) => plugin.name === OUTERMOST_PROBE,
-    )!;
+    const outermost = chain.plugins.find(/** 找最外层探针。 */ (plugin) => plugin.name === OUTERMOST_PROBE)!;
     const result = await outermost.handle!(stubCtx, () => Promise.reject(new Error("boom")));
     expect(result.kind).toBe(AXP_KINDS.INTERNAL);
     expect(events.rejectedNext).toBe(1);
@@ -282,9 +269,7 @@ describe("[invariants.fn.createChainProbe] I6", () => {
   it("next 同步抛错也算拒绝", /** 不是 Promise 的失败方式。 */ async () => {
     const events = recordEvents();
     const chain = createChainProbe(events);
-    const outermost = chain.plugins.find(
-      /** 找最外层探针。 */ (plugin) => plugin.name === OUTERMOST_PROBE,
-    )!;
+    const outermost = chain.plugins.find(/** 找最外层探针。 */ (plugin) => plugin.name === OUTERMOST_PROBE)!;
     await outermost.handle!(stubCtx, () => {
       throw new Error("sync");
     });

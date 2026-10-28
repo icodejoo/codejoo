@@ -10,10 +10,7 @@ export interface IKeyOptions {
   /** 超长字符串只采首、中、尾；默认全量。 */
   sample?: boolean;
   /** 会话分区；空值不附加。 */
-  scope?:
-    | string
-    | number
-    | ((request: Readonly<AxpRequestConfig>) => string | number | null | undefined | void);
+  scope?: string | number | ((request: Readonly<AxpRequestConfig>) => string | number | null | undefined | void);
 }
 /** 作用域分隔符。 */
 const SCOPE_SEPARATOR = "#";
@@ -26,10 +23,7 @@ const KEY_RADIX = 36;
  * @returns 显式 key、FNV 指纹或 null。
  * @example `requestKey({ method: 'get', url: '/pets', params: { page: 1 } })`
  */
-export function requestKey(
-  request: Readonly<AxpRequestConfig>,
-  options: IKeyOptions = {},
-): string | null {
+export function requestKey(request: Readonly<AxpRequestConfig>, options: IKeyOptions = {}): string | null {
   if (request.key === false) return null;
   let value: string;
   if (typeof request.key === "string") {
@@ -53,12 +47,7 @@ export function requestKey(
     }
   }
   const scope = typeof options.scope === "function" ? options.scope(request) : options.scope;
-  return scope === null ||
-    scope === undefined ||
-    scope === "" ||
-    (typeof scope === "number" && Number.isNaN(scope))
-    ? value
-    : value + SCOPE_SEPARATOR + String(scope);
+  return scope === null || scope === undefined || scope === "" || (typeof scope === "number" && Number.isNaN(scope)) ? value : value + SCOPE_SEPARATOR + String(scope);
 }
 
 /** FNV 每步混合使用的素数。 */

@@ -54,10 +54,7 @@ it("[core.req.headers] 顶层默认头按当前 defaults 掩码，已有头保�
         /** 不区分大小写地删除默认头。 */ headers: { "x-top": undefined, "x-late": undefined },
       }),
   };
-  const h = wireClient(
-    { /** 顶层默认头参与展平。 */ headers: { [TOP_HEADER]: "old", "X-Keep": "keep" } },
-    [patch],
-  );
+  const h = wireClient({ /** 顶层默认头参与展平。 */ headers: { [TOP_HEADER]: "old", "X-Keep": "keep" } }, [patch]);
   delete (h.axios.defaults.headers as Record<string, unknown>).get;
   await h.api.get(TEST_URL)();
   h.axios.defaults.headers[LATE_HEADER] = "new";
@@ -138,10 +135,7 @@ it("[repath.opt.pattern] 默认无变量路径直接透传，请求级正则使�
   };
   const { api } = preparedClient([axpRepath<AxpResponse>(), untouched]);
   const plain = TEST_URL + "?query={id}";
-  expect(
-    (await api.request({ /** 变量只在查询中。 */ url: plain, /** 不抛出。 */ throws: false }))
-      .request.url,
-  ).toBe(plain);
+  expect((await api.request({ /** 变量只在查询中。 */ url: plain, /** 不抛出。 */ throws: false })).request.url).toBe(plain);
   api.eject(untouched.name);
   const pattern = /\$([^/]+)/g;
   pattern.lastIndex = 2;

@@ -25,11 +25,7 @@ beforeEach(() => {
 });
 
 /** 装好 auth 与 share；服务端只认新 token。 */
-function client(
-  business = false,
-  overrides: Parameters<typeof authClient>[0] = {},
-  options: Parameters<typeof authClient>[2] = {},
-) {
+function client(business = false, overrides: Parameters<typeof authClient>[0] = {}, options: Parameters<typeof authClient>[2] = {}) {
   const h = authClient(overrides, [axpShare<AxpResponse>()], options);
   h.net.on(
     "get",
@@ -59,19 +55,14 @@ it.each([false, true])(
     expect(new Set(results).size).toBe(1);
     expect(h.settings.onRefresh).toHaveBeenCalledTimes(1);
     expect(h.net.totalStarted).toBe(ROUNDS_AFTER_REFRESH);
-    expect(h.net.log.map(/** 每次发送携带的凭证。 */ (record) => record.auth)).toEqual([
-      TOKEN_OLD,
-      TOKEN_NEW,
-    ]);
+    expect(h.net.log.map(/** 每次发送携带的凭证。 */ (record) => record.auth)).toEqual([TOKEN_OLD, TOKEN_NEW]);
   },
 );
 
 it("[auth.reason.expired × share.req.share] 刷新失败：所有跟随者共享同一次 401，一次刷新，落定为 auth 过期，过期通知只一次", /** 失败路径下刷新与通知同样单飞。 */ async () => {
   const h = client(false, { onRefresh: /** 刷新失败。 */ () => false });
   const results = await settleAll(...burst(h));
-  expect(results.map(/** 取类别与原因。 */ (r) => [r.kind, r.reason])).toEqual(
-    Array(CALLERS).fill([AXP_KINDS.AUTH, "expired"]),
-  );
+  expect(results.map(/** 取类别与原因。 */ (r) => [r.kind, r.reason])).toEqual(Array(CALLERS).fill([AXP_KINDS.AUTH, "expired"]));
   expect(h.net.totalStarted).toBe(1);
   expect(h.settings.onRefresh).toHaveBeenCalledTimes(1);
   expect(h.settings.onAccessExpired).toHaveBeenCalledTimes(1);
@@ -84,16 +75,12 @@ it("[auth.cb.onRefresh × share.req.share][core.opt.key] scope 不同的请求�
     {
       key: {
         /** 以租户请求头分区，模拟按账号或租户隔离。 */
-        scope: (request) =>
-          String(AxiosHeaders.from(request.headers as never).get(TENANT_HEADER) ?? ""),
+        scope: (request) => String(AxiosHeaders.from(request.headers as never).get(TENANT_HEADER) ?? ""),
       },
     },
   );
   const [a, b] = TENANTS;
-  const results = await settleAll(
-    ...burst(h, CALLERS_PER_TENANT, a),
-    ...burst(h, CALLERS_PER_TENANT, b),
-  );
+  const results = await settleAll(...burst(h, CALLERS_PER_TENANT, a), ...burst(h, CALLERS_PER_TENANT, b));
   expect(results.every(/** 全部成功。 */ (r) => r.ok)).toBe(true);
   const [a1, a2, b1, b2] = results;
   expect(a2).toBe(a1);
@@ -107,9 +94,7 @@ it("[auth.cb.onFailure × share.req.share] 越权 403 由所有跟随者共享�
   const h = client();
   h.net.on("get", REQUEST_URL, /** 一律越权。 */ () => failure(FORBIDDEN));
   const results = await settleAll(...burst(h));
-  expect(results.map(/** 取类别与原因。 */ (r) => [r.kind, r.reason])).toEqual(
-    Array(CALLERS).fill([AXP_KINDS.AUTH, "denied"]),
-  );
+  expect(results.map(/** 取类别与原因。 */ (r) => [r.kind, r.reason])).toEqual(Array(CALLERS).fill([AXP_KINDS.AUTH, "denied"]));
   expect(h.net.totalStarted).toBe(1);
   expect(h.settings.onRefresh).not.toHaveBeenCalled();
   expect(h.settings.onAccessDenied).toHaveBeenCalledTimes(CALLERS);

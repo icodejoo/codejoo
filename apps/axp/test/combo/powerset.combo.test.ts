@@ -14,12 +14,7 @@ import { isAxpResponse, type AxpKind, type AxpResponse } from "../../src/respons
 import type { AxpPlugin, AxpRequestConfig } from "../../src/types";
 import { guarded, memoryTokens, REFRESH_TOKEN, TOKEN_NEW } from "../helpers/b3";
 import type { ITestEvents } from "../helpers/client";
-import {
-  countRefresh,
-  createInvariantHarness,
-  createNotifyRecorder,
-  type IInvariantHarness,
-} from "../helpers/invariants";
+import { countRefresh, createInvariantHarness, createNotifyRecorder, type IInvariantHarness } from "../helpers/invariants";
 import type { RouteResult } from "../helpers/network";
 import { recordEvents } from "../helpers/client";
 import { loadingRecorder } from "../helpers/ui";
@@ -94,17 +89,7 @@ const HTTP_ERROR = 500;
 /** 用例标题统一前缀。 */
 const TITLE = "[combo.powerset]";
 /** 有中间件的内置插件，按插件表顺序；envs 只在装卸时执行、不进链，不在其中。 */
-const MIDDLEWARE_PLUGINS = [
-  "loading",
-  "notify",
-  "repath",
-  "filter",
-  "retry",
-  "auth",
-  "mock",
-  "share",
-  "cache",
-];
+const MIDDLEWARE_PLUGINS = ["loading", "notify", "repath", "filter", "retry", "auth", "mock", "share", "cache"];
 /** 九个插件的全部子集数（含空集与全集）。 */
 const SUBSET_COUNT = 512;
 
@@ -158,21 +143,11 @@ const PLUGINS: IPluginEntry[] = [
 function subsetsOf(table: readonly IPluginEntry[]): ISubset[] {
   const subsets: ISubset[] = [];
   for (let mask = 0; mask < 1 << table.length; mask++) {
-    const entries = table.filter(
-      /** 掩码的第 index 位为 1 才入选。 */ (_, index) => (mask & (1 << index)) !== 0,
-    );
+    const entries = table.filter(/** 掩码的第 index 位为 1 才入选。 */ (_, index) => (mask & (1 << index)) !== 0);
     const names = new Set(entries.map(/** 取短名。 */ (entry) => entry.name));
-    if (
-      entries.some(
-        /** 依赖没到齐的子集不生成。 */ (entry) =>
-          entry.needs?.some(/** 缺任一依赖即失败。 */ (need) => !names.has(need)),
-      )
-    )
-      continue;
+    if (entries.some(/** 依赖没到齐的子集不生成。 */ (entry) => entry.needs?.some(/** 缺任一依赖即失败。 */ (need) => !names.has(need)))) continue;
     subsets.push({
-      label: entries.length
-        ? entries.map(/** 取短名。 */ (entry) => entry.name).join("+")
-        : EMPTY_LABEL,
+      label: entries.length ? entries.map(/** 取短名。 */ (entry) => entry.name).join("+") : EMPTY_LABEL,
       entries,
     });
   }
@@ -184,12 +159,9 @@ function route(config: InternalAxiosRequestConfig, hit: number): RouteResult {
   const url = config.url ?? "";
   if (url.startsWith(MOCK_URL)) return { status: NOT_FOUND };
   if (url.startsWith(PATH.auth)) return authRoute(config, hit) ?? {};
-  if (url.startsWith(PATH.flaky) && hit <= FLAKY_FAILURES)
-    return { status: HTTP_ERROR, data: { code: HTTP_ERROR, message: "flaky", data: null } };
-  if (url.startsWith(PATH.http500))
-    return { status: HTTP_ERROR, data: { code: HTTP_ERROR, message: "boom", data: null } };
-  if (url.startsWith(PATH.offline))
-    throw new AxiosError("Network Error", AxiosError.ERR_NETWORK, config);
+  if (url.startsWith(PATH.flaky) && hit <= FLAKY_FAILURES) return { status: HTTP_ERROR, data: { code: HTTP_ERROR, message: "flaky", data: null } };
+  if (url.startsWith(PATH.http500)) return { status: HTTP_ERROR, data: { code: HTTP_ERROR, message: "boom", data: null } };
+  if (url.startsWith(PATH.offline)) throw new AxiosError("Network Error", AxiosError.ERR_NETWORK, config);
   return { status: 200, data: { code: 0, data: { url } } };
 }
 
@@ -227,10 +199,7 @@ const FLOWS: IFlow[] = [
     baseline: ["biz", "biz", "biz"],
     /** HTTP 200 + 业务码 401：装了 auth 时单飞刷新后重放；三个请求里两个同 key、一个不同，覆盖共享与单飞。 */
     async run(h) {
-      for (const params of AUTH_PARAMS)
-        h.launch(
-          withLatency({ url: PATH.auth, params, throws: false, ...SOURCE_OPTIONS }, LATENCY_SHORT),
-        );
+      for (const params of AUTH_PARAMS) h.launch(withLatency({ url: PATH.auth, params, throws: false, ...SOURCE_OPTIONS }, LATENCY_SHORT));
     },
   },
   {
@@ -246,13 +215,7 @@ const FLOWS: IFlow[] = [
     baseline: ["ok", "ok"],
     /** 两个请求参数完全相同、返回时间错开；装了 share、cache 时在此合并。 */
     async run(h) {
-      for (const latency of SAME_KEY_LATENCIES)
-        h.launch(
-          withLatency(
-            { url: PATH.same, params: { id: 1 }, throws: false, ...SOURCE_OPTIONS },
-            latency,
-          ),
-        );
+      for (const latency of SAME_KEY_LATENCIES) h.launch(withLatency({ url: PATH.same, params: { id: 1 }, throws: false, ...SOURCE_OPTIONS }, latency));
     },
   },
   {
@@ -261,12 +224,7 @@ const FLOWS: IFlow[] = [
     /** 一个带调用方 signal、一个不带，请求停在半途时 cancelAll。 */
     async run(h) {
       h.launch(withLatency({ url: PATH.slow, ...SOURCE_OPTIONS }, LATENCY_LONG));
-      h.launch(
-        withLatency(
-          { url: PATH.slow, signal: new AbortController().signal, ...SOURCE_OPTIONS },
-          LATENCY_LONG,
-        ),
-      );
+      h.launch(withLatency({ url: PATH.slow, signal: new AbortController().signal, ...SOURCE_OPTIONS }, LATENCY_LONG));
       await vi.advanceTimersByTimeAsync(CANCEL_AT);
       h.api.cancelAll("combo");
     },
@@ -277,12 +235,7 @@ const FLOWS: IFlow[] = [
     /** 同 key 的两个请求，首发在半途用自己的 signal 取消；装了 share 时跟随者不受连累。 */
     async run(h) {
       const leader = new AbortController();
-      h.launch(
-        withLatency(
-          { url: PATH.slow, signal: leader.signal, throws: false, ...SOURCE_OPTIONS },
-          LATENCY_LONG,
-        ),
-      );
+      h.launch(withLatency({ url: PATH.slow, signal: leader.signal, throws: false, ...SOURCE_OPTIONS }, LATENCY_LONG));
       h.launch(withLatency({ url: PATH.slow, throws: false, ...SOURCE_OPTIONS }, LATENCY_LONG));
       await vi.advanceTimersByTimeAsync(CANCEL_AT);
       leader.abort();
@@ -313,13 +266,9 @@ const FLOWS: IFlow[] = [
 /** 全部子集：插件表有 n 项且无 needs 时共 2^n 个。 */
 const SUBSETS = subsetsOf(PLUGINS);
 /** describe.each 的用例参数：标题用 %s 展开，避免对象插值给字符串加引号。 */
-const SUBSET_CASES = SUBSETS.map(
-  /** 转成 [子集名, 成员]。 */ (subset): [string, IPluginEntry[]] => [subset.label, subset.entries],
-);
+const SUBSET_CASES = SUBSETS.map(/** 转成 [子集名, 成员]。 */ (subset): [string, IPluginEntry[]] => [subset.label, subset.entries]);
 /** it.each 的用例参数：[流程名, 流程]。 */
-const FLOW_CASES = FLOWS.map(
-  /** 转成 [流程名, 流程]。 */ (flow): [string, IFlow] => [flow.name, flow],
-);
+const FLOW_CASES = FLOWS.map(/** 转成 [流程名, 流程]。 */ (flow): [string, IFlow] => [flow.name, flow]);
 
 /** 在假时钟上跑一个流程，排空后检查 I1–I7。
  * @param entries 本次安装的插件表项。
@@ -337,10 +286,7 @@ async function runFlow(entries: readonly IPluginEntry[], flow: IFlow): Promise<s
     await flow.run(h);
     await h.drain();
     h.assertAll();
-    return h.requests.map(
-      /** 落定值不是响应时标成 raw，说明有 bug 被抛了出来。 */ (request) =>
-        isAxpResponse(request.value) ? request.value.kind : "raw",
-    );
+    return h.requests.map(/** 落定值不是响应时标成 raw，说明有 bug 被抛了出来。 */ (request) => (isAxpResponse(request.value) ? request.value.kind : "raw"));
   } finally {
     h.dispose();
   }
@@ -372,11 +318,7 @@ describe(`${TITLE} 子集枚举`, () => {
       { name: "a", make: PLUGINS[0].make },
       { name: "b", make: PLUGINS[0].make, needs: ["a"] },
     ];
-    expect(subsetsOf(table).map(/** 取子集名。 */ (subset) => subset.label)).toEqual([
-      EMPTY_LABEL,
-      "a",
-      "a+b",
-    ]);
+    expect(subsetsOf(table).map(/** 取子集名。 */ (subset) => subset.label)).toEqual([EMPTY_LABEL, "a", "a+b"]);
   });
 });
 

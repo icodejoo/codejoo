@@ -7,16 +7,7 @@ import axpNotify from "../../src/plugins/notify";
 import axpRepath from "../../src/plugins/repath";
 import axpFilter from "../../src/plugins/filter";
 import axpEnvs from "../../src/plugins/envs";
-import type {
-  ILoadingOptions,
-  TLoadingFunc,
-  INotifyOptions,
-  IRepathOptions,
-  IFilterOptions,
-  TPredicate,
-  IEnvRule,
-  IEnvsOptions,
-} from "../../src/index";
+import type { ILoadingOptions, TLoadingFunc, INotifyOptions, IRepathOptions, IFilterOptions, TPredicate, IEnvRule, IEnvsOptions } from "../../src/index";
 import { customResponse, TestResponse } from "../helpers/client";
 
 it("[loading.type.options][notify.type.response][repath.type.options][filter.type.options][envs.type.options] 旧入口类型名保留，插件透传自定义 R，请求扩展不污染 axios", /** 仅编译的公开契约。 */ () => {
@@ -69,9 +60,7 @@ it("[loading.type.options][notify.type.response][repath.type.options][filter.typ
     void axiosFilter;
     expectTypeOf(axpLoading<TestResponse>()).toEqualTypeOf<AxpPlugin<TestResponse>>();
     expectTypeOf<ILoadingOptions>().toExtend<{ /** 回调类型。 */ loading?: TLoadingFunc }>();
-    expectTypeOf<INotifyOptions<TestResponse>["notify"]>().parameters.toEqualTypeOf<
-      [string, TestResponse]
-    >();
+    expectTypeOf<INotifyOptions<TestResponse>["notify"]>().parameters.toEqualTypeOf<[string, TestResponse]>();
     expectTypeOf<IRepathOptions>().toExtend<{ /** 插件开关。 */ enable?: boolean }>();
     expectTypeOf<IFilterOptions>().toExtend<{ /** 判定回调。 */ predicate?: TPredicate }>();
     const rule: IEnvRule = { rule: /** 规则示例。 */ () => true, config: {} };

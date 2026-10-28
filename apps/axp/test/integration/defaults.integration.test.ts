@@ -131,10 +131,7 @@ it("[core.req.defaults][core.req.transforms] 二次合并不恢复默认 data，
   expect(h.calls[0]!.config.data).toBeUndefined();
   expect(defaultRequest).toHaveBeenCalledTimes(1);
   expect(defaultResponse).toHaveBeenCalledTimes(1);
-  await h.api.post(REQUEST_URL)(
-    { value: 1 },
-    { transformRequest: [requestTransform], transformResponse: [responseTransform] },
-  );
+  await h.api.post(REQUEST_URL)({ value: 1 }, { transformRequest: [requestTransform], transformResponse: [responseTransform] });
   expect(defaultRequest).toHaveBeenCalledTimes(1);
   expect(defaultResponse).toHaveBeenCalledTimes(1);
   expect(requestTransform).toHaveBeenCalledTimes(1);
@@ -178,9 +175,7 @@ it.each([undefined, null, new URLSearchParams("only=1")])(
     const h = wireClient({ params: { q: OLD_QUERY, keep: 1 } }, [patch]);
     await h.api.get(REQUEST_URL)();
     expect(h.calls[0]!.config.params).toEqual(params === undefined ? EMPTY_PARAMS : params);
-    expect(h.calls[0]!.url).toBe(
-      REQUEST_URL + (params instanceof URLSearchParams ? "?only=1" : ""),
-    );
+    expect(h.calls[0]!.url).toBe(REQUEST_URL + (params instanceof URLSearchParams ? "?only=1" : ""));
     h.api.dispose();
   },
 );
@@ -203,10 +198,7 @@ it("[core.req.headers] 默认通用头、方法头和请求头按优先级展平
       return next({ headers: { authorization: undefined, "x-method": undefined } });
     },
   };
-  const h = wireClient(
-    { headers: { common: { Authorization: OLD_AUTH }, get: { "X-Method": "default-get" } } },
-    [patch],
-  );
+  const h = wireClient({ headers: { common: { Authorization: OLD_AUTH }, get: { "X-Method": "default-get" } } }, [patch]);
   await h.api.get(REQUEST_URL)(undefined, { headers: { Authorization: NEW_AUTH } });
   const headers = h.calls[0]!.config.headers;
   expect(headers.get(AUTH_HEADER)).toBe(false);
@@ -253,10 +245,7 @@ it.each([undefined, "PuT"])(
         return next();
       },
     };
-    const h = wireClient(
-      { method: "post", headers: { post: { "X-Method": "post" }, put: { "X-Method": "put" } } },
-      [observer],
-    );
+    const h = wireClient({ method: "post", headers: { post: { "X-Method": "post" }, put: { "X-Method": "put" } } }, [observer]);
     await h.api.request({ url: REQUEST_URL, method });
     expect(h.calls[0]!.config.method).toBe(expected);
     expect(h.calls[0]!.config.headers.get("X-Method")).toBe(expected);

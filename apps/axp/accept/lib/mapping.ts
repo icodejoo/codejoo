@@ -1,6 +1,6 @@
-import { DEFAULT_RETRY_STATUSES, PRIVATE_PREFIX, SUPPORTED_CAPABILITIES } from './constants.ts';
-import type { PluginConfigs, RequestOptions, RequestSpec, Scenario } from './types.ts';
-import { collectRequests, stepKind, STEP_KINDS, walkSteps } from './walk.ts';
+import { DEFAULT_RETRY_STATUSES, PRIVATE_PREFIX, SUPPORTED_CAPABILITIES } from "./constants.ts";
+import type { PluginConfigs, RequestOptions, RequestSpec, Scenario } from "./types.ts";
+import { collectRequests, stepKind, STEP_KINDS, walkSteps } from "./walk.ts";
 
 /**
  * 能力映射表（代码版）。文字版见 accept/mapping.md，两者必须一致。
@@ -11,9 +11,9 @@ import { collectRequests, stepKind, STEP_KINDS, walkSteps } from './walk.ts';
 type OptionCheck = (value: unknown) => string | null;
 
 /** 中立 key 选项：与 `true` 同义，查询参数和请求体都算进 key */
-const KEY_DEEP = 'deep';
+const KEY_DEEP = "deep";
 /** 中立 key 选项：只看方法+路径（新 key 服务没有这个模式，映射不了） */
-const KEY_SIMPLE = 'simple';
+const KEY_SIMPLE = "simple";
 /** `key: 'simple'` 映射不了的原因：新 key 服务始终把 params（及请求体）算进 key */
 const KEY_SIMPLE_UNSUPPORTED = `axp 的 key 服务始终含 params 与请求体，没有 '${KEY_SIMPLE}'（只看方法+路径）模式`;
 
@@ -26,13 +26,16 @@ export function lowerMethods(list: string[]): string[] {
   return list.map(/** 保留方法顺序与空数组含义。 */ (method) => method.toLowerCase());
 }
 
-const isNum: OptionCheck = (v) => (typeof v === 'number' && Number.isFinite(v) ? null : '需要数字');
-const isBool: OptionCheck = (v) => (typeof v === 'boolean' ? null : '需要布尔值');
-const isStrList: OptionCheck = (v) => (Array.isArray(v) && v.every((x) => typeof x === 'string') ? null : '需要字符串数组');
-const isNumList: OptionCheck = (v) => (Array.isArray(v) && v.every((x) => typeof x === 'number') ? null : '需要数字数组');
-const isObj: OptionCheck = (v) => (v && typeof v === 'object' && !Array.isArray(v) ? null : '需要对象');
+const isNum: OptionCheck = (v) => (typeof v === "number" && Number.isFinite(v) ? null : "需要数字");
+const isBool: OptionCheck = (v) => (typeof v === "boolean" ? null : "需要布尔值");
+const isStrList: OptionCheck = (v) => (Array.isArray(v) && v.every((x) => typeof x === "string") ? null : "需要字符串数组");
+const isNumList: OptionCheck = (v) => (Array.isArray(v) && v.every((x) => typeof x === "number") ? null : "需要数字数组");
+const isObj: OptionCheck = (v) => (v && typeof v === "object" && !Array.isArray(v) ? null : "需要对象");
 /** 只接受指定取值 */
-const oneOf = (...allowed: unknown[]): OptionCheck => (v) => (allowed.includes(v) ? null : `仅支持 ${allowed.map((x) => JSON.stringify(x)).join(' / ')}`);
+const oneOf =
+  (...allowed: unknown[]): OptionCheck =>
+  (v) =>
+    allowed.includes(v) ? null : `仅支持 ${allowed.map((x) => JSON.stringify(x)).join(" / ")}`;
 
 /**
  * 中立插件选项 → 是否可映射。键存在即"已映射"，校验器给出取值层面的限制。
@@ -40,14 +43,14 @@ const oneOf = (...allowed: unknown[]): OptionCheck => (v) => (allowed.includes(v
  * 但中立 schema 仍有这些选项，所以保留登记：`key.scope` 落到客户端的 key 配置，其余无需落地。
  */
 export const PLUGIN_OPTION_MAP: Record<string, Record<string, OptionCheck>> = {
-  auth: { url_pattern: (v) => (typeof v === 'string' ? null : '需要字符串'), refresh: oneOf('endpoint'), refresh_query: isObj },
+  auth: { url_pattern: (v) => (typeof v === "string" ? null : "需要字符串"), refresh: oneOf("endpoint"), refresh_query: isObj },
   cache: { ttl_ms: isNum, max: isNum, methods: isStrList },
   retry: { max: isNum, delay_ms: isNum, statuses: isNumList, methods: isStrList, respect_retry_after: isBool },
-  share: { policy: oneOf('start', 'end', 'race') },
+  share: { policy: oneOf("start", "end", "race") },
   loading: { delay_ms: isNum, delay_close_ms: isNum },
   notify: {},
   normalize: {},
-  key: { scope: oneOf('user') },
+  key: { scope: oneOf("user") },
   mock: { fallback_on_404: isBool },
   repath: {},
   filter: {},
@@ -57,20 +60,20 @@ export const PLUGIN_OPTION_MAP: Record<string, Record<string, OptionCheck>> = {
 };
 
 /** axp 没有对应能力、一律显式报错的插件 */
-export const UNSUPPORTED_PLUGINS: readonly string[] = ['breaker', 'offline', 'timeout'];
+export const UNSUPPORTED_PLUGINS: readonly string[] = ["breaker", "offline", "timeout"];
 
 /** 校验中立请求级 key：布尔或字符串；`'simple'` 映射不了 */
 const checkKeyOption: OptionCheck = (v) => {
   if (v === KEY_SIMPLE) return KEY_SIMPLE_UNSUPPORTED;
-  return typeof v === 'boolean' || typeof v === 'string' ? null : '需要 boolean 或字符串';
+  return typeof v === "boolean" || typeof v === "string" ? null : "需要 boolean 或字符串";
 };
 
 /** 中立请求级选项 → 是否可映射；`breaker` 无对应能力，一律映射不了 */
 export const REQUEST_OPTION_MAP: Record<string, OptionCheck> = {
   auth: isBool,
-  cache: (v) => (typeof v === 'boolean' ? null : isObj(v) === null ? null : '需要 boolean 或 {ttl_ms,key}'),
-  retry: (v) => (typeof v === 'boolean' || typeof v === 'number' ? null : isObj(v)),
-  share: oneOf(true, false, 'start', 'end', 'race', 'none'),
+  cache: (v) => (typeof v === "boolean" ? null : isObj(v) === null ? null : "需要 boolean 或 {ttl_ms,key}"),
+  retry: (v) => (typeof v === "boolean" || typeof v === "number" ? null : isObj(v)),
+  share: oneOf(true, false, "start", "end", "race", "none"),
   loading: isBool,
   silent: isBool,
   timeout_ms: isNum,
@@ -78,13 +81,13 @@ export const REQUEST_OPTION_MAP: Record<string, OptionCheck> = {
   mock: isBool,
   normalize: isBool,
   filter: isBool,
-  breaker: () => 'axp 没有 breaker 能力',
+  breaker: () => "axp 没有 breaker 能力",
 };
 
 /** 请求级 retry 对象里允许出现的键 */
-const RETRY_OBJECT_KEYS = ['max', 'delay_ms', 'statuses', 'methods', 'respect_retry_after'];
+const RETRY_OBJECT_KEYS = ["max", "delay_ms", "statuses", "methods", "respect_retry_after"];
 /** 请求级 cache 对象里允许出现的键 */
-const CACHE_OBJECT_KEYS = ['ttl_ms', 'key'];
+const CACHE_OBJECT_KEYS = ["ttl_ms", "key"];
 
 /**
  * 检查中立插件配置能否映射到 axp。
@@ -128,10 +131,10 @@ export function checkRequestOptions(req: RequestSpec): string[] {
     }
     const why = check(v);
     if (why) issues.push(`请求 ${req.id} 选项 ${k}: ${why}`);
-    if (k === 'retry' && v && typeof v === 'object') {
+    if (k === "retry" && v && typeof v === "object") {
       for (const rk of Object.keys(v)) if (!RETRY_OBJECT_KEYS.includes(rk)) issues.push(`请求 ${req.id} 选项 retry.${rk}: 没有对应的 axp 参数`);
     }
-    if (k === 'cache' && v && typeof v === 'object') {
+    if (k === "cache" && v && typeof v === "object") {
       for (const ck of Object.keys(v)) if (!CACHE_OBJECT_KEYS.includes(ck)) issues.push(`请求 ${req.id} 选项 cache.${ck}: 没有对应的 axp 参数`);
     }
   }
@@ -156,7 +159,10 @@ export function validateScenarioMapping(scenario: Scenario): string[] {
 /** 把 step 类型名收集出来，供测试核对"全部 step 都被解释" */
 export function usedStepKinds(scenario: Scenario): Set<string> {
   const set = new Set<string>();
-  walkSteps(scenario.steps, (s) => { const k = stepKind(s); if (k) set.add(k); });
+  walkSteps(scenario.steps, (s) => {
+    const k = stepKind(s);
+    if (k) set.add(k);
+  });
   return set;
 }
 
@@ -165,7 +171,7 @@ export interface MappedRequestConfig {
   protected?: boolean;
   cache?: boolean | { expires?: number; key?: string };
   retry?: number | boolean | { max?: number; delay?: number; statusCodes?: number[]; methods?: string[]; respectRetryAfter?: boolean };
-  share?: boolean | 'start' | 'end' | 'race' | 'none';
+  share?: boolean | "start" | "end" | "race" | "none";
   loading?: boolean;
   silent?: boolean;
   timeout?: number;
@@ -227,10 +233,10 @@ export function mapRequestOptions(options: RequestOptions | undefined): MappedRe
   const out: MappedRequestConfig = {};
   if (o.auth !== undefined) out.protected = o.auth;
   if (o.cache !== undefined) {
-    out.cache = typeof o.cache === 'boolean' ? o.cache : { expires: o.cache.ttl_ms, key: o.cache.key };
+    out.cache = typeof o.cache === "boolean" ? o.cache : { expires: o.cache.ttl_ms, key: o.cache.key };
   }
   if (o.retry !== undefined) {
-    if (typeof o.retry === 'object') {
+    if (typeof o.retry === "object") {
       const r = o.retry;
       out.retry = {
         max: r.max,
@@ -258,7 +264,7 @@ export function mapRequestOptions(options: RequestOptions | undefined): MappedRe
  * @param pattern 中立前缀，缺省为 `/t/private`
  */
 export function authUrlPatterns(pattern: string | undefined): string[] {
-  const p = (pattern ?? PRIVATE_PREFIX).replace(/\/+$/, '');
+  const p = (pattern ?? PRIVATE_PREFIX).replace(/\/+$/, "");
   return [p, `${p}/*`];
 }
 

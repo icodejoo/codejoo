@@ -31,9 +31,7 @@ function maskParams(params: unknown, defaults: unknown): unknown {
   const current = params ?? {};
   const masked: Record<string, unknown> = { ...current };
   for (const key of Object.keys(defaults)) {
-    masked[key] = Object.prototype.hasOwnProperty.call(current, key)
-      ? maskParams(current[key], defaults[key])
-      : null;
+    masked[key] = Object.prototype.hasOwnProperty.call(current, key) ? maskParams(current[key], defaults[key]) : null;
   }
   return masked;
 }
@@ -57,10 +55,7 @@ function maskHeaders(request: Readonly<AxpRequestConfig>, defaults: AxiosInstanc
  * axios 还会自行合并一次 defaults，交出完整视图会让那次合并按全部字段计费，交差量则回到原始成本，结果等价。
  * 层改动过的 params / headers 带上掩码，防止被二次合并带回已删除的默认值。
  */
-function toWire<R extends IAxpResponse>(
-  ctx: AxpContext<R>,
-  axios: AxiosInstance,
-): AxpRequestConfig {
+function toWire<R extends IAxpResponse>(ctx: AxpContext<R>, axios: AxiosInstance): AxpRequestConfig {
   const current = ctx.request as Record<string, unknown>;
   const wire: Record<string, unknown> = { ...ctx.originRequest };
   const touched = ctx.touchedFields;
@@ -79,10 +74,7 @@ function toWire<R extends IAxpResponse>(
  * @returns 产出统一响应的传输函数。
  * @example `const send = createTransport(axios, axpResponse())`
  */
-export function createTransport<R extends IAxpResponse>(
-  axios: AxiosInstance,
-  factory: IAxpResponseFactory<R>,
-): (ctx: AxpContext<R>) => Promise<R> {
+export function createTransport<R extends IAxpResponse>(axios: AxiosInstance, factory: IAxpResponseFactory<R>): (ctx: AxpContext<R>) => Promise<R> {
   return /** 网络与请求准备异常统一交给已保护的工厂分类。 */ async (ctx) => {
     let response: AxiosResponse;
     try {
@@ -90,8 +82,7 @@ export function createTransport<R extends IAxpResponse>(
       if (signal.aborted) return ctx.fail({ kind: AXP_KINDS.CANCEL });
       const request = toWire(ctx, axios);
       request.signal = signal;
-      if (ctx.replayable && (Array.isArray(request.data) || isPlainObject(request.data)))
-        request.data = cloneData(request.data, ctx);
+      if (ctx.replayable && (Array.isArray(request.data) || isPlainObject(request.data))) request.data = cloneData(request.data, ctx);
       request.validateStatus = ACCEPT_HTTP_STATUS;
       response = await axios.request(request);
     } catch (error) {

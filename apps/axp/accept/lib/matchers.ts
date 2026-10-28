@@ -1,8 +1,8 @@
-import type { Range } from './types.ts';
+import type { Range } from "./types.ts";
 
 /** 判断是不是普通对象 */
 function isPlainObject(v: unknown): v is Record<string, unknown> {
-  return v !== null && typeof v === 'object' && !Array.isArray(v);
+  return v !== null && typeof v === "object" && !Array.isArray(v);
 }
 
 /**
@@ -13,7 +13,7 @@ function isPlainObject(v: unknown): v is Record<string, unknown> {
  * @returns 差异清单；空数组表示匹配
  * @example subsetMatch({ meta: { auth: 'u1', hit: 1 } }, { meta: { auth: 'u1' } }) // []
  */
-export function subsetMatch(actual: unknown, expected: unknown, where = 'data'): string[] {
+export function subsetMatch(actual: unknown, expected: unknown, where = "data"): string[] {
   if (isPlainObject(expected)) {
     if (!isPlainObject(actual)) return [`${where}: 期望对象，实际 ${describe(actual)}`];
     const diffs: string[] = [];
@@ -63,9 +63,9 @@ export function checkOrder(actual: readonly string[], expected: readonly string[
   const want = new Set(expected);
   const filtered = actual.filter((id) => want.has(id));
   const missing = expected.filter((id) => !filtered.includes(id));
-  if (missing.length) return `order: 请求未落定 ${missing.join(',')}`;
+  if (missing.length) return `order: 请求未落定 ${missing.join(",")}`;
   if (filtered.length !== expected.length || filtered.some((id, i) => id !== expected[i])) {
-    return `order: 实际 [${filtered.join(',')}]，期望 [${expected.join(',')}]`;
+    return `order: 实际 [${filtered.join(",")}]，期望 [${expected.join(",")}]`;
   }
   return null;
 }

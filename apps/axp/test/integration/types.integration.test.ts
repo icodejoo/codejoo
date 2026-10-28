@@ -7,14 +7,7 @@ import axpAuth from "../../src/plugins/auth";
 import axpCache, { type ICacheRequestOptions } from "../../src/plugins/cache";
 import axpRetry, { type IRetryOptions } from "../../src/plugins/retry";
 import type { AxpOption } from "../../src/options";
-import {
-  AxpResponse,
-  axpResponse,
-  isAxpResponse,
-  type AxpKind,
-  type IAxpResponse,
-  type IAxpResponseFactory,
-} from "../../src/response";
+import { AxpResponse, axpResponse, isAxpResponse, type AxpKind, type IAxpResponse, type IAxpResponseFactory } from "../../src/response";
 import type { AxpPlugin, AxpRequestOptions, WithData } from "../../src/types";
 import { customResponse, TestResponse } from "../helpers/client";
 
@@ -44,9 +37,7 @@ class CodeResponse<D = unknown> extends AxpResponse<D> {
   }
 }
 /** 假泛型插件验证工厂调用时的上下文推断。 */
-function axpGeneric<R extends IAxpResponse = IAxpResponse>(options: {
-  /** 判定回调。 */ check: (r: R) => boolean;
-}): AxpPlugin<R> {
+function axpGeneric<R extends IAxpResponse = IAxpResponse>(options: { /** 判定回调。 */ check: (r: R) => boolean }): AxpPlugin<R> {
   return {
     name: "generic",
     /** 取内层响应交给调用方提供的类型检查。 */ async handle(_ctx, next) {
@@ -75,27 +66,15 @@ it("[core.fn.createAxp][core.req.wrap][core.req.throws] Schema/响应泛型/插�
       check: /** 仅判定追踪标识非空。 */ (response) => response.traceId !== "",
     });
     api.use(standalone);
-    expectTypeOf(api.get("/pet")({ id: 1 })).toEqualTypeOf<
-      Promise<{ /** name 字段。 */ name: string }>
-    >();
+    expectTypeOf(api.get("/pet")({ id: 1 })).toEqualTypeOf<Promise<{ /** name 字段。 */ name: string }>>();
     expectTypeOf(api.get("/empty")()).toEqualTypeOf<Promise<number>>();
     expectTypeOf(api.post("/pet")("body")).toEqualTypeOf<Promise<boolean>>();
-    expectTypeOf(api.get("/pet")({ id: 1 }, { wrap: true })).toEqualTypeOf<
-      Promise<WithData<TestResponse, { /** name 字段。 */ name: string }>>
-    >();
-    expectTypeOf(api.get("/pet")({ id: 1 }, { throws: false })).toEqualTypeOf<
-      Promise<WithData<TestResponse, { /** name 字段。 */ name: string }>>
-    >();
-    expectTypeOf(api.get("/empty", { wrap: true })()).toEqualTypeOf<
-      Promise<WithData<TestResponse, number>>
-    >();
+    expectTypeOf(api.get("/pet")({ id: 1 }, { wrap: true })).toEqualTypeOf<Promise<WithData<TestResponse, { /** name 字段。 */ name: string }>>>();
+    expectTypeOf(api.get("/pet")({ id: 1 }, { throws: false })).toEqualTypeOf<Promise<WithData<TestResponse, { /** name 字段。 */ name: string }>>>();
+    expectTypeOf(api.get("/empty", { wrap: true })()).toEqualTypeOf<Promise<WithData<TestResponse, number>>>();
     expectTypeOf(api.request<number>({ url: "/escape" })).toEqualTypeOf<Promise<number>>();
-    expectTypeOf(api.request<number>({ wrap: true })).toEqualTypeOf<
-      Promise<WithData<TestResponse, number>>
-    >();
-    expectTypeOf(api.request<number>({ throws: false })).toEqualTypeOf<
-      Promise<WithData<TestResponse, number>>
-    >();
+    expectTypeOf(api.request<number>({ wrap: true })).toEqualTypeOf<Promise<WithData<TestResponse, number>>>();
+    expectTypeOf(api.request<number>({ throws: false })).toEqualTypeOf<Promise<WithData<TestResponse, number>>>();
     api.get("/pet")({ id: 1 }, { retry: 2, cache: true });
     // @ts-expect-error 扩展字段仍校验值类型。
     api.get("/pet")({ id: 1 }, { retry: "twice" });
@@ -135,9 +114,7 @@ it("[core.fn.createAxp][core.req.wrap][core.req.throws] Schema/响应泛型/插�
     const generated = createAxp<model.MethodRefs>();
     expectTypeOf(generated.get("/pet/{petId}")({ petId: 1 })).toEqualTypeOf<Promise<model.Pet>>();
     const local = createAxp<model.LocalMethodRefs>();
-    expectTypeOf(local.post("/pet/draft")({ name: "draft", photoUrls: [] })).toEqualTypeOf<
-      Promise<model.Pet>
-    >();
+    expectTypeOf(local.post("/pet/draft")({ name: "draft", photoUrls: [] })).toEqualTypeOf<Promise<model.Pet>>();
     expectTypeOf(local.get("/experimental/whatever")()).toEqualTypeOf<Promise<unknown>>();
     // @ts-expect-error 旧 raw 返回形态已经删除。
     api.get("/empty")(undefined, { raw: true });
@@ -160,24 +137,12 @@ it("[core.req.wrap] 分派类型按调用级覆盖方法级：有无选项四组
   function contracts() {
     const api = createAxp<unknown, TestResponse>({ response: customResponse() });
     expectTypeOf(api.get("/x")<number>()).toEqualTypeOf<Promise<number>>();
-    expectTypeOf(api.get("/x")<number>(undefined, { wrap: true })).toEqualTypeOf<
-      Promise<WithData<TestResponse, number>>
-    >();
-    expectTypeOf(api.get("/x", { wrap: true })<number>()).toEqualTypeOf<
-      Promise<WithData<TestResponse, number>>
-    >();
-    expectTypeOf(api.get("/x", { wrap: true })<number>(undefined, { wrap: false })).toEqualTypeOf<
-      Promise<number>
-    >();
-    expectTypeOf(api.get("/x", { wrap: false })<number>(undefined, { wrap: true })).toEqualTypeOf<
-      Promise<WithData<TestResponse, number>>
-    >();
-    expectTypeOf(
-      api.get("/x", { wrap: true })<number>(undefined, { wrap: undefined }),
-    ).toEqualTypeOf<Promise<WithData<TestResponse, number>>>();
-    expectTypeOf(
-      api.get("/x", { throws: false })<number>(undefined, { wrap: false }),
-    ).toEqualTypeOf<Promise<WithData<TestResponse, number>>>();
+    expectTypeOf(api.get("/x")<number>(undefined, { wrap: true })).toEqualTypeOf<Promise<WithData<TestResponse, number>>>();
+    expectTypeOf(api.get("/x", { wrap: true })<number>()).toEqualTypeOf<Promise<WithData<TestResponse, number>>>();
+    expectTypeOf(api.get("/x", { wrap: true })<number>(undefined, { wrap: false })).toEqualTypeOf<Promise<number>>();
+    expectTypeOf(api.get("/x", { wrap: false })<number>(undefined, { wrap: true })).toEqualTypeOf<Promise<WithData<TestResponse, number>>>();
+    expectTypeOf(api.get("/x", { wrap: true })<number>(undefined, { wrap: undefined })).toEqualTypeOf<Promise<WithData<TestResponse, number>>>();
+    expectTypeOf(api.get("/x", { throws: false })<number>(undefined, { wrap: false })).toEqualTypeOf<Promise<WithData<TestResponse, number>>>();
     expectTypeOf(
       api.get("/x", { wrap: true, throws: false })<number>(undefined, {
         wrap: false,
@@ -192,33 +157,18 @@ it("[core.req.throws] 分派类型按调用级覆盖方法级：有无选项四�
   function contracts() {
     const api = createAxp<unknown, TestResponse>({ response: customResponse() });
     expectTypeOf(api.get("/x")<number>()).toEqualTypeOf<Promise<number>>();
-    expectTypeOf(api.get("/x")<number>(undefined, { throws: false })).toEqualTypeOf<
-      Promise<WithData<TestResponse, number>>
-    >();
-    expectTypeOf(api.get("/x", { throws: false })<number>()).toEqualTypeOf<
-      Promise<WithData<TestResponse, number>>
-    >();
-    expectTypeOf(
-      api.get("/x", { throws: false })<number>(undefined, { throws: true }),
-    ).toEqualTypeOf<Promise<number>>();
-    expectTypeOf(
-      api.get("/x", { throws: true })<number>(undefined, { throws: false }),
-    ).toEqualTypeOf<Promise<WithData<TestResponse, number>>>();
-    expectTypeOf(
-      api.get("/x", { throws: false })<number>(undefined, { throws: undefined }),
-    ).toEqualTypeOf<Promise<WithData<TestResponse, number>>>();
-    expectTypeOf(api.get("/x", { wrap: true })<number>(undefined, { throws: true })).toEqualTypeOf<
-      Promise<WithData<TestResponse, number>>
-    >();
+    expectTypeOf(api.get("/x")<number>(undefined, { throws: false })).toEqualTypeOf<Promise<WithData<TestResponse, number>>>();
+    expectTypeOf(api.get("/x", { throws: false })<number>()).toEqualTypeOf<Promise<WithData<TestResponse, number>>>();
+    expectTypeOf(api.get("/x", { throws: false })<number>(undefined, { throws: true })).toEqualTypeOf<Promise<number>>();
+    expectTypeOf(api.get("/x", { throws: true })<number>(undefined, { throws: false })).toEqualTypeOf<Promise<WithData<TestResponse, number>>>();
+    expectTypeOf(api.get("/x", { throws: false })<number>(undefined, { throws: undefined })).toEqualTypeOf<Promise<WithData<TestResponse, number>>>();
+    expectTypeOf(api.get("/x", { wrap: true })<number>(undefined, { throws: true })).toEqualTypeOf<Promise<WithData<TestResponse, number>>>();
   }
   expect(contracts).toBeTypeOf("function");
 });
 
 it("[core.fn.createAxp] 本地 Schema 扩展夹具与现有模板完全一致", /** 本地 Schema 扩展夹具与现有模板完全一致。 */ () => {
-  const template = readFileSync(
-    new URL("../../types/local/example.d.ts.template", import.meta.url),
-    "utf8",
-  );
+  const template = readFileSync(new URL("../../types/local/example.d.ts.template", import.meta.url), "utf8");
   const fixture = readFileSync(new URL("../helpers/local-schema.d.ts", import.meta.url), "utf8");
   expect(fixture).toBe(template);
 });
@@ -319,9 +269,7 @@ it("[core.fn.axpResponse][core.prop.ok][core.prop.status] 子类覆盖 ok / stat
     });
     expectTypeOf(factory).toEqualTypeOf<IAxpResponseFactory<CodeResponse>>();
     const api = createAxp<ISchema, CodeResponse>({ response: factory });
-    expectTypeOf(api.get("/empty", { wrap: true })()).toEqualTypeOf<
-      Promise<WithData<CodeResponse, number>>
-    >();
+    expectTypeOf(api.get("/empty", { wrap: true })()).toEqualTypeOf<Promise<WithData<CodeResponse, number>>>();
     const error: unknown = {};
     if (api.isResponse(error)) expectTypeOf(error).toEqualTypeOf<CodeResponse>();
     // 不满足契约的形状不是响应。

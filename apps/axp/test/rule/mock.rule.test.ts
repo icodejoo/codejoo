@@ -19,10 +19,7 @@ const REAL_DATA = "from-real";
 /** 装好 mock 与假网络路由：mock 返回 MOCK_DATA，真实返回 REAL_DATA。 */
 function mockClient(options: IMockOptions<AxpResponse> = {}, extra = false) {
   const rec = requestRecorder();
-  const h = sourceClient([
-    axpMock<AxpResponse>({ enable: true, mockUrl: MOCK, ...options }),
-    ...(extra ? [rec.plugin] : []),
-  ]);
+  const h = sourceClient([axpMock<AxpResponse>({ enable: true, mockUrl: MOCK, ...options }), ...(extra ? [rec.plugin] : [])]);
   h.net.on("get", `${MOCK}${REAL}`, () => envelope(MOCK_DATA));
   h.net.on("get", REAL, () => envelope(REAL_DATA));
   return { ...h, rec };
@@ -99,16 +96,13 @@ it("[mock.cb.fallbackWhen] mock 不可达（网络错误）回落真实接口", 
   expect(h.net.calls("get", REAL)).toBe(1);
 });
 
-it.each([403, 500])(
-  "[mock.cb.fallbackWhen] mock 返回 %i 说明 mock 存在，原样返回不回落",
-  async (status) => {
-    const h = mockClient();
-    h.net.on("get", `${MOCK}${REAL}`, () => ({ status }));
-    const r = await h.send({ url: REAL, mock: true });
-    expect(r.httpStatus).toBe(status);
-    expect(h.net.calls("get", REAL)).toBe(0);
-  },
-);
+it.each([403, 500])("[mock.cb.fallbackWhen] mock 返回 %i 说明 mock 存在，原样返回不回落", async (status) => {
+  const h = mockClient();
+  h.net.on("get", `${MOCK}${REAL}`, () => ({ status }));
+  const r = await h.send({ url: REAL, mock: true });
+  expect(r.httpStatus).toBe(status);
+  expect(h.net.calls("get", REAL)).toBe(0);
+});
 
 it("[mock.req.mock.mockUrl] 请求级 mockUrl 覆盖插件级", async () => {
   const h = mockClient();

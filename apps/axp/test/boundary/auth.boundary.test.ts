@@ -4,23 +4,7 @@ import type { ITokenManager } from "../../src/objects/TokenManager";
 import axpAuth, { AuthFailureAction } from "../../src/plugins/auth";
 import type { AxpResponse } from "../../src/response";
 import type { AxpRequestConfig } from "../../src/types";
-import {
-  authClient,
-  authSettings,
-  b3Client,
-  deferred,
-  failure,
-  guarded,
-  memoryTokens,
-  POLLUTED_ONCE,
-  pollutingBody,
-  pollutingTransform,
-  REFRESH_TOKEN,
-  REQUEST_URL,
-  run,
-  TOKEN_NEW,
-  TOKEN_OLD,
-} from "../helpers/b3";
+import { authClient, authSettings, b3Client, deferred, failure, guarded, memoryTokens, POLLUTED_ONCE, pollutingBody, pollutingTransform, REFRESH_TOKEN, REQUEST_URL, run, TOKEN_NEW, TOKEN_OLD } from "../helpers/b3";
 
 /** 通知与判定回调的原始故障。 */
 const BUG = new Error("auth callback bug");
@@ -185,10 +169,7 @@ describe("刷新失败：抛错也算失败，不死锁", () => {
       );
       expect(await run(h)).toMatchObject({ ok: false, kind: "auth", reason: "expired" });
       expect(refresh).toHaveBeenCalledTimes(1);
-      expect(logger.warn).toHaveBeenCalledExactlyOnceWith(
-        expect.stringContaining("onRefresh"),
-        BUG,
-      );
+      expect(logger.warn).toHaveBeenCalledExactlyOnceWith(expect.stringContaining("onRefresh"), BUG);
       expect(tm.accessToken).toBeUndefined();
       expect(await run(h)).toMatchObject({ kind: "auth", reason: "unauthenticated" });
       base.set(TOKEN_NEW, REFRESH_TOKEN);
@@ -209,9 +190,7 @@ describe("通知类回调抛错被隔离（N13）", () => {
   ] as const)(
     "[auth.cb.onAccessExpired][auth.cb.onAccessDenied] %s 的 %s 故障：请求结果不变，console.error 恰好一次，状态不受影响（%s）",
     /** 通知异常不进入请求结果。 */ async (name, mode, reason) => {
-      const error = vi
-        .spyOn(console, "error")
-        .mockImplementation(/** 静默输出。 */ () => undefined);
+      const error = vi.spyOn(console, "error").mockImplementation(/** 静默输出。 */ () => undefined);
       const notice =
         mode === "sync"
           ? vi.fn(
@@ -347,11 +326,7 @@ describe("路由与防回环边界", () => {
     "[auth.cb.onRefresh][auth.cb.onAccessExpired] 刷新成功后重放遇到无关错误（500）→ 会话不清、不通知过期，500 原样传播（business=%s）",
     /** 重放得到的无关失败不当作过期。 */ async (business) => {
       const h = authClient();
-      h.net.on(
-        "get",
-        REQUEST_URL,
-        /** 首发 401，重放 500。 */ (_config, hit) => failure(hit === 1 ? 401 : 500, business),
-      );
+      h.net.on("get", REQUEST_URL, /** 首发 401，重放 500。 */ (_config, hit) => failure(hit === 1 ? 401 : 500, business));
       expect(await run(h)).toMatchObject({ ok: false, status: 500 });
       expect(h.tm.accessToken).toBe(TOKEN_NEW);
       expect(h.settings.onAccessExpired).not.toHaveBeenCalled();
@@ -445,10 +420,7 @@ describe("单飞刷新与排队", () => {
         REQUEST_URL,
         guarded(() => TOKEN_NEW, business),
       );
-      const all = Array.from(
-        { length: BURST },
-        /** 同时发出的受保护请求。 */ () => h.send({ url: REQUEST_URL }),
-      );
+      const all = Array.from({ length: BURST }, /** 同时发出的受保护请求。 */ () => h.send({ url: REQUEST_URL }));
       await settle();
       expect(h.settings.onRefresh).toHaveBeenCalledTimes(1);
       expect(h.net.totalStarted).toBe(BURST);
@@ -481,12 +453,7 @@ describe("单飞刷新与排队", () => {
     await settle();
     expect((await first).ok).toBe(true);
     expect((await queued).ok).toBe(true);
-    expect(h.net.log.map(/** 每次发送携带的凭证。 */ (record) => record.auth)).toEqual([
-      TOKEN_OLD,
-      undefined,
-      TOKEN_NEW,
-      TOKEN_NEW,
-    ]);
+    expect(h.net.log.map(/** 每次发送携带的凭证。 */ (record) => record.auth)).toEqual([TOKEN_OLD, undefined, TOKEN_NEW, TOKEN_NEW]);
     expect(h.settings.onRefresh).toHaveBeenCalledTimes(1);
   });
 
@@ -494,18 +461,13 @@ describe("单飞刷新与排队", () => {
     const { gate, onRefresh } = gatedRefresh();
     const h = authClient({ onRefresh });
     h.net.on("get", REQUEST_URL, () => failure(401));
-    const bursts = Array.from(
-      { length: 5 },
-      /** 先到的 401。 */ () => h.send({ url: REQUEST_URL }),
-    );
+    const bursts = Array.from({ length: 5 }, /** 先到的 401。 */ () => h.send({ url: REQUEST_URL }));
     await settle();
     const queued = h.send({ url: REQUEST_URL });
     gate.resolve(false);
     await settle();
     const results = await Promise.all([...bursts, queued]);
-    expect(
-      results.every(/** 全部过期。 */ (r) => r.kind === "auth" && r.reason === "expired"),
-    ).toBe(true);
+    expect(results.every(/** 全部过期。 */ (r) => r.kind === "auth" && r.reason === "expired")).toBe(true);
     expect(results[5]!.status).toBe(0);
     expect(h.net.totalStarted).toBe(5);
     expect(h.settings.onRefresh).toHaveBeenCalledTimes(1);
@@ -739,10 +701,7 @@ describe("异步回调期间的会话变化", () => {
     await settle();
     expect((await pending).ok).toBe(true);
     expect(h.settings.onRefresh).toHaveBeenCalledTimes(1);
-    expect(h.net.log.map(/** 首发与重放的凭证。 */ (record) => record.auth)).toEqual([
-      TOKEN_NEW,
-      fresh,
-    ]);
+    expect(h.net.log.map(/** 首发与重放的凭证。 */ (record) => record.auth)).toEqual([TOKEN_NEW, fresh]);
   });
 
   it("[auth.cb.onRefresh][auth.cb.onAccessDenied] 刷新期间登出：重放前在本地拒绝为 unauthenticated，不发出无凭证请求", /** 每次重放前都核对凭证。 */ async () => {
@@ -777,9 +736,6 @@ describe("请求体一致性（I7）", () => {
     expect(result.ok).toBe(true);
     expect(bodies).toEqual([POLLUTED_ONCE, POLLUTED_ONCE]);
     expect(data).toEqual(pollutingBody());
-    expect(h.net.log.map(/** 首发与重放的凭证。 */ (record) => record.auth)).toEqual([
-      TOKEN_OLD,
-      TOKEN_NEW,
-    ]);
+    expect(h.net.log.map(/** 首发与重放的凭证。 */ (record) => record.auth)).toEqual([TOKEN_OLD, TOKEN_NEW]);
   });
 });

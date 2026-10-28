@@ -20,19 +20,14 @@ const CALLERS = 6;
 
 /** 装好 mock 与 share；mock 默认成功。 */
 function client() {
-  const h = sourceClient([
-    axpMock<AxpResponse>({ enable: true, mockUrl: MOCK }),
-    axpShare<AxpResponse>(),
-  ]);
+  const h = sourceClient([axpMock<AxpResponse>({ enable: true, mockUrl: MOCK }), axpShare<AxpResponse>()]);
   h.net.on("get", PROBE, () => envelope("mock"));
   h.net.on("get", REAL, () => envelope("real"));
   return h;
 }
 /** 并发发出同 key 的请求并等它们落定。 */
 async function burst(h: ReturnType<typeof client>) {
-  const pending = Array.from({ length: CALLERS }, () =>
-    h.send({ url: REAL, mock: true, share: true, latency: 5 } as never),
-  );
+  const pending = Array.from({ length: CALLERS }, () => h.send({ url: REAL, mock: true, share: true, latency: 5 } as never));
   await vi.runAllTimersAsync();
   return Promise.all(pending);
 }

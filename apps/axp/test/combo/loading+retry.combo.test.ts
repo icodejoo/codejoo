@@ -26,10 +26,7 @@ it.each([200, 500])(
   "[loading.cb.loading][retry.opt.max] retry 最终 %i：等待期间保持显示，最终只有一对回调",
   /** 重试都在同一对显示/隐藏之内。 */ async (final) => {
     const h = loadingRetryClient();
-    h.net.fallback(
-      /** 前两次失败，最后一次按目标状态。 */ (_config, hit) =>
-        hit < 3 || final !== 200 ? failure(500) : {},
-    );
+    h.net.fallback(/** 前两次失败，最后一次按目标状态。 */ (_config, hit) => (hit < 3 || final !== 200 ? failure(500) : {}));
     const pending = h.send({ url: REQUEST_URL });
     await vi.advanceTimersByTimeAsync(RETRY_WAIT / 2);
     expect(h.events.loading.get(LOADING_LABEL)).toEqual([true]);

@@ -42,13 +42,7 @@ it("[options.fn.resolveOption] 空字段继承、零值覆盖、数组整体替�
     keys: [],
     nested: plugin.nested,
   });
-  expect(
-    resolveOption<ILoadingOptions, typeof DEFAULTS>(
-      { delay: null },
-      { delay: undefined },
-      DEFAULTS,
-    ),
-  ).toEqual(DEFAULTS);
+  expect(resolveOption<ILoadingOptions, typeof DEFAULTS>({ delay: null }, { delay: undefined }, DEFAULTS)).toEqual(DEFAULTS);
   expect(resolveOption(Object.create(null), {}, DEFAULTS)).toEqual(DEFAULTS);
   expect(resolveOption(undefined, {}, DEFAULTS)).not.toBe(DEFAULTS);
 });

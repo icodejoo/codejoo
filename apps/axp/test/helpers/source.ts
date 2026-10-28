@@ -18,11 +18,7 @@ export function envelope(data: unknown, status = 200) {
  * @returns 客户端、假网络、事件记录和 send。
  * @example `const h = sourceClient([axpCache()]); await h.send({ url: '/a', cache: true })`
  */
-export function sourceClient(
-  plugins: readonly AxpPlugin<AxpResponse, any>[] = [],
-  options: AxpOptions = {},
-  transport?: Parameters<typeof createTestClient>[2],
-) {
+export function sourceClient(plugins: readonly AxpPlugin<AxpResponse, any>[] = [], options: AxpOptions = {}, transport?: Parameters<typeof createTestClient>[2]) {
   return observeUi(createTestClient<AxpResponse>(plugins, options, transport));
 }
 
@@ -32,10 +28,7 @@ export function sourceClient(
  * @returns 客户端、假网络、事件记录和 send，send 的结果按自定义 R 使用。
  * @example `const h = customSourceClient<TestResponse>([axpShare()], { response: customResponse() })`
  */
-export function customSourceClient<R extends IAxpResponse>(
-  plugins: readonly AxpPlugin<R, any>[],
-  options: AxpOptions<R>,
-) {
+export function customSourceClient<R extends IAxpResponse>(plugins: readonly AxpPlugin<R, any>[], options: AxpOptions<R>) {
   const fixture = createTestClient<R>(plugins, options);
   const observed = observeUi(fixture as unknown as Parameters<typeof observeUi>[0]);
   return observed as unknown as Omit<typeof observed, "send"> & {
@@ -109,17 +102,11 @@ export function trackAbortListeners(): () => number {
   const proto = EventTarget.prototype;
   const add = proto.addEventListener;
   const remove = proto.removeEventListener;
-  proto.addEventListener = /** 只统计 AbortSignal 的 abort 监听。 */ function (
-    this: EventTarget,
-    ...args: Parameters<typeof add>
-  ) {
+  proto.addEventListener = /** 只统计 AbortSignal 的 abort 监听。 */ function (this: EventTarget, ...args: Parameters<typeof add>) {
     if (this instanceof AbortSignal && args[0] === "abort") net++;
     return add.apply(this, args);
   };
-  proto.removeEventListener = /** 与注册对称。 */ function (
-    this: EventTarget,
-    ...args: Parameters<typeof remove>
-  ) {
+  proto.removeEventListener = /** 与注册对称。 */ function (this: EventTarget, ...args: Parameters<typeof remove>) {
     if (this instanceof AbortSignal && args[0] === "abort") net--;
     return remove.apply(this, args);
   };

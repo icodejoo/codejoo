@@ -1,11 +1,6 @@
 import { AxiosError, type AxiosResponse } from "axios";
 import { expect, it } from "vitest";
-import {
-  AxpResponse,
-  axpResponse,
-  type IAxpResponse,
-  type IAxpResponseFactory,
-} from "../../src/response";
+import { AxpResponse, axpResponse, type IAxpResponse, type IAxpResponseFactory } from "../../src/response";
 import { createTestClient } from "../helpers/client";
 
 it.each([false, true])(
@@ -48,7 +43,5 @@ it("[core.fn.isAxpResponse][core.opt.response] 自定义完整工厂的普通对
   expect(api.isResponse(await api.request({ throws: false }))).toBe(true);
   const controller = new AbortController();
   controller.abort();
-  expect(api.isResponse(await api.request({ signal: controller.signal, throws: false }))).toBe(
-    true,
-  );
+  expect(api.isResponse(await api.request({ signal: controller.signal, throws: false }))).toBe(true);
 });

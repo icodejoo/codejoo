@@ -1,6 +1,6 @@
-import type { Style } from './constants.ts';
-import type { LoginSpec, NetworkValue, RequestSpec, RevokeSpec, SetTokenSpec, Step } from './types.ts';
-import { stepKind } from './walk.ts';
+import type { Style } from "./constants.ts";
+import type { LoginSpec, NetworkValue, RequestSpec, RevokeSpec, SetTokenSpec, Step } from "./types.ts";
+import { stepKind } from "./walk.ts";
 
 /**
  * step 解释器依赖的执行环境。解释器只负责"怎么编排"（并行、顺序、重复、后台），
@@ -69,48 +69,60 @@ export function withSuffix(id: string, suffix: string): string {
  * @throws 未知 step 类型，或环境动作抛出的错误
  * @example await runStep({ parallel: [{ wait: 10 }, { wait: 20 }] }, env, newStepState())
  */
-export async function runStep(step: Step, env: StepEnv, state: StepState, suffix = ''): Promise<void> {
+export async function runStep(step: Step, env: StepEnv, state: StepState, suffix = ""): Promise<void> {
   const kind = stepKind(step);
   const s = step as unknown as Record<string, never>;
   switch (kind) {
-    case 'request': return env.request(s.request, suffix);
-    case 'parallel': {
+    case "request":
+      return env.request(s.request, suffix);
+    case "parallel": {
       await Promise.all((s.parallel as Step[]).map((x) => runStep(x, env, state, suffix)));
       return;
     }
-    case 'sequence': {
+    case "sequence": {
       for (const x of s.sequence as Step[]) await runStep(x, env, state, suffix);
       return;
     }
-    case 'fire': {
+    case "fire": {
       const task = runStep(s.fire as Step, env, state, suffix).catch((e: unknown) => {
         state.errors.push(`fire 内部出错: ${(e as Error).message}`);
       });
       state.fired.push(task);
       return;
     }
-    case 'repeat': {
+    case "repeat": {
       const r = s.repeat as { times: number; step: Step; id_suffix?: boolean };
       for (let i = 0; i < r.times; i++) await runStep(r.step, env, state, r.id_suffix === false ? suffix : `${suffix}#${i}`);
       return;
     }
-    case 'wait': return env.sleep(s.wait as number);
-    case 'login': return env.login(s.login);
-    case 'set_token': return env.setToken(s.set_token);
-    case 'logout': return env.logout();
-    case 'revoke': return env.revoke(s.revoke);
-    case 'expire_local': return env.expireLocal();
-    case 'cancel_all': {
+    case "wait":
+      return env.sleep(s.wait as number);
+    case "login":
+      return env.login(s.login);
+    case "set_token":
+      return env.setToken(s.set_token);
+    case "logout":
+      return env.logout();
+    case "revoke":
+      return env.revoke(s.revoke);
+    case "expire_local":
+      return env.expireLocal();
+    case "cancel_all": {
       const after = (s.cancel_all as { after_ms?: number }).after_ms ?? 0;
       if (after > 0) await env.sleep(after);
       env.cancelAll();
       return;
     }
-    case 'clear_cache': return env.clearCache();
-    case 'network': return env.network(s.network);
-    case 'style': return env.style(s.style as Style);
-    case 'server_reset': return env.serverReset();
-    default: throw new Error(`未知 step: ${JSON.stringify(Object.keys(step))}`);
+    case "clear_cache":
+      return env.clearCache();
+    case "network":
+      return env.network(s.network);
+    case "style":
+      return env.style(s.style as Style);
+    case "server_reset":
+      return env.serverReset();
+    default:
+      throw new Error(`未知 step: ${JSON.stringify(Object.keys(step))}`);
   }
 }
 

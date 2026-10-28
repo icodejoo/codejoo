@@ -4,6 +4,7 @@ status: draft
 updated: 2026-10-28
 summary: 旧写法到新写法的逐项对照：入口、错误、返回形态、删除的插件、默认值与回调签名的变化
 ---
+
 ## TL;DR
 
 - 入口换成 `createAxp`，插件只对 axp 客户端生效。`Axp.install`、`Axp.create`、`Core` 删除，裸 `axios` 实例上不再有插件。
@@ -17,22 +18,22 @@ summary: 旧写法到新写法的逐项对照：入口、错误、返回形态�
 旧：
 
 ```ts
-import axios from 'axios';
-import { Axp, axpKey, axpCache, axpRetry } from '@codejoo/axp';
+import axios from "axios";
+import { Axp, axpKey, axpCache, axpRetry } from "@codejoo/axp";
 
-const api = Axp.create<Schema>(axios.create({ baseURL: '/api' }));
+const api = Axp.create<Schema>(axios.create({ baseURL: "/api" }));
 Axp.install(api.axios, { key: axpKey(), cache: axpCache(), retry: axpRetry({ max: 2 }) });
 ```
 
 新：
 
 ```ts
-import axios from 'axios';
-import { createAxp, axpCache, axpRetry } from '@codejoo/axp';
+import axios from "axios";
+import { createAxp, axpCache, axpRetry } from "@codejoo/axp";
 
 const api = createAxp<Schema>({
-  axios: axios.create({ baseURL: '/api' }),
-  plugins: [axpRetry({ max: 2 }), axpCache()],   // 插件顺序不用排，内置插件位置固定
+  axios: axios.create({ baseURL: "/api" }),
+  plugins: [axpRetry({ max: 2 }), axpCache()], // 插件顺序不用排，内置插件位置固定
 });
 ```
 
@@ -48,11 +49,13 @@ const api = createAxp<Schema>({
 
 ```ts
 try {
-  await api.post('/pet')(body);
+  await api.post("/pet")(body);
 } catch (e) {
-  if (e instanceof ApiError) toast(e.message, e.response.code);       // 业务失败
+  if (e instanceof ApiError)
+    toast(e.message, e.response.code); // 业务失败
   else if (axios.isAxiosError(e) && e.response?.status === 401) relogin();
-  else if (axios.isAxiosError(e)) toast(e.message);                  // 网络、超时等
+  else if (axios.isAxiosError(e))
+    toast(e.message); // 网络、超时等
   else throw e;
 }
 ```
@@ -61,13 +64,14 @@ try {
 
 ```ts
 try {
-  await api.post('/pet')(body);
+  await api.post("/pet")(body);
 } catch (e) {
   if (api.isResponse(e)) {
-    if (e.kind === 'auth') relogin();     // 或者判断 e.status === 401
+    if (e.kind === "auth")
+      relogin(); // 或者判断 e.status === 401
     else toast(e.message, e.code);
   } else {
-    throw e;                              // 程序 bug，原样抛出
+    throw e; // 程序 bug，原样抛出
   }
 }
 ```
@@ -98,10 +102,12 @@ AxpResponse.isSuccessful = (status, code) => code === 200;
 新，每个客户端一份，子类覆盖 `ok` 和 `status` getter：
 
 ```ts
-import { AxpResponse, axpResponse, createAxp } from '@codejoo/axp';
+import { AxpResponse, axpResponse, createAxp } from "@codejoo/axp";
 
 class MyResponse<D = unknown> extends AxpResponse<D> {
-  get ok() { return this.httpStatus < 300 && this.code === 200; }
+  get ok() {
+    return this.httpStatus < 300 && this.code === 200;
+  }
 }
 
 const api = createAxp<Schema, MyResponse>({
@@ -120,18 +126,18 @@ const api = createAxp<Schema, MyResponse>({
 旧：
 
 ```ts
-const env = await api.get('/pet')(undefined, { raw: true });       // 完整信封 { code, data, message }
-const out = await api.get('/pet')(undefined, { wrap: true });      // AxpResponse 实例
-const r = await api.get('/pet')(undefined, { normalize: false });  // 不归一化
+const env = await api.get("/pet")(undefined, { raw: true }); // 完整信封 { code, data, message }
+const out = await api.get("/pet")(undefined, { wrap: true }); // AxpResponse 实例
+const r = await api.get("/pet")(undefined, { normalize: false }); // 不归一化
 ```
 
 新：
 
 ```ts
-const r = await api.get('/pet')(undefined, { wrap: true });    // r.data 是业务数据，r.code、r.message 也在
-r.raw;                                                          // 原始 AxiosResponse
+const r = await api.get("/pet")(undefined, { wrap: true }); // r.data 是业务数据，r.code、r.message 也在
+r.raw; // 原始 AxiosResponse
 
-const res = await api.get('/pet')(undefined, { throws: false }); // 失败不抛出，res.ok 为 false
+const res = await api.get("/pet")(undefined, { throws: false }); // 失败不抛出，res.ok 为 false
 ```
 
 要点：
@@ -142,41 +148,41 @@ const res = await api.get('/pet')(undefined, { throws: false }); // 失败不抛
 
 ## 5. 删除的插件及替代
 
-| 旧 | 新 |
-| --- | --- |
-| `axpCancel()` 加 `cancelAll(ax, reason)` | 内核自带。用 `api.cancelAll(reason)`。`signal` 照常可用 |
+| 旧                                                                           | 新                                                                                                                                                       |
+| ---------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `axpCancel()` 加 `cancelAll(ax, reason)`                                     | 内核自带。用 `api.cancelAll(reason)`。`signal` 照常可用                                                                                                  |
 | `axpKey({ fastMode, before, after, ignores, sample, scope })` 加 `key: true` | 内核服务。`createAxp({ key: { scope, ignores, sample } })`。`fastMode`、`before`、`after` 删除。请求级 `key` 省略即自动计算；`true` 与省略等价，保留兼容 |
-| `axpLogger({ debug, logger })` | `createAxp({ debug })`，`debug` 可以是 `true` 或自定义 logger |
-| `axpNormalize({ nullable })` | 内核落定，不需要安装。`nullable` 删除，`data` 为 `null` 或 `undefined` 时照常原样返回 |
+| `axpLogger({ debug, logger })`                                               | `createAxp({ debug })`，`debug` 可以是 `true` 或自定义 logger                                                                                            |
+| `axpNormalize({ nullable })`                                                 | 内核落定，不需要安装。`nullable` 删除，`data` 为 `null` 或 `undefined` 时照常原样返回                                                                    |
 
 key 的例子：
 
 ```ts
 // 旧
 Axp.install(axiosInstance, { key: axpKey({ fastMode: false, scope: () => session.userId }) });
-api.get('/list')(undefined, { key: true, cache: true });
+api.get("/list")(undefined, { key: true, cache: true });
 
 // 新：scope 仍然可以是函数，每次算 key 时求值，切换账号不用重建客户端
 const api = createAxp({ key: { scope: () => session.userId } });
-api.get('/list')(undefined, { cache: true });
+api.get("/list")(undefined, { cache: true });
 ```
 
 `scope` 可以是字符串、数字，或者函数 `(request) => 值`。写成静态值（`scope: session.userId`）的话，只在创建客户端那一刻取值，之后切换账号不会更新，需要切换账号的场景请用函数。返回 `null`、`undefined`、空串或 `NaN` 时不附加。
 
 ## 6. 各插件的选项与默认值变化
 
-| 插件 | 变化 |
-| --- | --- |
-| `axpRetry` | `max` 默认 0 改为 2。`delay` 默认 3000 改为指数退避 `attempt => 300 * 2 ** (attempt - 1)`。`delayMax` 默认 `Infinity` 改为 `10_000`。`shouldRetry` 签名改为 `(r, attempt, ctx)`。`statusCodes`、`afterStatusCodes` 改为对照逻辑状态 `r.status` |
-| `axpFilter` | 装上即生效。旧版要请求级写 `filter: true` 才过滤，现在要关闭才写 `filter: false`。请求级只接受 `false`、`true` 和对象，不再调用函数 |
-| `axpCache` | 默认只缓存 GET 和 HEAD。`shouldCache` 参数改为 `r`。`storage`、`memory` 选项删除，持久化走 `store`。命中时不再重跑 `transformResponse` |
-| `axpShare` | 策略 `'none'` 删除，改用 `share: false`。`share: (config) => …` 删除。race 的胜负改看 `r.ok`。新增 `methods`，默认 GET 和 HEAD。跟随者拿到同一个只读的 `R` |
-| `axpMock` | `fallbackWhen` 参数改为 `r`。请求级对象里的 `mock` 字段删除，关闭用 `false` 或 `{ enable: false }`。`mock: true` 仍然可以为单次请求开启 |
-| `axpNotify` | `stringify` 签名改为 `(r, ctx)`，并且有默认值，可以不写。`silent: true` 真正生效（只作用于默认的 `stringify`，自定义的自己读 `ctx.request.silent`）。请求级 `notify` 只是开关：`false` 或 `{ enable: false }` |
-| `axpLoading` | 显示从逻辑请求开始算，包括等待 token 刷新的时间。`guardTransform` 和 `logical` 参数删除。请求级回调（函数形式）保留 |
-| `axpRepath` | 行为不变。占位符值按路径段编码，只替换 pathname。请求级除了 `false`，还可以写对象 `{ pattern, removeKey }` 覆盖 |
-| `key` | 包含 params，有请求体的方法还包含 data。旧版 `key: true` 只哈希 method 和 url，同一路径不同参数会串缓存 |
-| `axpEnvs` | 卸载（`eject`、`dispose`）不再还原写入 `defaults` 的配置，旧版的 cleanup 会还原。另可写成 `{ enable, rules }`，数组写法仍然可用 |
+| 插件         | 变化                                                                                                                                                                                                                                           |
+| ------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `axpRetry`   | `max` 默认 0 改为 2。`delay` 默认 3000 改为指数退避 `attempt => 300 * 2 ** (attempt - 1)`。`delayMax` 默认 `Infinity` 改为 `10_000`。`shouldRetry` 签名改为 `(r, attempt, ctx)`。`statusCodes`、`afterStatusCodes` 改为对照逻辑状态 `r.status` |
+| `axpFilter`  | 装上即生效。旧版要请求级写 `filter: true` 才过滤，现在要关闭才写 `filter: false`。请求级只接受 `false`、`true` 和对象，不再调用函数                                                                                                            |
+| `axpCache`   | 默认只缓存 GET 和 HEAD。`shouldCache` 参数改为 `r`。`storage`、`memory` 选项删除，持久化走 `store`。命中时不再重跑 `transformResponse`                                                                                                         |
+| `axpShare`   | 策略 `'none'` 删除，改用 `share: false`。`share: (config) => …` 删除。race 的胜负改看 `r.ok`。新增 `methods`，默认 GET 和 HEAD。跟随者拿到同一个只读的 `R`                                                                                     |
+| `axpMock`    | `fallbackWhen` 参数改为 `r`。请求级对象里的 `mock` 字段删除，关闭用 `false` 或 `{ enable: false }`。`mock: true` 仍然可以为单次请求开启                                                                                                        |
+| `axpNotify`  | `stringify` 签名改为 `(r, ctx)`，并且有默认值，可以不写。`silent: true` 真正生效（只作用于默认的 `stringify`，自定义的自己读 `ctx.request.silent`）。请求级 `notify` 只是开关：`false` 或 `{ enable: false }`                                  |
+| `axpLoading` | 显示从逻辑请求开始算，包括等待 token 刷新的时间。`guardTransform` 和 `logical` 参数删除。请求级回调（函数形式）保留                                                                                                                            |
+| `axpRepath`  | 行为不变。占位符值按路径段编码，只替换 pathname。请求级除了 `false`，还可以写对象 `{ pattern, removeKey }` 覆盖                                                                                                                                |
+| `key`        | 包含 params，有请求体的方法还包含 data。旧版 `key: true` 只哈希 method 和 url，同一路径不同参数会串缓存                                                                                                                                        |
+| `axpEnvs`    | 卸载（`eject`、`dispose`）不再还原写入 `defaults` 的配置，旧版的 cleanup 会还原。另可写成 `{ enable, rules }`，数组写法仍然可用                                                                                                                |
 
 retry 的例子：
 
@@ -192,11 +198,11 @@ cache 的例子：
 
 ```ts
 // 旧：POST 也会被缓存
-api.post('/search')(body, { cache: true });
+api.post("/search")(body, { cache: true });
 
 // 新：POST 不会被缓存。要缓存只能在插件级改 methods
-axpCache({ methods: ['get', 'head', 'post'] });
-api.post('/search')(body, { cache: true });
+axpCache({ methods: ["get", "head", "post"] });
+api.post("/search")(body, { cache: true });
 ```
 
 ## 7. auth
@@ -208,9 +214,11 @@ axpAuth({
   tokenManager,
   onRefresh: (tm, resp) => refresh(tm),
   onAccessExpired: (tm, resp) => logout(),
-  onAccessDenied: (tm, resp) => toast('无权限'),
-  accessDeniedCode: 'ACCESS_DENIED',
-  ready: (tm, config) => { config.headers.Authorization = tm.accessToken; },
+  onAccessDenied: (tm, resp) => toast("无权限"),
+  accessDeniedCode: "ACCESS_DENIED",
+  ready: (tm, config) => {
+    config.headers.Authorization = tm.accessToken;
+  },
 });
 ```
 
@@ -221,7 +229,7 @@ axpAuth({
   tokenManager,
   onRefresh: (r, tm) => refresh(tm),
   onAccessExpired: (r, tm) => logout(),
-  onAccessDenied: (r, tm) => toast('无权限'),
+  onAccessDenied: (r, tm) => toast("无权限"),
   ready: (tm, request) => ({ headers: { Authorization: tm.accessToken } }),
 });
 ```
@@ -244,17 +252,17 @@ axpAuth({
 旧：
 
 ```ts
-api.get('/list')(undefined, { key: () => 'k', cache: { key: (cfg) => cfg.url } });
-api.get('/x')(undefined, { share: (cfg) => (cfg.url.startsWith('/a') ? 'start' : false) });
-api.get('/x')(undefined, { retry: () => 2 });
+api.get("/list")(undefined, { key: () => "k", cache: { key: (cfg) => cfg.url } });
+api.get("/x")(undefined, { share: (cfg) => (cfg.url.startsWith("/a") ? "start" : false) });
+api.get("/x")(undefined, { retry: () => 2 });
 ```
 
 新：
 
 ```ts
-api.get('/list')(undefined, { key: 'k', cache: { key: 'list' } });   // 显式字符串 key
-const shareable = url.startsWith('/a');                               // 在调用处判断
-api.get('/x')(undefined, { share: shareable ? 'start' : false });
+api.get("/list")(undefined, { key: "k", cache: { key: "list" } }); // 显式字符串 key
+const shareable = url.startsWith("/a"); // 在调用处判断
+api.get("/x")(undefined, { share: shareable ? "start" : false });
 ```
 
 例外：本身就是回调的选项仍然可以传函数，比如 `axpLoading` 的请求级回调。
@@ -264,16 +272,16 @@ api.get('/x')(undefined, { share: shareable ? 'start' : false });
 旧：
 
 ```ts
-const child = api.extends({ baseURL: '/v2' });   // 不带插件
+const child = api.extends({ baseURL: "/v2" }); // 不带插件
 Axp.install(child.axios, { cache: axpCache() }); // 要自己再装一遍
 ```
 
 新：
 
 ```ts
-const child = api.extend({ baseURL: '/v2' });    // 默认继承插件，每个插件各自重新 setup，状态不共享
+const child = api.extend({ baseURL: "/v2" }); // 默认继承插件，每个插件各自重新 setup，状态不共享
 
-const other = api.extend({ baseURL: '/v2' }, { plugins: [axpCache()] }); // 或者指定插件列表
+const other = api.extend({ baseURL: "/v2" }, { plugins: [axpCache()] }); // 或者指定插件列表
 ```
 
 要点：
@@ -283,48 +291,49 @@ const other = api.extend({ baseURL: '/v2' }, { plugins: [axpCache()] }); // 或�
 
 ## 10. 插件生命周期 API
 
-| 旧 | 新 |
-| --- | --- |
-| `Axp.install(ax, {...})` 返回 `AxpHandle` | `createAxp({ plugins })`；运行时用 `api.use(p)` 和 `api.eject(name)` |
-| `handle.plugin('axp:cache')`，按名字取 | `api.plugin(cachePlugin)`，传插件对象，不是名字 |
-| `handle.prepend`、`append`、`insertBefore`、`insertAfter` | 删除，不再支持手动排序。内置插件位置固定，自定义插件用 `stage` 和 `enforce` |
-| `handle.dispose()` | `api.dispose()`：先中止在途请求，再卸载全部插件，销毁后客户端不能再用；只卸一个用 `api.eject(name)`，不影响在途请求 |
-| 插件的 `install(axios)` 返回 cleanup | `setup(client)` 返回实例，实例上可以有 `handle`、`taps`、`api`、`dispose` |
-| 插件写成拦截器 | 写成中间件 `handle(ctx, next)`，或用 `taps` 挂到多个阶段。`next()` 不抛错，返回 `R` |
-| `pluginLog(config, ...)` | `ctx.log` |
-| `Plugin` 类型 | `AxpPlugin` 类型 |
+| 旧                                                        | 新                                                                                                                  |
+| --------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------- |
+| `Axp.install(ax, {...})` 返回 `AxpHandle`                 | `createAxp({ plugins })`；运行时用 `api.use(p)` 和 `api.eject(name)`                                                |
+| `handle.plugin('axp:cache')`，按名字取                    | `api.plugin(cachePlugin)`，传插件对象，不是名字                                                                     |
+| `handle.prepend`、`append`、`insertBefore`、`insertAfter` | 删除，不再支持手动排序。内置插件位置固定，自定义插件用 `stage` 和 `enforce`                                         |
+| `handle.dispose()`                                        | `api.dispose()`：先中止在途请求，再卸载全部插件，销毁后客户端不能再用；只卸一个用 `api.eject(name)`，不影响在途请求 |
+| 插件的 `install(axios)` 返回 cleanup                      | `setup(client)` 返回实例，实例上可以有 `handle`、`taps`、`api`、`dispose`                                           |
+| 插件写成拦截器                                            | 写成中间件 `handle(ctx, next)`，或用 `taps` 挂到多个阶段。`next()` 不抛错，返回 `R`                                 |
+| `pluginLog(config, ...)`                                  | `ctx.log`                                                                                                           |
+| `Plugin` 类型                                             | `AxpPlugin` 类型                                                                                                    |
 
 ## 11. 子路径删除
 
-| 旧 | 新 |
-| --- | --- |
-| `@codejoo/axp/cancel` | 删除。用 `api.cancelAll` |
-| `@codejoo/axp/key` | 删除。key 是内核服务 |
-| `@codejoo/axp/logger` | 删除。用 `debug` 选项 |
-| `@codejoo/axp/normalize` | 删除。归一化由内核完成 |
+| 旧                       | 新                       |
+| ------------------------ | ------------------------ |
+| `@codejoo/axp/cancel`    | 删除。用 `api.cancelAll` |
+| `@codejoo/axp/key`       | 删除。key 是内核服务     |
+| `@codejoo/axp/logger`    | 删除。用 `debug` 选项    |
+| `@codejoo/axp/normalize` | 删除。归一化由内核完成   |
 
 其它插件子路径（`/retry`、`/cache`、`/auth` 等）保留。
+
 <!-- TODO: 待实现确认：保留的子路径清单和 package exports，等 B6 打包后确认 -->
 
 ## 12. 其它删除或改名
 
-| 旧 | 新 |
-| --- | --- |
-| `ApiError` | 删除。失败是 `IAxpResponse` |
-| `AxpResponse.fromResponse(res)` | 删除，由响应工厂构造 |
-| `AxpResponse.isSuccessful` 静态钩子 | 子类覆盖 `ok` 和 `status` |
-| `res.successful` | `r.ok` |
-| `cancelToken` | 删除，用 `signal` |
-| `removeCache(ax, key)`、`clearCache(ax)` | `removeCache(client, key)`、`clearCache(client)`，参数改为客户端。没装 cache 时返回 `false` 和 `0` |
-| cache 的 `storage`、`memory` 选项 | 删除。持久化用 `store` |
-| `shouldCache(response)` | `shouldCache(r)` |
-| `stringify(data, message, status, config)` | `stringify(r, ctx)` |
-| `fallbackWhen({ response, error })` | `fallbackWhen(r)` |
-| `shouldRetry(response?, err?)` | `shouldRetry(r, attempt, ctx)` |
-| `nullable` 选项 | 删除。运行时本来就没有效果 |
-| 请求级 `key: true` | 可以保留：与省略等价，都是自动计算（新版自动计算包含参数）。数字、函数形式不再支持 |
-| `Axp.create<T>` 的 `T` | `createAxp<S>` 的 `S` |
-| `Core` 类 | `AxpClient`，由 `createAxp` 创建 |
+| 旧                                         | 新                                                                                                 |
+| ------------------------------------------ | -------------------------------------------------------------------------------------------------- |
+| `ApiError`                                 | 删除。失败是 `IAxpResponse`                                                                        |
+| `AxpResponse.fromResponse(res)`            | 删除，由响应工厂构造                                                                               |
+| `AxpResponse.isSuccessful` 静态钩子        | 子类覆盖 `ok` 和 `status`                                                                          |
+| `res.successful`                           | `r.ok`                                                                                             |
+| `cancelToken`                              | 删除，用 `signal`                                                                                  |
+| `removeCache(ax, key)`、`clearCache(ax)`   | `removeCache(client, key)`、`clearCache(client)`，参数改为客户端。没装 cache 时返回 `false` 和 `0` |
+| cache 的 `storage`、`memory` 选项          | 删除。持久化用 `store`                                                                             |
+| `shouldCache(response)`                    | `shouldCache(r)`                                                                                   |
+| `stringify(data, message, status, config)` | `stringify(r, ctx)`                                                                                |
+| `fallbackWhen({ response, error })`        | `fallbackWhen(r)`                                                                                  |
+| `shouldRetry(response?, err?)`             | `shouldRetry(r, attempt, ctx)`                                                                     |
+| `nullable` 选项                            | 删除。运行时本来就没有效果                                                                         |
+| 请求级 `key: true`                         | 可以保留：与省略等价，都是自动计算（新版自动计算包含参数）。数字、函数形式不再支持                 |
+| `Axp.create<T>` 的 `T`                     | `createAxp<S>` 的 `S`                                                                              |
+| `Core` 类                                  | `AxpClient`，由 `createAxp` 创建                                                                   |
 
 ## 迁移检查清单
 

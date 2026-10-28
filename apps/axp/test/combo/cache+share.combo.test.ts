@@ -22,9 +22,7 @@ const SLOW = 30;
 /** 装好 share 与带写入计数存储的 cache；路由按命中序号返回数据。 */
 function client(policy: SharePolicy = "start", clone?: "deep") {
   const entries = new Map<string, IAxpCacheEntry<AxpResponse>>();
-  const set = vi.fn(
-    (key: string, entry: IAxpCacheEntry<AxpResponse>) => void entries.set(key, entry),
-  );
+  const set = vi.fn((key: string, entry: IAxpCacheEntry<AxpResponse>) => void entries.set(key, entry));
   const store = {
     get: (key: string) => entries.get(key),
     set,
@@ -34,10 +32,7 @@ function client(policy: SharePolicy = "start", clone?: "deep") {
       return entries.size;
     },
   };
-  const h = sourceClient([
-    axpShare<AxpResponse>({ policy }),
-    axpCache<AxpResponse>({ store, clone }),
-  ]);
+  const h = sourceClient([axpShare<AxpResponse>({ policy }), axpCache<AxpResponse>({ store, clone })]);
   h.net.on("get", URL, (_config, hit) => envelope({ hit, list: [hit] }));
   return { ...h, set };
 }
@@ -49,11 +44,7 @@ async function settled<T>(...pending: Promise<T>[]): Promise<T[]> {
 
 it("[share.opt.policy × cache.req.cache] 并发未命中只发一次网络，结果只写缓存一次，之后的请求命中缓存", async () => {
   const h = client();
-  const results = await settled(
-    ...Array.from({ length: CALLERS }, () =>
-      h.send({ url: URL, share: true, cache: true, latency: LATENCY } as never),
-    ),
-  );
+  const results = await settled(...Array.from({ length: CALLERS }, () => h.send({ url: URL, share: true, cache: true, latency: LATENCY } as never)));
   expect(h.net.calls("get", URL)).toBe(1);
   expect(h.set).toHaveBeenCalledOnce();
   expect(new Set(results).size).toBe(1);
@@ -65,10 +56,7 @@ it("[share.opt.policy × cache.req.cache] 并发未命中只发一次网络，�
 it("[share.opt.policy × cache.cb.shouldCache] 失败结果被共享但不写缓存，之后的请求重新发送", async () => {
   const h = client();
   h.net.on("get", URL, (_config, hit) => (hit === 1 ? { status: 500 } : envelope("ok")));
-  const failed = await settled(
-    h.send({ url: URL, share: true, cache: true, latency: LATENCY } as never),
-    h.send({ url: URL, share: true, cache: true, latency: LATENCY } as never),
-  );
+  const failed = await settled(h.send({ url: URL, share: true, cache: true, latency: LATENCY } as never), h.send({ url: URL, share: true, cache: true, latency: LATENCY } as never));
   expect(failed[0]!.httpStatus).toBe(500);
   expect(failed[1]).toBe(failed[0]);
   expect(h.set).not.toHaveBeenCalled();
@@ -79,10 +67,7 @@ it("[share.opt.policy × cache.cb.shouldCache] 失败结果被共享但不写缓
 
 it("[share.opt.policy × cache.opt.clone] clone:deep 时首发与跟随者共享同一份拷贝，命中缓存则拿到新的拷贝，原件不被污染", async () => {
   const h = client("start", "deep");
-  const [leader, follower] = await settled(
-    h.send({ url: URL, share: true, cache: true, latency: LATENCY } as never),
-    h.send({ url: URL, share: true, cache: true, latency: LATENCY } as never),
-  );
+  const [leader, follower] = await settled(h.send({ url: URL, share: true, cache: true, latency: LATENCY } as never), h.send({ url: URL, share: true, cache: true, latency: LATENCY } as never));
   expect(follower).toBe(leader);
   (leader!.data as { list: unknown[] }).list.push("polluted");
   const [hit] = await settled(h.send({ url: URL, cache: true }));
@@ -92,10 +77,7 @@ it("[share.opt.policy × cache.opt.clone] clone:deep 时首发与跟随者共享
 
 it("[share.opt.policy × cache.fn.axpCache] end：两次都发网络，订阅者与缓存都以最新一次为准，较慢的旧响应不回写", async () => {
   const h = client("end");
-  const [older, newer] = await settled(
-    h.send({ url: URL, share: true, cache: true, latency: SLOW } as never),
-    h.send({ url: URL, share: true, cache: true, latency: LATENCY } as never),
-  );
+  const [older, newer] = await settled(h.send({ url: URL, share: true, cache: true, latency: SLOW } as never), h.send({ url: URL, share: true, cache: true, latency: LATENCY } as never));
   expect(h.net.calls("get", URL)).toBe(2);
   expect(newer).toBe(older);
   expect((newer!.data as { hit: number }).hit).toBe(2);
@@ -106,10 +88,7 @@ it("[share.opt.policy × cache.fn.axpCache] end：两次都发网络，订阅者
 
 it("[share.opt.policy × cache.fn.axpCache] race：先成功的胜出并写缓存，较慢的成功不覆盖", async () => {
   const h = client("race");
-  const [slow, fast] = await settled(
-    h.send({ url: URL, share: true, cache: true, latency: SLOW } as never),
-    h.send({ url: URL, share: true, cache: true, latency: LATENCY } as never),
-  );
+  const [slow, fast] = await settled(h.send({ url: URL, share: true, cache: true, latency: SLOW } as never), h.send({ url: URL, share: true, cache: true, latency: LATENCY } as never));
   expect(slow).toBe(fast);
   const [hit] = await settled(h.send({ url: URL, cache: true }));
   expect((hit!.data as { hit: number }).hit).toBe(2);
@@ -118,10 +97,7 @@ it("[share.opt.policy × cache.fn.axpCache] race：先成功的胜出并写缓�
 
 it("[share.opt.policy × cache.fn.clearCache] 共享期间 clear：在途结果照常分发，但不回写缓存", async () => {
   const h = client();
-  const pending = [
-    h.send({ url: URL, share: true, cache: true, latency: LATENCY } as never),
-    h.send({ url: URL, share: true, cache: true, latency: LATENCY } as never),
-  ];
+  const pending = [h.send({ url: URL, share: true, cache: true, latency: LATENCY } as never), h.send({ url: URL, share: true, cache: true, latency: LATENCY } as never)];
   await vi.advanceTimersByTimeAsync(1);
   clearCache(h.api);
   const [a, b] = await settled(...pending);
@@ -140,14 +116,7 @@ it("[share.opt.policy × cache.cb.shouldCache] 判定抛错：所有订阅者拿
     }),
   ]);
   h.net.on("get", URL, () => envelope("ok"));
-  const caught = [
-    h
-      .send({ url: URL, share: true, cache: true, latency: LATENCY } as never)
-      .catch((e: unknown) => e),
-    h
-      .send({ url: URL, share: true, cache: true, latency: LATENCY } as never)
-      .catch((e: unknown) => e),
-  ];
+  const caught = [h.send({ url: URL, share: true, cache: true, latency: LATENCY } as never).catch((e: unknown) => e), h.send({ url: URL, share: true, cache: true, latency: LATENCY } as never).catch((e: unknown) => e)];
   await vi.runAllTimersAsync();
   expect(await Promise.all(caught)).toEqual([bug, bug]);
   expect(h.net.calls("get", URL)).toBe(1);

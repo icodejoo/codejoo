@@ -29,22 +29,7 @@ const BINARY_LENGTH = 128;
 /** 会话分区样本。 */
 const SCOPES = [undefined, null, "", NaN, 0, -1, "account", "中文#分区"] as const;
 /** 同时覆盖缺省、大小写、空方法及不携带请求体的方法。 */
-const METHODS = [
-  undefined,
-  "",
-  "get",
-  "GET",
-  POST_METHOD,
-  "POST",
-  "put",
-  "patch",
-  "delete",
-  "head",
-  "options",
-  "purge",
-  "link",
-  "unlink",
-];
+const METHODS = [undefined, "", "get", "GET", POST_METHOD, "POST", "put", "patch", "delete", "head", "options", "purge", "link", "unlink"];
 /** URL 的边界、分隔符和非 ASCII 样本。 */
 const URLS = [undefined, "", TEST_URL, "/a?b=1#c", "/中文/😀", "|p|d"];
 /** 字段名分帧与豁免候选。 */
@@ -74,10 +59,7 @@ function generate(random: () => number, leaves: unknown[], depth = 0): unknown {
   if (depth >= MAX_DEPTH || shape > 1) return pick(leaves, random);
   const width = Math.floor(random() * MAX_WIDTH);
   if (shape === 0) {
-    return Array.from(
-      { /** 随机容器宽度。 */ length: width },
-      /** 递归生成有序数组项。 */ () => generate(random, leaves, depth + 1),
-    );
+    return Array.from({ /** 随机容器宽度。 */ length: width }, /** 递归生成有序数组项。 */ () => generate(random, leaves, depth + 1));
   }
   const result: Record<string, unknown> = {};
   for (let index = 0; index < width; index++) {
@@ -169,18 +151,12 @@ it("12,000 组固定种子请求与改造前逐位一致", /** 覆盖请求选�
       /** 交替启用超长串采样。 */
       sample: index % 2 === 0,
       /** scope 同时覆盖回调和值，回调读取当前请求。 */
-      scope:
-        index % 3 === 0
-          ? /** 缺省地址保留空分区语义。 */ (view) => (view.url ? scope : undefined)
-          : (scope ?? undefined),
+      scope: index % 3 === 0 ? /** 缺省地址保留空分区语义。 */ (view) => (view.url ? scope : undefined) : (scope ?? undefined),
     };
     if (index % 4 !== 0) {
-      options.ignores =
-        index % 3 === 0 ? [] : [KEEP_FIELD, "", null, undefined, NaN, false, pick(SCOPES, random)];
+      options.ignores = index % 3 === 0 ? [] : [KEEP_FIELD, "", null, undefined, NaN, false, pick(SCOPES, random)];
     }
-    expect(requestKey(request, options), "case=" + index).toBe(
-      referenceRequestKey(request, options),
-    );
+    expect(requestKey(request, options), "case=" + index).toBe(referenceRequestKey(request, options));
   }
 });
 
@@ -229,9 +205,7 @@ it("按值豁免无原型对象仍透传旧实现的转换异常", /** 对比两
   const value = Object.create(null);
   const request = { /** 使用请求体。 */ method: POST_METHOD, /** 无原型请求体。 */ data: value };
   const options = { /** 命中值豁免后需执行旧 String 转换。 */ ignores: [value] };
-  expect(/** 原实现暴露转换失败。 */ () => referenceRequestKey(request, options)).toThrow(
-    TypeError,
-  );
+  expect(/** 原实现暴露转换失败。 */ () => referenceRequestKey(request, options)).toThrow(TypeError);
   expect(/** 新实现保留同样异常。 */ () => requestKey(request, options)).toThrow(TypeError);
 });
 

@@ -53,8 +53,7 @@ it("[loading.cb.loading][notify.cb.stringify][notify.combo.taps] taps 的 outer 
     taps: [
       {
         stage: SOURCE_STAGE,
-        onResponse: /** 派生最终消息，由工厂保留扩展字段。 */ (r, ctx) =>
-          ctx.fail({ from: r, message: FINAL_MESSAGE }),
+        onResponse: /** 派生最终消息，由工厂保留扩展字段。 */ (r, ctx) => ctx.fail({ from: r, message: FINAL_MESSAGE }),
       },
       {
         stage: OUTER_STAGE,
@@ -67,9 +66,7 @@ it("[loading.cb.loading][notify.cb.stringify][notify.combo.taps] taps 的 outer 
   h.api.use(taps);
   h.api.use(axpNotify<AxpResponse>({ notify }));
   h.api.use(axpLoading<AxpResponse>({ loading: loadingRecorder(h.events) }));
-  h.net.fallback(
-    /** 追踪字段来自假网络响应头。 */ () => ({ status: 500, headers: { "x-trace-id": TRACE_ID } }),
-  );
+  h.net.fallback(/** 追踪字段来自假网络响应头。 */ () => ({ status: 500, headers: { "x-trace-id": TRACE_ID } }));
   const pending = h.send();
   await vi.runAllTimersAsync();
   const response = await pending;
@@ -115,9 +112,7 @@ it("[notify.req.throws][loading.cb.finally] 正常抛出最终失败 R 前，通
   h.api.use(axpLoading<AxpResponse>({ loading: loadingRecorder(h.events) }));
   h.api.use(axpNotify<AxpResponse>({ notify }));
   h.net.fallback(/** 最终失败。 */ () => ({ status: 500 }));
-  const pending = h
-    .send({ throws: true })
-    .catch(/** 捕获内核直接抛出的 R。 */ (response: unknown) => response);
+  const pending = h.send({ throws: true }).catch(/** 捕获内核直接抛出的 R。 */ (response: unknown) => response);
   await vi.runAllTimersAsync();
   const response = await pending;
   expect(response).toMatchObject({ kind: "http", status: 500 });

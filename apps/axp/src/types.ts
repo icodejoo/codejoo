@@ -41,11 +41,7 @@ type SchemaShape<T> = {
 };
 
 /** 默认 unknown/any 保持宽松，其余对象按实际键验证方法优先结构。 */
-type IsMethodSchema<T> = unknown extends T
-  ? false
-  : [T] extends [object & SchemaShape<T>]
-    ? true
-    : false;
+type IsMethodSchema<T> = unknown extends T ? false : [T] extends [object & SchemaShape<T>] ? true : false;
 
 /* `T` 是匹配 `SchemaShape<T>` 的方法优先 schema；按已有键检查结构后，每次查找均使用 `T[Mt][P]`，无需反转路径与方法。
  *
@@ -54,36 +50,21 @@ type IsMethodSchema<T> = unknown extends T
 /** 严格路径：只允许该方法下真实存在的 key。未列出的 URL 是编译错误；本地扩展可继承方法优先 schema，不匹配时放宽为 `string`。
  *
  *  Strict path: only keys present under that method. Unlisted URLs are a compile error — extend via a local `.d.ts` declaration merge; relaxes to `string` when `T` doesn't match `MethodSchema`. */
-type LoosePath<T, Mt extends HttpMethodLower> =
-  IsMethodSchema<T> extends true ? (Mt extends keyof T ? keyof T[Mt] : never) : string;
+type LoosePath<T, Mt extends HttpMethodLower> = IsMethodSchema<T> extends true ? (Mt extends keyof T ? keyof T[Mt] : never) : string;
 
 /** 某 path/method 对应的 `[response, request]` 元组，或 `never`；O(1) 字面量查找。
  *
  *  `[response, request]` tuple for a path/method, or `never`; O(1) literal lookup. */
-type EntryFor<T, Mt extends HttpMethodLower, P> =
-  IsMethodSchema<T> extends true
-    ? Mt extends keyof T
-      ? P extends keyof T[Mt]
-        ? T[Mt][P]
-        : never
-      : never
-    : never;
+type EntryFor<T, Mt extends HttpMethodLower, P> = IsMethodSchema<T> extends true ? (Mt extends keyof T ? (P extends keyof T[Mt] ? T[Mt][P] : never) : never) : never;
 
 /** 从 `EntryFor` 取出响应类型 `R`，取不到回退 `unknown`。 / Extracts response type `R` from `EntryFor`, falls back to `unknown`. */
-type ResponseFor<T, Mt extends HttpMethodLower, P> =
-  EntryFor<T, Mt, P> extends readonly [infer R, ...unknown[]] ? R : unknown;
+type ResponseFor<T, Mt extends HttpMethodLower, P> = EntryFor<T, Mt, P> extends readonly [infer R, ...unknown[]] ? R : unknown;
 
 /** 从 `EntryFor` 取出请求体类型；空 `request: []` 表示无请求体（解析为 `undefined`），其余回退 `unknown`。
  *
  *  Extracts payload type from `EntryFor`; empty `request: []` means no payload (resolves to `undefined`), else falls back to `unknown`. */
 type PayloadFor<T, Mt extends HttpMethodLower, P> =
-  EntryFor<T, Mt, P> extends readonly [unknown, infer Req]
-    ? Req extends readonly [infer Pl, ...unknown[]]
-      ? Pl
-      : Req extends readonly []
-        ? undefined
-        : unknown
-    : unknown;
+  EntryFor<T, Mt, P> extends readonly [unknown, infer Req] ? (Req extends readonly [infer Pl, ...unknown[]] ? Pl : Req extends readonly [] ? undefined : unknown) : unknown;
 
 /** 泛型仍是默认值 `unknown`/`any` 时为真。 / True when the generic was left at its `unknown`/`any` default. */
 type IsLoose<T> = unknown extends T ? true : false;
@@ -91,14 +72,12 @@ type IsLoose<T> = unknown extends T ? true : false;
 /** 解析后的请求体类型——显式 `Q` 优先，否则从 schema 推断，否则原样传递。
  *
  *  Resolved payload — explicit `Q` wins, else infer from schema, else passthrough. */
-type ResolvePayload<T, Mt extends HttpMethodLower, P, Q> =
-  IsLoose<Q> extends true ? ([EntryFor<T, Mt, P>] extends [never] ? Q : PayloadFor<T, Mt, P>) : Q;
+type ResolvePayload<T, Mt extends HttpMethodLower, P, Q> = IsLoose<Q> extends true ? ([EntryFor<T, Mt, P>] extends [never] ? Q : PayloadFor<T, Mt, P>) : Q;
 
 /** 解析后的响应类型——显式 `R` 优先，否则从 schema 推断，否则原样传递。
  *
  *  Resolved response — explicit `R` wins, else infer from schema, else passthrough. */
-type ResolveResponse<T, Mt extends HttpMethodLower, P, R> =
-  IsLoose<R> extends true ? ([EntryFor<T, Mt, P>] extends [never] ? R : ResponseFor<T, Mt, P>) : R;
+type ResolveResponse<T, Mt extends HttpMethodLower, P, R> = IsLoose<R> extends true ? ([EntryFor<T, Mt, P>] extends [never] ? R : ResponseFor<T, Mt, P>) : R;
 
 /** 元组构造器，使请求体可必填、可选，或 `any` 原样传递。 / Tuple builder so a payload can be required, optional, or `any`-passthrough. */
 type Payload<Q, Rest extends unknown[]> = 0 extends 1 & Q
@@ -194,14 +173,9 @@ export type WithData<R, D> = Omit<R, "data"> & { /** 当前接口的业务数据
 /** 从外到内的固定阶段。 */
 export type AxpStage = keyof typeof STAGE_BUILTINS;
 /** next 永远 resolve，程序异常临时归类为 internal。 */
-export type AxpNext<R extends IAxpResponse = IAxpResponse> = (
-  patch?: AxpRequestPatch,
-) => Promise<R>;
+export type AxpNext<R extends IAxpResponse = IAxpResponse> = (patch?: AxpRequestPatch) => Promise<R>;
 /** 请求不可变的洋葱中间件。 */
-export type AxpMiddleware<R extends IAxpResponse = IAxpResponse> = (
-  ctx: AxpContext<R>,
-  next: AxpNext<R>,
-) => Promise<R>;
+export type AxpMiddleware<R extends IAxpResponse = IAxpResponse> = (ctx: AxpContext<R>, next: AxpNext<R>) => Promise<R>;
 /** 一个独立参与排序的请求/响应挂载段。 */
 export interface AxpTap<R extends IAxpResponse = IAxpResponse> {
   /** 挂载阶段。 */
@@ -257,39 +231,20 @@ interface IAxpBaseOptions<R extends IAxpResponse> {
   debug?: boolean | AxpLogger;
 }
 /** 判断是否为默认响应的结构类型。 */
-export type TAxpDefaultResponse<R> = [R] extends [AxpResponse]
-  ? [AxpResponse] extends [R]
-    ? true
-    : false
-  : false;
+export type TAxpDefaultResponse<R> = [R] extends [AxpResponse] ? ([AxpResponse] extends [R] ? true : false) : false;
 /** 默认响应可省略选项，自定义响应必须提供完整选项。 */
 export type TAxpArgs<R, O> = TAxpDefaultResponse<R> extends true ? [options?: O] : [options: O];
 /** 自定义响应必须显式提供匹配的工厂。 */
 export type AxpOptions<R extends IAxpResponse = AxpResponse> = IAxpBaseOptions<R> &
-  (TAxpDefaultResponse<R> extends true
-    ? { /** 默认响应工厂。 */ response?: IAxpResponseFactory<R> }
-    : { /** 自定义响应工厂。 */ response: IAxpResponseFactory<R> });
+  (TAxpDefaultResponse<R> extends true ? { /** 默认响应工厂。 */ response?: IAxpResponseFactory<R> } : { /** 自定义响应工厂。 */ response: IAxpResponseFactory<R> });
 /** 根据选项决定返回形态。 */
-type TAxpResult<R extends IAxpResponse, D, O> = O extends { wrap: true } | { throws: false }
-  ? WithData<R, D>
-  : D;
+type TAxpResult<R extends IAxpResponse, D, O> = O extends { wrap: true } | { throws: false } ? WithData<R, D> : D;
 /** 新动词的调用签名，沿用原有 Schema 查表和 NoInfer。 */
-type TAxpDispatchArgs<S, Mt extends HttpMethodLower, P, Q, C extends unknown[]> = Payload<
-  ResolvePayload<S, Mt, P, NoInfer<Q>>,
-  C
->;
+type TAxpDispatchArgs<S, Mt extends HttpMethodLower, P, Q, C extends unknown[]> = Payload<ResolvePayload<S, Mt, P, NoInfer<Q>>, C>;
 /** 按调用级有效开关选择返回形态的动词签名。 */
 interface IAxpDispatch<S, Mt extends HttpMethodLower, P, R extends IAxpResponse, O> {
   /** 调用级明确包装或关闭抛错时返回响应。 */
-  <D = unknown, Q = unknown>(
-    ...args: TAxpDispatchArgs<
-      S,
-      Mt,
-      P,
-      Q,
-      [config: AxpRequestConfig & ({ wrap: true } | { throws: false })]
-    >
-  ): Promise<WithData<R, ResolveResponse<S, Mt, P, D>>>;
+  <D = unknown, Q = unknown>(...args: TAxpDispatchArgs<S, Mt, P, Q, [config: AxpRequestConfig & ({ wrap: true } | { throws: false })]>): Promise<WithData<R, ResolveResponse<S, Mt, P, D>>>;
   /** 调用级同时关闭包装并开启抛错时返回数据。 */
   <D = unknown, Q = unknown>(
     ...args: TAxpDispatchArgs<
@@ -319,13 +274,7 @@ interface IAxpDispatch<S, Mt extends HttpMethodLower, P, R extends IAxpResponse,
         },
       ]
     >
-  ): Promise<
-    TAxpResult<
-      R,
-      ResolveResponse<S, Mt, P, D>,
-      Omit<O, "wrap"> & { /** 有效包装值。 */ wrap: false }
-    >
-  >;
+  ): Promise<TAxpResult<R, ResolveResponse<S, Mt, P, D>, Omit<O, "wrap"> & { /** 有效包装值。 */ wrap: false }>>;
   /** 调用级覆盖抛错，包装开关继承方法配置。 */
   <D = unknown, Q = unknown>(
     ...args: TAxpDispatchArgs<
@@ -340,27 +289,13 @@ interface IAxpDispatch<S, Mt extends HttpMethodLower, P, R extends IAxpResponse,
         },
       ]
     >
-  ): Promise<
-    TAxpResult<
-      R,
-      ResolveResponse<S, Mt, P, D>,
-      Omit<O, "throws"> & { /** 有效抛错值。 */ throws: true }
-    >
-  >;
+  ): Promise<TAxpResult<R, ResolveResponse<S, Mt, P, D>, Omit<O, "throws"> & { /** 有效抛错值。 */ throws: true }>>;
   /** 未覆盖开关时根据方法配置决定返回形态。 */
-  <D = unknown, Q = unknown>(
-    ...args: TAxpDispatchArgs<S, Mt, P, Q, [config?: AxpRequestConfig]>
-  ): Promise<TAxpResult<R, ResolveResponse<S, Mt, P, D>, O>>;
+  <D = unknown, Q = unknown>(...args: TAxpDispatchArgs<S, Mt, P, Q, [config?: AxpRequestConfig]>): Promise<TAxpResult<R, ResolveResponse<S, Mt, P, D>, O>>;
 }
 /** axios 的十个小写动词与柯里化 Schema 分派。 */
 export type HttpVerbs<S, R extends IAxpResponse> = {
-  [Mt in HttpMethodLower]: <
-    P extends LoosePath<S, Mt>,
-    O extends AxpRequestConfig = AxpRequestConfig,
-  >(
-    path: P,
-    config?: O,
-  ) => IAxpDispatch<S, Mt, P, R, O>;
+  [Mt in HttpMethodLower]: <P extends LoosePath<S, Mt>, O extends AxpRequestConfig = AxpRequestConfig>(path: P, config?: O) => IAxpDispatch<S, Mt, P, R, O>;
 };
 /** 编译后的可观测挂载项。 */
 export interface IAxpInspection {
@@ -372,10 +307,7 @@ export interface IAxpInspection {
 /** 洋葱管线客户端的公开契约。
  * @example `const data = await api.get('/pets')()`
  */
-export interface AxpClient<S = unknown, R extends IAxpResponse = AxpResponse> extends HttpVerbs<
-  S,
-  R
-> {
+export interface AxpClient<S = unknown, R extends IAxpResponse = AxpResponse> extends HttpVerbs<S, R> {
   /** 底层传输实例。 */
   readonly axios: AxiosInstance;
   /** 逃生口，明确请求返回响应。
@@ -383,9 +315,7 @@ export interface AxpClient<S = unknown, R extends IAxpResponse = AxpResponse> ex
    * @returns 保留 R 扩展字段且 data 为 D 的响应。
    * @example `api.request<Pet>({ url: '/pet', wrap: true })`
    */
-  request<D = unknown>(
-    config: AxpRequestConfig & ({ wrap: true } | { throws: false }),
-  ): Promise<WithData<R, D>>;
+  request<D = unknown>(config: AxpRequestConfig & ({ wrap: true } | { throws: false })): Promise<WithData<R, D>>;
   /** 逃生口，默认解包业务数据；internal 始终抛原始异常。
    * @param config axios 原生字段及可扩展请求选项。
    * @returns 接口业务数据，失败按请求 throws 和客户端 reject 约定落定。
@@ -398,10 +328,7 @@ export interface AxpClient<S = unknown, R extends IAxpResponse = AxpResponse> ex
    * @returns 插件状态独立的子客户端。
    * @example `api.extend({ baseURL: '/v2' }, { plugins: 'inherit' })`
    */
-  extend(
-    overrides?: AxiosRequestConfig,
-    opts?: { /** inherit 为默认。 */ plugins?: "inherit" | readonly AxpPlugin<R, any>[] },
-  ): AxpClient<S, R>;
+  extend(overrides?: AxiosRequestConfig, opts?: { /** inherit 为默认。 */ plugins?: "inherit" | readonly AxpPlugin<R, any>[] }): AxpClient<S, R>;
   /** 安装插件并重新编译链；重名抛错，enable:false 不 setup。
    * @param plugin 客户端内具名插件。
    * @example `api.use(timing)`

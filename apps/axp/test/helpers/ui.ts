@@ -19,11 +19,7 @@ const fixtures: {
  * @returns 支撑对象，所有逻辑请求应通过 send 发起。
  * @example `const h = uiClient([axpLoading()]); await h.send()`
  */
-export function uiClient(
-  plugins: readonly AxpPlugin<AxpResponse, any>[] = [],
-  options: AxpOptions = {},
-  transport?: Parameters<typeof createTestClient>[2],
-) {
+export function uiClient(plugins: readonly AxpPlugin<AxpResponse, any>[] = [], options: AxpOptions = {}, transport?: Parameters<typeof createTestClient>[2]) {
   const fixture = createTestClient<AxpResponse>(plugins, options, transport);
   return observeUi(fixture);
 }

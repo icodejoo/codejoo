@@ -21,10 +21,7 @@ function logger() {
 }
 /** 装好 mock 与两条路由的客户端。 */
 function mockClient(options: IMockOptions<AxpResponse> = {}, debug?: AxpLogger) {
-  const h = sourceClient(
-    [axpMock<AxpResponse>({ enable: true, mockUrl: MOCK, ...options })],
-    debug ? { debug } : {},
-  );
+  const h = sourceClient([axpMock<AxpResponse>({ enable: true, mockUrl: MOCK, ...options })], debug ? { debug } : {});
   h.net.on("get", PROBE, () => envelope(MOCK_DATA));
   h.net.on("get", REAL, () => envelope(REAL_DATA));
   return h;
@@ -34,18 +31,15 @@ it.each([
   ["插件与请求都没有 mockUrl", { mockUrl: undefined }, true],
   ["空串 mockUrl 视为未配置", { mockUrl: "" }, true],
   ["请求级空串不回退到插件级", {}, { mockUrl: "" }],
-])(
-  "[mock.opt.mockUrl][mock.req.mock.mockUrl] %s：跳过 mock 直接请求真实接口，debug 下 warn",
-  async (_label, options, mock) => {
-    const debug = logger();
-    const h = mockClient(options, debug);
-    const r = await h.send({ url: REAL, mock });
-    expect(r.data).toBe(REAL_DATA);
-    expect(h.net.calls("get", PROBE)).toBe(0);
-    expect(debug.warn).toHaveBeenCalledOnce();
-    expect(debug.warn.mock.calls[0]![0]).toContain("mockUrl");
-  },
-);
+])("[mock.opt.mockUrl][mock.req.mock.mockUrl] %s：跳过 mock 直接请求真实接口，debug 下 warn", async (_label, options, mock) => {
+  const debug = logger();
+  const h = mockClient(options, debug);
+  const r = await h.send({ url: REAL, mock });
+  expect(r.data).toBe(REAL_DATA);
+  expect(h.net.calls("get", PROBE)).toBe(0);
+  expect(debug.warn).toHaveBeenCalledOnce();
+  expect(debug.warn.mock.calls[0]![0]).toContain("mockUrl");
+});
 
 it("[mock.opt.mockUrl] 没开 debug 时跳过 mock 不输出任何日志", async () => {
   const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
@@ -54,27 +48,20 @@ it("[mock.opt.mockUrl] 没开 debug 时跳过 mock 不输出任何日志", async
   expect(warn).not.toHaveBeenCalled();
 });
 
-it.each([`${MOCK}/`, `${MOCK}///`])(
-  "[mock.opt.mockUrl] 基址 %s 结尾斜杠不产生双斜杠，绝对地址去掉原 origin 保留 query",
-  async (base) => {
-    const h = mockClient({ mockUrl: base });
-    h.net.on("get", `${MOCK}/pet?id=1`, () => envelope(MOCK_DATA));
-    const r = await h.send({ url: "http://real.example/pet?id=1", mock: true });
-    expect(r.data).toBe(MOCK_DATA);
-    expect(r.request.url).toBe(`${MOCK}/pet?id=1`);
-  },
-);
+it.each([`${MOCK}/`, `${MOCK}///`])("[mock.opt.mockUrl] 基址 %s 结尾斜杠不产生双斜杠，绝对地址去掉原 origin 保留 query", async (base) => {
+  const h = mockClient({ mockUrl: base });
+  h.net.on("get", `${MOCK}/pet?id=1`, () => envelope(MOCK_DATA));
+  const r = await h.send({ url: "http://real.example/pet?id=1", mock: true });
+  expect(r.data).toBe(MOCK_DATA);
+  expect(r.request.url).toBe(`${MOCK}/pet?id=1`);
+});
 
 it("[mock.opt.mockUrl] 请求没有 url 时探测改写 baseURL", async () => {
   const seen: { baseURL?: string; url?: string }[] = [];
-  const h = sourceClient(
-    [axpMock<AxpResponse>({ enable: true, mockUrl: MOCK })],
-    {},
-    async (config) => {
-      seen.push({ baseURL: config.baseURL, url: config.url });
-      return { status: 200, statusText: "", headers: {}, config, data: { code: 0, data: 1 } };
-    },
-  );
+  const h = sourceClient([axpMock<AxpResponse>({ enable: true, mockUrl: MOCK })], {}, async (config) => {
+    seen.push({ baseURL: config.baseURL, url: config.url });
+    return { status: 200, statusText: "", headers: {}, config, data: { code: 0, data: 1 } };
+  });
   await h.send({ url: undefined, mock: true });
   expect(seen).toEqual([{ baseURL: MOCK, url: undefined }]);
 });
@@ -142,15 +129,12 @@ it("[mock.fn.axpMock] 回落后真实接口失败：保留真实结果，只落�
   expect(h.net.calls("get", REAL)).toBe(1);
 });
 
-it.each([0, "yes", Number.NaN, -1, () => true])(
-  "[mock.req.mock] 未声明的请求值 %s 按省略处理，由插件级 mock 决定",
-  async (value) => {
-    const on = mockClient({ mock: true });
-    expect((await on.send({ url: REAL, mock: value as never })).data).toBe(MOCK_DATA);
-    const off = mockClient({ mock: false });
-    expect((await off.send({ url: REAL, mock: value as never })).data).toBe(REAL_DATA);
-  },
-);
+it.each([0, "yes", Number.NaN, -1, () => true])("[mock.req.mock] 未声明的请求值 %s 按省略处理，由插件级 mock 决定", async (value) => {
+  const on = mockClient({ mock: true });
+  expect((await on.send({ url: REAL, mock: value as never })).data).toBe(MOCK_DATA);
+  const off = mockClient({ mock: false });
+  expect((await off.send({ url: REAL, mock: value as never })).data).toBe(REAL_DATA);
+});
 
 it("[mock.req.mock] 空对象表示请求开启：有插件级 mockUrl 即 mock，没有则跳过；对象里的 mock 字段不再生效", async () => {
   const h = mockClient();

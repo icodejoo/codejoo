@@ -1,10 +1,5 @@
 import { afterEach, expect, it, vi } from "vitest";
-import {
-  compileMethods,
-  compileUrlPatterns,
-  pathnameOf,
-  patternToRegex,
-} from "../../src/plugins/auth-match";
+import { compileMethods, compileUrlPatterns, pathnameOf, patternToRegex } from "../../src/plugins/auth-match";
 
 /** 小写读取动词。 */
 const GET_METHOD = "get";
@@ -39,19 +34,13 @@ function UnsupportedPattern() {
 
 afterEach(() => vi.unstubAllGlobals());
 
-it.each([{ methods: undefined }, { methods: EMPTY_INPUT }, { methods: [] }])(
-  "[auth.fn.compileMethods] 空配置 $methods 恒假",
-  ({ methods }) => {
-    expect(compileMethods(methods)(GET_METHOD)).toBe(false);
-  },
-);
+it.each([{ methods: undefined }, { methods: EMPTY_INPUT }, { methods: [] }])("[auth.fn.compileMethods] 空配置 $methods 恒假", ({ methods }) => {
+  expect(compileMethods(methods)(GET_METHOD)).toBe(false);
+});
 
-it.each([{ methods: WILDCARD }, { methods: [WILDCARD] }, { methods: [POST_METHOD, WILDCARD] }])(
-  "[auth.fn.compileMethods] 通配配置 $methods 恒真",
-  ({ methods }) => {
-    expect(compileMethods(methods)(GET_METHOD)).toBe(true);
-  },
-);
+it.each([{ methods: WILDCARD }, { methods: [WILDCARD] }, { methods: [POST_METHOD, WILDCARD] }])("[auth.fn.compileMethods] 通配配置 $methods 恒真", ({ methods }) => {
+  expect(compileMethods(methods)(GET_METHOD)).toBe(true);
+});
 
 it("[auth.fn.compileMethods] 字符串转小写、数组任一命中，输入依照旧契约须小写", () => {
   const single = compileMethods(POST_CONFIG);
@@ -64,23 +53,17 @@ it("[auth.fn.compileMethods] 字符串转小写、数组任一命中，输入依
   expect(multiple("put")).toBe(false);
 });
 
-it.each([
-  { patterns: undefined },
-  { patterns: [] },
-  { patterns: EMPTY_INPUT },
-  { patterns: [EMPTY_INPUT] },
-  { patterns: [false] as unknown as string[] },
-])("[auth.fn.compileUrlPatterns] 空或非法模式 $patterns 恒假", ({ patterns }) => {
-  vi.stubGlobal(URL_PATTERN, undefined);
-  expect(compileUrlPatterns(patterns)(USER)).toBe(false);
-});
-
-it.each([{ patterns: WILDCARD }, { patterns: [WILDCARD] }])(
-  "[auth.fn.compileUrlPatterns] 单一通配 $patterns 恒真",
+it.each([{ patterns: undefined }, { patterns: [] }, { patterns: EMPTY_INPUT }, { patterns: [EMPTY_INPUT] }, { patterns: [false] as unknown as string[] }])(
+  "[auth.fn.compileUrlPatterns] 空或非法模式 $patterns 恒假",
   ({ patterns }) => {
-    expect(compileUrlPatterns(patterns)(USER)).toBe(true);
+    vi.stubGlobal(URL_PATTERN, undefined);
+    expect(compileUrlPatterns(patterns)(USER)).toBe(false);
   },
 );
+
+it.each([{ patterns: WILDCARD }, { patterns: [WILDCARD] }])("[auth.fn.compileUrlPatterns] 单一通配 $patterns 恒真", ({ patterns }) => {
+  expect(compileUrlPatterns(patterns)(USER)).toBe(true);
+});
 
 it("[auth.fn.compileUrlPatterns] 无原生 URLPattern 时使用正则，多个包含模式任一匹配", () => {
   vi.stubGlobal(URL_PATTERN, undefined);

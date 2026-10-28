@@ -1,13 +1,5 @@
 import { expect, it, vi } from "vitest";
-import {
-  applyJitter,
-  computeDelay,
-  defaultDelay,
-  DEFAULT_DELAY_MAX,
-  DEFAULT_AFTER_STATUS_CODES,
-  isRetryAfterEligible,
-  retryAfterMs,
-} from "../../src/plugins/retry-timing";
+import { applyJitter, computeDelay, defaultDelay, DEFAULT_DELAY_MAX, DEFAULT_AFTER_STATUS_CODES, isRetryAfterEligible, retryAfterMs } from "../../src/plugins/retry-timing";
 
 /** 限流逻辑状态。 */
 const RATE_LIMIT_STATUS = 429;

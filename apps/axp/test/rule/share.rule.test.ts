@@ -39,16 +39,12 @@ it("[share.prop.name][share.opt.enable] 名称为 axp:share，enable:false 不�
   expect(h.api.inspect()).toEqual([]);
   await settled(h.send({ url: URL, share: true }), h.send({ url: URL, share: true }));
   expect(h.net.calls("get", URL)).toBe(2);
-  expect(sourceClient([axpShare<AxpResponse>()]).api.inspect()).toEqual([
-    { stage: "source", name: NAME },
-  ]);
+  expect(sourceClient([axpShare<AxpResponse>()]).api.inspect()).toEqual([{ stage: "source", name: NAME }]);
 });
 
 it("[share.opt.policy][share.req.share] start 并发 50 个同 key 请求只发一次，所有人拿到同一个 R，结束后重新发送", async () => {
   const h = sharedClient();
-  const results = await settled(
-    ...Array.from({ length: 50 }, () => h.send({ url: URL, share: true, latency: FAST } as never)),
-  );
+  const results = await settled(...Array.from({ length: 50 }, () => h.send({ url: URL, share: true, latency: FAST } as never)));
   expect(h.net.calls("get", URL)).toBe(1);
   expect(new Set(results).size).toBe(1);
   expect(results[0]!.data).toBe("hit-1");
@@ -60,10 +56,7 @@ it("[share.opt.policy][share.req.share] start 并发 50 个同 key 请求只发�
 it("[share.opt.policy] start 不同 key 互不干扰，各自发请求", async () => {
   const h = sharedClient();
   h.net.on("get", "/other", () => envelope("other"));
-  const [a, b] = await settled(
-    h.send({ url: URL, share: true }),
-    h.send({ url: "/other", share: true }),
-  );
+  const [a, b] = await settled(h.send({ url: URL, share: true }), h.send({ url: "/other", share: true }));
   expect([a!.data, b!.data]).toEqual(["hit-1", "other"]);
   expect(h.net.totalStarted).toBe(2);
 });
@@ -73,10 +66,7 @@ it("[share.req.share] 请求没写 share、false、null、enable:false、0 与�
   for (const share of [undefined, false, null, { enable: false }, 0, () => "start"]) {
     const before = h.net.calls("get", URL);
     // oxlint-disable-next-line no-await-in-loop -- 每种写法用同一客户端依次核对发送次数。
-    await settled(
-      h.send({ url: URL, share: share as never }),
-      h.send({ url: URL, share: share as never }),
-    );
+    await settled(h.send({ url: URL, share: share as never }), h.send({ url: URL, share: share as never }));
     expect(h.net.calls("get", URL) - before).toBe(2);
   }
 });
@@ -92,10 +82,7 @@ it.each<[string, unknown, SharePolicy | undefined, number]>([
   ["空对象沿用插件级 start", {}, undefined, 1],
 ])("[share.req.share][share.opt.policy] %s", async (_label, share, policy, calls) => {
   const h = sharedClient({ policy });
-  await settled(
-    h.send({ url: URL, share: share as never }),
-    h.send({ url: URL, share: share as never }),
-  );
+  await settled(h.send({ url: URL, share: share as never }), h.send({ url: URL, share: share as never }));
   expect(h.net.calls("get", URL)).toBe(calls);
 });
 
@@ -123,20 +110,14 @@ it("[share.opt.policy] end 每次都发，只有最新一次的结果分发给�
 it("[share.opt.policy] end 各自独立的 key 如实返回，失败也不例外", async () => {
   const h = sharedClient({ policy: "end" });
   h.net.on("get", "/bad", () => ({ status: 500 }));
-  const [ok, bad] = await settled(
-    h.send({ url: URL, share: true }),
-    h.send({ url: "/bad", share: true }),
-  );
+  const [ok, bad] = await settled(h.send({ url: URL, share: true }), h.send({ url: "/bad", share: true }));
   expect(ok!.data).toBe("hit-1");
   expect(bad!.httpStatus).toBe(500);
 });
 
 it("[share.opt.policy] race 第一个成功的胜出，较慢的成功不覆盖它", async () => {
   const h = sharedClient({ policy: "race" });
-  const [slow, fast] = await settled(
-    h.send({ url: URL, share: true, latency: SLOW } as never),
-    h.send({ url: URL, share: true, latency: FAST } as never),
-  );
+  const [slow, fast] = await settled(h.send({ url: URL, share: true, latency: SLOW } as never), h.send({ url: URL, share: true, latency: FAST } as never));
   expect(h.net.calls("get", URL)).toBe(2);
   expect(slow).toBe(fast);
   expect(fast!.data).toBe("hit-2");
@@ -145,24 +126,15 @@ it("[share.opt.policy] race 第一个成功的胜出，较慢的成功不覆盖�
 it("[share.opt.policy] race 先失败后成功：成功者胜出；成功之后到达的失败被忽略", async () => {
   const h = sharedClient({ policy: "race" });
   h.net.on("get", URL, (_config, hit) => (hit === 2 ? envelope("won") : { status: 500 }));
-  const [a, b, c] = await settled(
-    h.send({ url: URL, share: true, latency: FAST } as never),
-    h.send({ url: URL, share: true, latency: MIDDLE } as never),
-    h.send({ url: URL, share: true, latency: SLOW } as never),
-  );
+  const [a, b, c] = await settled(h.send({ url: URL, share: true, latency: FAST } as never), h.send({ url: URL, share: true, latency: MIDDLE } as never), h.send({ url: URL, share: true, latency: SLOW } as never));
   expect([a!.data, b!.data, c!.data]).toEqual(["won", "won", "won"]);
   expect(a!.ok).toBe(true);
 });
 
 it("[share.opt.policy] race 业务失败（HTTP 200 + 非成功码）不算赢家，后到的成功者胜出", async () => {
   const h = sharedClient({ policy: "race" });
-  h.net.on("get", URL, (_config, hit) =>
-    hit === 1 ? { status: 200, data: { code: 500, data: null, message: "biz" } } : envelope("ok"),
-  );
-  const [a, b] = await settled(
-    h.send({ url: URL, share: true, latency: FAST } as never),
-    h.send({ url: URL, share: true, latency: SLOW } as never),
-  );
+  h.net.on("get", URL, (_config, hit) => (hit === 1 ? { status: 200, data: { code: 500, data: null, message: "biz" } } : envelope("ok")));
+  const [a, b] = await settled(h.send({ url: URL, share: true, latency: FAST } as never), h.send({ url: URL, share: true, latency: SLOW } as never));
   expect(a!.data).toBe("ok");
   expect(b).toBe(a);
 });
@@ -170,10 +142,7 @@ it("[share.opt.policy] race 业务失败（HTTP 200 + 非成功码）不算赢�
 it("[share.opt.policy] race 全部失败：所有订阅者拿到最后到达的那个失败", async () => {
   const h = sharedClient({ policy: "race" });
   h.net.on("get", URL, (_config, hit) => ({ status: hit === 1 ? 500 : 503 }));
-  const [a, b] = await settled(
-    h.send({ url: URL, share: true, latency: SLOW } as never),
-    h.send({ url: URL, share: true, latency: FAST } as never),
-  );
+  const [a, b] = await settled(h.send({ url: URL, share: true, latency: SLOW } as never), h.send({ url: URL, share: true, latency: FAST } as never));
   // 第一个请求最慢，是最后一个到达的失败。
   expect(a!.httpStatus).toBe(500);
   expect(b).toBe(a);
@@ -206,32 +175,21 @@ it("[share.opt.methods] 默认只共享 get 与 head，其它方法即使请求�
 it("[share.opt.methods] methods 可改为包含 POST，大小写不敏感；get 不在表中就不共享", async () => {
   const h = sharedClient({ methods: ["POST"] });
   h.net.on("post", URL, () => envelope("posted"));
-  await settled(
-    h.send({ url: URL, method: "post", data: { a: 1 }, share: true }),
-    h.send({ url: URL, method: "post", data: { a: 1 }, share: true }),
-    h.send({ url: URL, share: true }),
-    h.send({ url: URL, share: true }),
-  );
+  await settled(h.send({ url: URL, method: "post", data: { a: 1 }, share: true }), h.send({ url: URL, method: "post", data: { a: 1 }, share: true }), h.send({ url: URL, share: true }), h.send({ url: URL, share: true }));
   expect(h.net.calls("post", URL)).toBe(1);
   expect(h.net.calls("get", URL)).toBe(2);
 });
 
 it("[share.fn.axpShare] key 为 null（key:false、不可哈希）直接放行；显式 key 让不同地址共享同一次请求", async () => {
   const h = sharedClient();
-  await settled(
-    h.send({ url: URL, share: true, key: false }),
-    h.send({ url: URL, share: true, key: false }),
-  );
+  await settled(h.send({ url: URL, share: true, key: false }), h.send({ url: URL, share: true, key: false }));
   expect(h.net.calls("get", URL)).toBe(2);
   const unhashable = { url: URL, share: true, params: { id: new Map() } } as never;
   await settled(h.send(unhashable), h.send(unhashable));
   expect(h.net.calls("get", URL)).toBe(4);
   h.net.on("get", "/a", () => envelope("a"));
   h.net.on("get", "/b", () => envelope("b"));
-  const [a, b] = await settled(
-    h.send({ url: "/a", share: true, key: "same" }),
-    h.send({ url: "/b", share: true, key: "same" }),
-  );
+  const [a, b] = await settled(h.send({ url: "/a", share: true, key: "same" }), h.send({ url: "/b", share: true, key: "same" }));
   expect(h.net.calls("get", "/a") + h.net.calls("get", "/b")).toBe(1);
   expect(b).toBe(a);
 });
@@ -241,16 +199,11 @@ it("[share.fn.axpShare] 订阅者拿到的是首发那次的 R：只发一次；
   const inside = requestRecorder("post");
   const h = sourceClient([axpShare<AxpResponse>(), outside.plugin, inside.plugin]);
   h.net.on("get", URL, () => envelope("x"));
-  const [first, follower] = await settled(
-    h.send({ url: URL, share: true, headers: { "x-who": "first" } }),
-    h.send({ url: URL, share: true, headers: { "x-who": "follower" } }),
-  );
+  const [first, follower] = await settled(h.send({ url: URL, share: true, headers: { "x-who": "first" } }), h.send({ url: URL, share: true, headers: { "x-who": "follower" } }));
   expect(follower).toBe(first);
   expect(first!.request.url).toBe(URL);
   // pre 段在 share 之前：每个调用方各自的请求都在自己的上下文里。
-  expect(
-    outside.seen.map((request) => (request.headers as Record<string, string>)["x-who"]),
-  ).toEqual(["first", "follower"]);
+  expect(outside.seen.map((request) => (request.headers as Record<string, string>)["x-who"])).toEqual(["first", "follower"]);
   // post 段在 share 之后：只有首发那次真正往下走。
   expect(inside.seen).toHaveLength(1);
   expect(h.net.calls("get", URL)).toBe(1);

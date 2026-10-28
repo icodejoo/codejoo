@@ -41,10 +41,7 @@ export type AuthFailureAction = (typeof AuthFailureAction)[keyof typeof AuthFail
 /** 响应通知与刷新函数的统一参数顺序。
  * @example `const expired: TAuthFunc<void> = (r, tm) => showLogin(r.message)`
  */
-export type TAuthFunc<T, R extends IAxpResponse = IAxpResponse> = (
-  response: R,
-  tm: ITokenManager,
-) => T | Promise<T>;
+export type TAuthFunc<T, R extends IAxpResponse = IAxpResponse> = (response: R, tm: ITokenManager) => T | Promise<T>;
 /** 凭证注入与鉴权恢复选项。 */
 export interface IAuthOptions<R extends IAxpResponse = IAxpResponse> extends IPluginSwitch {
   /** 持有当前会话的管理器。 */
@@ -56,16 +53,7 @@ export interface IAuthOptions<R extends IAxpResponse = IAxpResponse> extends IPl
   /** 拒绝访问通知，缺省沿用过期通知。 */
   onAccessDenied?: TAuthFunc<unknown, R>;
   /** 判定类路由，异常按程序错误落定。 */
-  onFailure?: (
-    response: R,
-    tm: ITokenManager,
-    ctx: AxpContext<R>,
-  ) =>
-    | AuthFailureAction
-    | null
-    | undefined
-    | void
-    | Promise<AuthFailureAction | null | undefined | void>;
+  onFailure?: (response: R, tm: ITokenManager, ctx: AxpContext<R>) => AuthFailureAction | null | undefined | void | Promise<AuthFailureAction | null | undefined | void>;
   /** 保护的方法列表或通配符，默认全部。 */
   methods?: string | readonly string[];
   /** 保护的 pathname 模式，支持否定模式。 */
@@ -73,10 +61,7 @@ export interface IAuthOptions<R extends IAxpResponse = IAxpResponse> extends IPl
   /** 布尔结果作为保护判定终值。 */
   isProtected?: (request: Readonly<AxpRequestConfig>) => boolean | null | undefined | void;
   /** 返回传给内层的补丁，默认注入 Authorization。 */
-  ready?: (
-    tm: ITokenManager,
-    request: Readonly<AxpRequestConfig>,
-  ) => AxpRequestPatch | void | Promise<AxpRequestPatch | void>;
+  ready?: (tm: ITokenManager, request: Readonly<AxpRequestConfig>) => AxpRequestPatch | void | Promise<AxpRequestPatch | void>;
 }
 /** 默认凭证补丁不修改本层请求或调用方头对象。 */
 function defaultReady(tm: ITokenManager): AxpRequestPatch {
@@ -91,25 +76,16 @@ const DEFAULTS = { methods: WILDCARD, urlPattern: WILDCARD, ready: defaultReady 
  * @returns 五动作之一，与请求头的形态和名字无关。
  * @example `onFailure: defaultAuthFailure`
  */
-export function defaultAuthFailure<R extends IAxpResponse>(
-  response: R,
-  tm: ITokenManager,
-  ctx: AxpContext<R>,
-): AuthFailureAction {
+export function defaultAuthFailure<R extends IAxpResponse>(response: R, tm: ITokenManager, ctx: AxpContext<R>): AuthFailureAction {
   if (response.status === UNAUTHORIZED) {
     const current = tm.accessToken;
     if (!current) return AuthFailureAction.Expired;
-    return ctx.get(INJECTED_TOKEN) === current
-      ? AuthFailureAction.Refresh
-      : AuthFailureAction.Replay;
+    return ctx.get(INJECTED_TOKEN) === current ? AuthFailureAction.Refresh : AuthFailureAction.Replay;
   }
   return response.status === FORBIDDEN ? AuthFailureAction.Deny : AuthFailureAction.Others;
 }
 /** 等待共享刷新时只取消当前等待者，始终释放监听。 */
-async function waitRefresh(
-  pending: Promise<boolean>,
-  signal: AbortSignal,
-): Promise<boolean | undefined> {
+async function waitRefresh(pending: Promise<boolean>, signal: AbortSignal): Promise<boolean | undefined> {
   if (signal.aborted) return undefined;
   let cancel!: () => void;
   const cancelled = new Promise<undefined>(
@@ -129,14 +105,10 @@ async function waitRefresh(
  * @returns credential 阶段鉴权插件。
  * @example `axpAuth({ tokenManager, onRefresh, onAccessExpired })`
  */
-export default function axpAuth<R extends IAxpResponse = AxpResponse>(
-  options: IAuthOptions<R>,
-): AxpPlugin<R> {
+export default function axpAuth<R extends IAxpResponse = AxpResponse>(options: IAuthOptions<R>): AxpPlugin<R> {
   if (!options?.tokenManager) throw new Error(`[${NAME}] options.tokenManager is required`);
-  if (typeof options.onRefresh !== "function")
-    throw new Error(`[${NAME}] options.onRefresh is required`);
-  if (typeof options.onAccessExpired !== "function")
-    throw new Error(`[${NAME}] options.onAccessExpired is required`);
+  if (typeof options.onRefresh !== "function") throw new Error(`[${NAME}] options.onRefresh is required`);
+  if (typeof options.onAccessExpired !== "function") throw new Error(`[${NAME}] options.onAccessExpired is required`);
   const base = resolveOption<IAuthOptions<R>, typeof DEFAULTS>(undefined, options, DEFAULTS);
   const matchMethod = compileMethods(base.methods);
   const matchUrl = compileUrlPatterns(base.urlPattern);
@@ -149,9 +121,7 @@ export default function axpAuth<R extends IAxpResponse = AxpResponse>(
     /** 单飞与过期状态均归当前客户端所有。 */
     setup() {
       let refreshing: Promise<boolean> | undefined;
-      let expired:
-        | { /** 清理后的会话快照，新 token 自动解除过期。 */ token: string | undefined }
-        | undefined;
+      let expired: { /** 清理后的会话快照，新 token 自动解除过期。 */ token: string | undefined } | undefined;
       /** 登录写入新 token 后解除上一轮过期状态。 */
       function isExpired(): boolean {
         if (expired && expired.token !== tm.accessToken) expired = undefined;
@@ -192,11 +162,7 @@ export default function axpAuth<R extends IAxpResponse = AxpResponse>(
       async function prepare(request: Readonly<AxpRequestConfig>) {
         let token = tm.accessToken;
         let patch = await base.ready(tm, request);
-        for (
-          let attempt = 1;
-          token !== tm.accessToken && attempt < READY_STABLE_ATTEMPTS;
-          attempt++
-        ) {
+        for (let attempt = 1; token !== tm.accessToken && attempt < READY_STABLE_ATTEMPTS; attempt++) {
           token = tm.accessToken;
           patch = await base.ready(tm, request);
         }
@@ -208,18 +174,13 @@ export default function axpAuth<R extends IAxpResponse = AxpResponse>(
           const request = ctx.request;
           const forced = request.protected;
           const decision = typeof forced === "boolean" ? forced : base.isProtected?.(request);
-          const protectedRequest =
-            typeof decision === "boolean"
-              ? decision
-              : matchMethod(normalizeMethod(request.method)) &&
-                matchUrl(pathnameOf(request.url ?? ""));
+          const protectedRequest = typeof decision === "boolean" ? decision : matchMethod(normalizeMethod(request.method)) && matchUrl(pathnameOf(request.url ?? ""));
           if (!protectedRequest) return next();
           ctx.markReplayable();
           if (refreshing) {
             const success = await waitRefresh(refreshing, ctx.signal);
             if (success === undefined) return ctx.fail({ kind: AXP_KINDS.CANCEL });
-            if (!success)
-              return ctx.fail({ kind: AXP_KINDS.AUTH, reason: AuthFailureAction.Expired });
+            if (!success) return ctx.fail({ kind: AXP_KINDS.AUTH, reason: AuthFailureAction.Expired });
           }
           let replayed = false;
           while (true) {
@@ -232,15 +193,8 @@ export default function axpAuth<R extends IAxpResponse = AxpResponse>(
             const { token, patch } = await prepare(request);
             ctx.set(INJECTED_TOKEN, token);
             const response = await next(patch ?? undefined);
-            if (
-              response.ok ||
-              response.kind === AXP_KINDS.INTERNAL ||
-              response.kind === AXP_KINDS.CANCEL
-            )
-              return response;
-            const action = base.onFailure
-              ? await base.onFailure(response, tm, ctx)
-              : defaultAuthFailure(response, tm, ctx);
+            if (response.ok || response.kind === AXP_KINDS.INTERNAL || response.kind === AXP_KINDS.CANCEL) return response;
+            const action = base.onFailure ? await base.onFailure(response, tm, ctx) : defaultAuthFailure(response, tm, ctx);
             // 异步路由期间调用方已取消：以取消落定，不再按鉴权失败处理（避免为取消的请求弹提示）
             if (ctx.signal.aborted) return ctx.fail({ kind: AXP_KINDS.CANCEL });
             switch (action) {

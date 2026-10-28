@@ -43,9 +43,7 @@ function shorthand(value: unknown): Partial<ILoadingOptions> {
  * @returns 每客户端在 setup 建立独立计数的插件。
  * @example `axpLoading({ loading: visible => spinner.toggle(visible), delay: 100 })`
  */
-export default function axpLoading<R extends IAxpResponse = AxpResponse>(
-  options: ILoadingOptions = {},
-): AxpPlugin<R> {
+export default function axpLoading<R extends IAxpResponse = AxpResponse>(options: ILoadingOptions = {}): AxpPlugin<R> {
   const base = resolveOption<ILoadingOptions, typeof DEFAULTS>(undefined, options, DEFAULTS);
   return {
     name: NAME,
@@ -62,12 +60,7 @@ export default function axpLoading<R extends IAxpResponse = AxpResponse>(
         fireNotice(fn, CALLBACK_ERROR, visible);
       }
       /** 同一回调最多保留一个显示或隐藏窗口。 */
-      function schedule(
-        fn: TLoadingFunc,
-        state: ILoadingState,
-        visible: boolean,
-        delay: number,
-      ): void {
+      function schedule(fn: TLoadingFunc, state: ILoadingState, visible: boolean, delay: number): void {
         if (delay > 0)
           state.timer = setTimeout(
             /** 窗口到期后发出当前通知。 */ () => {
@@ -82,18 +75,8 @@ export default function axpLoading<R extends IAxpResponse = AxpResponse>(
         /** 每个逻辑请求只增加和释放一次计数。 */
         async handle(ctx, next) {
           const value = ctx.request.loading;
-          if (
-            !active ||
-            value === false ||
-            (!base.loading &&
-              typeof value !== "function" &&
-              (!isPlainObject(value) || !value.loading))
-          )
-            return next();
-          const resolved =
-            isPlainObject(value) || typeof value === "function"
-              ? resolveOption(value, base, DEFAULTS, shorthand)
-              : base;
+          if (!active || value === false || (!base.loading && typeof value !== "function" && (!isPlainObject(value) || !value.loading))) return next();
+          const resolved = isPlainObject(value) || typeof value === "function" ? resolveOption(value, base, DEFAULTS, shorthand) : base;
           if (!resolved?.loading) return next();
           const fn = resolved.loading;
           const current = states.get(fn) ?? { count: 0, shown: false };

@@ -1,9 +1,5 @@
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
-import axpCache, {
-  clearCache,
-  type IAxpCacheEntry,
-  type ICacheOptions,
-} from "../../src/plugins/cache";
+import axpCache, { clearCache, type IAxpCacheEntry, type ICacheOptions } from "../../src/plugins/cache";
 import type { AxpResponse } from "../../src/response";
 import { envelope, sourceClient } from "../helpers/source";
 
@@ -104,23 +100,20 @@ it("[cache.opt.max] max:1 只保留最后写入的一条", async () => {
   expect(h.net.calls("get", URL) - before).toBe(1);
 });
 
-it.each([0, -5, Number.NaN])(
-  "[cache.opt.max] max=%s 回退默认容量 500，不会退化成只存一条",
-  async (max) => {
-    const h = cachedClient({ max });
-    const keys = ["a", "b", "c"];
-    for (const key of keys) {
-      // oxlint-disable-next-line no-await-in-loop -- 依次写入三条。
-      await call(h, { cache: { key } });
-    }
-    for (const key of keys) {
-      // oxlint-disable-next-line no-await-in-loop -- 依次读取三条。
-      await call(h, { cache: { key } });
-    }
-    expect(h.net.calls("get", URL)).toBe(keys.length);
-    expect(DEFAULT_MAX).toBeGreaterThan(keys.length);
-  },
-);
+it.each([0, -5, Number.NaN])("[cache.opt.max] max=%s 回退默认容量 500，不会退化成只存一条", async (max) => {
+  const h = cachedClient({ max });
+  const keys = ["a", "b", "c"];
+  for (const key of keys) {
+    // oxlint-disable-next-line no-await-in-loop -- 依次写入三条。
+    await call(h, { cache: { key } });
+  }
+  for (const key of keys) {
+    // oxlint-disable-next-line no-await-in-loop -- 依次读取三条。
+    await call(h, { cache: { key } });
+  }
+  expect(h.net.calls("get", URL)).toBe(keys.length);
+  expect(DEFAULT_MAX).toBeGreaterThan(keys.length);
+});
 
 it("[cache.opt.max] max=Infinity 不限容量", async () => {
   const h = cachedClient({ max: Number.POSITIVE_INFINITY });
@@ -132,16 +125,13 @@ it("[cache.opt.max] max=Infinity 不限容量", async () => {
   expect(h.net.calls("get", URL)).toBe(DEFAULT_MAX + 1);
 });
 
-it.each([0, -1, Number.NaN])(
-  "[cache.opt.expires][cache.req.cache.expires] 有效期 %s 写入即过期，永不命中",
-  async (expires) => {
-    const h = cachedClient();
-    await call(h, { cache: expires });
-    await call(h, { cache: expires });
-    await call(h, { cache: { expires } });
-    expect(h.net.calls("get", URL)).toBe(3);
-  },
-);
+it.each([0, -1, Number.NaN])("[cache.opt.expires][cache.req.cache.expires] 有效期 %s 写入即过期，永不命中", async (expires) => {
+  const h = cachedClient();
+  await call(h, { cache: expires });
+  await call(h, { cache: expires });
+  await call(h, { cache: { expires } });
+  expect(h.net.calls("get", URL)).toBe(3);
+});
 
 it("[cache.opt.expires] 有效期 Infinity 永不过期", async () => {
   const h = cachedClient({ expires: Number.POSITIVE_INFINITY });

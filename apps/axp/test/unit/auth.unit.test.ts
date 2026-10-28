@@ -56,15 +56,9 @@ describe("defaultAuthFailure", () => {
   it("[auth.fn.defaultAuthFailure] 无状态：连续用不同会话判定互不影响", /** 同一函数多次调用。 */ () => {
     const first = tokensOf(INJECTED);
     const second = tokensOf(undefined);
-    expect(defaultAuthFailure(statusOf(401), first, ctxWith(INJECTED))).toBe(
-      AuthFailureAction.Refresh,
-    );
-    expect(defaultAuthFailure(statusOf(401), second, ctxWith(INJECTED))).toBe(
-      AuthFailureAction.Expired,
-    );
-    expect(defaultAuthFailure(statusOf(401), first, ctxWith(INJECTED))).toBe(
-      AuthFailureAction.Refresh,
-    );
+    expect(defaultAuthFailure(statusOf(401), first, ctxWith(INJECTED))).toBe(AuthFailureAction.Refresh);
+    expect(defaultAuthFailure(statusOf(401), second, ctxWith(INJECTED))).toBe(AuthFailureAction.Expired);
+    expect(defaultAuthFailure(statusOf(401), first, ctxWith(INJECTED))).toBe(AuthFailureAction.Refresh);
   });
 });
 
@@ -80,26 +74,10 @@ describe("axpAuth 装配", () => {
   const refresh = vi.fn();
   const expired = vi.fn();
   it.each([
-    [
-      "缺 tokenManager",
-      { onRefresh: refresh, onAccessExpired: expired },
-      "options.tokenManager is required",
-    ],
-    [
-      "缺 onRefresh",
-      { tokenManager: memoryTokens(), onAccessExpired: expired },
-      "options.onRefresh is required",
-    ],
-    [
-      "缺 onAccessExpired",
-      { tokenManager: memoryTokens(), onRefresh: refresh },
-      "options.onAccessExpired is required",
-    ],
-    [
-      "onRefresh 不是函数",
-      { tokenManager: memoryTokens(), onRefresh: "x", onAccessExpired: expired },
-      "options.onRefresh is required",
-    ],
+    ["缺 tokenManager", { onRefresh: refresh, onAccessExpired: expired }, "options.tokenManager is required"],
+    ["缺 onRefresh", { tokenManager: memoryTokens(), onAccessExpired: expired }, "options.onRefresh is required"],
+    ["缺 onAccessExpired", { tokenManager: memoryTokens(), onRefresh: refresh }, "options.onAccessExpired is required"],
+    ["onRefresh 不是函数", { tokenManager: memoryTokens(), onRefresh: "x", onAccessExpired: expired }, "options.onRefresh is required"],
     ["整个选项缺失", undefined, "options.tokenManager is required"],
     ["选项为 null", null, "options.tokenManager is required"],
   ])(

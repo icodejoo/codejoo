@@ -99,13 +99,7 @@ it("[cache.fn.axpCache][mock.fn.axpMock][share.fn.axpShare] 旧入口仍导出�
 it("[mock.prop.stage][share.prop.stage][cache.prop.stage] source 阶段固定次序 mock → share → cache，与注册顺序无关，自定义 pre/post 包在两侧", () => {
   const pre = requestRecorder("pre");
   const post = requestRecorder("post");
-  const h = sourceClient([
-    axpCache<AxpResponse>(),
-    post.plugin,
-    axpShare<AxpResponse>(),
-    pre.plugin,
-    axpMock<AxpResponse>({ enable: true }),
-  ]);
+  const h = sourceClient([axpCache<AxpResponse>(), post.plugin, axpShare<AxpResponse>(), pre.plugin, axpMock<AxpResponse>({ enable: true })]);
   expect(h.api.inspect()).toEqual([
     { stage: "source", name: "recorder-pre" },
     { stage: "source", name: "axp:mock" },
@@ -182,10 +176,7 @@ it("[share.method.lifecycle][cache.method.lifecycle] 任意顺序卸载：剩余
     h.net.on("get", URL, (_config, hit) => envelope(`hit-${hit}`));
     /** 同时发两个同 key 请求并推进假时钟，返回两次落定的结果。 */
     const burst = async () => {
-      const pending = [
-        h.send({ url: URL, share: true, cache: true, latency: 5 } as never),
-        h.send({ url: URL, share: true, cache: true, latency: 5 } as never),
-      ];
+      const pending = [h.send({ url: URL, share: true, cache: true, latency: 5 } as never), h.send({ url: URL, share: true, cache: true, latency: 5 } as never)];
       await vi.runAllTimersAsync();
       return Promise.all(pending);
     };

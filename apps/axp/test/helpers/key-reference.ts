@@ -11,10 +11,7 @@ export interface IKeyOptions {
   /** 超长字符串只采首、中、尾；默认全量。 */
   sample?: boolean;
   /** 会话分区；空值不附加。 */
-  scope?:
-    | string
-    | number
-    | ((request: Readonly<AxpRequestConfig>) => string | number | null | undefined | void);
+  scope?: string | number | ((request: Readonly<AxpRequestConfig>) => string | number | null | undefined | void);
 }
 /** 默认 HTTP 方法。 */
 export const DEFAULT_METHOD = "get";
@@ -27,10 +24,7 @@ const SCOPE_SEPARATOR = "#";
  * @returns 显式 key、FNV 指纹或 null。
  * @example `requestKey({ method: 'get', url: '/pets', params: { page: 1 } })`
  */
-export function requestKey(
-  request: Readonly<AxpRequestConfig>,
-  options: IKeyOptions = {},
-): string | null {
+export function requestKey(request: Readonly<AxpRequestConfig>, options: IKeyOptions = {}): string | null {
   if (request.key === false) return null;
   let value: string;
   if (typeof request.key === "string") {
@@ -54,12 +48,7 @@ export function requestKey(
     }
   }
   const scope = typeof options.scope === "function" ? options.scope(request) : options.scope;
-  return scope === null ||
-    scope === undefined ||
-    scope === "" ||
-    (typeof scope === "number" && Number.isNaN(scope))
-    ? value
-    : value + SCOPE_SEPARATOR + String(scope);
+  return scope === null || scope === undefined || scope === "" || (typeof scope === "number" && Number.isNaN(scope)) ? value : value + SCOPE_SEPARATOR + String(scope);
 }
 
 const FNV_PRIME = 16777619;
@@ -200,12 +189,7 @@ function hashByte(c: number, h: number): number {
  * @param h 父级传入的种子/累积哈希值 / seed/accumulator passed down from the parent
  * @returns 混合后的哈希值；`undefined` 表示 target 判空 / the mixed hash value; `undefined` means `target` is empty
  */
-function deepHash(
-  target: any,
-  h: number,
-  opts?: IKeyOptions,
-  ancestors = new Set<object>(),
-): number | undefined {
+function deepHash(target: any, h: number, opts?: IKeyOptions, ancestors = new Set<object>()): number | undefined {
   if (target === null || typeof target !== "object") return hashValue(target, h, opts, ancestors);
   if (ancestors.has(target)) throw KEY_UNSUPPORTED;
   ancestors.add(target);
@@ -217,12 +201,7 @@ function deepHash(
 }
 
 /** 沿用旧算法计算一个值；递归时共享当前祖先集合。 */
-function hashValue(
-  target: any,
-  h: number,
-  opts: IKeyOptions | undefined,
-  ancestors: Set<object>,
-): number | undefined {
+function hashValue(target: any, h: number, opts: IKeyOptions | undefined, ancestors: Set<object>): number | undefined {
   // 顶部一次性 destructure：避免每层递归重复 ?. 链式查找
   const ignores = opts?.ignores;
   if (ignores?.length && ignores.includes(target)) {

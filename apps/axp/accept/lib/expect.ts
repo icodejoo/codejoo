@@ -1,8 +1,8 @@
-import type { NetworkName, Style } from './constants.ts';
-import type { Expectation, Scenario } from './types.ts';
+import type { NetworkName, Style } from "./constants.ts";
+import type { Expectation, Scenario } from "./types.ts";
 
 /** 通配键：对所有网络生效 */
-const WILDCARD = '*';
+const WILDCARD = "*";
 
 /**
  * 按优先级给出候选键，从低到高：`*` < `*@风格` < `网络` < `网络@风格`。

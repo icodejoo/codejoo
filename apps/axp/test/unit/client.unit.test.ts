@@ -23,7 +23,5 @@ it("[core.fn.cloneAxiosDefaults] 复制方法头、参数与转换器数组，�
   expect(cloned.transformRequest).toEqual([transform]);
   expect(cloned.transformResponse).not.toBe(defaults.transformResponse);
   expect(cloned.transitional).not.toBe(defaults.transitional);
-  expect(cloneAxiosDefaults({ transformResponse: transform }).transformResponse).toEqual([
-    transform,
-  ]);
+  expect(cloneAxiosDefaults({ transformResponse: transform }).transformResponse).toEqual([transform]);
 });

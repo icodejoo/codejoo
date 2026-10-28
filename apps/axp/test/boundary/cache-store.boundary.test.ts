@@ -52,16 +52,13 @@ it("[cache.fn.createMemoryStore] get 命中和 set 替换都提升 LRU 顺序", 
   expect(store.size).toBe(SMALL_CAPACITY);
 });
 
-it.each([NOW - 1, NOW, NaN])(
-  "[cache.fn.createMemoryStore] 到期/负 TTL/NaN expiresAt=%s 读取即删除",
-  (expiresAt) => {
-    const store = createMemoryStore<string>({ now: () => NOW });
-    store.set(KEY, { response: RESPONSE, expiresAt });
-    expect(store.size).toBe(1);
-    expect(store.get(KEY)).toBeUndefined();
-    expect(store.size).toBe(0);
-  },
-);
+it.each([NOW - 1, NOW, NaN])("[cache.fn.createMemoryStore] 到期/负 TTL/NaN expiresAt=%s 读取即删除", (expiresAt) => {
+  const store = createMemoryStore<string>({ now: () => NOW });
+  store.set(KEY, { response: RESPONSE, expiresAt });
+  expect(store.size).toBe(1);
+  expect(store.get(KEY)).toBeUndefined();
+  expect(store.size).toBe(0);
+});
 
 it("[cache.fn.createMemoryStore] 到期前 1ms 有效，恰好到期失效", () => {
   let timestamp = NOW;

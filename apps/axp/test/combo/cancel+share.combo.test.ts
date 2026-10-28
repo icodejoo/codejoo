@@ -2,12 +2,7 @@ import { beforeEach, expect, it, vi } from "vitest";
 import axpCache, { clearCache } from "../../src/plugins/cache";
 import axpShare from "../../src/plugins/share";
 import { AXP_KINDS, type AxpResponse } from "../../src/response";
-import {
-  signalAdapter,
-  sourceClient,
-  trackAbortListeners,
-  type IWireCall,
-} from "../helpers/source";
+import { signalAdapter, sourceClient, trackAbortListeners, type IWireCall } from "../helpers/source";
 
 /** 取消时序统一用假时钟。 */
 beforeEach(() => {
@@ -64,10 +59,7 @@ it("[cancel.fn.cancelAll × share.opt.policy × cache.req.cache] 被取消的共
   await vi.runAllTimersAsync();
   await Promise.all(pending);
   expect(clearCache(h.api)).toBe(0);
-  const [again] = await Promise.all([
-    h.send({ url: URL, share: true, cache: true }),
-    vi.runAllTimersAsync(),
-  ]);
+  const [again] = await Promise.all([h.send({ url: URL, share: true, cache: true }), vi.runAllTimersAsync()]);
   expect(again.ok).toBe(true);
   expect(h.calls).toHaveLength(2);
 });

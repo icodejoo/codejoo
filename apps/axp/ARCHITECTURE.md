@@ -18,30 +18,31 @@
 
 `src/` 下的文件和职责：
 
-| 文件 | 职责 |
-|---|---|
-| `client.ts` | `createAxp`、动词分发、`request`、落定 `settle`、`extend`、`use/eject`、`cancelAll`、`inspect`、`dispose` |
-| `options.ts` | `resolveOption`：请求级四种写法（`false`、`true` 或省略、简写、对象）的统一解析，所有插件共用 |
-| `pipeline.ts` | 插件排序、taps 编译、链组合、`next(patch)`、异常兜底 |
-| `stages.ts` | `STAGE_BUILTINS`：阶段和内置插件固定次序的唯一来源，`AxpStage` 类型与排序都从它派生 |
-| `context.ts` | `AxpContext`：请求视图、signal、状态键（`stateKey`）、`key()`、`fail()`、`markReplayable()` |
-| `transport.ts` | 调 `axios.request`、按需克隆请求体、交给响应工厂判定 |
-| `response.ts` | `IAxpResponse`、`AxpResponse`、`IAxpResponseFactory`、`axpResponse()`、`isAxpResponse` |
-| `brand.ts` | 响应品牌 `AXP_RESPONSE` 和类别常量 `AXP_KINDS`。零导入的叶子模块，验收执行器可以直接用 Node 原生加载 |
-| `key.ts` | key 服务（哈希算法从旧的 `plugins/key.ts` 迁来） |
-| `methods.ts` | 十个动词按 payload 去向（`data` 或 `params`）分组，`normalizeMethod` 统一方法大小写；client、key 和按方法判断的插件（retry、auth、share、cache）共用 |
-| `utils.ts` | 共用小件：纯对象判断、`defaults` 克隆与写回、默认头展平、通知回调隔离 |
-| `types.ts` | Schema 推断（沿用现有机制）、请求选项、插件类型、`AxpLogger` |
-| `plugins/*.ts` | 10 个内置插件，一个插件一个文件 |
-| `plugins/retry-timing.ts` | retry 的纯算法：默认退避、抖动与封顶、`Retry-After` 解析（秒数或 HTTP 日期）、可取消的等待 |
-| `plugins/auth-match.ts` | auth 的纯算法：`methods`、`urlPattern` 的编译与匹配（优先 URLPattern，不可用时回退正则） |
-| `plugins/cache-store.ts` | cache 的纯算法：同步内存 LRU 仓、`IAxpCacheStore` 接口、防止旧响应覆盖新结果的新鲜度屏障 |
-| `objects/TokenManager.ts` | 令牌管理：`ITokenManager` 接口和默认实现 `TokenManager`（内存存放，镜像到 `localStorage`），去掉了 `canRefresh` |
-| `index.ts` | 包入口，见下 |
+| 文件                      | 职责                                                                                                                                                 |
+| ------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `client.ts`               | `createAxp`、动词分发、`request`、落定 `settle`、`extend`、`use/eject`、`cancelAll`、`inspect`、`dispose`                                            |
+| `options.ts`              | `resolveOption`：请求级四种写法（`false`、`true` 或省略、简写、对象）的统一解析，所有插件共用                                                        |
+| `pipeline.ts`             | 插件排序、taps 编译、链组合、`next(patch)`、异常兜底                                                                                                 |
+| `stages.ts`               | `STAGE_BUILTINS`：阶段和内置插件固定次序的唯一来源，`AxpStage` 类型与排序都从它派生                                                                  |
+| `context.ts`              | `AxpContext`：请求视图、signal、状态键（`stateKey`）、`key()`、`fail()`、`markReplayable()`                                                          |
+| `transport.ts`            | 调 `axios.request`、按需克隆请求体、交给响应工厂判定                                                                                                 |
+| `response.ts`             | `IAxpResponse`、`AxpResponse`、`IAxpResponseFactory`、`axpResponse()`、`isAxpResponse`                                                               |
+| `brand.ts`                | 响应品牌 `AXP_RESPONSE` 和类别常量 `AXP_KINDS`。零导入的叶子模块，验收执行器可以直接用 Node 原生加载                                                 |
+| `key.ts`                  | key 服务（哈希算法从旧的 `plugins/key.ts` 迁来）                                                                                                     |
+| `methods.ts`              | 十个动词按 payload 去向（`data` 或 `params`）分组，`normalizeMethod` 统一方法大小写；client、key 和按方法判断的插件（retry、auth、share、cache）共用 |
+| `utils.ts`                | 共用小件：纯对象判断、`defaults` 克隆与写回、默认头展平、通知回调隔离                                                                                |
+| `types.ts`                | Schema 推断（沿用现有机制）、请求选项、插件类型、`AxpLogger`                                                                                         |
+| `plugins/*.ts`            | 10 个内置插件，一个插件一个文件                                                                                                                      |
+| `plugins/retry-timing.ts` | retry 的纯算法：默认退避、抖动与封顶、`Retry-After` 解析（秒数或 HTTP 日期）、可取消的等待                                                           |
+| `plugins/auth-match.ts`   | auth 的纯算法：`methods`、`urlPattern` 的编译与匹配（优先 URLPattern，不可用时回退正则）                                                             |
+| `plugins/cache-store.ts`  | cache 的纯算法：同步内存 LRU 仓、`IAxpCacheStore` 接口、防止旧响应覆盖新结果的新鲜度屏障                                                             |
+| `objects/TokenManager.ts` | 令牌管理：`ITokenManager` 接口和默认实现 `TokenManager`（内存存放，镜像到 `localStorage`），去掉了 `canRefresh`                                      |
+| `index.ts`                | 包入口，见下                                                                                                                                         |
 
 `debug` 没有独立的文件：`createAxp` 按选项挑日志器（`true` 用 `console`，对象原样用，关闭时用 `context.ts` 里共享的空实现 `NO_LOG`），插件经 `ctx.log` 使用。
 
 入口：`index.ts` 导出 `createAxp`、响应与类型、10 个插件工厂、`TokenManager` 等；子路径保留 10 个插件各自的 `./<name>` 和 `./min`，删除 `./cancel`、`./key`、`./logger`、`./normalize`。
+
 <!-- TODO: 待实现确认：index.ts 的导出清单和 package.json exports 的最终形态，等 B6 打包后核对 -->
 
 10 个内置插件按阶段分布：
@@ -91,13 +92,13 @@ api.get('/pet/{id}')(payload, opts)        一次调用 = 一个逻辑请求
 
 ## 4. 阶段与排序
 
-| 阶段 | 语义 | 内置插件（外→内） | 自定义插件典型用途 |
-|---|---|---|---|
-| `outer` | 每个逻辑请求进出一次，看到最终的 `R` | loading → notify | 埋点、整体耗时、审计 |
-| `prepare` | 请求整形，只跑一次 | repath → filter | 签名前的参数规整、公共参数 |
-| `attempt` | 重试边界；retry 以内的层每次尝试都重跑 | retry | 每次尝试的日志、请求签名（**自定义插件默认阶段**） |
-| `credential` | 凭证注入与鉴权失败处理 | auth | 自定义 header 鉴权 |
-| `source` | 结果来源，可不触网直接返回 | mock → share → cache | 本地 mock、离线兜底 |
+| 阶段         | 语义                                   | 内置插件（外→内）    | 自定义插件典型用途                                 |
+| ------------ | -------------------------------------- | -------------------- | -------------------------------------------------- |
+| `outer`      | 每个逻辑请求进出一次，看到最终的 `R`   | loading → notify     | 埋点、整体耗时、审计                               |
+| `prepare`    | 请求整形，只跑一次                     | repath → filter      | 签名前的参数规整、公共参数                         |
+| `attempt`    | 重试边界；retry 以内的层每次尝试都重跑 | retry                | 每次尝试的日志、请求签名（**自定义插件默认阶段**） |
+| `credential` | 凭证注入与鉴权失败处理                 | auth                 | 自定义 header 鉴权                                 |
+| `source`     | 结果来源，可不触网直接返回             | mock → share → cache | 本地 mock、离线兜底                                |
 
 排序规则：
 
@@ -114,16 +115,16 @@ api.get('/pet/{id}')(payload, opts)        一次调用 = 一个逻辑请求
 
 中间件签名是 `(ctx, next) => Promise<R>`。`ctx` 上最常用的：
 
-| 成员 | 用途 |
-|---|---|
-| `id` / `client` | 逻辑请求序号 / 所属客户端 |
-| `request` | 本层看到的请求，**只读** |
-| `signal` | 逻辑请求级：用户 signal ∪ `cancelAll` |
-| `log` | 受 `debug` 开关控制，关闭时是空函数；形状是 `AxpLogger`，即 `{ log, warn, error }` |
-| `key()` | 惰性计算，按 request 对象缓存；不可哈希时为 `null` |
-| `get(k)` / `set(k, v)` | 逻辑请求级状态，用 `stateKey<T>()` 建的 Symbol 键，替代字符串键 |
-| `fail(init)` | 凭空造一个结果，必须经响应工厂，保证扩展字段齐全 |
-| `markReplayable()` | 声明本请求可能被重发，传输层据此克隆请求体 |
+| 成员                   | 用途                                                                               |
+| ---------------------- | ---------------------------------------------------------------------------------- |
+| `id` / `client`        | 逻辑请求序号 / 所属客户端                                                          |
+| `request`              | 本层看到的请求，**只读**                                                           |
+| `signal`               | 逻辑请求级：用户 signal ∪ `cancelAll`                                              |
+| `log`                  | 受 `debug` 开关控制，关闭时是空函数；形状是 `AxpLogger`，即 `{ log, warn, error }` |
+| `key()`                | 惰性计算，按 request 对象缓存；不可哈希时为 `null`                                 |
+| `get(k)` / `set(k, v)` | 逻辑请求级状态，用 `stateKey<T>()` 建的 Symbol 键，替代字符串键                    |
+| `fail(init)`           | 凭空造一个结果，必须经响应工厂，保证扩展字段齐全                                   |
+| `markReplayable()`     | 声明本请求可能被重发，传输层据此克隆请求体                                         |
 
 完整签名见 [核心架构 §5](docs/design/core-architecture.md#5-上下文)。
 
@@ -159,14 +160,18 @@ api.get('/pet/{id}')(payload, opts)        一次调用 = 一个逻辑请求
 ```ts
 /** 自定义响应：成功码是 200，TOKEN_EXPIRED 视作 401 */
 class MyResponse<D = unknown> extends AxpResponse<D> {
-  traceId = ''
-  get ok() { return this.httpStatus < 300 && this.code === 200 }
-  get status() { return this.code === 'TOKEN_EXPIRED' ? 401 : super.status }
+  traceId = "";
+  get ok() {
+    return this.httpStatus < 300 && this.code === 200;
+  }
+  get status() {
+    return this.code === "TOKEN_EXPIRED" ? 401 : super.status;
+  }
 }
 const response = axpResponse<MyResponse>({
-  create: (init, raw) => Object.assign(new MyResponse(init), { traceId: raw?.headers['x-trace-id'] ?? '' }),
-})
-const api = createAxp<Schema, MyResponse>({ response })
+  create: (init, raw) => Object.assign(new MyResponse(init), { traceId: raw?.headers["x-trace-id"] ?? "" }),
+});
+const api = createAxp<Schema, MyResponse>({ response });
 ```
 
 内核保证这两个 getter **只在收到响应时求值**：其余情况（取消、超时、网络错误……）由工厂在构造时把 `ok: false`、`kind`、`status` 写成实例自有属性，遮住原型 getter。所以覆盖 getter 时只需要判断"响应本身"，不用操心异常分支。
@@ -175,15 +180,15 @@ const api = createAxp<Schema, MyResponse>({ response })
 
 `axpResponse(options?)` 按下表从上到下匹配，顺序即优先级：
 
-| 输入 | kind | status |
-|---|---|---|
-| 取消（`axios.isCancel`、`AbortError`，或发送前 signal 已中止） | `cancel` | 0 |
-| AxiosError 且超时 | `timeout` | 0 |
-| AxiosError 且 `ERR_BAD_RESPONSE` | `parse` | 0 |
-| 其它 AxiosError | `network` | 0 |
-| **非 AxiosError 的异常**（用户拦截器、`transformResponse` 里的 bug） | `internal` | 0 |
-| `expectJson` 为真，2xx，声明 json/html 但 body 仍是非空字符串 | `parse` | httpStatus |
-| 收到响应 | 由 `ok` / `status` / `kind` getter 决定 | 同左 |
+| 输入                                                                 | kind                                    | status     |
+| -------------------------------------------------------------------- | --------------------------------------- | ---------- |
+| 取消（`axios.isCancel`、`AbortError`，或发送前 signal 已中止）       | `cancel`                                | 0          |
+| AxiosError 且超时                                                    | `timeout`                               | 0          |
+| AxiosError 且 `ERR_BAD_RESPONSE`                                     | `parse`                                 | 0          |
+| 其它 AxiosError                                                      | `network`                               | 0          |
+| **非 AxiosError 的异常**（用户拦截器、`transformResponse` 里的 bug） | `internal`                              | 0          |
+| `expectJson` 为真，2xx，声明 json/html 但 body 仍是非空字符串        | `parse`                                 | httpStatus |
+| 收到响应                                                             | 由 `ok` / `status` / `kind` getter 决定 | 同左       |
 
 前六行在构造时就把 `ok: false`、`kind`、`status` 写成实例自有属性（`expectJson` 判出的 `parse` 也一样，`status` 取原 HTTP 状态），只有最后一行交给 getter。
 
@@ -193,11 +198,11 @@ const api = createAxp<Schema, MyResponse>({ response })
 
 axp 没有错误类。最外层按下表落定：
 
-| 情况 | 默认 | `wrap: true` | `throws: false` |
-|---|---|---|---|
-| 成功 | `data` | `WithData<R, D>` | `WithData<R, D>` |
-| 可预期的失败 | `throw r` | `throw r` | resolve `WithData<R, D>`（`ok: false`） |
-| 程序 bug（`kind: 'internal'`） | 抛原始异常 | 抛原始异常 | 抛原始异常 |
+| 情况                           | 默认       | `wrap: true`     | `throws: false`                         |
+| ------------------------------ | ---------- | ---------------- | --------------------------------------- |
+| 成功                           | `data`     | `WithData<R, D>` | `WithData<R, D>`                        |
+| 可预期的失败                   | `throw r`  | `throw r`        | resolve `WithData<R, D>`（`ok: false`） |
+| 程序 bug（`kind: 'internal'`） | 抛原始异常 | 抛原始异常       | 抛原始异常                              |
 
 `throws` 只有请求级，默认 `true`；没有客户端级默认值（`createAxp<S, R>` 显式泛型时返回类型无法如实反映客户端级开关）。
 
@@ -215,25 +220,25 @@ axp 没有错误类。最外层按下表落定：
 ### 接口
 
 ```ts
-type AxpStage = 'outer' | 'prepare' | 'attempt' | 'credential' | 'source'
-type AxpMiddleware<R> = (ctx: AxpContext<R>, next: AxpNext<R>) => Promise<R>
+type AxpStage = "outer" | "prepare" | "attempt" | "credential" | "source";
+type AxpMiddleware<R> = (ctx: AxpContext<R>, next: AxpNext<R>) => Promise<R>;
 
 /** 分段挂载：请求侧、响应侧各挂各的阶段 */
 interface AxpTap<R> {
-  stage: AxpStage
-  enforce?: 'pre' | 'post'
-  onRequest?(ctx: AxpContext<R>): void | AxpRequestPatch | Promise<void | AxpRequestPatch>
-  onResponse?(r: R, ctx: AxpContext<R>): void | R | Promise<void | R>
+  stage: AxpStage;
+  enforce?: "pre" | "post";
+  onRequest?(ctx: AxpContext<R>): void | AxpRequestPatch | Promise<void | AxpRequestPatch>;
+  onResponse?(r: R, ctx: AxpContext<R>): void | R | Promise<void | R>;
 }
 
 interface AxpPlugin<R extends IAxpResponse = IAxpResponse, A = void> {
-  readonly name: string
-  readonly enable?: boolean          // false 时不 setup、不进链
-  readonly stage?: AxpStage          // 自定义插件默认 'attempt'；只有 taps 时忽略
-  readonly enforce?: 'pre' | 'post'  // 默认 'post'
-  setup?(client: AxpClient<unknown, R>): AxpPluginInstance<R, A> | void  // 每个客户端调一次，状态建在这里
-  handle?: AxpMiddleware<R>          // 无状态插件可直接给
-  taps?: readonly AxpTap<R>[]
+  readonly name: string;
+  readonly enable?: boolean; // false 时不 setup、不进链
+  readonly stage?: AxpStage; // 自定义插件默认 'attempt'；只有 taps 时忽略
+  readonly enforce?: "pre" | "post"; // 默认 'post'
+  setup?(client: AxpClient<unknown, R>): AxpPluginInstance<R, A> | void; // 每个客户端调一次，状态建在这里
+  handle?: AxpMiddleware<R>; // 无状态插件可直接给
+  taps?: readonly AxpTap<R>[];
 }
 ```
 
@@ -256,15 +261,15 @@ interface AxpPlugin<R extends IAxpResponse = IAxpResponse, A = void> {
 ```ts
 /** 记录每次尝试耗时 */
 const timing: AxpPlugin = {
-  name: 'timing',
-  stage: 'attempt',
+  name: "timing",
+  stage: "attempt",
   async handle(ctx, next) {
-    const t = performance.now()
-    const r = await next()
-    ctx.log.log(`[timing] ${ctx.request.url} ${r.status} ${performance.now() - t}ms`)
-    return r
+    const t = performance.now();
+    const r = await next();
+    ctx.log.log(`[timing] ${ctx.request.url} ${r.status} ${performance.now() - t}ms`);
+    return r;
   },
-}
+};
 ```
 
 它在 `attempt` 阶段，默认 `post`，落在 retry 里面，所以重试多少次就记多少条。
@@ -274,44 +279,44 @@ const timing: AxpPlugin = {
 ```ts
 /** 不对称：请求侧看最终发出的请求，响应侧看收敛后的结果 */
 const audit: AxpPlugin = {
-  name: 'audit',
+  name: "audit",
   taps: [
-    { stage: 'credential', enforce: 'post', onRequest: (ctx) => report('send', ctx.request) },
-    { stage: 'outer', onResponse: (r) => report('done', r.kind) },
+    { stage: "credential", enforce: "post", onRequest: (ctx) => report("send", ctx.request) },
+    { stage: "outer", onResponse: (r) => report("done", r.kind) },
   ],
-}
+};
 ```
 
 请求侧挂在 `credential` 阶段、排在内置 auth 之后，看到的是注入 token 后的请求；响应侧挂在 `outer`，看到的是重试、刷新、缓存都收敛之后的最终 `R`。请求侧和响应侧要处在不同深度时，就用 taps 拆成多段。
 
 ### 想扩展某处？
 
-| 想做的事 | 动哪里 |
-|---|---|
-| 加横切逻辑（埋点、签名、日志） | 自定义插件，选阶段；进出不对称就用 `taps` |
-| 改成功判定、给响应加字段 | 子类覆盖 `ok` / `status`，用 `axpResponse({ create })` 接上 |
-| 换信封字段名、要求严格 JSON | `axpResponse({ envelope, expectJson })` |
-| 缓存换成持久化存储 | 实现 `IAxpCacheStore<R>`，传给 cache 的 `store` |
-| 调整失败的抛出形态 | `throws`、`wrap`、`createAxp({ reject })` |
-| 给请求加选项 | 扩展 `AxpRequestOptions` |
-| 排查插件顺序 | `client.inspect()` |
-| 排查谁发起了失败的请求 | `createAxp({ debug: true })`，失败的 `r.stack` 里有调用点 |
-| 改客户端本身的 API | `client.ts` |
-| 改排序、链编译、`next(patch)` | `pipeline.ts` |
+| 想做的事                       | 动哪里                                                      |
+| ------------------------------ | ----------------------------------------------------------- |
+| 加横切逻辑（埋点、签名、日志） | 自定义插件，选阶段；进出不对称就用 `taps`                   |
+| 改成功判定、给响应加字段       | 子类覆盖 `ok` / `status`，用 `axpResponse({ create })` 接上 |
+| 换信封字段名、要求严格 JSON    | `axpResponse({ envelope, expectJson })`                     |
+| 缓存换成持久化存储             | 实现 `IAxpCacheStore<R>`，传给 cache 的 `store`             |
+| 调整失败的抛出形态             | `throws`、`wrap`、`createAxp({ reject })`                   |
+| 给请求加选项                   | 扩展 `AxpRequestOptions`                                    |
+| 排查插件顺序                   | `client.inspect()`                                          |
+| 排查谁发起了失败的请求         | `createAxp({ debug: true })`，失败的 `r.stack` 里有调用点   |
+| 改客户端本身的 API             | `client.ts`                                                 |
+| 改排序、链编译、`next(patch)`  | `pipeline.ts`                                               |
 
 ## 9. 性能设计要点
 
-| # | 做法 |
-|---|---|
-| P1 | 链在增删插件时编译，请求时不排序、不查表 |
-| P2 | 每层是固定形状的上下文实例，逻辑请求级状态放在各层共享的同一个容器里；没有补丁时直接复用外层上下文，有补丁才新建一个带新 `request` 视图的实例 |
-| P3 | `key()` 惰性计算并按 request 对象缓存；不用 cache/share 的请求根本不算 key |
-| P4 | 只有 `markReplayable()` 且 `data` 是纯对象/数组才 `structuredClone`；克隆失败或环境没有 `structuredClone` 时回退为原引用（debug 下 warn），不让请求失败 |
-| P5 | 传输强制 `validateStatus` 全放行，HTTP 错误不构造 AxiosError，省掉调用栈捕获 |
-| P6 | 失败直接抛 `R`，不另建错误对象；调用点 stack 只在 debug 模式记录 |
-| P7 | 不再包装 `transformResponse`，不再拷贝尝试钩子数组 |
-| P8 | 缓存过期惰性删除，写入时按容量节流清扫 |
-| P9 | 逻辑请求入口只合并一次 `defaults`；交给 axios 的是差量，避免它内部那次合并按全部字段计费 |
+| #   | 做法                                                                                                                                                    |
+| --- | ------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| P1  | 链在增删插件时编译，请求时不排序、不查表                                                                                                                |
+| P2  | 每层是固定形状的上下文实例，逻辑请求级状态放在各层共享的同一个容器里；没有补丁时直接复用外层上下文，有补丁才新建一个带新 `request` 视图的实例           |
+| P3  | `key()` 惰性计算并按 request 对象缓存；不用 cache/share 的请求根本不算 key                                                                              |
+| P4  | 只有 `markReplayable()` 且 `data` 是纯对象/数组才 `structuredClone`；克隆失败或环境没有 `structuredClone` 时回退为原引用（debug 下 warn），不让请求失败 |
+| P5  | 传输强制 `validateStatus` 全放行，HTTP 错误不构造 AxiosError，省掉调用栈捕获                                                                            |
+| P6  | 失败直接抛 `R`，不另建错误对象；调用点 stack 只在 debug 模式记录                                                                                        |
+| P7  | 不再包装 `transformResponse`，不再拷贝尝试钩子数组                                                                                                      |
+| P8  | 缓存过期惰性删除，写入时按容量节流清扫                                                                                                                  |
+| P9  | 逻辑请求入口只合并一次 `defaults`；交给 axios 的是差量，避免它内部那次合并按全部字段计费                                                                |
 
 性能门槛和测法见 [测试方案 §8](docs/design/test-plan.md)。
 
@@ -319,20 +324,20 @@ const audit: AxpPlugin = {
 
 旧版是"axios 拦截器 + adapter 包装"。下面这些机制随重构删除，原因是它们本来就是底座不够用逼出来的补丁：
 
-| 旧机制 / 问题 | 新方案 | 为什么 |
-|---|---|---|
-| adapter 链与单次尝试机制、尝试钩子、`captureRawRequest`、`runAttempt` | 洋葱管线，重放就是再调一次 `next()` | 重放不再需要裸 runner 和钩子 |
-| `bag.ts` 的 WeakMap/Symbol 袋子、`axp:share`、`axp:cache`、`axp:retry:*` 保活键 | 请求不可变 + `next(patch)`；跨层状态用 `ctx.get/set` 的 Symbol 键 | 请求不可变之后，重发不再需要快照原始请求体（O1） |
-| loading 包 `transformResponse`（`guardTransform`、`COMPLETE` 层键） | loading 放在 `outer`，进入 +1、`finally` 里 -1 | 洋葱最外层天然成对，唯一的不对称只是 axios 限制下的绕行 |
-| 4 种错误类型、`ApiError` | 没有错误类：可预期的失败抛 `R`，看 `r.kind` / `r.reason`；bug 抛原始异常 | 一个对象贯穿链路和调用方，概念最少；包一层 `AxpError` 的 stack 只指向 axp 内部 |
-| 静态 `isSuccessful` | 子类覆盖 `ok` / `status` getter | 静态钩子是全局可变状态，多个客户端会互相覆盖 |
-| "成没成功"散在 auth、share、retry、notify、normalize 各写一遍；retry 只看 HTTP 码（O5） | 传输边界判定一次，全插件读 `r.status`（逻辑状态） | 判定只该有一处 |
-| 三处手动给错误挂 config（O2） | `R` 自带 `request` | 由传输层或 `ctx.fail` 统一填写 |
-| `canRefresh` 写在用户的 TokenManager 上（O4） | 收进 auth 内部状态 | 登录写入新 token 后自动恢复，不用手动改标志 |
-| cache 四张表（O3）、全表扫描清过期（O6） | 表收敛；惰性删除 + 容量节流清扫 | 见 [插件规格 §6.3](docs/design/plugin-spec.md) |
-| `axpCancel`、`axpKey`、`axpLogger`、`axpNormalize` | 内核的取消、key、`debug` 开关、落定 | retry 等待、auth 排队、share 跟随者都要 signal，本来就该人人都有 |
-| 14 个写死槽位，自定义插件只能靠 4 个插入方法 | 5 个阶段 + `use/eject` | 使用者不用背顺序 |
-| notify 里关于 auth 重放双触发的过时警告 | 机制不存在，随旧代码删除 | — |
+| 旧机制 / 问题                                                                           | 新方案                                                                   | 为什么                                                                         |
+| --------------------------------------------------------------------------------------- | ------------------------------------------------------------------------ | ------------------------------------------------------------------------------ |
+| adapter 链与单次尝试机制、尝试钩子、`captureRawRequest`、`runAttempt`                   | 洋葱管线，重放就是再调一次 `next()`                                      | 重放不再需要裸 runner 和钩子                                                   |
+| `bag.ts` 的 WeakMap/Symbol 袋子、`axp:share`、`axp:cache`、`axp:retry:*` 保活键         | 请求不可变 + `next(patch)`；跨层状态用 `ctx.get/set` 的 Symbol 键        | 请求不可变之后，重发不再需要快照原始请求体（O1）                               |
+| loading 包 `transformResponse`（`guardTransform`、`COMPLETE` 层键）                     | loading 放在 `outer`，进入 +1、`finally` 里 -1                           | 洋葱最外层天然成对，唯一的不对称只是 axios 限制下的绕行                        |
+| 4 种错误类型、`ApiError`                                                                | 没有错误类：可预期的失败抛 `R`，看 `r.kind` / `r.reason`；bug 抛原始异常 | 一个对象贯穿链路和调用方，概念最少；包一层 `AxpError` 的 stack 只指向 axp 内部 |
+| 静态 `isSuccessful`                                                                     | 子类覆盖 `ok` / `status` getter                                          | 静态钩子是全局可变状态，多个客户端会互相覆盖                                   |
+| "成没成功"散在 auth、share、retry、notify、normalize 各写一遍；retry 只看 HTTP 码（O5） | 传输边界判定一次，全插件读 `r.status`（逻辑状态）                        | 判定只该有一处                                                                 |
+| 三处手动给错误挂 config（O2）                                                           | `R` 自带 `request`                                                       | 由传输层或 `ctx.fail` 统一填写                                                 |
+| `canRefresh` 写在用户的 TokenManager 上（O4）                                           | 收进 auth 内部状态                                                       | 登录写入新 token 后自动恢复，不用手动改标志                                    |
+| cache 四张表（O3）、全表扫描清过期（O6）                                                | 表收敛；惰性删除 + 容量节流清扫                                          | 见 [插件规格 §6.3](docs/design/plugin-spec.md)                                 |
+| `axpCancel`、`axpKey`、`axpLogger`、`axpNormalize`                                      | 内核的取消、key、`debug` 开关、落定                                      | retry 等待、auth 排队、share 跟随者都要 signal，本来就该人人都有               |
+| 14 个写死槽位，自定义插件只能靠 4 个插入方法                                            | 5 个阶段 + `use/eject`                                                   | 使用者不用背顺序                                                               |
+| notify 里关于 auth 重放双触发的过时警告                                                 | 机制不存在，随旧代码删除                                                 | —                                                                              |
 
 两个使用者能感知的行为变化，单独强调：
 

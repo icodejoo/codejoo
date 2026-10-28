@@ -101,15 +101,11 @@ it("[core.method.extend] headers/params/transforms/transitional 不污染父实�
   const child = api.extend();
   child.axios.defaults.headers.common["X-Parent"] = "child";
   child.axios.defaults.params.page = 2;
-  (child.axios.defaults.transformResponse as unknown[]).push(
-    /** 给子实例追加转换器，验证不污染父实例。 */ () => 1,
-  );
+  (child.axios.defaults.transformResponse as unknown[]).push(/** 给子实例追加转换器，验证不污染父实例。 */ () => 1);
   child.axios.defaults.transitional!.clarifyTimeoutError = true;
   expect(api.axios.defaults.headers.common["X-Parent"]).toBe("parent");
   expect(api.axios.defaults.params.page).toBe(1);
-  expect(child.axios.defaults.transformResponse).not.toHaveLength(
-    (api.axios.defaults.transformResponse as unknown[]).length,
-  );
+  expect(child.axios.defaults.transformResponse).not.toHaveLength((api.axios.defaults.transformResponse as unknown[]).length);
   const override = api.extend({ headers: { "X-Child": "only" } });
   expect(override.axios.defaults.headers["X-Child"]).toBe("only");
   expect(api.axios.defaults.headers["X-Child"]).toBeUndefined();
@@ -134,15 +130,11 @@ it("[core.opt.plugins] 同一对象装两个客户端重新 setup，动态非法
   ).toThrow("Unknown");
   expect(dispose).toHaveBeenCalledTimes(1);
   expect(api.inspect()).toEqual([]);
-  expect(
-    /** 初始化列表重名应失败。 */ () => createTestClient([{ name: "a" }, { name: "a" }]),
-  ).toThrow("Duplicate");
+  expect(/** 初始化列表重名应失败。 */ () => createTestClient([{ name: "a" }, { name: "a" }])).toThrow("Duplicate");
 });
 it("[core.method.use] 静态非法阶段与重名在 setup 之前被拒绝，不产生副作用", /** 校验失败的插件不应执行 setup，已装插件保持不变。 */ () => {
   const setup = vi.fn(/** 统计 setup 是否被调用。 */ () => ({}));
-  const { api } = createTestClient([
-    { name: "kept", handle: /** 占位中间件。 */ (_ctx, next) => next() },
-  ]);
+  const { api } = createTestClient([{ name: "kept", handle: /** 占位中间件。 */ (_ctx, next) => next() }]);
   expect(
     /** 静态声明了未知阶段的插件。 */ () =>
       api.use({
@@ -215,10 +207,7 @@ it("[core.method.cancelAll][core.req.signal] 用户取消与批量取消、重�
   const adapter: AxiosAdapter = (config) =>
     new Promise(
       /** adapter 挂起，直到收到取消信号。 */ (_resolve, reject) => {
-        config.signal!.addEventListener!(
-          "abort",
-          /** 收到取消信号后以 CanceledError 拒绝。 */ () => reject(new CanceledError()),
-        );
+        config.signal!.addEventListener!("abort", /** 收到取消信号后以 CanceledError 拒绝。 */ () => reject(new CanceledError()));
       },
     );
   const { api } = createTestClient([], {}, adapter);
@@ -242,11 +231,7 @@ it("[core.req.signal] 已中止直接落定且扩展响应字段存在，不执�
   controller.abort();
   const handle = vi.fn();
   const adapter = vi.fn();
-  const { api } = createTestClient<TestResponse>(
-    [{ name: "never", handle }],
-    { response: customResponse() },
-    adapter,
-  );
+  const { api } = createTestClient<TestResponse>([{ name: "never", handle }], { response: customResponse() }, adapter);
   const response = await api.request({ signal: controller.signal, throws: false });
   expect(response).toMatchObject({ kind: "cancel", traceId: "" });
   expect(handle).not.toHaveBeenCalled();

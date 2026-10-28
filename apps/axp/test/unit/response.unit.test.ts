@@ -19,16 +19,11 @@ describe("响应判定", /** 响应判定的用例集合。 */ () => {
     const request = { url: "/actual", headers: new AxiosHeaders() };
     const error = new AxiosError("offline", undefined, request);
     expect(axpResponse().fromError(error, testContext()).request).toBe(request);
-    for (const httpStatus of [NaN, -1, 65_536])
-      expect(new AxpResponse({ httpStatus }).ok).toBe(false);
+    for (const httpStatus of [NaN, -1, 65_536]) expect(new AxpResponse({ httpStatus }).ok).toBe(false);
     expect(new AxpResponse({ httpStatus: 299 }).ok).toBe(true);
-    for (const code of ["0", "", -1])
-      expect(new AxpResponse({ httpStatus: OK, code }).ok).toBe(false);
+    for (const code of ["0", "", -1]) expect(new AxpResponse({ httpStatus: OK, code }).ok).toBe(false);
     for (const data of [false, 0, "", null, undefined]) {
-      const response = axpResponse().fromResponse(
-        raw({ code: 0, data, message: "" }),
-        testContext(),
-      );
+      const response = axpResponse().fromResponse(raw({ code: 0, data, message: "" }), testContext());
       expect(response.data).toBe(data);
       expect(response.message).toBe("");
     }
@@ -53,20 +48,13 @@ describe("响应判定", /** 响应判定的用例集合。 */ () => {
     [300, undefined, false, 300, "http"],
   ])(
     "[core.prop.ok][core.prop.status][core.prop.kind] http=%s code=%s",
-    /** HTTP 状态与业务码组合下的 ok、status、kind 判定。 */ (
-      httpStatus,
-      code,
-      ok,
-      status,
-      kind,
-    ) => {
+    /** HTTP 状态与业务码组合下的 ok、status、kind 判定。 */ (httpStatus, code, ok, status, kind) => {
       const response = new AxpResponse({
         httpStatus: httpStatus as number,
         code: code as number | string | undefined,
       });
       expect([response.ok, response.status, response.kind]).toEqual([ok, status, kind]);
-      for (const name of ["ok", "status", "kind"])
-        expect(Object.prototype.hasOwnProperty.call(response, name)).toBe(false);
+      for (const name of ["ok", "status", "kind"]) expect(Object.prototype.hasOwnProperty.call(response, name)).toBe(false);
     },
   );
   it("[core.fn.axpResponse][core.opt.envelope] 信封识别、字段映射、关闭与非信封数据", /** 信封识别、字段映射、关闭与非信封数据。 */ () => {
@@ -75,13 +63,9 @@ describe("响应判定", /** 响应判定的用例集合。 */ () => {
     const body = { code: 0, data: null };
     expect(factory.fromResponse(raw(body), ctx).data).toBeNull();
     expect(factory.fromResponse(raw({ code: 0, data: undefined }), ctx).data).toBeUndefined();
-    for (const data of [null, "", "text", [1], {}, { code: 0 }])
-      expect(factory.fromResponse(raw(data), ctx).data).toBe(data);
+    for (const data of [null, "", "text", [1], {}, { code: 0 }]) expect(factory.fromResponse(raw(data), ctx).data).toBe(data);
     expect(axpResponse({ envelope: false }).fromResponse(raw(body), ctx).data).toBe(body);
-    const custom = axpResponse({ envelope: { code: "c", data: "d", message: "m" } }).fromResponse(
-      raw({ c: "0000", d: 1, m: "done" }),
-      ctx,
-    );
+    const custom = axpResponse({ envelope: { code: "c", data: "d", message: "m" } }).fromResponse(raw({ c: "0000", d: 1, m: "done" }), ctx);
     expect([custom.data, custom.message, custom.ok]).toEqual([1, "done", true]);
   });
   it.each([
@@ -98,13 +82,7 @@ describe("响应判定", /** 响应判定的用例集合。 */ () => {
     "[core.fn.axpResponse] 分类 %s → %s",
     /** 各类异常归入固定的失败类别。 */ (error, kind) => {
       const response = axpResponse().fromError(error, testContext());
-      expect([
-        response.ok,
-        response.status,
-        response.httpStatus,
-        response.kind,
-        response.error,
-      ]).toEqual([false, 0, 0, kind, error]);
+      expect([response.ok, response.status, response.httpStatus, response.kind, response.error]).toEqual([false, 0, 0, kind, error]);
     },
   );
   it.each([
@@ -118,17 +96,8 @@ describe("响应判定", /** 响应判定的用例集合。 */ () => {
     [false, OK, "application/json", "broken", "ok"],
   ])(
     "[core.opt.expectJson] expect=%s status=%s type=%s body=%s",
-    /** expectJson 在不同状态码、媒体类型与响应体组合下的类别判定。 */ (
-      expectJson,
-      status,
-      contentType,
-      data,
-      kind,
-    ) => {
-      const response = axpResponse({ expectJson: expectJson as boolean }).fromResponse(
-        raw(data, status as number, { "content-type": contentType }),
-        testContext(),
-      );
+    /** expectJson 在不同状态码、媒体类型与响应体组合下的类别判定。 */ (expectJson, status, contentType, data, kind) => {
+      const response = axpResponse({ expectJson: expectJson as boolean }).fromResponse(raw(data, status as number, { "content-type": contentType }), testContext());
       expect(response.kind).toBe(kind);
       expect(response.status).toBe(status);
     },
@@ -177,19 +146,12 @@ describe("响应判定", /** 响应判定的用例集合。 */ () => {
     expect(isAxpResponse(response)).toBe(true);
     expect(Object.getOwnPropertyDescriptor(response, AXP_RESPONSE)?.enumerable).toBe(false);
     expect(isAxpResponse({ [Symbol.for("axp.response")]: true })).toBe(true);
-    for (const value of [new Error(), {}, null, undefined, 1, "response"])
-      expect(isAxpResponse(value)).toBe(false);
+    for (const value of [new Error(), {}, null, undefined, 1, "response"]) expect(isAxpResponse(value)).toBe(false);
   });
   it("[core.method.toJSON][core.method.fail] 派生字段完整且不改原响应", /** 派生字段完整且不改原响应。 */ () => {
     const factory = axpResponse();
-    const original = factory.fromResponse(
-      raw({ code: UNAUTHORIZED, data: 1, message: "denied" }),
-      testContext(),
-    );
-    const derived = factory.fail(
-      { from: original, stack: "callsite", reason: "expired", data: undefined },
-      testContext(),
-    );
+    const original = factory.fromResponse(raw({ code: UNAUTHORIZED, data: 1, message: "denied" }), testContext());
+    const derived = factory.fail({ from: original, stack: "callsite", reason: "expired", data: undefined }, testContext());
     expect(derived).not.toBe(original);
     expect(original.stack).toBeUndefined();
     expect(derived.toJSON()).toMatchObject({
@@ -211,10 +173,7 @@ describe("响应判定", /** 响应判定的用例集合。 */ () => {
       kind: "ok",
       status: OK,
     });
-    const failure = factory.fail(
-      { kind: "cancel", message: "stop", error: "reason" },
-      testContext(),
-    );
+    const failure = factory.fail({ kind: "cancel", message: "stop", error: "reason" }, testContext());
     expect(factory.fail({ from: failure }, testContext())).toMatchObject({
       kind: "cancel",
       error: "reason",

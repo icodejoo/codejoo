@@ -2,14 +2,7 @@ import { beforeEach, expect, it, vi } from "vitest";
 import axpLoading from "../../src/plugins/loading";
 import axpNotify from "../../src/plugins/notify";
 import type { AxpResponse } from "../../src/response";
-import {
-  authClient,
-  deferred,
-  failure,
-  REFRESH_TOKEN,
-  REQUEST_URL,
-  TOKEN_NEW,
-} from "../helpers/b3";
+import { authClient, deferred, failure, REFRESH_TOKEN, REQUEST_URL, TOKEN_NEW } from "../helpers/b3";
 import { loadingRecorder, notifyRecorder } from "../helpers/ui";
 
 /** 默认回调的事件标签。 */

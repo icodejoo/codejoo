@@ -1,4 +1,4 @@
-import type { AuthTag } from './classify.ts';
+import type { AuthTag } from "./classify.ts";
 
 /** 事件快照：断言用的只读视图 */
 export interface EventSnapshot {
@@ -26,11 +26,17 @@ export class EventLog {
   #tags = new Map<string, Set<AuthTag>>();
 
   /** loading 回调 */
-  onLoading = (visible: boolean): void => { this.loading.push(visible); };
+  onLoading = (visible: boolean): void => {
+    this.loading.push(visible);
+  };
   /** notify 回调，参数为提示文案 */
-  onNotify = (message: string): void => { this.notify.push(message); };
+  onNotify = (message: string): void => {
+    this.notify.push(message);
+  };
   /** 实际发起了一次 refresh 调用 */
-  onRefresh = (): void => { this.refresh++; };
+  onRefresh = (): void => {
+    this.refresh++;
+  };
 
   /**
    * 会话过期回调。
@@ -38,7 +44,7 @@ export class EventLog {
    */
   onExpired(reqTag: string | undefined): void {
     this.expired++;
-    this.#tag(reqTag, 'expired');
+    this.#tag(reqTag, "expired");
   }
 
   /**
@@ -46,7 +52,7 @@ export class EventLog {
    * @param reqTag 请求标签
    */
   markExpired(reqTag: string | undefined): void {
-    this.#tag(reqTag, 'expired');
+    this.#tag(reqTag, "expired");
   }
 
   /**
@@ -55,7 +61,7 @@ export class EventLog {
    */
   onDenied(reqTag: string | undefined): void {
     this.denied++;
-    this.#tag(reqTag, 'denied');
+    this.#tag(reqTag, "denied");
   }
 
   /**
@@ -64,7 +70,7 @@ export class EventLog {
    */
   onUnauthenticated(reqTag: string | undefined): void {
     this.unauthenticated++;
-    this.#tag(reqTag, 'unauthenticated');
+    this.#tag(reqTag, "unauthenticated");
   }
 
   /**
@@ -106,11 +112,17 @@ export class PendingTracker {
   #settled = 0;
 
   /** 请求发出 */
-  start(): void { this.#started++; }
+  start(): void {
+    this.#started++;
+  }
   /** 请求落定（无论成败） */
-  settle(): void { this.#settled++; }
+  settle(): void {
+    this.#settled++;
+  }
   /** 尚未落定的请求数 */
-  pending(): number { return this.#started - this.#settled; }
+  pending(): number {
+    return this.#started - this.#settled;
+  }
 }
 
 /**
@@ -122,6 +134,6 @@ export function checkLoadingPaired(seq: readonly boolean[]): string | null {
   const shows = seq.filter(Boolean).length;
   const hides = seq.length - shows;
   if (shows !== hides) return `loading 未成对: true×${shows} false×${hides}`;
-  if (seq.length > 0 && seq[seq.length - 1] !== false) return 'loading 最后一个不是 false';
+  if (seq.length > 0 && seq[seq.length - 1] !== false) return "loading 最后一个不是 false";
   return null;
 }

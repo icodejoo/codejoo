@@ -22,10 +22,7 @@ it("[core.method.eject][core.method.inspect] 非 LIFO 卸载保持剩余中间�
   }[];
   snapshot[0]!.name = "mutated";
   snapshot.pop();
-  expect(api.inspect().map(/** 取当前链的插件名。 */ (row) => row.name)).toEqual([
-    "outer",
-    "inner",
-  ]);
+  expect(api.inspect().map(/** 取当前链的插件名。 */ (row) => row.name)).toEqual(["outer", "inner"]);
   api.eject("outer");
   await api.get(URL)();
   expect(events).toEqual(["inner"]);

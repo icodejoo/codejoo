@@ -65,12 +65,7 @@ interface IShareEntry<R extends IAxpResponse> {
 /** 同一策略下 key 到共享条目的索引。 */
 type TShareTable<R extends IAxpResponse> = Map<string, IShareEntry<R>>;
 /** 某个策略处理一次请求的入口。 */
-type TShareRunner = <R extends IAxpResponse>(
-  ctx: AxpContext<R>,
-  next: AxpNext<R>,
-  key: string,
-  table: TShareTable<R>,
-) => Promise<R>;
+type TShareRunner = <R extends IAxpResponse>(ctx: AxpContext<R>, next: AxpNext<R>, key: string, table: TShareTable<R>) => Promise<R>;
 
 /** 判断是否为合法策略名。 */
 function isPolicy(value: unknown): value is SharePolicy {
@@ -101,12 +96,7 @@ function createEntry<R extends IAxpResponse>(): IShareEntry<R> {
 }
 
 /** 用共享结果落定条目并摘出索引；已落定或已放弃的条目忽略迟到的结果。 */
-function settleEntry<R extends IAxpResponse>(
-  table: TShareTable<R>,
-  key: string,
-  entry: IShareEntry<R>,
-  response: R,
-): void {
+function settleEntry<R extends IAxpResponse>(table: TShareTable<R>, key: string, entry: IShareEntry<R>, response: R): void {
   if (entry.settled) return;
   entry.settled = true;
   if (table.get(key) === entry) table.delete(key);
@@ -124,11 +114,7 @@ function timeoutOf<R extends IAxpResponse>(ctx: AxpContext<R>): number {
  * @param abandon 最后一个订阅者提前离开时调用，用于中止底层请求；落定后订阅者在同一轮微任务内收尾，不会再提前离开。
  * @returns 共享结果，或订阅者自己的取消、超时响应。
  */
-function subscribe<R extends IAxpResponse>(
-  ctx: AxpContext<R>,
-  entry: IShareEntry<R>,
-  abandon?: () => void,
-): Promise<R> {
+function subscribe<R extends IAxpResponse>(ctx: AxpContext<R>, entry: IShareEntry<R>, abandon?: () => void): Promise<R> {
   let deliver!: (response: R) => void;
   const result = new Promise<R>((resolve) => {
     deliver = resolve;
@@ -157,26 +143,14 @@ function subscribe<R extends IAxpResponse>(
   ctx.signal.addEventListener(ABORT_EVENT, onAbort);
   const limit = timeoutOf(ctx);
   if (limit > 0) {
-    timer = setTimeout(
-      /** 调用方超时：只让自己以 timeout 告终。 */ () =>
-        leave(
-          ctx.fail({ kind: AXP_KINDS.TIMEOUT, message: `timeout of ${limit}ms exceeded` }),
-          true,
-        ),
-      limit,
-    );
+    timer = setTimeout(/** 调用方超时：只让自己以 timeout 告终。 */ () => leave(ctx.fail({ kind: AXP_KINDS.TIMEOUT, message: `timeout of ${limit}ms exceeded` }), true), limit);
   }
   void entry.promise.then(/** 共享结果到达。 */ (response) => leave(response, false));
   return result;
 }
 
 /** start：首发才真正发请求，后到的同 key 订阅者复用其结果。 */
-function shareStart<R extends IAxpResponse>(
-  ctx: AxpContext<R>,
-  next: AxpNext<R>,
-  key: string,
-  table: TShareTable<R>,
-): Promise<R> {
+function shareStart<R extends IAxpResponse>(ctx: AxpContext<R>, next: AxpNext<R>, key: string, table: TShareTable<R>): Promise<R> {
   let entry = table.get(key);
   if (!entry) {
     const created = createEntry<R>();
@@ -186,9 +160,7 @@ function shareStart<R extends IAxpResponse>(
     // 共享请求用独立信号，超时也交给订阅者自己的计时器，首发的取消和超时都不连累跟随者。
     const patch: AxpRequestPatch = { signal: created.controller.signal };
     if (timeoutOf(ctx) > 0) patch.timeout = NO_TIMEOUT;
-    void next(patch).then(
-      /** 首发结果分发给所有订阅者。 */ (response) => settleEntry(table, key, created, response),
-    );
+    void next(patch).then(/** 首发结果分发给所有订阅者。 */ (response) => settleEntry(table, key, created, response));
   }
   const shared = entry;
   return subscribe(
@@ -203,12 +175,7 @@ function shareStart<R extends IAxpResponse>(
 }
 
 /** end：每次调用都发请求，只有最新一次的结果落定共享条目。 */
-function shareEnd<R extends IAxpResponse>(
-  ctx: AxpContext<R>,
-  next: AxpNext<R>,
-  key: string,
-  table: TShareTable<R>,
-): Promise<R> {
+function shareEnd<R extends IAxpResponse>(ctx: AxpContext<R>, next: AxpNext<R>, key: string, table: TShareTable<R>): Promise<R> {
   let entry = table.get(key);
   if (!entry) {
     entry = createEntry<R>();
@@ -216,20 +183,12 @@ function shareEnd<R extends IAxpResponse>(
   }
   const shared = entry;
   const mine = ++shared.seq;
-  void next().then(
-    /** 被更新的调用顶替后，这次的结果直接丢弃。 */ (response) =>
-      mine === shared.seq ? settleEntry(table, key, shared, response) : undefined,
-  );
+  void next().then(/** 被更新的调用顶替后，这次的结果直接丢弃。 */ (response) => (mine === shared.seq ? settleEntry(table, key, shared, response) : undefined));
   return subscribe(ctx, shared);
 }
 
 /** race：每次调用都发请求，第一个成功的胜出；全部失败时用最后一个。 */
-function shareRace<R extends IAxpResponse>(
-  ctx: AxpContext<R>,
-  next: AxpNext<R>,
-  key: string,
-  table: TShareTable<R>,
-): Promise<R> {
+function shareRace<R extends IAxpResponse>(ctx: AxpContext<R>, next: AxpNext<R>, key: string, table: TShareTable<R>): Promise<R> {
   let entry = table.get(key);
   if (!entry) {
     entry = createEntry<R>();
@@ -240,9 +199,7 @@ function shareRace<R extends IAxpResponse>(
   void next().then(
     /** 成功立即胜出；失败要等在途的都落定，最后到达的那个收尾。 */ (response) => {
       shared.inflight--;
-      return response.ok || shared.inflight === 0
-        ? settleEntry(table, key, shared, response)
-        : undefined;
+      return response.ok || shared.inflight === 0 ? settleEntry(table, key, shared, response) : undefined;
     },
   );
   return subscribe(ctx, shared);
@@ -262,14 +219,10 @@ const RUNNERS: Record<SharePolicy, TShareRunner> = {
  * @returns source 阶段内置次序 2 的插件，每个客户端各有一套独立的共享表。
  * @example `axpShare({ policy: 'start' })` 配合 `api.get('/pets')(undefined, { share: true })`
  */
-export default function axpShare<R extends IAxpResponse = AxpResponse>(
-  options: ISharedOptions = {},
-): AxpPlugin<R> {
+export default function axpShare<R extends IAxpResponse = AxpResponse>(options: ISharedOptions = {}): AxpPlugin<R> {
   const base = resolveOption<ISharedOptions, typeof DEFAULTS>(undefined, options, DEFAULTS);
   if (!isPolicy(base.policy)) base.policy = DEFAULT_POLICY;
-  const methods = new Set(
-    base.methods.map(/** 方法名统一小写。 */ (method) => method.toLowerCase()),
-  );
+  const methods = new Set(base.methods.map(/** 方法名统一小写。 */ (method) => method.toLowerCase()));
   return {
     name: NAME,
     enable: options.enable,

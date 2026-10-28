@@ -14,9 +14,7 @@ it("[core.method.markReplayable][core.req.patch] 重复发送体一致，transfo
       },
     },
   ]);
-  api.axios.defaults.transformRequest = /** 在序列化前改写请求体，验证基准体不被污染。 */ (
-    data,
-  ) => {
+  api.axios.defaults.transformRequest = /** 在序列化前改写请求体，验证基准体不被污染。 */ (data) => {
     data.items.push(2);
     data.nested.value = "transformed";
     observed.push(JSON.parse(JSON.stringify(data)));

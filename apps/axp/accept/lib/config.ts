@@ -1,10 +1,7 @@
-import path from 'node:path';
-import { parseArgs } from 'node:util';
-import {
-  ALL_ADAPTERS, ALL_NETWORKS, ALL_STYLES, DEFAULT_NETEM, DEFAULT_SCENARIOS, DEFAULT_SERVER,
-  ENV_NETEM, ENV_SCENARIOS, ENV_SERVER,
-} from './constants.ts';
-import type { AdapterName, NetworkName, Style } from './constants.ts';
+import path from "node:path";
+import { parseArgs } from "node:util";
+import { ALL_ADAPTERS, ALL_NETWORKS, ALL_STYLES, DEFAULT_NETEM, DEFAULT_SCENARIOS, DEFAULT_SERVER, ENV_NETEM, ENV_SCENARIOS, ENV_SERVER } from "./constants.ts";
+import type { AdapterName, NetworkName, Style } from "./constants.ts";
 
 /** 过滤条件：空数组表示不过滤 */
 export interface Filters {
@@ -32,11 +29,14 @@ export interface AcceptConfig {
 }
 
 /** 默认报告目录名（相对 accept/） */
-export const REPORT_DIR_NAME = '.report';
+export const REPORT_DIR_NAME = ".report";
 
 /** 把逗号分隔字符串拆成去空白的数组 */
 export function splitList(v: string | undefined): string[] {
-  return (v ?? '').split(',').map((s) => s.trim()).filter(Boolean);
+  return (v ?? "")
+    .split(",")
+    .map((s) => s.trim())
+    .filter(Boolean);
 }
 
 /**
@@ -48,7 +48,7 @@ export function splitList(v: string | undefined): string[] {
  */
 export function pickEnum<T extends string>(label: string, values: string[], allowed: readonly T[]): T[] {
   for (const v of values) {
-    if (!(allowed as readonly string[]).includes(v)) throw new Error(`未知的${label}: ${v}（可选 ${allowed.join(', ')}）`);
+    if (!(allowed as readonly string[]).includes(v)) throw new Error(`未知的${label}: ${v}（可选 ${allowed.join(", ")}）`);
   }
   return values as T[];
 }
@@ -66,32 +66,32 @@ export function parseConfig(argv: string[], env: Record<string, string | undefin
   const { values } = parseArgs({
     args: argv,
     options: {
-      dry: { type: 'boolean', default: false },
-      id: { type: 'string' },
-      network: { type: 'string' },
-      style: { type: 'string' },
-      adapter: { type: 'string' },
-      jobs: { type: 'string' },
-      'report-dir': { type: 'string' },
-      verbose: { type: 'boolean', default: false },
+      dry: { type: "boolean", default: false },
+      id: { type: "string" },
+      network: { type: "string" },
+      style: { type: "string" },
+      adapter: { type: "string" },
+      jobs: { type: "string" },
+      "report-dir": { type: "string" },
+      verbose: { type: "boolean", default: false },
     },
     allowPositionals: false,
   });
   const jobs = Number(values.jobs ?? env.TESTKIT_JOBS ?? 1);
   if (!Number.isInteger(jobs) || jobs < 1) throw new Error(`--jobs 必须是正整数: ${values.jobs}`);
   return {
-    server: (env[ENV_SERVER] || DEFAULT_SERVER).replace(/\/+$/, ''),
-    netem: (env[ENV_NETEM] || DEFAULT_NETEM).replace(/\/+$/, ''),
+    server: (env[ENV_SERVER] || DEFAULT_SERVER).replace(/\/+$/, ""),
+    netem: (env[ENV_NETEM] || DEFAULT_NETEM).replace(/\/+$/, ""),
     scenarios: path.resolve(cwd, env[ENV_SCENARIOS] || DEFAULT_SCENARIOS),
     filters: {
       ids: splitList(values.id ?? env.TESTKIT_ID),
-      networks: pickEnum('网络', splitList(values.network ?? env.TESTKIT_NETWORK), ALL_NETWORKS),
-      styles: pickEnum('风格', splitList(values.style ?? env.TESTKIT_STYLE), ALL_STYLES),
-      adapters: pickEnum('adapter', splitList(values.adapter ?? env.TESTKIT_ADAPTER), ALL_ADAPTERS),
+      networks: pickEnum("网络", splitList(values.network ?? env.TESTKIT_NETWORK), ALL_NETWORKS),
+      styles: pickEnum("风格", splitList(values.style ?? env.TESTKIT_STYLE), ALL_STYLES),
+      adapters: pickEnum("adapter", splitList(values.adapter ?? env.TESTKIT_ADAPTER), ALL_ADAPTERS),
     },
     dry: values.dry === true,
     jobs,
-    reportDir: path.resolve(cwd, values['report-dir'] ?? path.join(acceptDir, REPORT_DIR_NAME)),
+    reportDir: path.resolve(cwd, values["report-dir"] ?? path.join(acceptDir, REPORT_DIR_NAME)),
     verbose: values.verbose === true,
   };
 }

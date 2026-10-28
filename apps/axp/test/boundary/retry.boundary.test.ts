@@ -4,14 +4,7 @@ import { beforeEach, expect, it, vi } from "vitest";
 import axpRetry, { type IRetryOptions } from "../../src/plugins/retry";
 import { AxpResponse, type AxpKind } from "../../src/response";
 import type { AxpRequestConfig } from "../../src/types";
-import {
-  b3Client,
-  POLLUTED_ONCE,
-  pollutingBody,
-  pollutingTransform,
-  REQUEST_URL,
-  run,
-} from "../helpers/b3";
+import { b3Client, POLLUTED_ONCE, pollutingBody, pollutingTransform, REQUEST_URL, run } from "../helpers/b3";
 
 /** 延迟与封顶的观测窗口。 */
 const LOCAL_DELAY = 40;
@@ -29,10 +22,7 @@ it.each(["cancel", "auth", "internal", "parse"] as const)(
   /** 合成失败也经过内核异常边界。 */ async (kind) => {
     const shouldRetry = vi.fn(/** 不应覆盖失败类别否决。 */ () => true);
     const h = b3Client([axpRetry({ shouldRetry })]);
-    const inner = vi.fn(
-      /** 构造内核契约中的不可重试失败。 */ (ctx) =>
-        ctx.fail({ kind, error: kind === "internal" ? BUG : undefined }),
-    );
+    const inner = vi.fn(/** 构造内核契约中的不可重试失败。 */ (ctx) => ctx.fail({ kind, error: kind === "internal" ? BUG : undefined }));
     h.api.use({ name: "failure-kind", stage: "source", handle: inner });
     const pending = h.send().catch(/** 原始程序异常必须保留。 */ (error) => error);
     await vi.runAllTimersAsync();
@@ -112,9 +102,7 @@ it.each(["delay", "jitter", "shouldRetry"] as const)(
     };
     const h = b3Client([axpRetry({ delay: 0, shouldRetry: fallback })]);
     h.net.fallback(/** 首轮服务端错误。 */ () => ({ status: 500 }));
-    const pending = h
-      .send({ retry: { shouldRetry: () => true, ...override } })
-      .catch(/** 尽早观察拒绝。 */ (error) => error);
+    const pending = h.send({ retry: { shouldRetry: () => true, ...override } }).catch(/** 尽早观察拒绝。 */ (error) => error);
     await vi.runAllTimersAsync();
     expect(await pending).toBe(BUG);
     expect(fallback).not.toHaveBeenCalled();
@@ -128,9 +116,7 @@ it.each([false, true])(
   /** Retry-After 不执行本地延迟与抖动，也不受 delayMax 影响。 */ async (business) => {
     const delay = vi.fn(/** 有合法服务端时间就不调用。 */ () => LOCAL_DELAY);
     const jitter = vi.fn(/** 服务端时间不叠加抖动。 */ () => 0);
-    const h = b3Client([
-      axpRetry({ max: 1, delay, jitter, delayMax: 0, retryAfterMax: REMOTE_DELAY }),
-    ]);
+    const h = b3Client([axpRetry({ max: 1, delay, jitter, delayMax: 0, retryAfterMax: REMOTE_DELAY })]);
     h.net.fallback(
       /** 逻辑 429 可来自业务信封。 */ () => ({
         status: business ? 200 : 429,

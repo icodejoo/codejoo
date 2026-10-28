@@ -73,9 +73,7 @@ describe("TokenManager — 正常持久化路径", () => {
     ]);
     const storage = {
       getItem: vi.fn(/** 缺失键按 null 返回。 */ (key: string) => values.get(key) ?? null),
-      setItem: vi.fn(
-        /** 写入存裸值。 */ (key: string, value: string) => void values.set(key, value),
-      ),
+      setItem: vi.fn(/** 写入存裸值。 */ (key: string, value: string) => void values.set(key, value)),
       removeItem: vi.fn(/** 删除存储键。 */ (key: string) => void values.delete(key)),
     };
     vi.stubGlobal("localStorage", storage);

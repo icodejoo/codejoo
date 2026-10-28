@@ -98,12 +98,7 @@ it.each([408, 429, 500, 502, 503, 504, 400, 404, 501, 200])(
   /** 分别验证标准与业务错误。 */ async (status) => {
     for (const business of [false, true]) {
       const h = b3Client([axpRetry({ delay: 0, max: 1 })]);
-      h.net.fallback(
-        /** HTTP 200 信封可承载逻辑错误。 */ () =>
-          business
-            ? { status: 200, data: { code: status === 200 ? 0 : status, data: null } }
-            : { status },
-      );
+      h.net.fallback(/** HTTP 200 信封可承载逻辑错误。 */ () => (business ? { status: 200, data: { code: status === 200 ? 0 : status, data: null } } : { status }));
       const pending = h.send();
       await vi.runAllTimersAsync();
       const result = await pending;
@@ -121,11 +116,7 @@ it.each(["network", "timeout"] as const)(
       const h = b3Client([axpRetry({ delay: 0, max: 1, statusCodes: [], shouldRetry })]);
       h.net.fallback(
         /** 首轮模拟 axios 传输错误。 */ (_config, hit) => {
-          if (hit === 1)
-            throw new AxiosError(
-              kind,
-              kind === "network" ? AxiosError.ERR_NETWORK : AxiosError.ECONNABORTED,
-            );
+          if (hit === 1) throw new AxiosError(kind, kind === "network" ? AxiosError.ERR_NETWORK : AxiosError.ECONNABORTED);
           return { status: 200 };
         },
       );
@@ -149,11 +140,7 @@ it.each([true, false, undefined, null])(
     const result = await pending;
     expect(h.net.totalStarted).toBe(decision === true ? 3 : 1);
     expect(shouldRetry.mock.calls.length).toBe(decision === true ? 2 : 1);
-    expect(shouldRetry).toHaveBeenCalledWith(
-      expect.objectContaining({ ok: true }),
-      1,
-      expect.objectContaining({ request: expect.any(Object) }),
-    );
+    expect(shouldRetry).toHaveBeenCalledWith(expect.objectContaining({ ok: true }), 1, expect.objectContaining({ request: expect.any(Object) }));
     expect(base).not.toHaveBeenCalled();
     expect(result.ok).toBe(true);
   },
@@ -186,9 +173,7 @@ it("[retry.cb.shouldRetry][retry.opt.max] 后续不可重试失败立即收敛�
       },
     ],
   });
-  h.net.fallback(
-    /** 第一次可重试，第二次硬停止。 */ (_c, hit) => ({ status: hit === 1 ? 500 : 404 }),
-  );
+  h.net.fallback(/** 第一次可重试，第二次硬停止。 */ (_c, hit) => ({ status: hit === 1 ? 500 : 404 }));
   const pending = h.send();
   await vi.runAllTimersAsync();
   expect(await pending).toBe(responses[1]);
@@ -227,9 +212,7 @@ it("[retry.method.cleanup][retry.opt.enable] 禁用、卸载、重名拒绝和�
   expect(h.net.totalStarted).toBe(1);
   expect(axpRetry({ enable: false }).name).toBe(RETRY_NAME);
   const disabled = b3Client([axpRetry({ enable: false })]);
-  expect(disabled.api.inspect().some(/** 禁用插件不可见。 */ (p) => p.name === RETRY_NAME)).toBe(
-    false,
-  );
+  expect(disabled.api.inspect().some(/** 禁用插件不可见。 */ (p) => p.name === RETRY_NAME)).toBe(false);
   disabled.net.fallback(
     /** 禁用时网络失败同样不重试。 */ () => {
       throw new AxiosError("offline", AxiosError.ERR_NETWORK);

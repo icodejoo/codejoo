@@ -17,18 +17,14 @@ export interface INotifyOptions<R extends IAxpResponse = IAxpResponse> extends I
 }
 /** 从最终逻辑结果生成默认消息。 */
 function defaultStringify<R extends IAxpResponse>(response: R, ctx: AxpContext<R>): string {
-  return response.ok || response.kind === AXP_KINDS.CANCEL || ctx.request.silent
-    ? ""
-    : response.message || `${response.kind} ${response.status}`;
+  return response.ok || response.kind === AXP_KINDS.CANCEL || ctx.request.silent ? "" : response.message || `${response.kind} ${response.status}`;
 }
 /** 在 outer 阶段最多通知一次，原样透传最终响应。
  * @param options 必填通知回调和可选消息格式化规则。
  * @returns 不构造响应的消息插件。
  * @example `axpNotify({ notify: message => toast(message) })`
  */
-export default function axpNotify<R extends IAxpResponse = AxpResponse>(
-  options: INotifyOptions<R>,
-): AxpPlugin<R> {
+export default function axpNotify<R extends IAxpResponse = AxpResponse>(options: INotifyOptions<R>): AxpPlugin<R> {
   const stringify = options.stringify ?? defaultStringify<R>;
   const notify = options.notify;
   return {

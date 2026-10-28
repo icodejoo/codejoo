@@ -56,9 +56,7 @@ function readData(data: unknown, key: string, used: IConsumedFields): unknown {
  * @returns 经 next(patch) 传递新请求视图的 prepare 插件。
  * @example `axpRepath({ removeKey: false })`
  */
-export default function axpRepath<R extends IAxpResponse = AxpResponse>(
-  options: IRepathOptions = {},
-): AxpPlugin<R> {
+export default function axpRepath<R extends IAxpResponse = AxpResponse>(options: IRepathOptions = {}): AxpPlugin<R> {
   const base = resolveOption<IRepathOptions, typeof DEFAULTS>(undefined, options, DEFAULTS);
   const basePattern = new RegExp(base.pattern.source, base.pattern.flags);
   return {
@@ -69,9 +67,7 @@ export default function axpRepath<R extends IAxpResponse = AxpResponse>(
     async handle(ctx, next) {
       const requestOption = ctx.request.repath;
       if (requestOption === false) return next();
-      const resolved = isPlainObject(requestOption)
-        ? resolveOption(requestOption, base, DEFAULTS)
-        : base;
+      const resolved = isPlainObject(requestOption) ? resolveOption(requestOption, base, DEFAULTS) : base;
       const { url, params, data } = ctx.request;
       if (!resolved || !url) return next();
       const prefix = url.match(/^(?:[a-z][a-z\d+.-]*:)?\/\/[^/?#]*/i)?.[0] ?? "";
@@ -82,18 +78,13 @@ export default function axpRepath<R extends IAxpResponse = AxpResponse>(
       const suffix = rest.slice(pathname.length);
       const used: IConsumedFields = {};
       // 不向共享正则写 lastIndex；无捕获组时不把 replace 的 offset 当变量名。
-      const pattern =
-        isPlainObject(requestOption) && requestOption.pattern != null
-          ? new RegExp(resolved.pattern.source, resolved.pattern.flags)
-          : basePattern;
+      const pattern = isPlainObject(requestOption) && requestOption.pattern != null ? new RegExp(resolved.pattern.source, resolved.pattern.flags) : basePattern;
       pattern.lastIndex = 0;
       const replaced = pathname.replace(
         pattern,
         /** 捕获组依次提供变量名。 */ (match, ...args: unknown[]) => {
           const captures = args.slice(0, -2);
-          const key = captures.find(
-            /** 忽略未命中的可选组。 */ (value) => typeof value === "string" && value.length > 0,
-          );
+          const key = captures.find(/** 忽略未命中的可选组。 */ (value) => typeof value === "string" && value.length > 0);
           if (typeof key !== "string") return match;
           const value = readParams(params, key, used) ?? readData(data, key, used);
           return value == null ? match : encodeURIComponent(String(value));

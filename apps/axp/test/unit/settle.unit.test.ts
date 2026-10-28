@@ -22,10 +22,7 @@ it.each(MODES)(
     const ctx = testContext(mode);
     const response = ctx.fail({ httpStatus: 200, code: BIZ_FAILURE });
     if (mode.throws === false) expect(settle(response, ctx, {})).toBe(response);
-    else
-      expect(/** 可预期失败在 throws 开启时被抛出。 */ () => settle(response, ctx, {})).toThrow(
-        response,
-      );
+    else expect(/** 可预期失败在 throws 开启时被抛出。 */ () => settle(response, ctx, {})).toThrow(response);
   },
 );
 it.each(MODES)(
@@ -33,10 +30,7 @@ it.each(MODES)(
   /** internal 失败在九种 wrap/throws 组合下都抛出原始异常。 */ (mode) => {
     const ctx = testContext(mode);
     const bug = new TypeError("bug");
-    expect(
-      /** internal 响应抛出原始异常。 */ () =>
-        settle(ctx.fail({ kind: "internal", error: bug }), ctx, {}),
-    ).toThrow(bug);
+    expect(/** internal 响应抛出原始异常。 */ () => settle(ctx.fail({ kind: "internal", error: bug }), ctx, {})).toThrow(bug);
   },
 );
 it("[core.cb.reject][core.req.throws] reject 只处理请求级 throws 开启的可预期失败", /** reject 只处理请求级 throws 开启的可预期失败。 */ () => {
@@ -45,13 +39,9 @@ it("[core.cb.reject][core.req.throws] reject 只处理请求级 throws 开启的
   const converted = new Error("converted");
   const reject = vi.fn(/** 把失败响应转换为自定义错误。 */ () => converted);
   expect(settle(response, testContext({ throws: false }), { reject })).toBe(response);
-  expect(/** reject 转换后的错误被抛出。 */ () => settle(response, ctx, { reject })).toThrow(
-    converted,
-  );
+  expect(/** reject 转换后的错误被抛出。 */ () => settle(response, ctx, { reject })).toThrow(converted);
   const explicit = testContext({ throws: true });
-  expect(/** 请求级 throws:true 优先，仍抛原响应。 */ () => settle(response, explicit, {})).toThrow(
-    response,
-  );
+  expect(/** 请求级 throws:true 优先，仍抛原响应。 */ () => settle(response, explicit, {})).toThrow(response);
   const bug = new TypeError("reject bug");
   expect(
     /** reject 自身抛错时原样透传。 */ () =>

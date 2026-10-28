@@ -112,11 +112,7 @@ it("[notify.opt.enable][notify.method.lifecycle] 禁用不 setup，重名拒绝�
 
 it("[notify.cb.missing] 无 config、message、response 的网络错误使用默认类别状态消息", /** 缺少传输信息时仍有 R 契约。 */ async () => {
   const { AxiosError } = await import("axios");
-  const h = uiClient(
-    [],
-    {},
-    /** 空 AxiosError 不含请求和响应。 */ () => Promise.reject(new AxiosError()),
-  );
+  const h = uiClient([], {}, /** 空 AxiosError 不含请求和响应。 */ () => Promise.reject(new AxiosError()));
   const notify = vi.fn(notifyRecorder(h.events));
   h.api.use(axpNotify<AxpResponse>({ notify }));
   const response = await h.send();

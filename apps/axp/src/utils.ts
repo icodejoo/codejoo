@@ -1,23 +1,8 @@
-import {
-  AxiosHeaders,
-  mergeConfig,
-  type AxiosRequestConfig,
-  type CreateAxiosDefaults,
-  type RawAxiosHeaders,
-} from "axios";
+import { AxiosHeaders, mergeConfig, type AxiosRequestConfig, type CreateAxiosDefaults, type RawAxiosHeaders } from "axios";
 import { normalizeMethod } from "./methods";
 
 /** axios 在发送前展开的默认头分组，不作为真实 HTTP header。 */
-export const HEADER_GROUPS = new Set([
-  "common",
-  "delete",
-  "get",
-  "head",
-  "post",
-  "put",
-  "patch",
-  "query",
-]);
+export const HEADER_GROUPS = new Set(["common", "delete", "get", "head", "post", "put", "patch", "query"]);
 
 /** 判断非空对象，数组和特殊对象均保留为对象。
  * @internal
@@ -41,9 +26,7 @@ export function isPlainObject(value: unknown): value is Record<string, unknown> 
  * @returns 独立容器，空值保持原样。
  * @example `cloneAxiosHeaders(defaults.headers)`
  */
-export function cloneAxiosHeaders(
-  headers: AxiosRequestConfig["headers"],
-): AxiosRequestConfig["headers"] {
+export function cloneAxiosHeaders(headers: AxiosRequestConfig["headers"]): AxiosRequestConfig["headers"] {
   if (headers == null) return headers;
   if (headers instanceof AxiosHeaders) return new AxiosHeaders(headers);
   const cloned = mergeConfig({}, { headers }).headers!;
@@ -65,12 +48,9 @@ export function cloneAxiosDefaults(defaults: AxiosRequestConfig): AxiosRequestCo
   for (const key of Object.keys(defaults)) {
     if (key === "headers") cloned.headers = cloneAxiosHeaders(defaults.headers);
     else if (key === "params") cloned.params = cloneParams(defaults.params);
-    else if (key === "transformRequest")
-      cloned.transformRequest = toArray(defaults.transformRequest);
-    else if (key === "transformResponse")
-      cloned.transformResponse = toArray(defaults.transformResponse);
-    else if (!(key in cloned))
-      Object.assign(cloned, { [key]: defaults[key as keyof AxiosRequestConfig] });
+    else if (key === "transformRequest") cloned.transformRequest = toArray(defaults.transformRequest);
+    else if (key === "transformResponse") cloned.transformResponse = toArray(defaults.transformResponse);
+    else if (!(key in cloned)) Object.assign(cloned, { [key]: defaults[key as keyof AxiosRequestConfig] });
   }
   return cloned;
 }
@@ -81,10 +61,7 @@ export function cloneAxiosDefaults(defaults: AxiosRequestConfig): AxiosRequestCo
  * @param config 需要覆盖的字段。
  * @example `assignAxiosDefaults(client.axios.defaults, overrides)`
  */
-export function assignAxiosDefaults(
-  target: object,
-  config: AxiosRequestConfig | CreateAxiosDefaults,
-): void {
+export function assignAxiosDefaults(target: object, config: AxiosRequestConfig | CreateAxiosDefaults): void {
   Object.assign(target, cloneAxiosDefaults(config as AxiosRequestConfig));
 }
 
@@ -95,15 +72,9 @@ export function assignAxiosDefaults(
  * @param args 回调参数。
  * @example `fireNotice(loading, '[axp:loading] loading 回调失败', true)`
  */
-export function fireNotice<A extends unknown[]>(
-  fn: (...args: A) => unknown,
-  label: string,
-  ...args: A
-): void {
+export function fireNotice<A extends unknown[]>(fn: (...args: A) => unknown, label: string, ...args: A): void {
   try {
-    void Promise.resolve(fn(...args)).catch(
-      /** 异步通知故障不影响请求落定。 */ (error: unknown) => console.error(label, error),
-    );
+    void Promise.resolve(fn(...args)).catch(/** 异步通知故障不影响请求落定。 */ (error: unknown) => console.error(label, error));
   } catch (error) {
     console.error(label, error);
   }
@@ -113,11 +84,7 @@ export function fireNotice<A extends unknown[]>(
 function cloneParams(value: unknown): unknown {
   if (Array.isArray(value)) return value.map(cloneParams);
   if (isPlainObject(value)) {
-    return Object.fromEntries(
-      Object.entries(value).map(
-        /** 每个查询字段独立复制可变容器。 */ ([key, item]) => [key, cloneParams(item)],
-      ),
-    );
+    return Object.fromEntries(Object.entries(value).map(/** 每个查询字段独立复制可变容器。 */ ([key, item]) => [key, cloneParams(item)]));
   }
   return value;
 }

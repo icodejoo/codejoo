@@ -1,11 +1,5 @@
 import { beforeEach, expect, it, vi } from "vitest";
-import axpCache, {
-  clearCache,
-  removeCache,
-  type ICacheOptions,
-  type IAxpCacheEntry,
-  type IAxpCacheStore,
-} from "../../src/plugins/cache";
+import axpCache, { clearCache, removeCache, type ICacheOptions, type IAxpCacheEntry, type IAxpCacheStore } from "../../src/plugins/cache";
 import type { AxpResponse } from "../../src/response";
 import { envelope, sourceClient } from "../helpers/source";
 

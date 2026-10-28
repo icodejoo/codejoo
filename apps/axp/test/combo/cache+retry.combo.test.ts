@@ -3,13 +3,7 @@ import axpCache from "../../src/plugins/cache";
 import axpRetry from "../../src/plugins/retry";
 import type { AxpResponse } from "../../src/response";
 import { failure } from "../helpers/b3";
-import {
-  countingCacheStore,
-  envelope,
-  requestRecorder,
-  settleAll,
-  sourceClient,
-} from "../helpers/source";
+import { countingCacheStore, envelope, requestRecorder, settleAll, sourceClient } from "../helpers/source";
 
 /** 被缓存且可重试的接口。 */
 const URL = "/pets";
@@ -36,11 +30,7 @@ beforeEach(() => {
 function client(max: number) {
   const cache = countingCacheStore();
   const attempts = requestRecorder("pre");
-  const h = sourceClient([
-    axpRetry<AxpResponse>({ max, delay: 0 }),
-    axpCache<AxpResponse>({ store: cache.store }),
-    attempts.plugin,
-  ]);
+  const h = sourceClient([axpRetry<AxpResponse>({ max, delay: 0 }), axpCache<AxpResponse>({ store: cache.store }), attempts.plugin]);
   return { ...h, cache, attempts: attempts.seen };
 }
 
@@ -48,20 +38,13 @@ it.each([false, true])(
   "[retry.opt.max × cache.req.cache.key] 失败后重试成功的那次写入缓存，之前的失败不写，后续请求命中缓存且只走一次尝试（business=%s）",
   /** 缓存在 retry 之内：每次尝试都先问缓存，只有最终成功才写。 */ async (business) => {
     const h = client(ONE_RETRY);
-    h.net.on(
-      "get",
-      URL,
-      /** 首发失败，其后成功。 */ (_config, hit) =>
-        hit <= FAILED_SENDS ? failure(HTTP_ERROR, business) : envelope(DATA),
-    );
+    h.net.on("get", URL, /** 首发失败，其后成功。 */ (_config, hit) => (hit <= FAILED_SENDS ? failure(HTTP_ERROR, business) : envelope(DATA)));
     const [first] = await settleAll(h.send({ url: URL, cache: { key: CACHE_KEY } }));
     expect(first!.ok).toBe(true);
     expect(h.net.calls("get", URL)).toBe(SENDS_AFTER_RETRY);
     expect(h.attempts).toHaveLength(SENDS_AFTER_RETRY);
     expect(h.cache.set).toHaveBeenCalledTimes(1);
-    expect([...h.cache.entries.values()].map(/** 缓存里的响应。 */ (e) => e.response)).toEqual([
-      first,
-    ]);
+    expect([...h.cache.entries.values()].map(/** 缓存里的响应。 */ (e) => e.response)).toEqual([first]);
     const [hit] = await settleAll(h.send({ url: URL, cache: { key: CACHE_KEY } }));
     expect(hit).toBe(first);
     expect(h.net.calls("get", URL)).toBe(SENDS_AFTER_RETRY);
@@ -87,12 +70,7 @@ it("[retry.opt.max × cache.req.cache] 重试耗尽仍失败：每一轮失败�
 
 it("[retry.opt.max × cache.req.cache] 请求级 cache:false：每次尝试都绕过缓存，重试成功的结果也不写入", /** 请求级关闭对每轮尝试都生效。 */ async () => {
   const h = client(ONE_RETRY);
-  h.net.on(
-    "get",
-    URL,
-    /** 首发失败，其后成功。 */ (_config, hit) =>
-      hit <= FAILED_SENDS ? failure(HTTP_ERROR) : envelope(DATA),
-  );
+  h.net.on("get", URL, /** 首发失败，其后成功。 */ (_config, hit) => (hit <= FAILED_SENDS ? failure(HTTP_ERROR) : envelope(DATA)));
   const [r] = await settleAll(h.send({ url: URL, cache: false }));
   expect(r!.ok).toBe(true);
   expect(h.net.calls("get", URL)).toBe(SENDS_AFTER_RETRY);

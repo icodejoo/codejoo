@@ -62,10 +62,7 @@ it("[repath.opt.removeKey][repath.req.repath] params 优先、空值回退 data�
 it("[repath.opt.pattern][repath.method.lifecycle] 自定义模式、插件关闭、卸载重装", /** 新安装契约。 */ async () => {
   const { api } = preparedClient([axpRepath<AxpResponse>({ enable: false })]);
   expect(api.inspect()).toEqual([]);
-  expect(
-    (await api.request({ url: VARIABLE_PATH, params: { id: 1 }, repath: true, throws: false }))
-      .request.url,
-  ).toBe(VARIABLE_PATH);
+  expect((await api.request({ url: VARIABLE_PATH, params: { id: 1 }, repath: true, throws: false })).request.url).toBe(VARIABLE_PATH);
   api.eject(NAME);
   const plugin = axpRepath<AxpResponse>({ pattern: /\$([a-z]+)/g });
   api.use(plugin);
@@ -76,8 +73,6 @@ it("[repath.opt.pattern][repath.method.lifecycle] 自定义模式、插件关闭
   expect((await api.request({ url: CUSTOM_PATH, throws: false })).request.url).toBe(CUSTOM_PATH);
   expect(api.eject(plugin.name)).toBe(false);
   api.use(plugin);
-  expect(
-    (await api.request({ url: CUSTOM_PATH, params: { id: 2 }, throws: false })).request.url,
-  ).toBe("/2");
+  expect((await api.request({ url: CUSTOM_PATH, params: { id: 2 }, throws: false })).request.url).toBe("/2");
   api.dispose();
 });

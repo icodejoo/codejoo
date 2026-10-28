@@ -11,6 +11,7 @@ npm i @codejoo/axp   # peer dep: axios
 ```
 
 Entry points:
+
 - `@codejoo/axp`: unbundled ESM. Plugin subpaths (`@codejoo/axp/retry`, `@codejoo/axp/cache`, ...) share one module instance with the root entry, so mixing them is fine.
 - `@codejoo/axp/min`: a single minified file with **its own copy** of the module. Don't mix it with the root entry or the subpaths.
 
@@ -19,14 +20,14 @@ Typed inference needs TypeScript ≥ 5.4.
 ## Quick start
 
 ```ts
-import axios from 'axios';
-import { createAxp, axpRepath, axpRetry, axpAuth, axpCache, TokenManager } from '@codejoo/axp';
-import type { Schema } from './api-schema'; // your endpoint types, same shape as the old MethodSchema
+import axios from "axios";
+import { createAxp, axpRepath, axpRetry, axpAuth, axpCache, TokenManager } from "@codejoo/axp";
+import type { Schema } from "./api-schema"; // your endpoint types, same shape as the old MethodSchema
 
 const api = createAxp<Schema>({
-  axios: axios.create({ baseURL: '/api' }),
+  axios: axios.create({ baseURL: "/api" }),
   plugins: [
-    axpRepath(),                              // fills {id} in paths; active once installed
+    axpRepath(), // fills {id} in paths; active once installed
     axpRetry({ max: 2 }),
     axpAuth({
       tokenManager: new TokenManager(),
@@ -38,9 +39,9 @@ const api = createAxp<Schema>({
 });
 
 // Typed call: a success gives you the business data directly
-const pet = await api.get('/pet/{id}')({ id: 1 });                                  // Pet
+const pet = await api.get("/pet/{id}")({ id: 1 }); // Pet
 // Caching is opted in per request
-const list = await api.get('/pet/findByStatus')({ status: 'available' }, { cache: true });
+const list = await api.get("/pet/findByStatus")({ status: "available" }, { cache: true });
 ```
 
 If you use a custom response type `R`, write both `S` and `R` explicitly: TypeScript doesn't do partial inference, so `S` alone can't infer `R`. Without `S`, paths fall back to `string`.
@@ -49,60 +50,61 @@ If you use a custom response type `R`, write both `S` and `R` explicitly: TypeSc
 
 Two switches decide what a call returns: `wrap` and `throws`.
 
-| Call | Success | Failure |
-| --- | --- | --- |
-| default | returns `data` | `throw r`, where `r` is an `IAxpResponse` |
-| `{ wrap: true }` | returns `WithData<R, D>`: the same shape as the response, with `data` typed as the business type | same, thrown |
-| `{ throws: false }` | returns `WithData<R, D>` | nothing is thrown; resolves with an `R` whose `ok` is `false` |
+| Call                | Success                                                                                          | Failure                                                       |
+| ------------------- | ------------------------------------------------------------------------------------------------ | ------------------------------------------------------------- |
+| default             | returns `data`                                                                                   | `throw r`, where `r` is an `IAxpResponse`                     |
+| `{ wrap: true }`    | returns `WithData<R, D>`: the same shape as the response, with `data` typed as the business type | same, thrown                                                  |
+| `{ throws: false }` | returns `WithData<R, D>`                                                                         | nothing is thrown; resolves with an `R` whose `ok` is `false` |
 
 A failure is thrown as a plain object, not an `Error`. By default it has no `stack`; turn on `debug` to attach the call site. Program bugs (an exception from middleware, a user callback, or an interceptor that isn't an axios error) are not treated as request failures: they are rethrown as-is, and `throws: false` doesn't swallow them.
 
 ```ts
 // Default: a failure you catch is an IAxpResponse; real bugs are rethrown
 try {
-  await api.post('/pet')(body);
+  await api.post("/pet")(body);
 } catch (e) {
-  if (api.isResponse(e)) toast(e.message);   // an expected failure
-  else throw e;                              // a bug
+  if (api.isResponse(e))
+    toast(e.message); // an expected failure
+  else throw e; // a bug
 }
 
 // throws: false: failures resolve too; check ok
-const res = await api.post('/pet')(body, { throws: false });
+const res = await api.post("/pet")(body, { throws: false });
 if (!res.ok) toast(res.message);
 
 // wrap: true: when you need the raw response
-const out = await api.get('/pet/{id}')({ id: 1 }, { wrap: true });
-out.data;   // Pet
-out.raw;    // the original AxiosResponse (escape hatch)
+const out = await api.get("/pet/{id}")({ id: 1 }, { wrap: true });
+out.data; // Pet
+out.raw; // the original AxiosResponse (escape hatch)
 ```
 
 Fields of `IAxpResponse`:
 
-| Field | Description |
-| --- | --- |
-| `ok` | Success check; the one extension point, see the next section |
-| `kind` | Category, see the table below |
-| `status` | Logical status. Read this for 401, 403 and 5xx checks. In the default implementation, an HTTP 2xx response with a numeric business code in 400–599 gets that code as its `status` |
-| `httpStatus` | Raw HTTP status; `0` when there was no response |
-| `code` / `message` / `data` | Business code, message and data. `code` is `undefined` for non-envelope responses |
-| `reason` | Finer reason, e.g. `expired`, `denied`, `unauthenticated` for auth failures |
-| `request` | The request that was actually sent. For share or cache hits, the one that was sent |
-| `stack` | Only present when `debug` is on and the failure is thrown, see below |
-| `raw` | The original `AxiosResponse` |
-| `error` | The original exception; the stack of a network error lives here |
+| Field                       | Description                                                                                                                                                                       |
+| --------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `ok`                        | Success check; the one extension point, see the next section                                                                                                                      |
+| `kind`                      | Category, see the table below                                                                                                                                                     |
+| `status`                    | Logical status. Read this for 401, 403 and 5xx checks. In the default implementation, an HTTP 2xx response with a numeric business code in 400–599 gets that code as its `status` |
+| `httpStatus`                | Raw HTTP status; `0` when there was no response                                                                                                                                   |
+| `code` / `message` / `data` | Business code, message and data. `code` is `undefined` for non-envelope responses                                                                                                 |
+| `reason`                    | Finer reason, e.g. `expired`, `denied`, `unauthenticated` for auth failures                                                                                                       |
+| `request`                   | The request that was actually sent. For share or cache hits, the one that was sent                                                                                                |
+| `stack`                     | Only present when `debug` is on and the failure is thrown, see below                                                                                                              |
+| `raw`                       | The original `AxiosResponse`                                                                                                                                                      |
+| `error`                     | The original exception; the stack of a network error lives here                                                                                                                   |
 
 Possible `kind` values:
 
-| kind | Meaning |
-| --- | --- |
-| `ok` | Success |
-| `http` | Non-2xx |
-| `biz` | HTTP 2xx, but the business check failed |
-| `network` | Network error |
-| `timeout` | Timed out |
-| `cancel` | Cancelled (`cancelAll` or `signal`) |
-| `parse` | Response could not be parsed. With `expectJson` on, a 2xx came back as unparsed JSON text |
-| `auth` | Auth failure; look at `reason` for details |
+| kind       | Meaning                                                                                                                      |
+| ---------- | ---------------------------------------------------------------------------------------------------------------------------- |
+| `ok`       | Success                                                                                                                      |
+| `http`     | Non-2xx                                                                                                                      |
+| `biz`      | HTTP 2xx, but the business check failed                                                                                      |
+| `network`  | Network error                                                                                                                |
+| `timeout`  | Timed out                                                                                                                    |
+| `cancel`   | Cancelled (`cancelAll` or `signal`)                                                                                          |
+| `parse`    | Response could not be parsed. With `expectJson` on, a 2xx came back as unparsed JSON text                                    |
+| `auth`     | Auth failure; look at `reason` for details                                                                                   |
 | `internal` | Internal wrapper for a program bug. The original exception is rethrown when the call settles, so you normally never see this |
 
 Three related helpers:
@@ -123,21 +125,25 @@ Three related helpers:
 The default implementation is `AxpResponse`. To add fields or change the rule, subclass it and override the `ok` or `status` getter. `kind` follows `ok` automatically.
 
 ```ts
-import { AxpResponse, axpResponse, axpRetry, createAxp } from '@codejoo/axp';
+import { AxpResponse, axpResponse, axpRetry, createAxp } from "@codejoo/axp";
 
 class MyResponse<D = unknown> extends AxpResponse<D> {
-  traceId = '';
-  get ok() { return this.httpStatus < 300 && this.code === 200; }   // our success code is 200
-  get status() { return this.code === 'TOKEN_EXPIRED' ? 401 : super.status; }
+  traceId = "";
+  get ok() {
+    return this.httpStatus < 300 && this.code === 200;
+  } // our success code is 200
+  get status() {
+    return this.code === "TOKEN_EXPIRED" ? 401 : super.status;
+  }
 }
 
 const response = axpResponse<MyResponse>({
-  create: (init, raw) => Object.assign(new MyResponse(init), { traceId: raw?.headers['x-trace-id'] ?? '' }),
+  create: (init, raw) => Object.assign(new MyResponse(init), { traceId: raw?.headers["x-trace-id"] ?? "" }),
 });
 
 const api = createAxp<Schema, MyResponse>({
   response,
-  plugins: [axpRetry({ shouldRetry: (r) => r.traceId !== '' })],
+  plugins: [axpRetry({ shouldRetry: (r) => r.traceId !== "" })],
 });
 ```
 
@@ -149,11 +155,11 @@ Notes:
 
 Options of the default factory `axpResponse(options?)`:
 
-| Option | Default | Description |
-| --- | --- | --- |
-| `envelope` | `{ code: 'code', data: 'data', message: 'message' }` | Envelope field names. `false` turns envelope detection off |
-| `expectJson` | `false` | A declared JSON body that fails to parse is classified as `parse` |
-| `create(init, raw?)` | `new AxpResponse(init)` | Extension point; return a subclass or an object with extra fields |
+| Option               | Default                                              | Description                                                       |
+| -------------------- | ---------------------------------------------------- | ----------------------------------------------------------------- |
+| `envelope`           | `{ code: 'code', data: 'data', message: 'message' }` | Envelope field names. `false` turns envelope detection off        |
+| `expectJson`         | `false`                                              | A declared JSON body that fails to parse is classified as `parse` |
+| `create(init, raw?)` | `new AxpResponse(init)`                              | Extension point; return a subclass or an object with extra fields |
 
 Default success check: HTTP 2xx, and either no business code, or a business code within `[0, '0000']`.
 
@@ -161,14 +167,14 @@ Default success check: HTTP 2xx, and either no business code, or a business code
 
 Ten built-in plugins. They are active as soon as they are installed, except `cache` and `share`, which are opted in per request, and `mock`, which is off by default. The built-in plugins are ordered by their stage, so you never sort them yourself.
 
-| Stage | Built-in plugins (outer → inner) | Notes |
-| --- | --- | --- |
-| `outer` | `axpLoading` → `axpNotify` | Entered and left once per logical request; sees the final result |
-| `prepare` | `axpRepath` → `axpFilter` | Shapes the request; runs once |
-| `attempt` | `axpRetry` | Retry boundary; every attempt inside it runs again |
-| `credential` | `axpAuth` | Injects credentials; on 401, refreshes and replays |
-| `source` | `axpMock` → `axpShare` → `axpCache` | Where the result comes from; can answer without touching the network |
-| none | `axpEnvs` | Runs only when installed; not part of the middleware chain |
+| Stage        | Built-in plugins (outer → inner)    | Notes                                                                |
+| ------------ | ----------------------------------- | -------------------------------------------------------------------- |
+| `outer`      | `axpLoading` → `axpNotify`          | Entered and left once per logical request; sees the final result     |
+| `prepare`    | `axpRepath` → `axpFilter`           | Shapes the request; runs once                                        |
+| `attempt`    | `axpRetry`                          | Retry boundary; every attempt inside it runs again                   |
+| `credential` | `axpAuth`                           | Injects credentials; on 401, refreshes and replays                   |
+| `source`     | `axpMock` → `axpShare` → `axpCache` | Where the result comes from; can answer without touching the network |
+| none         | `axpEnvs`                           | Runs only when installed; not part of the middleware chain           |
 
 ### Shared conventions
 
@@ -176,12 +182,12 @@ These apply to every plugin, so they are described once here.
 
 Per-request options accept four forms:
 
-| Form | Meaning |
-| --- | --- |
-| `false` | Off for this call |
-| `true` or omitted | Use the plugin-level configuration |
-| shorthand | Documented per plugin, e.g. retry's number, share's policy string or loading's callback function; overrides only the main parameter |
-| object | Field-by-field override. Precedence: request > plugin > built-in default. A field set to `null` or `undefined` inherits. Array fields are replaced as a whole. `enable: false` means the same as `false` |
+| Form              | Meaning                                                                                                                                                                                                  |
+| ----------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `false`           | Off for this call                                                                                                                                                                                        |
+| `true` or omitted | Use the plugin-level configuration                                                                                                                                                                       |
+| shorthand         | Documented per plugin, e.g. retry's number, share's policy string or loading's callback function; overrides only the main parameter                                                                      |
+| object            | Field-by-field override. Precedence: request > plugin > built-in default. A field set to `null` or `undefined` inherits. Array fields are replaced as a whole. `enable: false` means the same as `false` |
 
 Also:
 
@@ -202,11 +208,11 @@ How errors thrown by callbacks are handled, in two groups:
 
 Stage: `outer` (built-in order 1). Counts logical requests; shows and hides come in pairs.
 
-| Option | Default | Description |
-| --- | --- | --- |
-| `loading(visible)` | — | Show/hide callback |
-| `delay` | `0` | After the count goes from 0 to 1, wait this long before showing. If the count drops back to 0 in the meantime, nothing is shown |
-| `delayClose` | `0` | After the count goes from 1 to 0, wait this long before hiding. If a new request starts in the meantime, it stays visible |
+| Option             | Default | Description                                                                                                                     |
+| ------------------ | ------- | ------------------------------------------------------------------------------------------------------------------------------- |
+| `loading(visible)` | —       | Show/hide callback                                                                                                              |
+| `delay`            | `0`     | After the count goes from 0 to 1, wait this long before showing. If the count drops back to 0 in the meantime, nothing is shown |
+| `delayClose`       | `0`     | After the count goes from 1 to 0, wait this long before hiding. If a new request starts in the meantime, it stays visible       |
 
 Per request: `false`, `true`, a function (the callback for this call), or `{ enable, loading, delay, delayClose }`.
 
@@ -219,18 +225,18 @@ Per request: `false`, `true`, a function (the callback for this call), or `{ ena
 
 ```ts
 axpLoading({ loading: (v) => setSpinner(v), delay: 200, delayClose: 200 });
-api.get('/list')(undefined, { loading: true });
-api.get('/quiet')(undefined, { loading: { delay: 0 } });   // skip the anti-flicker delay for this call
+api.get("/list")(undefined, { loading: true });
+api.get("/quiet")(undefined, { loading: { delay: 0 } }); // skip the anti-flicker delay for this call
 ```
 
 ### `axpNotify(options)`
 
 Stage: `outer` (built-in order 2). Each logical request notifies at most once.
 
-| Option | Default | Description |
-| --- | --- | --- |
-| `notify(message, r)` | **required** | Called when the message is non-empty |
-| `stringify(r, ctx)` | see below | Return an empty string to stay silent |
+| Option               | Default      | Description                           |
+| -------------------- | ------------ | ------------------------------------- |
+| `notify(message, r)` | **required** | Called when the message is non-empty  |
+| `stringify(r, ctx)`  | see below    | Return an empty string to stay silent |
 
 Default `stringify`: returns `''` when `r.ok` is true, when `r.kind === 'cancel'`, or when `ctx.request.silent` is set. Otherwise it returns `r.message || \`${r.kind} ${r.status}\``.
 
@@ -241,19 +247,19 @@ The kernel option `silent: true` makes the default `stringify` return an empty s
 ```ts
 axpNotify({
   notify: (msg) => toast.error(msg),
-  stringify: (r, ctx) => (r.ok || r.kind === 'cancel' || ctx.request.silent ? '' : r.message),
+  stringify: (r, ctx) => (r.ok || r.kind === "cancel" || ctx.request.silent ? "" : r.message),
 });
-api.post('/pet')(body, { silent: true });   // no toast for this call
+api.post("/pet")(body, { silent: true }); // no toast for this call
 ```
 
 ### `axpRepath(options?)`
 
 Stage: `prepare` (built-in order 1).
 
-| Option | Default | Description |
-| --- | --- | --- |
-| `pattern` | matches `{id}`, `:id`, `[id]` | Placeholder matching rule |
-| `removeKey` | `true` | Remove parameters that were used to fill the path |
+| Option      | Default                       | Description                                       |
+| ----------- | ----------------------------- | ------------------------------------------------- |
+| `pattern`   | matches `{id}`, `:id`, `[id]` | Placeholder matching rule                         |
+| `removeKey` | `true`                        | Remove parameters that were used to fill the path |
 
 - Only the pathname is touched; the query string and hash are left alone.
 - A value is taken from `params` first, then from `data`.
@@ -264,17 +270,17 @@ Per request: `false` turns it off for this call; an object `{ enable, pattern, r
 
 ```ts
 axpRepath();
-api.get('/pet/:id')(undefined, { params: { id: 5 } });   // → GET /pet/5
+api.get("/pet/:id")(undefined, { params: { id: 5 } }); // → GET /pet/5
 ```
 
 ### `axpFilter(options?)`
 
 Stage: `prepare` (built-in order 2). Active as soon as it is installed.
 
-| Option | Default | Description |
-| --- | --- | --- |
-| `predicate([k, v])` | drops `null`, `undefined`, `NaN` and blank strings | Fields for which this returns exactly `true` are removed |
-| `ignoreKeys` / `ignoreValues` | — | Keys or values exempt from filtering; `ignoreValues` recognizes `NaN` |
+| Option                        | Default                                            | Description                                                           |
+| ----------------------------- | -------------------------------------------------- | --------------------------------------------------------------------- |
+| `predicate([k, v])`           | drops `null`, `undefined`, `NaN` and blank strings | Fields for which this returns exactly `true` are removed              |
+| `ignoreKeys` / `ignoreValues` | —                                                  | Keys or values exempt from filtering; `ignoreValues` recognizes `NaN` |
 
 It only looks at the top-level fields of `params` and `data` (plain objects), without recursing. After stripping the empty fields it builds new objects and passes them on; special bodies such as `FormData` are left as they are.
 
@@ -282,25 +288,25 @@ Per request: `false` turns it off for this call; an object `{ enable, predicate,
 
 ```ts
 axpFilter();
-api.get('/search')(undefined, { params: { q: 'x', page: '' } });   // sends ?q=x
+api.get("/search")(undefined, { params: { q: "x", page: "" } }); // sends ?q=x
 ```
 
 ### `axpRetry(options?)`
 
 Stage: `attempt`. Active as soon as it is installed; retries up to 2 times by default.
 
-| Option | Default | Description |
-| --- | --- | --- |
-| `max` | `2` | Maximum number of retries |
-| `methods` | `get put head delete options trace` | Hard veto: a method not in this list is never retried, even if `shouldRetry` says yes |
-| `statusCodes` | `[408, 429, 500, 502, 503, 504]` | Checked against `r.status` (the logical status) |
-| `shouldRetry(r, attempt, ctx)` | — | A boolean is final; any other return value (including `undefined`) falls through to the next check |
-| `delay` | `attempt => 300 * 2 ** (attempt - 1)` | A number, or a function `(attempt, max, r) => number`; a non-number result counts as 0 |
-| `jitter` | — | `true` (uniform random between 0 and the delay), or `(delay) => number` (a negative, `NaN` or `Infinity` result keeps the original delay) |
-| `delayMax` | `10_000` | Caps only the delay the plugin computes itself, applied after jitter |
-| `respectRetryAfter` | `true` | Whether to honor the `Retry-After` header |
-| `afterStatusCodes` | `[413, 429, 503]` | Only these statuses honor `Retry-After`; checked against `r.status` |
-| `retryAfterMax` | `Infinity` | Upper bound for a wait derived from `Retry-After` |
+| Option                         | Default                               | Description                                                                                                                               |
+| ------------------------------ | ------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------- |
+| `max`                          | `2`                                   | Maximum number of retries                                                                                                                 |
+| `methods`                      | `get put head delete options trace`   | Hard veto: a method not in this list is never retried, even if `shouldRetry` says yes                                                     |
+| `statusCodes`                  | `[408, 429, 500, 502, 503, 504]`      | Checked against `r.status` (the logical status)                                                                                           |
+| `shouldRetry(r, attempt, ctx)` | —                                     | A boolean is final; any other return value (including `undefined`) falls through to the next check                                        |
+| `delay`                        | `attempt => 300 * 2 ** (attempt - 1)` | A number, or a function `(attempt, max, r) => number`; a non-number result counts as 0                                                    |
+| `jitter`                       | —                                     | `true` (uniform random between 0 and the delay), or `(delay) => number` (a negative, `NaN` or `Infinity` result keeps the original delay) |
+| `delayMax`                     | `10_000`                              | Caps only the delay the plugin computes itself, applied after jitter                                                                      |
+| `respectRetryAfter`            | `true`                                | Whether to honor the `Retry-After` header                                                                                                 |
+| `afterStatusCodes`             | `[413, 429, 503]`                     | Only these statuses honor `Retry-After`; checked against `r.status`                                                                       |
+| `retryAfterMax`                | `Infinity`                            | Upper bound for a wait derived from `Retry-After`                                                                                         |
 
 How `Retry-After` works:
 
@@ -332,25 +338,25 @@ At runtime:
 
 ```ts
 axpRetry({ max: 3, statusCodes: [500, 502, 503, 504], jitter: true, delayMax: 10_000 });
-api.get('/flaky')(undefined, { retry: 3 });                                          // up to 3 retries for this call
-api.get('/flaky')(undefined, { retry: { max: 2, shouldRetry: (r) => r.code !== 0 } });
-api.get('/flaky')(undefined, { retry: false });                                      // no retry for this call
+api.get("/flaky")(undefined, { retry: 3 }); // up to 3 retries for this call
+api.get("/flaky")(undefined, { retry: { max: 2, shouldRetry: (r) => r.code !== 0 } });
+api.get("/flaky")(undefined, { retry: false }); // no retry for this call
 ```
 
 ### `axpAuth(options)`
 
 Stage: `credential`. Handles token guarding, single-flight refresh on 401/403, and replay.
 
-| Option | Default | Description |
-| --- | --- | --- |
-| `tokenManager` | **required** | An `ITokenManager` instance |
-| `onRefresh(r, tm)` | **required** | Return `false` or throw to fail the refresh. Only one refresh runs at a time |
-| `onAccessExpired(r, tm)` | **required** | The session has expired. On the 401 / refresh-failure path, notified once per round |
-| `onAccessDenied(r, tm)` | same as `onAccessExpired` | Forbidden (403), or no token locally. With no token locally, called once for every protected request, with no de-duplication |
-| `onFailure(r, tm, ctx)` | `defaultAuthFailure` | Returns one of the `AuthFailureAction` values |
-| `methods` / `urlPattern` | `'*'` | Decides whether a request is protected. `urlPattern` only matches the pathname, uses URLPattern syntax; `!` negates |
-| `isProtected(request)` | — | A boolean is the final answer. Evaluated once at the start of each attempt: every retry round evaluates it again, a replay after a refresh does not |
-| `ready(tm, request)` | writes the `Authorization` header | Returns an `AxpRequestPatch` |
+| Option                   | Default                           | Description                                                                                                                                         |
+| ------------------------ | --------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `tokenManager`           | **required**                      | An `ITokenManager` instance                                                                                                                         |
+| `onRefresh(r, tm)`       | **required**                      | Return `false` or throw to fail the refresh. Only one refresh runs at a time                                                                        |
+| `onAccessExpired(r, tm)` | **required**                      | The session has expired. On the 401 / refresh-failure path, notified once per round                                                                 |
+| `onAccessDenied(r, tm)`  | same as `onAccessExpired`         | Forbidden (403), or no token locally. With no token locally, called once for every protected request, with no de-duplication                        |
+| `onFailure(r, tm, ctx)`  | `defaultAuthFailure`              | Returns one of the `AuthFailureAction` values                                                                                                       |
+| `methods` / `urlPattern` | `'*'`                             | Decides whether a request is protected. `urlPattern` only matches the pathname, uses URLPattern syntax; `!` negates                                 |
+| `isProtected(request)`   | —                                 | A boolean is the final answer. Evaluated once at the start of each attempt: every retry round evaluates it again, a replay after a refresh does not |
+| `ready(tm, request)`     | writes the `Authorization` header | Returns an `AxpRequestPatch`                                                                                                                        |
 
 `AuthFailureAction` is a constant object with five actions: `Refresh` (`'refresh'`), `Replay` (`'replay'`), `Deny` (`'deny'`), `Expired` (`'expired'`) and `Others` (`'others'`, a failure unrelated to auth, returned as-is). If `onFailure` returns `null`, `undefined` or an unknown value, it behaves like `Others`.
 
@@ -382,23 +388,23 @@ Refresh is single-flight: only one runs at a time, and other requests queue for 
 ```ts
 axpAuth({
   tokenManager: new TokenManager(),
-  urlPattern: ['/api/*', '!/api/public/*'],
+  urlPattern: ["/api/*", "!/api/public/*"],
   onRefresh: (r, tm) => refreshToken(tm),
   onAccessExpired: () => redirectToLogin(),
 });
-api.get('/public/banner')(undefined, { protected: false });   // no auth for this call
+api.get("/public/banner")(undefined, { protected: false }); // no auth for this call
 ```
 
 ### `axpMock(options?)`
 
 Stage: `source` (built-in order 1). Off by default.
 
-| Option | Default | Description |
-| --- | --- | --- |
-| `enable` | `false` | Usually set to `import.meta.env.DEV` |
-| `mock` | `false` | `true` sends every request to the mock |
-| `mockUrl` | — | Base URL of the mock server. When it is not set (or is an empty string), mock is skipped and the request goes straight to the real endpoint |
-| `fallbackWhen(r)` | `r.httpStatus === 404 \|\| r.kind === 'network'` | When true, falls back to the real endpoint |
+| Option            | Default                                          | Description                                                                                                                                 |
+| ----------------- | ------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------- |
+| `enable`          | `false`                                          | Usually set to `import.meta.env.DEV`                                                                                                        |
+| `mock`            | `false`                                          | `true` sends every request to the mock                                                                                                      |
+| `mockUrl`         | —                                                | Base URL of the mock server. When it is not set (or is an empty string), mock is skipped and the request goes straight to the real endpoint |
+| `fallbackWhen(r)` | `r.httpStatus === 404 \|\| r.kind === 'network'` | When true, falls back to the real endpoint                                                                                                  |
 
 Per request: `false` or `{ enable: false }` turns it off; `true` or any object (including an empty one) turns it on for this call, and an object can override `mockUrl` and `fallbackWhen`. This requires the plugin-level `enable` to be true: a per-request switch can't turn on a plugin that is off.
 
@@ -407,18 +413,18 @@ Without a `mockUrl` (none at plugin level or per request, or an empty string; a 
 At runtime, the request is first rewritten to `mockUrl` as a probe (`cache: false`, `share: false`). The probe result is not written to the cache and doesn't take a share slot. If `fallbackWhen(r)` is true, the request then goes to the real endpoint. Rewrite rules: a relative URL is appended to `mockUrl`; an absolute URL loses its original origin but keeps its path, query and hash; a request with no `url` has its `baseURL` rewritten.
 
 ```ts
-axpMock({ enable: import.meta.env.DEV, mockUrl: 'http://localhost:4000' });
-api.get('/pet/1')(undefined, { mock: true });
-api.get('/pet/1')(undefined, { mock: { fallbackWhen: (r) => r.httpStatus >= 500 } });
+axpMock({ enable: import.meta.env.DEV, mockUrl: "http://localhost:4000" });
+api.get("/pet/1")(undefined, { mock: true });
+api.get("/pet/1")(undefined, { mock: { fallbackWhen: (r) => r.httpStatus >= 500 } });
 ```
 
 ### `axpShare(options?)`
 
 Stage: `source` (built-in order 2). Off by default; opted in per request.
 
-| Option | Default | Description |
-| --- | --- | --- |
-| `policy` | `'start'` | `'start'`, `'end'` or `'race'` |
+| Option    | Default           | Description                                                  |
+| --------- | ----------------- | ------------------------------------------------------------ |
+| `policy`  | `'start'`         | `'start'`, `'end'` or `'race'`                               |
 | `methods` | `['get', 'head']` | Other methods are never shared, even if opted in per request |
 
 Per request: `true`, a policy string, `{ policy }`, or `false`. When the cache key is `null` (see the key section), the request is sent without sharing.
@@ -430,23 +436,23 @@ Per request: `true`, a policy string, `{ policy }`, or `false`. When the cache k
 Followers get the same read-only `R`. `r.request` is the request that was originally sent. Each follower's own request is on its own `ctx.request`. A follower that times out gets `kind: 'timeout'`; a cancelled one gets `kind: 'cancel'`.
 
 ```ts
-axpShare({ policy: 'start' });
-api.get('/list')(undefined, { share: true });
-api.get('/list')(undefined, { share: 'race' });
+axpShare({ policy: "start" });
+api.get("/list")(undefined, { share: true });
+api.get("/list")(undefined, { share: "race" });
 ```
 
 ### `axpCache(options?)`
 
 Stage: `source` (built-in order 3). Off by default; opted in per request.
 
-| Option | Default | Description |
-| --- | --- | --- |
-| `expires` | `60_000` | Time to live, in milliseconds |
-| `max` | `500` | LRU capacity. `Infinity` means no limit; values below 1 fall back to 500. Ignored once you inject a `store` |
-| `methods` | `['get', 'head']` | Other methods are never cached, even if opted in per request |
-| `clone` | — | `'shallow'`, `'deep'`, or `(data) => data`, applied to `r.data`. No copy by default: the caller shares the same reference |
-| `shouldCache(r)` | `r.ok` | Decides which results are written to the cache |
-| `store` | in-memory LRU | Implements `IAxpCacheStore<R>` (synchronous `get`, `set`, `delete`, `clear`, `size`). A persistent store will come later |
+| Option           | Default           | Description                                                                                                               |
+| ---------------- | ----------------- | ------------------------------------------------------------------------------------------------------------------------- |
+| `expires`        | `60_000`          | Time to live, in milliseconds                                                                                             |
+| `max`            | `500`             | LRU capacity. `Infinity` means no limit; values below 1 fall back to 500. Ignored once you inject a `store`               |
+| `methods`        | `['get', 'head']` | Other methods are never cached, even if opted in per request                                                              |
+| `clone`          | —                 | `'shallow'`, `'deep'`, or `(data) => data`, applied to `r.data`. No copy by default: the caller shares the same reference |
+| `shouldCache(r)` | `r.ok`            | Decides which results are written to the cache                                                                            |
+| `store`          | in-memory LRU     | Implements `IAxpCacheStore<R>` (synchronous `get`, `set`, `delete`, `clear`, `size`). A persistent store will come later  |
 
 Per request: `true`; a number sets `expires`; an object `{ expires, key, clone, shouldCache }`, where `key` is an explicit cache key; `false` turns it off. An explicit key doesn't go through the key service, so it carries no `scope`, and it takes precedence over a per-request `key: false`; an empty string or a non-string key falls back to the key service.
 
@@ -464,9 +470,9 @@ Operations:
 
 ```ts
 axpCache({ expires: 30_000 });
-api.get('/list')(undefined, { cache: true });                 // uses the plugin-level expires
-api.get('/list')(undefined, { cache: 10_000 });               // overrides expires for this call
-api.get('/list')(undefined, { cache: { expires: 10_000, key: 'pets' } });
+api.get("/list")(undefined, { cache: true }); // uses the plugin-level expires
+api.get("/list")(undefined, { cache: 10_000 }); // overrides expires for this call
+api.get("/list")(undefined, { cache: { expires: 10_000, key: "pets" } });
 
 const cache = axpCache();
 const api2 = createAxp({ plugins: [cache] });
@@ -479,8 +485,8 @@ Only has a `setup`; no middleware, so it is not in the chain. When installed, it
 
 ```ts
 axpEnvs([
-  { rule: () => import.meta.env.DEV, config: { baseURL: 'http://dev' } },
-  { rule: () => import.meta.env.PROD, config: { baseURL: 'http://prod' } },
+  { rule: () => import.meta.env.DEV, config: { baseURL: "http://dev" } },
+  { rule: () => import.meta.env.PROD, config: { baseURL: "http://prod" } },
 ]);
 ```
 
@@ -505,14 +511,14 @@ The kernel's key service computes the keys used by cache and share:
 
 Client-level configuration:
 
-| Option | Default | Description |
-| --- | --- | --- |
-| `scope` | — | Mixed into every key, e.g. an account id, so cache and share entries never leak across accounts. A string, a number, or a function `(request) => value` returning one of them. A function is evaluated every time a key is computed, so switching accounts doesn't require rebuilding the client. `null`, `undefined`, an empty string and `NaN` add nothing |
-| `ignores` | — | Keys or values exempt from empty-value filtering |
-| `sample` | `false` | Strings longer than 64 characters are sampled rather than hashed in full |
+| Option    | Default | Description                                                                                                                                                                                                                                                                                                                                                  |
+| --------- | ------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `scope`   | —       | Mixed into every key, e.g. an account id, so cache and share entries never leak across accounts. A string, a number, or a function `(request) => value` returning one of them. A function is evaluated every time a key is computed, so switching accounts doesn't require rebuilding the client. `null`, `undefined`, an empty string and `NaN` add nothing |
+| `ignores` | —       | Keys or values exempt from empty-value filtering                                                                                                                                                                                                                                                                                                             |
+| `sample`  | `false` | Strings longer than 64 characters are sampled rather than hashed in full                                                                                                                                                                                                                                                                                     |
 
 ```ts
-const api = createAxp({ key: { scope: () => session.userId } });   // read the current user each time a key is computed
+const api = createAxp({ key: { scope: () => session.userId } }); // read the current user each time a key is computed
 ```
 
 Per-request `key`: omit it to compute automatically; pass a string to use an explicit key (the `scope` is added to it too, and a blank string counts as `false`); `false` means this request doesn't take part in cache or share. `true` is the same as omitting it (automatic); it is kept so old `key: true, cache: true` code keeps working, but new code can just leave it out. The automatic key includes params.
@@ -527,17 +533,17 @@ Per-request `key`: omit it to compute automatically; pass a string to use an exp
 
 ```ts
 const controller = new AbortController();
-api.get('/list')(undefined, { signal: controller.signal });
-controller.abort();                // cancel just this request
+api.get("/list")(undefined, { signal: controller.signal });
+controller.abort(); // cancel just this request
 
-api.cancelAll('page left');        // cancel every in-flight request
+api.cancelAll("page left"); // cancel every in-flight request
 ```
 
 ### debug
 
 ```ts
-createAxp({ debug: true });        // print plugin logs and record call sites for failures
-createAxp({ debug: myLogger });    // print through your own logger
+createAxp({ debug: true }); // print plugin logs and record call sites for failures
+createAxp({ debug: myLogger }); // print through your own logger
 ```
 
 - When off, the plugins' `ctx.log` is an empty function, so there is no overhead.
@@ -553,11 +559,11 @@ A plugin is a named object. `handle` is middleware, `(ctx, next) => Promise<R>`.
 ```ts
 interface AxpPlugin<R, A> {
   readonly name: string;
-  readonly enable?: boolean;                                                 // false: no setup, not in the chain
-  readonly stage?: 'outer' | 'prepare' | 'attempt' | 'credential' | 'source'; // default 'attempt'; ignored when only taps are given
-  readonly enforce?: 'pre' | 'post';                                         // default 'post'
-  setup?(client): AxpPluginInstance<R, A> | void;   // called once per client; keep state here
-  handle?: (ctx, next) => Promise<R>;                // stateless plugins can pass this directly
+  readonly enable?: boolean; // false: no setup, not in the chain
+  readonly stage?: "outer" | "prepare" | "attempt" | "credential" | "source"; // default 'attempt'; ignored when only taps are given
+  readonly enforce?: "pre" | "post"; // default 'post'
+  setup?(client): AxpPluginInstance<R, A> | void; // called once per client; keep state here
+  handle?: (ctx, next) => Promise<R>; // stateless plugins can pass this directly
   taps?: readonly AxpTap<R>[];
 }
 ```
@@ -571,12 +577,12 @@ Sorting rules:
 5. `api.inspect()` returns the fully resolved order. Use it when debugging ordering.
 
 ```ts
-import type { AxpPlugin } from '@codejoo/axp';
+import type { AxpPlugin } from "@codejoo/axp";
 
 /** Record the duration of each attempt */
 const timing: AxpPlugin = {
-  name: 'timing',
-  stage: 'attempt',
+  name: "timing",
+  stage: "attempt",
   async handle(ctx, next) {
     const t = performance.now();
     const r = await next();
@@ -587,18 +593,18 @@ const timing: AxpPlugin = {
 
 /** The request side and the response side sit at different depths */
 const audit: AxpPlugin = {
-  name: 'audit',
+  name: "audit",
   taps: [
-    { stage: 'credential', enforce: 'post', onRequest: (ctx) => report('send', ctx.request) },
-    { stage: 'outer', onResponse: (r) => report('done', r.kind) },
+    { stage: "credential", enforce: "post", onRequest: (ctx) => report("send", ctx.request) },
+    { stage: "outer", onResponse: (r) => report("done", r.kind) },
   ],
 };
 
 /** Add a trace header for the inner layers, via next(patch) */
 const addTrace: AxpPlugin = {
-  name: 'add-trace',
-  stage: 'prepare',
-  handle: (ctx, next) => next({ headers: { 'X-Trace': crypto.randomUUID() } }),
+  name: "add-trace",
+  stage: "prepare",
+  handle: (ctx, next) => next({ headers: { "X-Trace": crypto.randomUUID() } }),
 };
 ```
 
@@ -617,34 +623,34 @@ A few conventions:
 function createAxp<S = unknown, R extends IAxpResponse = AxpResponse>(options?: AxpOptions<R>): AxpClient<S, R>;
 ```
 
-| Option | Default | Description |
-| --- | --- | --- |
-| `axios` | `axios.create()` | Underlying instance |
-| `plugins` | `[]` | Plugin array |
-| `response` | `axpResponse()` | Response factory. Required when `R` is not `AxpResponse` |
-| `key` | — | Key service configuration, see "Kernel features" |
-| `reject` | `(r) => r` | Conversion applied to expected failures before they are thrown |
-| `debug` | `false` | `true`, or a custom logger |
+| Option     | Default          | Description                                                    |
+| ---------- | ---------------- | -------------------------------------------------------------- |
+| `axios`    | `axios.create()` | Underlying instance                                            |
+| `plugins`  | `[]`             | Plugin array                                                   |
+| `response` | `axpResponse()`  | Response factory. Required when `R` is not `AxpResponse`       |
+| `key`      | —                | Key service configuration, see "Kernel features"               |
+| `reject`   | `(r) => r`       | Conversion applied to expected failures before they are thrown |
+| `debug`    | `false`          | `true`, or a custom logger                                     |
 
 Client members:
 
-| Member | Description |
-| --- | --- |
-| `api.get(path, methodConfig?)(payload?, callConfig?)` and the rest | The 10 lowercase axios verbs. `delete`, `post`, `put` and `patch` send the payload as `data`; the others send it as `params`. For `wrap` and `throws`, the call config wins; if it doesn't set them, the method config is inherited |
-| `api.request<D>(config)` | Untyped escape hatch; also supports `wrap` and `throws` |
-| `api.axios` | The underlying `AxiosInstance` |
-| `api.extend(overrides?, opts?)` | Clones the axios defaults, then writes `overrides` (overwriting at the top level). Plugins are inherited by default (`opts.plugins: 'inherit'`); each plugin runs `setup` again, so state is not shared. You can also pass a new plugin array. `key`, `reject`, `debug` and `response` are inherited too. `overrides` is written after the plugins' `setup`, so it takes precedence over what `axpEnvs` wrote |
-| `api.use(plugin)` | Installs a plugin; the chain is recompiled |
-| `api.eject(name)` | Removes a plugin by name and cleans up its instance; returns whether it was removed. Requests in flight are unaffected and keep the chain they started with |
-| `api.plugin(p)` | Returns the plugin instance's `api`, such as cache's `clear()`. Pass the plugin object, not its name. Returns `undefined` if it isn't installed |
-| `api.cancelAll(reason?)` / `api.pending()` | See "Cancellation" |
-| `api.inspect()` | Returns `[{ stage, name }]`, the resolved plugin order |
-| `api.isResponse(e)` | See "Return shape and error handling" |
-| `api.dispose()` | First aborts every in-flight request (they settle with `kind: 'cancel'`), then uninstalls the plugins in reverse order of registration and releases resources such as timers. Safe to call more than once; later calls do nothing. A disposed client can't send requests, `use` or `extend` any more. If one plugin throws during cleanup, the others still run, and the first exception is rethrown at the end |
+| Member                                                             | Description                                                                                                                                                                                                                                                                                                                                                                                                     |
+| ------------------------------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `api.get(path, methodConfig?)(payload?, callConfig?)` and the rest | The 10 lowercase axios verbs. `delete`, `post`, `put` and `patch` send the payload as `data`; the others send it as `params`. For `wrap` and `throws`, the call config wins; if it doesn't set them, the method config is inherited                                                                                                                                                                             |
+| `api.request<D>(config)`                                           | Untyped escape hatch; also supports `wrap` and `throws`                                                                                                                                                                                                                                                                                                                                                         |
+| `api.axios`                                                        | The underlying `AxiosInstance`                                                                                                                                                                                                                                                                                                                                                                                  |
+| `api.extend(overrides?, opts?)`                                    | Clones the axios defaults, then writes `overrides` (overwriting at the top level). Plugins are inherited by default (`opts.plugins: 'inherit'`); each plugin runs `setup` again, so state is not shared. You can also pass a new plugin array. `key`, `reject`, `debug` and `response` are inherited too. `overrides` is written after the plugins' `setup`, so it takes precedence over what `axpEnvs` wrote   |
+| `api.use(plugin)`                                                  | Installs a plugin; the chain is recompiled                                                                                                                                                                                                                                                                                                                                                                      |
+| `api.eject(name)`                                                  | Removes a plugin by name and cleans up its instance; returns whether it was removed. Requests in flight are unaffected and keep the chain they started with                                                                                                                                                                                                                                                     |
+| `api.plugin(p)`                                                    | Returns the plugin instance's `api`, such as cache's `clear()`. Pass the plugin object, not its name. Returns `undefined` if it isn't installed                                                                                                                                                                                                                                                                 |
+| `api.cancelAll(reason?)` / `api.pending()`                         | See "Cancellation"                                                                                                                                                                                                                                                                                                                                                                                              |
+| `api.inspect()`                                                    | Returns `[{ stage, name }]`, the resolved plugin order                                                                                                                                                                                                                                                                                                                                                          |
+| `api.isResponse(e)`                                                | See "Return shape and error handling"                                                                                                                                                                                                                                                                                                                                                                           |
+| `api.dispose()`                                                    | First aborts every in-flight request (they settle with `kind: 'cancel'`), then uninstalls the plugins in reverse order of registration and releases resources such as timers. Safe to call more than once; later calls do nothing. A disposed client can't send requests, `use` or `extend` any more. If one plugin throws during cleanup, the others still run, and the first exception is rethrown at the end |
 
 ```ts
-const admin = api.extend({ baseURL: '/admin' });                         // inherits plugins; state is separate
-const plain = api.extend({ baseURL: '/v2' }, { plugins: [axpCache()] }); // only the plugins you list
+const admin = api.extend({ baseURL: "/admin" }); // inherits plugins; state is separate
+const plain = api.extend({ baseURL: "/v2" }, { plugins: [axpCache()] }); // only the plugins you list
 ```
 
 ---

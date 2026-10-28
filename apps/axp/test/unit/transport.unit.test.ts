@@ -17,10 +17,7 @@ function transport() {
       config: { ...config, headers: new AxiosHeaders() },
     }),
   );
-  const send = createTransport(
-    { request, defaults: {} } as unknown as AxiosInstance,
-    axpResponse(),
-  );
+  const send = createTransport({ request, defaults: {} } as unknown as AxiosInstance, axpResponse());
   return { send, request };
 }
 it("[core.fn.createTransport] 强制全状态放行，默认使用逻辑 signal", /** 强制全状态放行，默认使用逻辑 signal。 */ async () => {
@@ -44,17 +41,7 @@ it("[core.req.signal] 显式传输 signal 优先，已取消不发送", /** 显�
   expect((await send(ctx)).kind).toBe("cancel");
   expect(request).toHaveBeenCalledTimes(1);
 });
-it.each(
-  [
-    { a: [1] },
-    [1],
-    Object.assign(Object.create(null), { a: 1 }),
-    "data",
-    null,
-    new Date(),
-    new Blob(["body"]),
-  ].map(/** 把候选请求体包成 each 参数。 */ (data) => ({ data })),
-)(
+it.each([{ a: [1] }, [1], Object.assign(Object.create(null), { a: 1 }), "data", null, new Date(), new Blob(["body"])].map(/** 把候选请求体包成 each 参数。 */ (data) => ({ data })))(
   "[core.method.markReplayable] 标记后仅克隆数组与纯对象，原始值和特殊体保持引用：$data",
   /** 标记后仅克隆数组与纯对象，原始值和特殊体保持引用。 */ async ({ data }) => {
     const { send, request } = transport();
@@ -63,12 +50,7 @@ it.each(
     expect(request.mock.lastCall![0].data).toBe(data);
     ctx.markReplayable();
     await send(ctx);
-    if (
-      Array.isArray(data) ||
-      (data && Object.getPrototypeOf(data) === Object.prototype) ||
-      (data && Object.getPrototypeOf(data) === null)
-    )
-      expect(request.mock.lastCall![0].data).not.toBe(data);
+    if (Array.isArray(data) || (data && Object.getPrototypeOf(data) === Object.prototype) || (data && Object.getPrototypeOf(data) === null)) expect(request.mock.lastCall![0].data).not.toBe(data);
     else expect(request.mock.lastCall![0].data).toBe(data);
   },
 );

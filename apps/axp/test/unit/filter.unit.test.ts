@@ -32,11 +32,7 @@ it("[filter.fn.$filter] 只读自有字段，豁免 NaN/undefined，收集 dropp
   });
   Object.defineProperty(source, "__proto__", { enumerable: true, value: SAFE_VALUE });
   const dropped: TDroppedKV[] = [];
-  const result = $filter(
-    source,
-    { predicate: defaultPredicate, ignoreKeys: ["empty"], ignoreValues: [NaN, undefined] },
-    dropped,
-  );
+  const result = $filter(source, { predicate: defaultPredicate, ignoreKeys: ["empty"], ignoreValues: [NaN, undefined] }, dropped);
   expect(result).toEqual({
     empty: EMPTY_TEXT,
     nan: NaN,
@@ -47,20 +43,11 @@ it("[filter.fn.$filter] 只读自有字段，豁免 NaN/undefined，收集 dropp
   expect(Object.getPrototypeOf(result)).toBe(Object.prototype);
   expect(dropped).toEqual([["nil", null]]);
   expect(source.nil).toBeNull();
-  expect(
-    $filter(source, { predicate: defaultPredicate, ignoreKeys: [], ignoreValues: [] }),
-  ).toEqual({ valid: 0, ["__proto__"]: SAFE_VALUE });
+  expect($filter(source, { predicate: defaultPredicate, ignoreKeys: [], ignoreValues: [] })).toEqual({ valid: 0, ["__proto__"]: SAFE_VALUE });
 });
 it("[filter.cb.predicate] 自定义过滤且只接受严格 true", /** 不是 true 的返回值保留。 */ () => {
   for (const returned of [false, 1, Promise.resolve(true)]) {
-    expect(
-      $filter({ n: 1 }, { predicate: /** JS 返回值边界。 */ () => returned as boolean }),
-    ).toEqual({ n: 1 });
+    expect($filter({ n: 1 }, { predicate: /** JS 返回值边界。 */ () => returned as boolean })).toEqual({ n: 1 });
   }
-  expect(
-    $filter(
-      { n: 1, s: NONEMPTY_TEXT },
-      { predicate: /** 丢弃数值。 */ ([, value]) => typeof value === "number" },
-    ),
-  ).toEqual({ s: NONEMPTY_TEXT });
+  expect($filter({ n: 1, s: NONEMPTY_TEXT }, { predicate: /** 丢弃数值。 */ ([, value]) => typeof value === "number" })).toEqual({ s: NONEMPTY_TEXT });
 });
