@@ -145,14 +145,14 @@ describe("刷新失败：抛错也算失败，不死锁", () => {
             ? () => {
                 throw BUG;
               }
-            : base.set,
-        clear: base.clear,
+            : base.set.bind(base),
+        clear: base.clear.bind(base),
       };
       const logger = { log: vi.fn(), warn: vi.fn(), error: vi.fn() };
       const refresh = vi.fn(onRefresh as never);
       const h = b3Client(
         [
-          axpAuth<AxpResponse>({
+          axpAuth({
             tokenManager: tm,
             onRefresh: refresh,
             onAccessExpired: vi.fn(),
@@ -352,8 +352,8 @@ describe("路由与防回环边界", () => {
       const results = await Promise.all(clients.map(/** 两个客户端并行发起。 */ (h) => run(h)));
       for (const [index, result] of results.entries()) {
         expect(result).toMatchObject({ ok: false, status: 0, kind });
-        expect(clients[index]!.settings.onRefresh).not.toHaveBeenCalled();
-        expect(clients[index]!.tm.accessToken).toBe(TOKEN_OLD);
+        expect(clients[index].settings.onRefresh).not.toHaveBeenCalled();
+        expect(clients[index].tm.accessToken).toBe(TOKEN_OLD);
       }
       expect(onFailure).toHaveBeenCalledTimes(1);
     },
@@ -468,7 +468,7 @@ describe("单飞刷新与排队", () => {
     await settle();
     const results = await Promise.all([...bursts, queued]);
     expect(results.every(/** 全部过期。 */ (r) => r.kind === "auth" && r.reason === "expired")).toBe(true);
-    expect(results[5]!.status).toBe(0);
+    expect(results[5].status).toBe(0);
     expect(h.net.totalStarted).toBe(5);
     expect(h.settings.onRefresh).toHaveBeenCalledTimes(1);
     expect(h.settings.onAccessExpired).toHaveBeenCalledTimes(1);
@@ -490,7 +490,7 @@ describe("单飞刷新与排队", () => {
   it("[auth.state.singleFlight] 同一个插件对象装到两个客户端：状态各自独立，互不阻塞，各自刷新一次", /** 单飞状态建在 setup 里。 */ async () => {
     const { gate, onRefresh } = gatedRefresh();
     const settings = authSettings({ onRefresh });
-    const plugin = axpAuth<AxpResponse>(settings);
+    const plugin = axpAuth(settings);
     const first = b3Client([plugin]);
     const second = b3Client([plugin]);
     for (const h of [first, second])
@@ -631,7 +631,7 @@ describe("过期后的刷新可用性（O4）", () => {
       get refreshToken() {
         return store.refreshToken;
       },
-      set: store.set,
+      set: store.set.bind(store),
       clear: /** 模拟不真正清除的自定义实现。 */ () => undefined,
     };
     const h = authClient({ tokenManager: sticky, onRefresh: () => false });

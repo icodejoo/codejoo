@@ -1,4 +1,3 @@
-import type { AxpResponse } from "../../src/response";
 import { expect, it } from "vitest";
 import axpRepath from "../../src/plugins/repath";
 import axpFilter from "../../src/plugins/filter";
@@ -12,7 +11,7 @@ const EMPTY_TEXT = "";
 const PREPARE_STAGE = "prepare";
 
 it("[repath.fn.axpRepath][filter.fn.axpFilter] 反向注册仍先消费路径变量再过滤空字段，来源不可变", /** prepare 固定顺序。 */ async () => {
-  const { api } = preparedClient([axpFilter<AxpResponse>(), axpRepath<AxpResponse>()]);
+  const { api } = preparedClient([axpFilter(), axpRepath()]);
   const params = Object.freeze({ id: BLANK_ID, nil: null, keep: 0 });
   const data = Object.freeze({ empty: EMPTY_TEXT, valid: false });
   const response = await api.request({ url: "/users/:id", params, data, throws: false });

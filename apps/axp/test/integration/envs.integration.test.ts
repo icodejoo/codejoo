@@ -1,7 +1,6 @@
 import { AxiosHeaders } from "axios";
 import { expect, it, vi } from "vitest";
 import axpEnvs from "../../src/plugins/envs";
-import type { AxpResponse } from "../../src/response";
 import { wireClient } from "../helpers/wire";
 
 /** 继承插件写入的默认环境地址。 */
@@ -29,7 +28,7 @@ it("[envs.method.setup][core.method.extend] 继承 envs.setup 完成后显式 ov
     },
     /** 子环境租户。 */ params: { tenant: CHILD_TENANT },
   };
-  const plugin = axpEnvs<AxpResponse>([
+  const plugin = axpEnvs([
     {
       /** 固定命中默认环境。 */ rule: () => true,
       /** 插件安装时写入的父环境。 */ config: {
@@ -65,7 +64,7 @@ it("[envs.method.setup][envs.opt.config] 父子及规则模板的 headers、嵌�
     /** 可变的转换器数组。 */ transformRequest: [transform],
     /** 可变的 axios 兼容配置。 */ transitional: { clarifyTimeoutError: false },
   };
-  const plugin = axpEnvs<AxpResponse>([{ rule: /** 固定匹配环境规则。 */ () => true, config }]);
+  const plugin = axpEnvs([{ rule: /** 固定匹配环境规则。 */ () => true, config }]);
   const h = wireClient({}, [plugin]);
   const child = h.api.extend();
   child.axios.defaults.headers.common.Authorization = CHILD_AUTH;

@@ -1,5 +1,4 @@
 /* eslint-disable no-await-in-loop -- 同一客户端依次核对请求选项和生命周期，避免引入额外并发语义。 */
-import type { AxpResponse } from "../../src/response";
 import { beforeEach, expect, it, vi } from "vitest";
 import axpLoading from "../../src/plugins/loading";
 import type { AxpRequestConfig } from "../../src/types";
@@ -29,7 +28,7 @@ const SLOW = { latency: 30 } as AxpRequestConfig;
 
 it("[loading.opt.enable] 插件关闭不可被请求回调重新开启", /** 总开关不 setup、不进 inspect。 */ async () => {
   const fn = vi.fn();
-  const plugin = axpLoading<AxpResponse>({ enable: false, loading: fn });
+  const plugin = axpLoading({ enable: false, loading: fn });
   const setup = vi.spyOn(plugin, "setup");
   const h = uiClient([plugin]);
   const pending = h.send({ loading: { enable: true, loading: fn } });
@@ -53,7 +52,7 @@ it.each([SYNC_FAILURE, "reject"])(
         return Promise.reject(BUG);
       },
     );
-    h.api.use(axpLoading<AxpResponse>({ loading }));
+    h.api.use(axpLoading({ loading }));
     for (const config of [{}, { loading }, { loading: { loading, delay: 5 } }]) {
       const before = error.mock.calls.length;
       const pending = h.send({ ...SLOW, ...config });
@@ -70,7 +69,7 @@ it.each([SHOW_WINDOW, HIDE_WINDOW, "inflight"])(
   /** 清理两个计时器和在途请求。 */ async (window) => {
     const h = uiClient();
     h.api.use(
-      axpLoading<AxpResponse>({
+      axpLoading({
         loading: loadingRecorder(h.events),
         delay: window === SHOW_WINDOW ? 10 : 0,
         delayClose: 10,
@@ -88,7 +87,7 @@ it.each([SHOW_WINDOW, HIDE_WINDOW, "inflight"])(
     await pending;
     expect(h.events.loading.get(LOADING_LABEL)).toEqual(snapshot);
     expect(vi.getTimerCount()).toBe(0);
-    h.api.use(axpLoading<AxpResponse>({ loading: loadingRecorder(h.events, "fresh") }));
+    h.api.use(axpLoading({ loading: loadingRecorder(h.events, "fresh") }));
     const fresh = h.send();
     await vi.runAllTimersAsync();
     await fresh;
@@ -111,7 +110,7 @@ it.each([ADAPTER_FAILURE, "transform"])(
             },
           },
     );
-    h.api.use(axpLoading<AxpResponse>({ loading: loadingRecorder(h.events) }));
+    h.api.use(axpLoading({ loading: loadingRecorder(h.events) }));
     const assertion = expect(h.send()).rejects.toBe(BUG);
     await vi.runAllTimersAsync();
     await assertion;
@@ -122,7 +121,7 @@ it.each([ADAPTER_FAILURE, "transform"])(
 it("[loading.method.setup] 同一定义装在父子客户端各自计数", /** extend 重新建立状态。 */ async () => {
   const parent = uiClient();
   const shared = loadingRecorder(parent.events);
-  parent.api.use(axpLoading<AxpResponse>({ loading: shared }));
+  parent.api.use(axpLoading({ loading: shared }));
   const child = observeUi({ ...parent, api: parent.api.extend(), events: recordEvents() });
   const first = parent.send(SLOW);
   const second = child.send(SLOW);
@@ -132,6 +131,6 @@ it("[loading.method.setup] 同一定义装在父子客户端各自计数", /** e
   // 同一 UI 回调被两个客户端各自使用，分别检查每个客户端的一对。
   expect(parent.events.loading.get(LOADING_LABEL)).toEqual([true, true, false, false]);
   const observed = parent.events.loading.get(LOADING_LABEL)!;
-  parent.events.loading.set(LOADING_LABEL, [observed[0]!, observed[2]!]);
-  child.events.loading.set(LOADING_LABEL, [observed[1]!, observed[3]!]);
+  parent.events.loading.set(LOADING_LABEL, [observed[0], observed[2]]);
+  child.events.loading.set(LOADING_LABEL, [observed[1], observed[3]]);
 });

@@ -1,7 +1,6 @@
 import { beforeEach, expect, it, vi } from "vitest";
 import axpRetry from "../../src/plugins/retry";
 import { AxpResponse, axpResponse, type AxpResponseInit } from "../../src/response";
-import type { AxpResponse as DefaultResponse } from "../../src/response";
 import type { AxpOptions } from "../../src/types";
 import { authClient, b3Client, failure, REQUEST_URL, run, TOKEN_NEW } from "../helpers/b3";
 
@@ -45,7 +44,7 @@ function coded(code: string, trace: string) {
 }
 
 it("[retry.opt.statusCodes][retry.business.retryAfter] business 失败（HTTP 200 + 业务码 500）由 retry 先处理：重试恢复后调用方直接拿到数据，不会先抛失败", /** D3：retry 先于落定看到 R。 */ async () => {
-  const h = b3Client([axpRetry<DefaultResponse>({ max: 2, delay: RETRY_WAIT })]);
+  const h = b3Client([axpRetry({ max: 2, delay: RETRY_WAIT })]);
   h.net.fallback(/** 前两次业务失败，第三次成功。 */ (_config, hit) => (hit < 3 ? failure(500, true) : { data: { code: 0, data: "payload" } }));
   const pending = h.api.request({ url: REQUEST_URL });
   await vi.runAllTimersAsync();
@@ -112,7 +111,7 @@ it("[auth.reason.unauthenticated][retry.priority.kind] 无 from 的合成响应�
   expect(local).toBeInstanceOf(BizResponse);
   expect(local).toMatchObject({ kind: "auth", reason: "unauthenticated", traceId: "" });
 
-  const waiting = authClient({}, [axpRetry<DefaultResponse>({ max: 1, delay: RETRY_WAIT })], bizOptions());
+  const waiting = authClient({}, [axpRetry({ max: 1, delay: RETRY_WAIT })], bizOptions());
   waiting.net.fallback(/** 可重试失败。 */ () => failure(500));
   const pending = waiting.send({ url: REQUEST_URL });
   await vi.advanceTimersByTimeAsync(RETRY_WAIT / 2);

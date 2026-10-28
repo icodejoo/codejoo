@@ -101,9 +101,9 @@ const TAG_DATE = "[object Date]";
 /** 查询串类型标签。 */
 const TAG_URL_SEARCH_PARAMS = "[object URLSearchParams]";
 /** 读取对象的标准类型标签。 */
-const toTag = Object.prototype.toString;
+const toTag = (value: unknown): string => Object.prototype.toString.call(value);
 /** 读取字段自身归属，保留无原型字典语义。 */
-const hasOwn = Object.prototype.hasOwnProperty;
+const hasOwn = (target: object, key: string): boolean => Object.prototype.hasOwnProperty.call(target, key);
 
 /** 请求内复用的两条独立 FNV 车道。 */
 interface HashState {
@@ -263,7 +263,7 @@ function hashValue(target: any, state: HashState): boolean {
     hash(String(target.byteLength), state);
     return true;
   }
-  const tag = toTag.call(target);
+  const tag = toTag(target);
   if (tag === TAG_DATE) {
     hashByte(CC_DATE, state);
     hash(specialText(target.getTime()), state);
@@ -309,7 +309,7 @@ function hashObject(target: Record<string, any>, state: HashState): boolean {
   let acc2 = 0;
   let any = false;
   for (const key in target) {
-    if (!hasOwn.call(target, key)) continue;
+    if (!hasOwn(target, key)) continue;
     state.h1 = h1;
     state.h2 = h2;
     hashByte(CC_OBJ, state);

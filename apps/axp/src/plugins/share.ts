@@ -17,8 +17,8 @@ export type SharePolicy = "start" | "end" | "race";
 
 /** 未指定策略时采用首发复用。 */
 const DEFAULT_POLICY: SharePolicy = "start";
-/** 合法策略名，用于过滤请求级的非法字符串。 */
-const POLICIES: ReadonlySet<string> = new Set(["start", "end", "race"]);
+/** 合法策略名，用于过滤请求级的非法值；按 unknown 查询，判定入参本就是未校验的值。 */
+const POLICIES: ReadonlySet<unknown> = new Set<SharePolicy>(["start", "end", "race"]);
 /** 默认只共享不改变服务端状态的方法。 */
 const DEFAULT_METHODS = ["get", "head"];
 
@@ -69,7 +69,7 @@ type TShareRunner = <R extends IAxpResponse>(ctx: AxpContext<R>, next: AxpNext<R
 
 /** 判断是否为合法策略名。 */
 function isPolicy(value: unknown): value is SharePolicy {
-  return POLICIES.has(value as string);
+  return POLICIES.has(value);
 }
 
 /** 字符串简写即策略名，非法字符串交回插件级策略。 */

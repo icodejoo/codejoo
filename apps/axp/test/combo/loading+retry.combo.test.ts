@@ -1,7 +1,6 @@
 import { beforeEach, expect, it, vi } from "vitest";
 import axpLoading from "../../src/plugins/loading";
 import axpRetry from "../../src/plugins/retry";
-import type { AxpResponse } from "../../src/response";
 import { b3Client, failure, REQUEST_URL, run } from "../helpers/b3";
 import { loadingRecorder } from "../helpers/ui";
 
@@ -16,9 +15,9 @@ beforeEach(() => {
 
 /** 装好 loading 与 retry 的客户端。 */
 function loadingRetryClient(max = 2) {
-  const h = b3Client([axpRetry<AxpResponse>({ max, delay: RETRY_WAIT })]);
+  const h = b3Client([axpRetry({ max, delay: RETRY_WAIT })]);
   const loading = vi.fn(loadingRecorder(h.events));
-  h.api.use(axpLoading<AxpResponse>({ loading }));
+  h.api.use(axpLoading({ loading }));
   return { ...h, loading };
 }
 

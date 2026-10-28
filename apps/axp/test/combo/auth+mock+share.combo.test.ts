@@ -1,7 +1,6 @@
 import { beforeEach, expect, it, vi } from "vitest";
 import axpMock from "../../src/plugins/mock";
 import axpShare from "../../src/plugins/share";
-import type { AxpResponse } from "../../src/response";
 import { authClient, failure, guarded, TOKEN_NEW, TOKEN_OLD } from "../helpers/b3";
 import { envelope, settleAll } from "../helpers/source";
 
@@ -28,7 +27,7 @@ beforeEach(() => {
 
 /** 装好 auth、全局 mock 与 share；探测默认返回 mock 数据，真实接口只认新 token。 */
 function client() {
-  const h = authClient({}, [axpMock<AxpResponse>({ enable: true, mock: true, mockUrl: MOCK }), axpShare<AxpResponse>()]);
+  const h = authClient({}, [axpMock({ enable: true, mock: true, mockUrl: MOCK }), axpShare()]);
   h.net.on("get", PROBE, () => envelope(MOCK_DATA));
   h.net.on(
     "get",
@@ -52,7 +51,7 @@ it("[auth.cb.onRefresh × mock.req.mock × share.req.share] 全部回落的并�
   h.net.on("get", PROBE, /** mock 服务器没有这条接口。 */ () => failure(404));
   const results = await settleAll(...Array.from({ length: CALLERS }, () => h.send({ url: REAL, mock: true, share: true, latency: LATENCY } as never)));
   expect(results.every(/** 全部成功。 */ (r) => r.ok)).toBe(true);
-  expect(results[0]!.data).toBe(REAL_DATA);
+  expect(results[0].data).toBe(REAL_DATA);
   expect(new Set(results).size).toBe(1);
   expect(h.settings.onRefresh).toHaveBeenCalledTimes(1);
   const probes = h.net.log.filter(/** 探测请求。 */ (record) => record.url === PROBE);

@@ -24,7 +24,7 @@ it.each([true, false])(
       },
     });
     const notify = vi.fn(notifyRecorder(h.events));
-    h.api.use(axpLoading<AxpResponse>({ loading: loadingRecorder(h.events) }));
+    h.api.use(axpLoading({ loading: loadingRecorder(h.events) }));
     h.api.use(axpNotify<AxpResponse>({ notify }));
     h.net.on("get", REQUEST_URL, () => failure(401));
     const waiting = h.send({ url: REQUEST_URL });

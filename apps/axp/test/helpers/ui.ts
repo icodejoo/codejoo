@@ -20,7 +20,7 @@ const fixtures: {
  * @example `const h = uiClient([axpLoading()]); await h.send()`
  */
 export function uiClient(plugins: readonly AxpPlugin<AxpResponse, any>[] = [], options: AxpOptions = {}, transport?: Parameters<typeof createTestClient>[2]) {
-  const fixture = createTestClient<AxpResponse>(plugins, options, transport);
+  const fixture = createTestClient(plugins, options, transport);
   return observeUi(fixture);
 }
 /** 对现有客户端（包括 extend 的子客户端）登记不变量观测。

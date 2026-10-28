@@ -26,7 +26,7 @@ it("[core.fn.createTransport] 强制全状态放行，默认使用逻辑 signal"
     validateStatus: /** 调用方的 validateStatus 应被传输层覆盖。 */ () => false,
   });
   const response = await send(ctx);
-  const config = request.mock.calls[0]![0];
+  const config = request.mock.calls[0][0];
   expect(config.signal).toBe(ctx.signal);
   expect(config.validateStatus!(500)).toBe(true);
   expect(response.request).toMatchObject({ signal: ctx.signal });
@@ -36,7 +36,7 @@ it("[core.req.signal] 显式传输 signal 优先，已取消不发送", /** 显�
   const controller = new AbortController();
   const ctx = testContext({ signal: controller.signal });
   await send(ctx);
-  expect(request.mock.calls[0]![0].signal).toBe(controller.signal);
+  expect(request.mock.calls[0][0].signal).toBe(controller.signal);
   controller.abort();
   expect((await send(ctx)).kind).toBe("cancel");
   expect(request).toHaveBeenCalledTimes(1);
@@ -108,7 +108,7 @@ it("[core.fn.createTransport] 各层未改动 params / headers 时原样透传�
   const params = { tenant: "a" };
   const headers = new AxiosHeaders({ Accept: "json" });
   await send(testContext({ params, headers }));
-  const config = request.mock.calls[0]![0];
+  const config = request.mock.calls[0][0];
   expect(config.params).toBe(params);
   expect(config.headers).toBe(headers);
 });

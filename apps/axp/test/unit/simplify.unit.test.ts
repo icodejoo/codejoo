@@ -59,9 +59,9 @@ it("[core.req.headers] 顶层默认头按当前 defaults 掩码，已有头保�
   await h.api.get(TEST_URL)();
   h.axios.defaults.headers[LATE_HEADER] = "new";
   await h.api.get(TEST_URL)();
-  expect(h.calls[0]!.config.headers.get(TOP_HEADER)).toBe(false);
-  expect(h.calls[1]!.config.headers.get(LATE_HEADER)).toBe(false);
-  expect(h.calls[1]!.config.headers.get("X-Keep")).toBe("keep");
+  expect(h.calls[0].config.headers.get(TOP_HEADER)).toBe(false);
+  expect(h.calls[1].config.headers.get(LATE_HEADER)).toBe(false);
+  expect(h.calls[1].config.headers.get("X-Keep")).toBe("keep");
   expect(h.axios.defaults.headers[LATE_HEADER]).toBe("new");
   h.api.dispose();
 });
@@ -94,7 +94,7 @@ it("[core.method.key] 浅空预检继续读取继承的可枚举属性并保留�
 
 it("[filter.opt.snapshot] 装配配置快照不受原选项和豁免数组后续修改影响", /** 对象覆盖也应继承同一份配置。 */ async () => {
   const options = { /** 原始豁免列表。 */ ignoreKeys: [PATH_FIELD] };
-  const { api } = preparedClient([axpFilter<AxpResponse>(options)]);
+  const { api } = preparedClient([axpFilter(options)]);
   options.ignoreKeys.length = 0;
   const response = await api.request({
     /** 固定地址。 */ url: TEST_URL,
@@ -133,7 +133,7 @@ it("[repath.opt.pattern] 默认无变量路径直接透传，请求级正则使�
       return next();
     },
   };
-  const { api } = preparedClient([axpRepath<AxpResponse>(), untouched]);
+  const { api } = preparedClient([axpRepath(), untouched]);
   const plain = TEST_URL + "?query={id}";
   expect((await api.request({ /** 变量只在查询中。 */ url: plain, /** 不抛出。 */ throws: false })).request.url).toBe(plain);
   api.eject(untouched.name);

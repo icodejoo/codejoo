@@ -53,7 +53,7 @@ export function resolveOption<T extends object, D extends Partial<T>>(
   for (const source of [plugin, override]) {
     if (!source) continue;
     for (const key of Object.keys(source) as (keyof T)[]) {
-      const value = (source as Partial<T>)[key];
+      const value = source[key];
       if (value != null) resolved[key] = value as T[keyof T];
     }
   }

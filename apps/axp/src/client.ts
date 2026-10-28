@@ -191,7 +191,7 @@ export function createAxp<S = unknown, R extends IAxpResponse = AxpResponse>(opt
       // 逆序清理，单个实例失败不影响其余实例。
       for (let index = removed.length - 1; index >= 0; index--) {
         try {
-          removed[index]!.instance.dispose?.();
+          removed[index].instance.dispose?.();
         } catch (error) {
           errors.push(error);
         }
@@ -229,7 +229,7 @@ export function createAxp<S = unknown, R extends IAxpResponse = AxpResponse>(opt
   bindMethods(NO_BODY_METHODS, "params");
   try {
     for (const plugin of options.plugins ?? []) register(plugin, false);
-    if (defaultOverrides) assignAxiosDefaults(axios.defaults as AxiosRequestConfig, defaultOverrides);
+    if (defaultOverrides) assignAxiosDefaults(axios.defaults, defaultOverrides);
     compile();
   } catch (error) {
     client.dispose();

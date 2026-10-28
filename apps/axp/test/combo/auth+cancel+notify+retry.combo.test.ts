@@ -16,7 +16,7 @@ it.each([
 ] as const)(
   "[auth.cb.onAccessExpired][retry.opt.max][cancel.fn.cancelAll][notify.cb.notify] 重放返回 %i：只通知一次、重试预算至多用一次，之后逻辑请求全部释放",
   /** 刷新重放不占预算，重放后的失败交给 retry 或 auth 收敛。 */ async (replayStatus, expected, sends) => {
-    const h = authClient({}, [axpRetry<AxpResponse>({ max: 1, delay: 0 })]);
+    const h = authClient({}, [axpRetry({ max: 1, delay: 0 })]);
     const notify = vi.fn(notifyRecorder(h.events));
     h.api.use(axpNotify<AxpResponse>({ notify }));
     h.net.on("get", REQUEST_URL, /** 首发 401，之后（重放与重试）都返回目标状态。 */ (_config, hit) => failure(hit === 1 ? 401 : replayStatus));

@@ -18,7 +18,7 @@ const DEFAULT_TTL = 60_000;
 
 /** 建立路由按命中序号返回 `hit-N` 的缓存客户端，并返回插件以便取管理 API。 */
 function cachedClient(options: ICacheOptions<AxpResponse> = {}) {
-  const cache = axpCache<AxpResponse>(options);
+  const cache = axpCache(options);
   const h = sourceClient([cache]);
   h.net.on("get", URL, (_config, hit) => envelope({ hit, list: [{ n: hit }] }));
   return { ...h, cache };
@@ -66,7 +66,7 @@ it("[cache.req.cache] 请求没写 cache、false、null、enable:false、函数�
 
 it("[cache.fn.axpCache] 命中不重跑 transformResponse（缓存的是判定后的响应）", async () => {
   const transform = vi.fn((data: unknown) => data);
-  const cache = axpCache<AxpResponse>();
+  const cache = axpCache();
   const h = sourceClient([cache], {}, { transformResponse: [transform] });
   h.net.on("get", URL, () => envelope(1));
   const pending = h.send({ url: URL, cache: true });
@@ -159,7 +159,7 @@ it("[cache.cb.shouldCache][cache.req.cache.shouldCache] 判定收到 R；请求�
   await call(h, { cache: true });
   expect(h.net.calls("get", URL)).toBe(2);
   expect(pluginLevel).toHaveBeenCalledTimes(2);
-  expect(pluginLevel.mock.calls[0]![0]).toMatchObject({ ok: true, kind: "ok" });
+  expect(pluginLevel.mock.calls[0][0]).toMatchObject({ ok: true, kind: "ok" });
   h.net.on("get", URL, () => ({ status: 500 }));
   const requestLevel = vi.fn((r: { httpStatus: number }) => r.httpStatus === 500);
   const failed = await call(h, { cache: { shouldCache: requestLevel }, key: "fail" });
@@ -190,9 +190,9 @@ it("[cache.opt.clone][cache.req.cache.clone] shallow 隔离顶层，嵌套仍共
 it("[cache.opt.clone][cache.req.cache.clone] deep 完整隔离，就地改任意层都不污染缓存", async () => {
   const h = cachedClient();
   const first = await call(h, { cache: { clone: "deep" } });
-  (first.data as { list: { n: number }[] }).list[0]!.n = -1;
+  (first.data as { list: { n: number }[] }).list[0].n = -1;
   const second = await call(h, { cache: { clone: "deep" } });
-  expect((second.data as { list: { n: number }[] }).list[0]!.n).toBe(1);
+  expect((second.data as { list: { n: number }[] }).list[0].n).toBe(1);
   (second.data as { list: unknown[] }).list.push("x");
   const third = await call(h, { cache: { clone: "deep" } });
   expect((third.data as { list: unknown[] }).list).toHaveLength(1);
@@ -274,9 +274,10 @@ it("[cache.opt.max] 超出容量按 LRU 淘汰最久未使用的条目，命中�
 
 it("[cache.opt.store] 注入的同步存储按 key 读写，插件不拷贝响应，卸载时不清空调用方的存储", async () => {
   const entries = new Map<string, IAxpCacheEntry<AxpResponse>>();
+  const set = vi.fn((key: string, entry: IAxpCacheEntry<AxpResponse>) => void entries.set(key, entry));
   const store: IAxpCacheStore<AxpResponse> = {
     get: vi.fn((key: string) => entries.get(key)),
-    set: vi.fn((key: string, entry: IAxpCacheEntry<AxpResponse>) => void entries.set(key, entry)),
+    set,
     delete: (key) => entries.delete(key),
     clear: () => entries.clear(),
     get size() {
@@ -288,7 +289,7 @@ it("[cache.opt.store] 注入的同步存储按 key 读写，插件不拷贝响�
   await call(h, { cache: { key: "b" } });
   expect(store.size).toBe(2);
   expect(store.get("a")!.response).toBe(first);
-  expect(store.set).toHaveBeenCalledTimes(2);
+  expect(set).toHaveBeenCalledTimes(2);
   expect(h.api.eject(NAME)).toBe(true);
   expect(store.size).toBe(2);
 });

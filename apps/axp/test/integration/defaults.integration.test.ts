@@ -60,7 +60,7 @@ it("[core.req.defaults] 使用公开 mergeConfig，所有阶段看到有效 defa
     headers: { authorization: NEW_AUTH },
   });
   expect(stages).toEqual(AXP_STAGES);
-  expect(h.calls[0]!.url).toBe(BASE_URL + REQUEST_URL + "?q=old&keep=2");
+  expect(h.calls[0].url).toBe(BASE_URL + REQUEST_URL + "?q=old&keep=2");
   expect(h.axios.defaults.params).toEqual({ q: OLD_QUERY, keep: 1 });
   h.api.dispose();
 });
@@ -68,8 +68,8 @@ it("[core.req.defaults] 使用公开 mergeConfig，所有阶段看到有效 defa
 it("[filter.req.defaults] 请求空值覆盖 defaults 后被过滤，adapter URL 不再含 q", /** 防止过滤结果被第二次合并覆盖。 */ async () => {
   const h = wireClient({ params: { q: OLD_QUERY, keep: 1 } }, [axpFilter()]);
   await h.api.request({ url: REQUEST_URL, params: { q: "" } });
-  expect(h.calls[0]!.config.params).toEqual({ q: null, keep: 1 });
-  expect(h.calls[0]!.url).toBe(REQUEST_URL + "?keep=1");
+  expect(h.calls[0].config.params).toEqual({ q: null, keep: 1 });
+  expect(h.calls[0].url).toBe(REQUEST_URL + "?keep=1");
   expect(h.axios.defaults.params.q).toBe(OLD_QUERY);
   h.api.dispose();
 });
@@ -81,17 +81,17 @@ it.each([
   /** 没有请求级 params 时也执行过滤。 */ async (params) => {
     const h = wireClient({ params }, [axpFilter()]);
     await h.api.get(REQUEST_URL)();
-    expect(h.calls[0]!.config.params).toEqual(EMPTY_PARAMS);
-    expect(h.calls[0]!.url).toBe(REQUEST_URL);
+    expect(h.calls[0].config.params).toEqual(EMPTY_PARAMS);
+    expect(h.calls[0].url).toBe(REQUEST_URL);
     h.api.dispose();
   },
 );
 it("[repath.req.defaults] 从 defaults.params 取路径变量，消费后不出现在查询串", /** 替换和删除都在真实 adapter 边界检查。 */ async () => {
   const h = wireClient({ params: { id: "a/b", keep: 1 } }, [axpRepath()]);
   await h.api.request({ url: "/users/:id" });
-  expect(h.calls[0]!.config.url).toBe("/users/a%2Fb");
-  expect(h.calls[0]!.config.params).toEqual({ id: null, keep: 1 });
-  expect(h.calls[0]!.url).toBe("/users/a%2Fb?keep=1");
+  expect(h.calls[0].config.url).toBe("/users/a%2Fb");
+  expect(h.calls[0].config.params).toEqual({ id: null, keep: 1 });
+  expect(h.calls[0].url).toBe("/users/a%2Fb?keep=1");
   expect(h.axios.defaults.params.id).toBe("a/b");
   h.api.dispose();
 });
@@ -128,7 +128,7 @@ it("[core.req.defaults][core.req.transforms] 二次合并不恢复默认 data，
     transformResponse: [defaultResponse],
   });
   await h.api.get(REQUEST_URL)();
-  expect(h.calls[0]!.config.data).toBeUndefined();
+  expect(h.calls[0].config.data).toBeUndefined();
   expect(defaultRequest).toHaveBeenCalledTimes(1);
   expect(defaultResponse).toHaveBeenCalledTimes(1);
   await h.api.post(REQUEST_URL)({ value: 1 }, { transformRequest: [requestTransform], transformResponse: [responseTransform] });
@@ -136,7 +136,7 @@ it("[core.req.defaults][core.req.transforms] 二次合并不恢复默认 data，
   expect(defaultResponse).toHaveBeenCalledTimes(1);
   expect(requestTransform).toHaveBeenCalledTimes(1);
   expect(responseTransform).toHaveBeenCalledTimes(1);
-  expect(h.calls[1]!.config.data).toEqual({ value: 1 });
+  expect(h.calls[1].config.data).toEqual({ value: 1 });
   h.api.dispose();
 });
 it("[core.req.interceptors] 每次 next 尝试经过用户实例拦截器一次且转换器一次", /** 重放仍调用用户原实例，入口合并不执行拦截器。 */ async () => {
@@ -162,7 +162,7 @@ it("[core.req.interceptors] 每次 next 尝试经过用户实例拦截器一次�
   expect(h.calls).toHaveLength(2);
   expect(interceptor).toHaveBeenCalledTimes(2);
   expect(transform).toHaveBeenCalledTimes(2);
-  expect(h.calls[1]!.config.headers.get("X-User")).toBe("yes");
+  expect(h.calls[1].config.headers.get("X-User")).toBe("yes");
   h.api.dispose();
 });
 it.each([undefined, null, new URLSearchParams("only=1")])(
@@ -174,8 +174,8 @@ it.each([undefined, null, new URLSearchParams("only=1")])(
     };
     const h = wireClient({ params: { q: OLD_QUERY, keep: 1 } }, [patch]);
     await h.api.get(REQUEST_URL)();
-    expect(h.calls[0]!.config.params).toEqual(params === undefined ? EMPTY_PARAMS : params);
-    expect(h.calls[0]!.url).toBe(REQUEST_URL + (params instanceof URLSearchParams ? "?only=1" : ""));
+    expect(h.calls[0].config.params).toEqual(params === undefined ? EMPTY_PARAMS : params);
+    expect(h.calls[0].url).toBe(REQUEST_URL + (params instanceof URLSearchParams ? "?only=1" : ""));
     h.api.dispose();
   },
 );
@@ -186,8 +186,8 @@ it("[core.req.params] 嵌套默认参数的删除同样通过 null 阻止复活"
   };
   const h = wireClient({ params: { nested: { q: OLD_QUERY, keep: 1 } } }, [patch]);
   await h.api.get(REQUEST_URL)();
-  expect(h.calls[0]!.config.params).toEqual({ nested: { q: null, keep: 1 } });
-  expect(h.calls[0]!.url).not.toContain("old");
+  expect(h.calls[0].config.params).toEqual({ nested: { q: null, keep: 1 } });
+  expect(h.calls[0].url).not.toContain("old");
   h.api.dispose();
 });
 it("[core.req.headers] 默认通用头、方法头和请求头按优先级展平，删除默认头后不发送", /** header 删除忽略大小写，使用公开 false 禁用标记。 */ async () => {
@@ -200,7 +200,7 @@ it("[core.req.headers] 默认通用头、方法头和请求头按优先级展平
   };
   const h = wireClient({ headers: { common: { Authorization: OLD_AUTH }, get: { "X-Method": "default-get" } } }, [patch]);
   await h.api.get(REQUEST_URL)(undefined, { headers: { Authorization: NEW_AUTH } });
-  const headers = h.calls[0]!.config.headers;
+  const headers = h.calls[0].config.headers;
   expect(headers.get(AUTH_HEADER)).toBe(false);
   expect(headers.get("X-Method")).toBe(false);
   expect(headers.toJSON()).not.toHaveProperty(AUTH_HEADER);
@@ -213,8 +213,8 @@ it.each([false, null])(
   /** 文档化的两种禁用值均保留到发送边界。 */ async (value) => {
     const h = wireClient({ headers: { common: { Authorization: OLD_AUTH } } });
     await h.api.get(REQUEST_URL)(undefined, { headers: { Authorization: value } });
-    expect(h.calls[0]!.config.headers.get(AUTH_HEADER)).toBe(value);
-    expect(h.calls[0]!.config.headers.toJSON()).not.toHaveProperty(AUTH_HEADER);
+    expect(h.calls[0].config.headers.get(AUTH_HEADER)).toBe(value);
+    expect(h.calls[0].config.headers.toJSON()).not.toHaveProperty(AUTH_HEADER);
     h.api.dispose();
   },
 );
@@ -247,8 +247,8 @@ it.each([undefined, "PuT"])(
     };
     const h = wireClient({ method: "post", headers: { post: { "X-Method": "post" }, put: { "X-Method": "put" } } }, [observer]);
     await h.api.request({ url: REQUEST_URL, method });
-    expect(h.calls[0]!.config.method).toBe(expected);
-    expect(h.calls[0]!.config.headers.get("X-Method")).toBe(expected);
+    expect(h.calls[0].config.method).toBe(expected);
+    expect(h.calls[0].config.headers.get("X-Method")).toBe(expected);
     h.api.dispose();
   },
 );

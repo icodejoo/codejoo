@@ -1,7 +1,7 @@
 import { beforeEach, expect, it, vi } from "vitest";
 import axpRetry from "../../src/plugins/retry";
 import axpShare from "../../src/plugins/share";
-import { AXP_KINDS, type AxpResponse } from "../../src/response";
+import { AXP_KINDS } from "../../src/response";
 import { failure } from "../helpers/b3";
 import { envelope, settleAll, sourceClient } from "../helpers/source";
 
@@ -36,8 +36,8 @@ beforeEach(() => {
 function client(max: number) {
   const attempts = vi.fn();
   const h = sourceClient([
-    axpRetry<AxpResponse>({ max, delay: DELAY }),
-    axpShare<AxpResponse>(),
+    axpRetry({ max, delay: DELAY }),
+    axpShare(),
     {
       name: "attempt-count",
       stage: "attempt",
@@ -67,7 +67,7 @@ it.each([false, true])(
     expect(h.attempts).toHaveBeenCalledTimes(CALLERS * ROUNDS_AFTER_RETRY);
     // 两轮不重叠：第一轮落定之后第二轮才开始，说明每轮各自合并，而不是复用同一个条目。
     const [first, second] = h.net.log;
-    expect(first!.finishedAt).toBeLessThan(second!.startedAt);
+    expect(first.finishedAt).toBeLessThan(second.startedAt);
   },
 );
 

@@ -87,12 +87,12 @@ const layered = LAYER_COUNTS.map(
 );
 
 /** B4：只装 cache，有效期无限，预先填充后只测命中。 */
-const cached = createAxp<unknown, AxpResponse>({
+const cached = createAxp({
   axios: createAxios({ adapter }),
   plugins: [axpCache({ expires: Infinity })],
 });
 /** B5：只装 share，start 策略。 */
-const shared = createAxp<unknown, AxpResponse>({
+const shared = createAxp({
   axios: createAxios({ adapter }),
   plugins: [axpShare({ policy: "start" })],
 });

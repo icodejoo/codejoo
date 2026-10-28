@@ -14,7 +14,7 @@ beforeEach(() => {
 
 /** 装好 retry 与 notify 的客户端，notify 按逻辑请求计数。 */
 function notifyRetryClient(max = 2) {
-  const h = b3Client([axpRetry<AxpResponse>({ max, delay: RETRY_WAIT })]);
+  const h = b3Client([axpRetry({ max, delay: RETRY_WAIT })]);
   const notify = vi.fn(notifyRecorder(h.events));
   h.api.use(axpNotify<AxpResponse>({ notify }));
   return { ...h, notify };

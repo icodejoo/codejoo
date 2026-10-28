@@ -123,7 +123,7 @@ export function b3Client(plugins: readonly AxpPlugin<AxpResponse, any>[] = [], o
 export function authClient(overrides: Partial<IAuthOptions<AxpResponse>> = {}, plugins: readonly AxpPlugin<AxpResponse, any>[] = [], options: AxpOptions = {}) {
   const h = b3Client(plugins, options);
   const settings = authSettings(overrides, h.events);
-  const plugin = axpAuth<AxpResponse>(settings);
+  const plugin = axpAuth(settings);
   h.api.use(plugin);
   return { ...h, settings, tm: settings.tokenManager, plugin };
 }
@@ -184,7 +184,7 @@ export function pollutingBody() {
  * @example `transformRequest: [pollutingTransform]`
  */
 export function pollutingTransform(input: ReturnType<typeof pollutingBody>): string {
-  input.items[0]!.n++;
+  input.items[0].n++;
   return JSON.stringify(input);
 }
 /** 无污染时每次发送都应得到的请求体。 */

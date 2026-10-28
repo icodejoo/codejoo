@@ -1,7 +1,6 @@
 import { beforeEach, expect, it, vi } from "vitest";
 import axpLoading from "../../src/plugins/loading";
 import axpMock from "../../src/plugins/mock";
-import type { AxpResponse } from "../../src/response";
 import { envelope, sourceClient } from "../helpers/source";
 import { loadingRecorder } from "../helpers/ui";
 
@@ -20,8 +19,8 @@ const LABEL = "main";
 /** 装好 loading 与 mock；探测 404 回落真实接口。 */
 function client(loadingOptions: { delay?: number } = {}) {
   const h = sourceClient([]);
-  h.api.use(axpLoading<AxpResponse>({ loading: loadingRecorder(h.events, LABEL), ...loadingOptions }));
-  h.api.use(axpMock<AxpResponse>({ enable: true, mockUrl: MOCK }));
+  h.api.use(axpLoading({ loading: loadingRecorder(h.events, LABEL), ...loadingOptions }));
+  h.api.use(axpMock({ enable: true, mockUrl: MOCK }));
   h.net.on("get", `${MOCK}${REAL}`, () => ({ status: 404 }));
   h.net.on("get", REAL, () => envelope("real"));
   return h;
@@ -75,7 +74,7 @@ it("[loading.method.lifecycle × mock.method.lifecycle] 先卸 mock：loading �
   expect(h.api.eject("axp:mock")).toBe(true);
   expect((await send()).data).toBe("real");
   expect(h.events.loading.get(LABEL)).toEqual([true, false, true, false]);
-  h.api.use(axpMock<AxpResponse>({ enable: true, mockUrl: MOCK }));
+  h.api.use(axpMock({ enable: true, mockUrl: MOCK }));
   expect(h.api.eject("axp:loading")).toBe(true);
   expect((await send()).data).toBe("mock");
   expect(h.events.loading.get(LABEL)).toEqual([true, false, true, false]);

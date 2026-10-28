@@ -20,6 +20,16 @@ export function isPlainObject(value: unknown): value is Record<string, unknown> 
   return prototype === Object.prototype || prototype === null;
 }
 
+/** 把任意值转成字符串，等价于 String(value)；入参声明为 unknown，如实表达调用点接受任意值。
+ * @internal
+ * @param value 待转换的值。
+ * @returns 字符串，对象沿用自身的 toString 结果。
+ * @example `toText(res.headers?.["content-type"] ?? "")`
+ */
+export function toText(value: unknown): string {
+  return String(value);
+}
+
 /** 克隆默认头和方法分组，保留 false/null 等禁止发送标记。
  * @internal
  * @param headers 待复制的默认头容器。
@@ -50,7 +60,7 @@ export function cloneAxiosDefaults(defaults: AxiosRequestConfig): AxiosRequestCo
     else if (key === "params") cloned.params = cloneParams(defaults.params);
     else if (key === "transformRequest") cloned.transformRequest = toArray(defaults.transformRequest);
     else if (key === "transformResponse") cloned.transformResponse = toArray(defaults.transformResponse);
-    else if (!(key in cloned)) Object.assign(cloned, { [key]: defaults[key as keyof AxiosRequestConfig] });
+    else if (!(key in cloned)) Object.assign(cloned, { [key]: Reflect.get(defaults, key) });
   }
   return cloned;
 }

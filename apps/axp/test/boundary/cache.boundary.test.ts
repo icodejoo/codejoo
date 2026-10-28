@@ -24,7 +24,7 @@ const FAST = 5;
 
 /** 建立路由按命中序号返回 `hit-N` 的缓存客户端。 */
 function cachedClient(options: ICacheOptions<AxpResponse> = {}) {
-  const cache = axpCache<AxpResponse>(options);
+  const cache = axpCache(options);
   const h = sourceClient([cache]);
   h.net.on("get", URL, (_config, hit) => envelope(`hit-${hit}`));
   return { ...h, cache };

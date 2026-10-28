@@ -21,7 +21,7 @@ function logger() {
 }
 /** 装好 mock 与两条路由的客户端。 */
 function mockClient(options: IMockOptions<AxpResponse> = {}, debug?: AxpLogger) {
-  const h = sourceClient([axpMock<AxpResponse>({ enable: true, mockUrl: MOCK, ...options })], debug ? { debug } : {});
+  const h = sourceClient([axpMock({ enable: true, mockUrl: MOCK, ...options })], debug ? { debug } : {});
   h.net.on("get", PROBE, () => envelope(MOCK_DATA));
   h.net.on("get", REAL, () => envelope(REAL_DATA));
   return h;
@@ -38,7 +38,7 @@ it.each([
   expect(r.data).toBe(REAL_DATA);
   expect(h.net.calls("get", PROBE)).toBe(0);
   expect(debug.warn).toHaveBeenCalledOnce();
-  expect(debug.warn.mock.calls[0]![0]).toContain("mockUrl");
+  expect(debug.warn.mock.calls[0][0]).toContain("mockUrl");
 });
 
 it("[mock.opt.mockUrl] 没开 debug 时跳过 mock 不输出任何日志", async () => {
@@ -58,7 +58,7 @@ it.each([`${MOCK}/`, `${MOCK}///`])("[mock.opt.mockUrl] 基址 %s 结尾斜杠�
 
 it("[mock.opt.mockUrl] 请求没有 url 时探测改写 baseURL", async () => {
   const seen: { baseURL?: string; url?: string }[] = [];
-  const h = sourceClient([axpMock<AxpResponse>({ enable: true, mockUrl: MOCK })], {}, async (config) => {
+  const h = sourceClient([axpMock({ enable: true, mockUrl: MOCK })], {}, async (config) => {
     seen.push({ baseURL: config.baseURL, url: config.url });
     return { status: 200, statusText: "", headers: {}, config, data: { code: 0, data: 1 } };
   });
@@ -150,11 +150,11 @@ it("[mock.cb.fallbackWhen] 回落时在 debug 下输出一条日志", async () =
   h.net.on("get", PROBE, () => ({ status: 404 }));
   await h.send({ url: REAL, mock: true });
   expect(debug.log).toHaveBeenCalledOnce();
-  expect(debug.log.mock.calls[0]![0]).toContain("404");
+  expect(debug.log.mock.calls[0][0]).toContain("404");
 });
 
 it("[mock.method.lifecycle] eject 重复调用安全，卸载后可用同一个插件对象重装并恢复 mock", async () => {
-  const plugin = axpMock<AxpResponse>({ enable: true, mockUrl: MOCK });
+  const plugin = axpMock({ enable: true, mockUrl: MOCK });
   const h = sourceClient([plugin]);
   h.net.on("get", PROBE, () => envelope(MOCK_DATA));
   h.net.on("get", REAL, () => envelope(REAL_DATA));
@@ -168,12 +168,12 @@ it("[mock.method.lifecycle] eject 重复调用安全，卸载后可用同一个�
 it("[mock.opt.fallbackWhen] 探测后回落真实接口，两次发送的请求体相互独立，原地修改的 transformRequest 不会叠加", async () => {
   const sent: unknown[] = [];
   const h = sourceClient(
-    [axpMock<AxpResponse>({ enable: true, mockUrl: MOCK })],
+    [axpMock({ enable: true, mockUrl: MOCK })],
     {},
     {
       transformRequest: [
         /** 原地修改嵌套元素后再序列化，模拟不规范的用户转换器。 */ (data: { qty: number }[]) => {
-          data[0]!.qty += 1;
+          data[0].qty += 1;
           return JSON.stringify(data);
         },
       ],

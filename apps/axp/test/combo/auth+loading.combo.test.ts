@@ -1,7 +1,6 @@
 import { AxiosError } from "axios";
 import { beforeEach, expect, it, vi } from "vitest";
 import axpLoading from "../../src/plugins/loading";
-import type { AxpResponse } from "../../src/response";
 import { authClient, deferred, failure, guarded, REFRESH_TOKEN, REQUEST_URL, run, TOKEN_NEW } from "../helpers/b3";
 import { loadingRecorder } from "../helpers/ui";
 
@@ -20,7 +19,7 @@ it("[loading.cb.loading][auth.cb.onRefresh] 刷新等待期间一直显示，排
       tm.set(TOKEN_NEW, REFRESH_TOKEN);
     },
   });
-  h.api.use(axpLoading<AxpResponse>({ loading: loadingRecorder(h.events) }));
+  h.api.use(axpLoading({ loading: loadingRecorder(h.events) }));
   h.net.on(
     "get",
     REQUEST_URL,
@@ -41,7 +40,7 @@ it("[loading.cb.loading][auth.cb.onRefresh] 刷新等待期间一直显示，排
 
 it("[loading.cb.loading][auth.cb.onRefresh] 刷新失败收敛后同样隐藏：一对回调，结果为 auth/expired", /** 失败路径也成对。 */ async () => {
   const h = authClient({ onRefresh: () => false });
-  h.api.use(axpLoading<AxpResponse>({ loading: loadingRecorder(h.events) }));
+  h.api.use(axpLoading({ loading: loadingRecorder(h.events) }));
   h.net.on("get", REQUEST_URL, () => failure(401));
   expect(await run(h)).toMatchObject({ kind: "auth", reason: "expired" });
   expect(h.events.loading.get(LOADING_LABEL)).toEqual([true, false]);
@@ -54,7 +53,7 @@ it.each([
   "[loading.cb.loading][auth.cb.onRefresh] 首发 401 后重放遇到 %s 失败也释放 loading，结果保留该失败类别",
   /** 重放失败不遗漏 false。 */ async (kind, code) => {
     const h = authClient();
-    h.api.use(axpLoading<AxpResponse>({ loading: loadingRecorder(h.events) }));
+    h.api.use(axpLoading({ loading: loadingRecorder(h.events) }));
     h.net.on(
       "get",
       REQUEST_URL,

@@ -19,7 +19,7 @@ const LONG = 40;
 /** 装好 share 与会响应取消的适配器。 */
 function signalClient(options: ISharedOptions = {}) {
   const calls: IWireCall[] = [];
-  const h = sourceClient([axpShare<AxpResponse>(options)], {}, signalAdapter(calls));
+  const h = sourceClient([axpShare(options)], {}, signalAdapter(calls));
   return { ...h, calls };
 }
 /** 推进假时钟直到所有请求落定。 */
@@ -39,8 +39,8 @@ it("[share.opt.policy][share.fn.subscribe] start 首发取消只结束自己，�
   expect(second.ok).toBe(true);
   expect(second.data).toBe("done-1");
   expect(h.calls).toHaveLength(1);
-  expect(h.calls[0]!.signal).not.toBe(leader.signal);
-  expect(h.calls[0]!.signal!.aborted).toBe(false);
+  expect(h.calls[0].signal).not.toBe(leader.signal);
+  expect(h.calls[0].signal!.aborted).toBe(false);
 });
 
 it("[share.opt.policy][share.fn.subscribe] start 全部订阅者都取消才中止底层，新请求开启新一轮", async () => {
@@ -51,13 +51,13 @@ it("[share.opt.policy][share.fn.subscribe] start 全部订阅者都取消才中�
   const b = h.send({ url: URL, share: true, signal: two.signal });
   one.abort();
   await vi.advanceTimersByTimeAsync(1);
-  expect(h.calls[0]!.signal!.aborted).toBe(false);
+  expect(h.calls[0].signal!.aborted).toBe(false);
   two.abort();
   const [first, second] = await settled(a, b);
   expect([first.kind, second.kind]).toEqual([AXP_KINDS.CANCEL, AXP_KINDS.CANCEL]);
-  expect(h.calls[0]!.signal!.aborted).toBe(true);
+  expect(h.calls[0].signal!.aborted).toBe(true);
   const [fresh] = await settled(h.send({ url: URL, share: true }));
-  expect(fresh!.data).toBe("done-2");
+  expect(fresh.data).toBe("done-2");
   expect(h.calls).toHaveLength(2);
 });
 
@@ -103,7 +103,7 @@ it("[share.fn.subscribe] 跟随者按自己的 timeout 退出：它以 timeout �
   expect(follower.message).toContain(`${SHORT}ms`);
   expect(first.data).toBe("done-1");
   expect(h.calls).toHaveLength(1);
-  expect(h.calls[0]!.signal!.aborted).toBe(false);
+  expect(h.calls[0].signal!.aborted).toBe(false);
 });
 
 it("[share.fn.subscribe] 首发的 timeout 不连累跟随者：共享请求的 axios 超时被取消，跟随者没有超时就等到结果", async () => {
@@ -113,7 +113,7 @@ it("[share.fn.subscribe] 首发的 timeout 不连累跟随者：共享请求的 
   const [leader, follower] = await settled(a, b);
   expect(leader.kind).toBe(AXP_KINDS.TIMEOUT);
   expect(follower.data).toBe("done-1");
-  expect(h.calls[0]!.timeout).toBe(0);
+  expect(h.calls[0].timeout).toBe(0);
 });
 
 it("[share.fn.subscribe] 分批超时：只在全部订阅者都离开后才中止底层，新请求开启新一轮", async () => {
@@ -121,13 +121,13 @@ it("[share.fn.subscribe] 分批超时：只在全部订阅者都离开后才中�
   const a = h.send({ url: URL, share: true, timeout: SHORT });
   const b = h.send({ url: URL, share: true, timeout: LONG });
   await vi.advanceTimersByTimeAsync(SHORT);
-  expect(h.calls[0]!.signal!.aborted).toBe(false);
+  expect(h.calls[0].signal!.aborted).toBe(false);
   await vi.advanceTimersByTimeAsync(LONG - SHORT);
-  expect(h.calls[0]!.signal!.aborted).toBe(true);
+  expect(h.calls[0].signal!.aborted).toBe(true);
   const [first, second] = await settled(a, b);
   expect([first.kind, second.kind]).toEqual([AXP_KINDS.TIMEOUT, AXP_KINDS.TIMEOUT]);
   const [fresh] = await settled(h.send({ url: URL, share: true }));
-  expect(fresh!.data).toBe("done-2");
+  expect(fresh.data).toBe("done-2");
 });
 
 it("[share.fn.subscribe] 非法 timeout（NaN、负数）按无超时处理，不装计时器", async () => {
@@ -138,7 +138,7 @@ it("[share.fn.subscribe] 非法 timeout（NaN、负数）按无超时处理，�
 
 it("[share.fn.subscribe] 订阅落定后清除计时器与 abort 监听（共享结果、取消、超时三种离开方式）", async () => {
   const listeners = trackAbortListeners();
-  const h = sourceClient([axpShare<AxpResponse>()]);
+  const h = sourceClient([axpShare()]);
   h.net.on("get", URL, () => envelope("x"));
   const cancel = new AbortController();
   const pending = [
@@ -154,7 +154,7 @@ it("[share.fn.subscribe] 订阅落定后清除计时器与 abort 监听（共享
 });
 
 it("[share.fn.$createEntry] 旧一轮迟到的结果不会落定或删除同 key 的新一轮", async () => {
-  const h = sourceClient([axpShare<AxpResponse>()]);
+  const h = sourceClient([axpShare()]);
   h.net.on("get", URL, (_config, hit) => envelope(`hit-${hit}`));
   const one = new AbortController();
   const first = h.send({ url: URL, share: true, latency: 30, signal: one.signal } as never);
@@ -165,9 +165,9 @@ it("[share.fn.$createEntry] 旧一轮迟到的结果不会落定或删除同 key
   const second = h.send({ url: URL, share: true, latency: 30 } as never);
   const third = h.send({ url: URL, share: true, latency: 30 } as never);
   const results = await settled(first, second, third);
-  expect(results[0]!.kind).toBe(AXP_KINDS.CANCEL);
+  expect(results[0].kind).toBe(AXP_KINDS.CANCEL);
   expect(results[1]).toBe(results[2]);
-  expect(results[1]!.data).toBe("hit-2");
+  expect(results[1].data).toBe("hit-2");
   expect(h.net.calls("get", URL)).toBe(2);
 });
 
@@ -181,7 +181,7 @@ it("[share.method.lifecycle] 卸载后在途轮次的订阅者全部取消也能
   h.api.cancelAll();
   const [first, second] = await settled(a, b);
   expect([first.kind, second.kind]).toEqual([AXP_KINDS.CANCEL, AXP_KINDS.CANCEL]);
-  expect(h.calls[0]!.signal!.aborted).toBe(true);
+  expect(h.calls[0].signal!.aborted).toBe(true);
 });
 
 it("[share.fn.axpShare] 共享以一次尝试为单位：retry 在外层，每轮同 key 只发一次，各调用方重试时合并到新一轮", async () => {
@@ -194,7 +194,7 @@ it("[share.fn.axpShare] 共享以一次尝试为单位：retry 在外层，每�
       return first.ok ? first : next();
     },
   };
-  const h = sourceClient([axpShare<AxpResponse>(), retryOnce]);
+  const h = sourceClient([axpShare(), retryOnce]);
   h.net.on("get", URL, (_config, hit) => (hit === 1 ? { status: 500 } : envelope(`hit-${hit}`)));
   const [a, b] = await settled(h.send({ url: URL, share: true, latency: 10 } as never), h.send({ url: URL, share: true, latency: 10 } as never));
   expect(h.net.calls("get", URL)).toBe(2);
@@ -204,7 +204,7 @@ it("[share.fn.axpShare] 共享以一次尝试为单位：retry 在外层，每�
 
 it("[share.opt.policy][share.fn.subscribe] end 与 race 的订阅者全部取消：各自以 cancel 收尾，没有共享控制器可中止", async () => {
   for (const policy of ["end", "race"] as const) {
-    const h = sourceClient([axpShare<AxpResponse>({ policy })]);
+    const h = sourceClient([axpShare({ policy })]);
     h.net.on("get", URL, () => envelope("x"));
     const one = new AbortController();
     const two = new AbortController();
@@ -217,7 +217,7 @@ it("[share.opt.policy][share.fn.subscribe] end 与 race 的订阅者全部取消
     expect([first.kind, second.kind]).toEqual([AXP_KINDS.CANCEL, AXP_KINDS.CANCEL]);
     // oxlint-disable-next-line no-await-in-loop -- 取消后同 key 的新请求应重新开始。
     const [fresh] = await settled(h.send({ url: URL, share: true }));
-    expect(fresh!.ok).toBe(true);
+    expect(fresh.ok).toBe(true);
   }
 });
 
@@ -240,7 +240,7 @@ it("[share.fn.axpShare] 自定义 R：share 合成的取消与超时响应也带
 });
 
 it("[share.method.lifecycle] 重名 use 被拒绝；eject 重复调用安全，卸载后可用同一插件对象重装", async () => {
-  const plugin = axpShare<AxpResponse>();
+  const plugin = axpShare();
   const h = sourceClient([plugin]);
   h.net.on("get", URL, () => envelope("x"));
   expect(() => h.api.use(plugin)).toThrow(/Duplicate plugin/);
@@ -264,14 +264,14 @@ it.each(["start", "end", "race"] as const)("[share.opt.policy][share.fn.axpShare
       return next();
     },
   };
-  const h = sourceClient([axpShare<AxpResponse>({ policy }), bomb]);
+  const h = sourceClient([axpShare({ policy }), bomb]);
   h.net.on("get", URL, () => envelope("ok"));
   const caught = [h.send({ url: URL, share: true }).catch((error: unknown) => error), h.send({ url: URL, share: true }).catch((error: unknown) => error)];
   await vi.runAllTimersAsync();
   expect(await Promise.all(caught)).toEqual([bug, bug]);
   armed = false;
   const [again] = await settled(h.send({ url: URL, share: true }));
-  expect(again!.ok).toBe(true);
+  expect(again.ok).toBe(true);
 });
 
 it("[share.opt.policy] end 与 race 中只有部分调用撞上程序 bug：订阅者仍拿到成功结果，不被个别尝试的 bug 连累", async () => {
@@ -290,11 +290,11 @@ it("[share.opt.policy] end 与 race 中只有部分调用撞上程序 bug：订�
         return next();
       },
     };
-    const h = sourceClient([axpShare<AxpResponse>({ policy }), bomb]);
+    const h = sourceClient([axpShare({ policy }), bomb]);
     h.net.on("get", URL, () => envelope("ok"));
     // oxlint-disable-next-line no-await-in-loop -- 两种策略依次核对。
     const [a, b] = await settled(h.send({ url: URL, share: true }), h.send({ url: URL, share: true }));
-    expect([a!.ok, b!.ok]).toEqual([true, true]);
+    expect([a.ok, b.ok]).toEqual([true, true]);
   }
 });
 
@@ -310,7 +310,7 @@ it("[share.fn.subscribe] 首发在订阅前被内层同步取消，以 cancel �
       return next();
     },
   };
-  const h = sourceClient([axpShare<AxpResponse>(), aborter]);
+  const h = sourceClient([axpShare(), aborter]);
   h.net.on("get", "/shared-abort", () => envelope("ok"));
   const response = h.send({ url: "/shared-abort", share: true, signal: controller.signal });
   await vi.runAllTimersAsync();

@@ -1,7 +1,7 @@
 import { resolveOption, type AxpOption, type IPluginSwitch } from "../options";
 import type { AxpResponse, IAxpResponse } from "../response";
 import type { AxpPlugin } from "../types";
-import { isObject, isPlainObject } from "../utils";
+import { isObject, isPlainObject, toText } from "../utils";
 
 /** 内置路径替换插件名称。 */
 const NAME = "axp:repath";
@@ -20,9 +20,9 @@ export interface IRepathOptions extends IPluginSwitch {
   removeKey?: boolean;
 }
 /** 复制外壳后删除已消费字段。 */
-function omit(source: unknown, keys?: Set<string>): unknown {
+function omit(source: object | undefined, keys?: Set<string>): unknown {
   if (!keys) return source;
-  const copy = { ...(source as Record<string, unknown>) };
+  const copy: Record<string, unknown> = { ...source };
   for (const key of keys) delete copy[key];
   return copy;
 }
@@ -87,7 +87,7 @@ export default function axpRepath<R extends IAxpResponse = AxpResponse>(options:
           const key = captures.find(/** 忽略未命中的可选组。 */ (value) => typeof value === "string" && value.length > 0);
           if (typeof key !== "string") return match;
           const value = readParams(params, key, used) ?? readData(data, key, used);
-          return value == null ? match : encodeURIComponent(String(value));
+          return value == null ? match : encodeURIComponent(toText(value));
         },
       );
       if (replaced === pathname) return next();

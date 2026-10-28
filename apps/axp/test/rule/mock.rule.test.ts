@@ -19,14 +19,14 @@ const REAL_DATA = "from-real";
 /** 装好 mock 与假网络路由：mock 返回 MOCK_DATA，真实返回 REAL_DATA。 */
 function mockClient(options: IMockOptions<AxpResponse> = {}, extra = false) {
   const rec = requestRecorder();
-  const h = sourceClient([axpMock<AxpResponse>({ enable: true, mockUrl: MOCK, ...options }), ...(extra ? [rec.plugin] : [])]);
+  const h = sourceClient([axpMock({ enable: true, mockUrl: MOCK, ...options }), ...(extra ? [rec.plugin] : [])]);
   h.net.on("get", `${MOCK}${REAL}`, () => envelope(MOCK_DATA));
   h.net.on("get", REAL, () => envelope(REAL_DATA));
   return { ...h, rec };
 }
 
 it("[mock.prop.name][mock.opt.enable] 名称为 axp:mock，默认不启用：不进链、不执行，请求直达真实接口", async () => {
-  const plugin = axpMock<AxpResponse>({ mockUrl: MOCK });
+  const plugin = axpMock({ mockUrl: MOCK });
   const handle = vi.spyOn(plugin, "handle" as never);
   expect(plugin.name).toBe(NAME);
   expect(plugin.enable).toBe(false);
@@ -39,9 +39,9 @@ it("[mock.prop.name][mock.opt.enable] 名称为 axp:mock，默认不启用：不
 });
 
 it("[mock.opt.enable] enable:true 进入 source 阶段；请求级开关不能把关闭的插件重新打开", async () => {
-  const on = sourceClient([axpMock<AxpResponse>({ enable: true })]);
+  const on = sourceClient([axpMock({ enable: true })]);
   expect(on.api.inspect()).toEqual([{ stage: "source", name: NAME }]);
-  const off = sourceClient([axpMock<AxpResponse>({ enable: false, mockUrl: MOCK })]);
+  const off = sourceClient([axpMock({ enable: false, mockUrl: MOCK })]);
   off.net.on("get", REAL, () => envelope(REAL_DATA));
   const r = await off.send({ url: REAL, mock: { enable: true, mockUrl: MOCK } });
   expect(r.data).toBe(REAL_DATA);
@@ -120,7 +120,7 @@ it("[mock.req.mock.fallbackWhen][mock.cb.fallbackWhen] 请求级判定覆盖插�
   const r = await h.send({ url: REAL, mock: { fallbackWhen: requestLevel } });
   expect(r.data).toBe(REAL_DATA);
   expect(requestLevel).toHaveBeenCalledOnce();
-  expect(requestLevel.mock.calls[0]![0]).toMatchObject({ httpStatus: 500, kind: "http" });
+  expect(requestLevel.mock.calls[0][0]).toMatchObject({ httpStatus: 500, kind: "http" });
   expect(pluginLevel).not.toHaveBeenCalled();
   const fallback = await h.send({ url: REAL, mock: true });
   expect(fallback.httpStatus).toBe(500);
