@@ -15,6 +15,7 @@
 
 ## 报告（带日期的结果）
 
+- [2026-10-28 洋葱管线 B6 文档与产物](reports/2026-10-28-pipeline-b6.md) — 产物类型增强、产物测试、e2e 迁移、质量收尾、与 B0 交错 A/B 的性能和体积结论。active。
 - [2026-10-28 洋葱管线 B5 测试收尾](reports/2026-10-28-pipeline-b5.md) — 跨批组合、powerset 512 子集、删旧实现、新入口、覆盖率 100%、映射改标与终审修复。active。
 - [2026-10-28 洋葱管线 B4 数据源插件](reports/2026-10-28-pipeline-b4.md) — mock/share/cache 实现、验收、API id、承接旧行与终审修复。active。
 - [2026-10-28 洋葱管线 B3 重试与鉴权](reports/2026-10-28-pipeline-b3.md) — retry/auth/TokenManager 实现、验收、API id、承接旧行与终审修复。active。
