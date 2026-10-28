@@ -55,7 +55,7 @@ export function tamperPayload(jwt: string): string {
   if (json === null) return breakSignature(jwt);
   try {
     const payload = JSON.parse(json) as Record<string, unknown>;
-    payload.sub = `${String(payload.sub ?? "u")}${TAMPER_SUFFIX}`;
+    payload.sub = `${typeof payload.sub === "string" ? payload.sub : "u"}${TAMPER_SUFFIX}`;
     parts[1] = b64urlEncode(JSON.stringify(payload));
     return parts.join(".");
   } catch {
@@ -69,8 +69,6 @@ export function tamperPayload(jwt: string): string {
  * 内部保存"完整 Authorization 头值"（如 `Bearer xxx`），这样 wrong_scheme 能原样表达。
  */
 export class TokenStore {
-  /** 刷新许可，axp 在会话过期后置 false，登录时由执行器重置 */
-  canRefresh = true;
   /** 当前登录用户名 */
   user: string | undefined;
   #access: string | undefined;

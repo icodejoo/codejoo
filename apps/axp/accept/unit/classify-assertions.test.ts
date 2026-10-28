@@ -1,6 +1,9 @@
+import fs from "node:fs";
 import http from "node:http";
 import net from "node:net";
 import type { AddressInfo } from "node:net";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
 import axios, { AxiosError } from "axios";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { checkResults, evaluateLocal, checkServer, checkClient, checkGeneric } from "../lib/assertions.ts";
@@ -8,9 +11,16 @@ import type { Observed, RequestRecord } from "../lib/assertions.ts";
 import { AxpResponse, AXP_RESPONSE as RESPONSE_BRAND } from "../../src/response.ts";
 import { AXP_RESPONSE } from "../../src/brand.ts";
 import type { AxpKind } from "../../src/response.ts";
-import { classifyError, classifyResponse, errorMatches, errorMatchesAny, PARSE_MARK } from "../lib/classify.ts";
-import { AUTH_DENIED_MESSAGE, AUTH_REFRESH_FAILED_MESSAGE } from "../lib/constants.ts";
+import { classifyError, classifyResponse, errorMatches, errorMatchesAny } from "../lib/classify.ts";
 import type { Expectation } from "../lib/types.ts";
+
+/** 被测产物是否已打包；没有就跳过依赖它的测试（accept 脚本会先 vp pack） */
+const HERE = path.dirname(fileURLToPath(import.meta.url));
+const hasDist = fs.existsSync(path.resolve(HERE, "..", "..", "dist", "esm", "index.mjs"));
+/** 旧 axp 的 auth 越权错误消息：新架构里它不再起任何作用 */
+const OLD_DENIED_MESSAGE = "[axp:auth] access denied";
+/** 旧 axp 的 auth 刷新失败错误消息：新架构里它不再起任何作用 */
+const OLD_REFRESH_FAILED_MESSAGE = "[axp:auth] refresh failed";
 
 /** 造一个真实的归一化响应（src 的默认实现），与 axp 实际抛出的对象同形 */
 function axpResp(init: ConstructorParameters<typeof AxpResponse>[0]): AxpResponse {
@@ -57,10 +67,9 @@ describe("classifyError：IAxpResponse（新架构，直接读 kind / reason）"
     expect(classifyError(failure("internal", { message: "boom", error: new Error("boom") }))).toBe("unknown:internal:boom");
   });
 
-  it("IAxpResponse 优先于旧形态：auth 标签、错误消息都不再起作用", () => {
-    expect(classifyError(axpResp({ httpStatus: 500 }), { tags: new Set(["expired"]) })).toBe("http:500");
-    expect(classifyError(failure("network", { message: AUTH_DENIED_MESSAGE }))).toBe("network");
-    expect(classifyError(failure("timeout", { message: AUTH_REFRESH_FAILED_MESSAGE }))).toBe("timeout");
+  it("类别只看字段，不看 message：旧 auth 错误消息不起作用", () => {
+    expect(classifyError(failure("network", { message: OLD_DENIED_MESSAGE }))).toBe("network");
+    expect(classifyError(failure("timeout", { message: OLD_REFRESH_FAILED_MESSAGE }))).toBe("timeout");
   });
 
   it("按品牌识别，不依赖 instanceof：create 返回的普通对象补了品牌也算", () => {
@@ -92,43 +101,24 @@ function respErr(status: number, data: unknown = {}): AxiosError {
   return e;
 }
 
-describe("classifyError：构造各种错误（合成）", () => {
-  it("HTTP 状态码 → http:<n>", () => {
-    expect(classifyError(respErr(500))).toBe("http:500");
-    expect(classifyError(respErr(401))).toBe("http:401");
-  });
-
-  it("axp 的 ApiError（normalize 业务失败）：HTTP 2xx 看 code，≥400 看状态", () => {
-    const api = (status: number, code: number) => Object.assign(new Error("x"), { name: "ApiError", response: { status, code } });
-    expect(classifyError(api(200, 1001))).toBe("business:1001");
-    expect(classifyError(api(200, -5))).toBe("business:-5");
-    expect(classifyError(api(500, 5001))).toBe("http:500");
-  });
-
-  it("取消 / 超时 / 网络 / 解析", () => {
-    expect(classifyError(new axios.CanceledError("canceled"))).toBe("canceled");
-    expect(classifyError(Object.assign(new Error("x"), { name: "AbortError" }))).toBe("canceled");
-    expect(classifyError(new AxiosError("timeout of 800ms exceeded", "ETIMEDOUT"))).toBe("timeout");
-    expect(classifyError(new AxiosError("timeout of 800ms exceeded", "ECONNABORTED"))).toBe("timeout");
-    expect(classifyError(new AxiosError("Network Error", "ERR_NETWORK"))).toBe("network");
-    expect(classifyError(Object.assign(new AxiosError("connect", "ECONNREFUSED")))).toBe("network");
-    expect(classifyError(Object.assign(new AxiosError("fetch failed", "ERR_NETWORK"), { cause: { code: "ENOTFOUND" } }))).toBe("network");
-    expect(classifyError(new AxiosError("stream has been aborted", "ERR_BAD_RESPONSE"))).toBe("network");
-    expect(classifyError(Object.assign(new AxiosError("bad json", "ERR_BAD_RESPONSE"), { [PARSE_MARK]: true }))).toBe("parse");
-    expect(classifyError(new SyntaxError("Unexpected token"))).toBe("parse");
-  });
-
-  it("auth 插件自身抛出的错误与标签优先", () => {
-    expect(classifyError(new Error(`${AUTH_DENIED_MESSAGE}`))).toBe("unauthenticated");
-    expect(classifyError(new Error(`${AUTH_REFRESH_FAILED_MESSAGE}; aborting request`))).toBe("expired");
-    expect(classifyError(respErr(401), { tags: new Set(["expired"]) })).toBe("expired");
-    expect(classifyError(respErr(403), { tags: new Set(["denied"]) })).toBe("denied");
-    expect(classifyError(respErr(401), { tags: new Set(["unauthenticated", "expired"]) })).toBe("expired");
-  });
-
-  it("认不出来的错误给 unknown:，不会被当成任何已知类别", () => {
-    expect(classifyError(new TypeError("weird"))).toMatch(/^unknown:TypeError:weird/);
+describe("classifyError：非 IAxpResponse 一律 unknown:（意味着 axp 有 bug）", () => {
+  it("不再识别 axios 错误、ApiError、取消、解析、auth 消息等旧形态", () => {
+    expect(classifyError(respErr(500))).toMatch(/^unknown:AxiosError:/);
+    expect(classifyError(respErr(401))).toMatch(/^unknown:AxiosError:/);
+    expect(classifyError(new axios.CanceledError("canceled"))).toBe("unknown:CanceledError:canceled");
+    expect(classifyError(Object.assign(new Error("x"), { name: "AbortError" }))).toBe("unknown:AbortError:x");
+    expect(classifyError(new AxiosError("timeout of 800ms exceeded", "ETIMEDOUT"))).toMatch(/^unknown:AxiosError:/);
+    expect(classifyError(new AxiosError("Network Error", "ERR_NETWORK"))).toMatch(/^unknown:AxiosError:/);
+    expect(classifyError(Object.assign(new Error("x"), { name: "ApiError", response: { status: 200, code: 1001 } }))).toBe("unknown:ApiError:x");
+    expect(classifyError(new Error(OLD_DENIED_MESSAGE))).toBe(`unknown:Error:${OLD_DENIED_MESSAGE}`);
+    expect(classifyError(new Error(`${OLD_REFRESH_FAILED_MESSAGE}; aborting request`))).toBe(`unknown:Error:${OLD_REFRESH_FAILED_MESSAGE}; aborting request`);
+    expect(classifyError(new SyntaxError("Unexpected token"))).toMatch(/^unknown:SyntaxError:/);
     expect(classifyError("string error")).toMatch(/^unknown:/);
+  });
+
+  it("消息只保留前 80 个字符", () => {
+    const text = classifyError(new Error("x".repeat(200)));
+    expect(text).toBe(`unknown:Error:${"x".repeat(80)}`);
   });
 });
 
@@ -150,7 +140,7 @@ describe("错误类别匹配：status:<n> 随风格", () => {
   });
 });
 
-describe("classifyError：真实 axios 错误（http 与 fetch 两种 adapter）", () => {
+describe.skipIf(!hasDist)("classifyError：axp 真实抛出的失败（http 与 fetch 两种 adapter）", () => {
   let server: http.Server;
   let port: number;
   const sockets = new Set<net.Socket>();
@@ -161,6 +151,18 @@ describe("classifyError：真实 axios 错误（http 与 fetch 两种 adapter）
       if (req.url === "/500") {
         res.writeHead(500, { "content-type": "application/json" });
         return void res.end('{"code":500}');
+      }
+      if (req.url === "/bad_json") {
+        res.writeHead(200, { "content-type": "application/json" });
+        return void res.end("{oops");
+      }
+      if (req.url === "/html") {
+        res.writeHead(200, { "content-type": "text/html" });
+        return void res.end("<html>gateway</html>");
+      }
+      if (req.url === "/biz") {
+        res.writeHead(200, { "content-type": "application/json" });
+        return void res.end('{"code":1001,"message":"stock","data":null}');
       }
       res.writeHead(200, { "content-type": "application/json" });
       res.end('{"code":0,"data":{}}');
@@ -188,14 +190,27 @@ describe("classifyError：真实 axios 错误（http 与 fetch 两种 adapter）
 
   for (const adapter of ["http", "fetch"] as const) {
     describe(`adapter=${adapter}`, () => {
-      const call = (url: string, extra: Record<string, unknown> = {}) =>
-        axios.get(url, { adapter, ...extra }).then(
+      /** 经真实的 createAxp（打包产物）发请求，返回抛出的东西；成功返回 null */
+      const call = async (url: string, extra: Record<string, unknown> = {}): Promise<unknown> => {
+        const { createAxp, axpResponse } = await import("@codejoo/axp");
+        const api = createAxp({ axios: axios.create({ adapter }), response: axpResponse({ expectJson: true }) });
+        return api.request({ url, ...extra }).then(
           () => null,
           (e: unknown) => e,
         );
+      };
 
       it("HTTP 500 → http:500", async () => {
         expect(classifyError(await call(`http://127.0.0.1:${port}/500`))).toBe("http:500");
+      });
+
+      it("HTTP 200 + 非 0 业务码 → business:<code>", async () => {
+        expect(classifyError(await call(`http://127.0.0.1:${port}/biz`))).toBe("business:1001");
+      });
+
+      it("声明 JSON 却没解析成功、或网关 HTML 拦截页 → parse", async () => {
+        expect(classifyError(await call(`http://127.0.0.1:${port}/bad_json`))).toBe("parse");
+        expect(classifyError(await call(`http://127.0.0.1:${port}/html`))).toBe("parse");
       });
 
       it("连接被拒 → network", async () => {

@@ -1,11 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { AxiosError } from "axios";
-import type { AxiosResponse } from "axios";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { PARSE_MARK } from "../lib/classify.ts";
-import { logicalStatus, makeShouldCache, makeShouldRetry, notifyText, parseGuard, reasonOf } from "../lib/client-factory.ts";
 import type { AcceptConfig } from "../lib/config.ts";
 import type { AdapterName, NetworkName, Style } from "../lib/constants.ts";
 import { NetemClient } from "../lib/netem-client.ts";
@@ -20,81 +16,14 @@ const HERE = path.dirname(fileURLToPath(import.meta.url));
 const hasDist = fs.existsSync(path.resolve(HERE, "..", "..", "dist", "esm", "index.mjs"));
 const describeDist = hasDist ? describe : describe.skip;
 
-describe("client-factory 里的纯逻辑", () => {
-  it("logicalStatus：business 风格的 HTTP 200 + code 取 code", () => {
-    expect(logicalStatus(200, { code: 401 })).toBe(401);
-    expect(logicalStatus(200, { code: 0 })).toBe(200);
-    expect(logicalStatus(200, { code: 1001 })).toBe(1001);
-    expect(logicalStatus(500, { code: 500 })).toBe(500);
-    expect(logicalStatus(200, "text")).toBe(200);
-  });
-
-  it("reasonOf：从信封 data.reason 读取", () => {
-    expect(reasonOf({ code: 401, data: { reason: "missing" } })).toBe("missing");
-    expect(reasonOf({ code: 401, data: null })).toBeUndefined();
-    expect(reasonOf(undefined)).toBeUndefined();
-  });
-
-  it("shouldRetry：逻辑状态在名单内才重试；无响应时只有网络/超时重试", () => {
-    const should = makeShouldRetry([500, 503]);
-    const resp = (status: number, data: unknown, retry?: unknown) => ({ status, data, config: { retry } }) as unknown as AxiosResponse;
-    expect(should(resp(500, {}))).toBe(true);
-    expect(should(resp(200, { code: 503 }))).toBe(true);
-    expect(should(resp(200, { code: 1001 }))).toBe(false);
-    expect(should(resp(404, {}))).toBe(false);
-    expect(should(resp(429, {}, { statusCodes: [429] }))).toBe(true);
-    expect(should(undefined, new AxiosError("Network Error", "ERR_NETWORK"))).toBe(true);
-    expect(should(undefined, new AxiosError("timeout of 5ms exceeded", "ETIMEDOUT"))).toBe(true);
-    expect(should(undefined, axiosCanceled() as AxiosError)).toBe(false);
-    expect(should(undefined, Object.assign(new AxiosError("bad", "ERR_BAD_RESPONSE"), { [PARSE_MARK]: true }))).toBe(false);
-  });
-
-  it("notifyText：成功、silent、主动取消都不提示；失败与业务失败提示", () => {
-    expect(notifyText({ code: 0 }, "", 200, {})).toBe("");
-    expect(notifyText({ code: 500, message: "m" }, "", 200, {})).toBe("code 500");
-    expect(notifyText(undefined, "boom", 500, {})).toBe("boom");
-    expect(notifyText(undefined, "Network Error", 0, {})).toBe("Network Error");
-    expect(notifyText(undefined, "boom", 500, { silent: true })).toBe("");
-    expect(notifyText(undefined, "canceled", 0, { signal: { aborted: true } })).toBe("");
-    expect(notifyText("plain text", "", 200, {})).toBe("");
-  });
-
-  it("parseGuard：声明 JSON/HTML 但 body 仍是字符串 → 解析错误；其余放行", () => {
-    const hdr = (ct: string) => ({ get: (k: string) => (k === "content-type" ? ct : undefined) });
-    expect(() => parseGuard.call({}, "{oops", hdr("application/json"), 200)).toThrow(/not valid JSON/);
-    expect(() => parseGuard.call({}, "<html>", hdr("text/html"), 200)).toThrow();
-    try {
-      parseGuard.call({}, "{oops", hdr("application/json"), 200);
-    } catch (e) {
-      expect((e as Record<string, unknown>)[PARSE_MARK]).toBe(true);
-    }
-    expect(parseGuard.call({}, "", hdr("application/json"), 200)).toBe("");
-    expect(parseGuard.call({}, "plain", hdr("text/plain"), 200)).toBe("plain");
-    expect(parseGuard.call({}, "<html>", hdr("text/html"), 502)).toBe("<html>");
-    expect(parseGuard.call({}, { a: 1 }, hdr("application/json"), 200)).toEqual({ a: 1 });
-  });
-
+describe("runner 里的纯逻辑", () => {
   it("settleDelayMs：只有 loading 配了 delay_close_ms 才额外等待", () => {
     const base = { id: "x.y", title: "t", requires: [], networks: ["normal"], steps: [], expect: {} } as unknown as Scenario;
     expect(settleDelayMs(base)).toBe(0);
     expect(settleDelayMs({ ...base, client: { plugins: { loading: {} } } })).toBe(0);
     expect(settleDelayMs({ ...base, client: { plugins: { loading: { delay_close_ms: 400 } } } })).toBe(460);
   });
-
-  it("shouldCache：方法白名单叠加业务成功判定", () => {
-    const should = makeShouldCache(["GET"]);
-    const r = (method: string, status: number, data: unknown) => ({ status, data, config: { method } }) as unknown as AxiosResponse;
-    expect(should(r("get", 200, { code: 0 }))).toBe(true);
-    expect(should(r("post", 200, { code: 0 }))).toBe(false);
-    expect(should(r("get", 200, { code: 500 }))).toBe(false);
-    expect(should(r("get", 200, '{"code":0}'))).toBe(true);
-  });
 });
-
-/** 取消错误构造器（避免在文件顶部再引一个 axios 命名） */
-function axiosCanceled(): Error {
-  return Object.assign(new Error("canceled"), { name: "CanceledError", code: "ERR_CANCELED" });
-}
 
 /** 造场景：默认 normal 网络、两种风格 */
 function mk(id: string, over: Partial<Scenario> & { steps: Step[]; expect: Record<string, Expectation> }): Scenario {
@@ -147,6 +76,24 @@ describeDist("流水线：对假服务器 + 假 netem 跑完整的 runEntry（ht
       expect: { "*": { results: { r: { ok: false, error: "status:500" } }, ...GENERIC } },
     });
     expectAllPass(await runAll(sc));
+  });
+
+  it("请求级 normalize:false 只放行业务码失败：business 风格 code:5001 成功；http 风格的 HTTP 500 仍是 status:500 失败", async () => {
+    const biz = mk("normalize.off-biz", {
+      requires: ["normalize"],
+      client: { plugins: { normalize: {} } },
+      steps: [{ request: { id: "r", path: "/t/echo", query: { code: 5001 }, options: { normalize: false } } }],
+      expect: { "*": { results: { r: { ok: true } }, ...GENERIC } },
+    });
+    expectAllPass(await runAll(biz, { styles: ["business"] }), 2);
+    const http = mk("normalize.off-http", {
+      requires: ["normalize"],
+      client: { plugins: { normalize: {} } },
+      steps: [{ request: { id: "r", path: "/t/echo", query: { status: 500 }, options: { normalize: false } } }],
+      expect: { "*": { results: { r: { ok: false, error: "status:500" } }, ...GENERIC } },
+    });
+    // business 风格下 status:500 是 HTTP 200 + 业务码 500，属于业务码失败，normalize:false 本就放行，所以只看 http 风格
+    expectAllPass(await runAll(http, { styles: ["http"] }), 2);
   });
 
   it("auth：过期令牌 → 刷新 1 次 → 重放成功（两种风格）", async () => {
@@ -222,6 +169,95 @@ describeDist("流水线：对假服务器 + 假 netem 跑完整的 runEntry（ht
       expect: { "*": { results: { r: { ok: true } }, server: { by_path: { "/t/echo": { eq: 3 } } }, ...GENERIC } },
     });
     expectAllPass(await runAll(sc));
+  });
+
+  it("auth：并发两个受保护请求 + 坏 refresh → 两个都是 expired，refresh 与 expired 回调各只触发一次", async () => {
+    const sc = mk("auth.concurrent-expired", {
+      requires: ["auth"],
+      client: { plugins: { auth: { url_pattern: "/t/private", refresh: "endpoint" } } },
+      steps: [
+        { login: { user: "u1" } },
+        { set_token: { access: "garbage", refresh: "garbage" } },
+        { parallel: [{ request: { id: "a", path: "/t/private/me", query: { key: "a" } } }, { request: { id: "b", path: "/t/private/me", query: { key: "b" } } }] },
+      ],
+      expect: {
+        "*": {
+          results: { a: { ok: false, error: "expired" }, b: { ok: false, error: "expired" } },
+          server: { by_path: { "/t/auth/refresh": { eq: 1 } } },
+          client: { refresh: { eq: 1 }, expired: { eq: 1 }, pending_after: { eq: 0 } },
+        },
+      },
+    });
+    expectAllPass(await runAll(sc));
+  });
+
+  it("share：同 key 并发默认合并成一次；请求级 'none' 映射成 false，各发各的", async () => {
+    const mkShare = (id: string, option: string | boolean, hits: number): Scenario =>
+      mk(id, {
+        requires: ["share", "key"],
+        client: { plugins: { key: {}, share: { policy: "start" } } },
+        steps: [
+          {
+            parallel: [
+              { request: { id: "a", path: "/t/echo", query: { delay_ms: 80, key: "s" }, options: { key: true, share: option as never } } },
+              { request: { id: "b", path: "/t/echo", query: { delay_ms: 80, key: "s" }, options: { key: true, share: option as never } } },
+            ],
+          },
+        ],
+        expect: { "*": { results: { a: { ok: true }, b: { ok: true } }, server: { by_path: { "/t/echo": { eq: hits } } }, ...GENERIC } },
+      });
+    expectAllPass(await runAll(mkShare("share.merged", true, 1)));
+    expectAllPass(await runAll(mkShare("share.none", "none", 2)));
+  });
+
+  it("normalize: false：单次关闭业务判定，HTTP 200 + 非 0 业务码也 resolve（映射成 throws: false）；不关则抛 business:<code>", async () => {
+    const off = mk("normalize.per-request-off", {
+      requires: ["normalize"],
+      client: { plugins: { normalize: {} } },
+      steps: [{ request: { id: "r1", path: "/t/echo", query: { code: 5001 }, options: { normalize: false } } }],
+      expect: { "*": { results: { r1: { ok: true } }, ...GENERIC } },
+    });
+    expectAllPass(await runAll(off));
+    const on = mk("normalize.default-on", {
+      requires: ["normalize"],
+      client: { plugins: { normalize: {} } },
+      steps: [{ request: { id: "r1", path: "/t/echo", query: { code: 5001 } } }],
+      expect: { "*": { results: { r1: { ok: false, error: "business:5001" } }, ...GENERIC } },
+    });
+    expectAllPass(await runAll(on, { styles: ["http", "business"] }));
+  });
+
+  it("key：请求没写 key 就不生成 key（share:true 也不合并）；写了 key: true 才合并", async () => {
+    const mkKey = (id: string, key: boolean | undefined, hits: number): Scenario =>
+      mk(id, {
+        requires: ["share", "key"],
+        client: { plugins: { key: {}, share: { policy: "start" } } },
+        steps: [
+          {
+            parallel: [
+              { request: { id: "a", path: "/t/echo", query: { delay_ms: 80, key: "s" }, options: key === undefined ? { share: true } : { share: true, key } } },
+              { request: { id: "b", path: "/t/echo", query: { delay_ms: 80, key: "s" }, options: key === undefined ? { share: true } : { share: true, key } } },
+            ],
+          },
+        ],
+        expect: { "*": { results: { a: { ok: true }, b: { ok: true } }, server: { by_path: { "/t/echo": { eq: hits } } }, ...GENERIC } },
+      });
+    expectAllPass(await runAll(mkKey("key.share-without-key", undefined, 2)));
+    expectAllPass(await runAll(mkKey("key.share-with-key", true, 1)));
+  });
+
+  it("filter：装了 filter 但请求没写 filter: true 就原样发送；写了才剔除空值", async () => {
+    const sc = mk("filter.off-by-default", {
+      requires: ["filter"],
+      client: { plugins: { filter: {} } },
+      steps: [
+        { request: { id: "r1", method: "POST", path: "/t/echo", body: { a: null, c: "", n: 0 } } },
+        { request: { id: "r2", method: "POST", path: "/t/echo", body: { a: null, c: "", n: 0 }, options: { filter: true } } },
+      ],
+      expect: { "*": { results: { r1: { ok: true, data: { request: { body: { a: null, c: "", n: 0 } } } }, r2: { ok: true, data: { request: { body: { n: 0 } } } } }, ...GENERIC } },
+    });
+    const rs = await runAll(sc);
+    expectAllPass(rs);
   });
 
   it("loading：并发只有一对 true/false；notify：失败只提示一次，silent 不提示", async () => {

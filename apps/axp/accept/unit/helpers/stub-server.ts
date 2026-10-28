@@ -184,6 +184,9 @@ export async function startStub(): Promise<StubServer> {
       entry.status = status;
       return fail(status, "injected");
     }
+    // 纯业务失败：两种风格都是 HTTP 200 + 非 0 code（CONTRACT §4.1 的 code 参数）
+    const bizCode = Number(u.searchParams.get("code") ?? 0);
+    if (bizCode !== 0) return send(200, { code: bizCode, message: "business failure", data: { reason: "injected" } });
     send(200, {
       code: 0,
       message: "ok",

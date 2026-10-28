@@ -102,7 +102,8 @@ export function reachedServer(before: Observation, after: Observation, serverKey
  * @param query 查询参数
  */
 export function serverKeyOf(method: string, path: string, query: Record<string, unknown> | undefined): string | undefined {
-  if (query && query.key !== undefined) return String(query.key);
+  const key = query?.key;
+  if (key !== undefined) return typeof key === "string" ? key : JSON.stringify(key);
   if (/[{}[\]]|\/:[A-Za-z_]/.test(path)) return undefined;
   return `${method.toUpperCase()} ${path}`;
 }

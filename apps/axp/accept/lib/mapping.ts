@@ -1,5 +1,6 @@
-import { DEFAULT_RETRY_STATUSES, PRIVATE_PREFIX, SUPPORTED_CAPABILITIES } from "./constants.ts";
-import type { PluginConfigs, RequestOptions, RequestSpec, Scenario } from "./types.ts";
+import { PRIVATE_PREFIX, SUPPORTED_CAPABILITIES } from "./constants.ts";
+import type { NetworkName, Style } from "./constants.ts";
+import type { Expectation, PluginConfigs, RequestOptions, RequestSpec, ResultExpect, Scenario } from "./types.ts";
 import { collectRequests, stepKind, STEP_KINDS, walkSteps } from "./walk.ts";
 
 /**
@@ -14,6 +15,8 @@ type OptionCheck = (value: unknown) => string | null;
 const KEY_DEEP = "deep";
 /** 中立 key 选项：只看方法+路径（新 key 服务没有这个模式，映射不了） */
 const KEY_SIMPLE = "simple";
+/** 中立 share 选项里的"不共享"：新架构没有 'none' 策略，等价于 false */
+const SHARE_NONE = "none";
 /** `key: 'simple'` 映射不了的原因：新 key 服务始终把 params（及请求体）算进 key */
 const KEY_SIMPLE_UNSUPPORTED = `axp 的 key 服务始终含 params 与请求体，没有 '${KEY_SIMPLE}'（只看方法+路径）模式`;
 
@@ -171,13 +174,14 @@ export interface MappedRequestConfig {
   protected?: boolean;
   cache?: boolean | { expires?: number; key?: string };
   retry?: number | boolean | { max?: number; delay?: number; statusCodes?: number[]; methods?: string[]; respectRetryAfter?: boolean };
-  share?: boolean | "start" | "end" | "race" | "none";
+  share?: boolean | "start" | "end" | "race";
   loading?: boolean;
   silent?: boolean;
   timeout?: number;
   key?: boolean | string;
   mock?: boolean;
-  normalize?: boolean;
+  /** 可预期失败也 resolve 出 `ok: false` 的响应而不抛出（对应中立 `normalize: false`） */
+  throws?: boolean;
   filter?: boolean;
 }
 
@@ -223,6 +227,8 @@ export function mapCacheOptions(cfg: { ttl_ms?: number; max?: number; methods?: 
 /**
  * 把中立的请求级选项翻译成 axp/axios 的请求配置字段。
  * - `key: true` / `'deep'` 都是 axp 的 `key: true`（默认含参数）；`'simple'` 映射不了，会抛错；
+ * - `share: 'none'` 翻成 `false`（新架构没有 'none' 策略）；
+ * - `normalize: false` 翻成 `throws: false`，由 client-factory 的 `passBusinessFailure` 只放行业务码失败（HTTP、网络失败照常算失败）；`normalize: true` 是内核默认，不输出；
  * - 方法名转小写（axp 的 retry.methods 只认小写）。
  * @param options 中立请求选项
  * @returns axios 配置片段；未设置的选项不出现
@@ -247,13 +253,13 @@ export function mapRequestOptions(options: RequestOptions | undefined): MappedRe
       };
     } else out.retry = o.retry;
   }
-  if (o.share !== undefined) out.share = o.share;
+  if (o.share !== undefined) out.share = o.share === SHARE_NONE ? false : o.share;
   if (o.loading !== undefined) out.loading = o.loading;
   if (o.silent !== undefined) out.silent = o.silent;
   if (o.timeout_ms !== undefined) out.timeout = o.timeout_ms;
   if (o.key !== undefined) out.key = mapKeyOption(o.key);
   if (o.mock !== undefined) out.mock = o.mock;
-  if (o.normalize !== undefined) out.normalize = o.normalize;
+  if (o.normalize === false) out.throws = false;
   if (o.filter !== undefined) out.filter = o.filter;
   return out;
 }
@@ -268,7 +274,83 @@ export function authUrlPatterns(pattern: string | undefined): string[] {
   return [p, `${p}/*`];
 }
 
-/** 生效的重试状态列表：请求级优先，其次插件级，最后中立默认值 */
-export function effectiveRetryStatuses(requestLevel: number[] | undefined, pluginLevel: number[] | undefined): number[] {
-  return requestLevel ?? pluginLevel ?? [...DEFAULT_RETRY_STATUSES];
+/**
+ * 补上中立语义里"请求不写就不生效"的两个请求级默认。它们和 axp 的默认相反，只能由请求级选项对齐：
+ * - `key`：中立语义是请求写 `key: true` 才生成 key（没生成就不能误合并、误缓存）；axp 的 key 默认惰性自动生成，所以没写时显式关闭；
+ * - `filter`：中立语义是装配了 filter、请求又没写 `filter: true` 时原样发送；axp 的 filter 装上即生效，所以没写时显式关闭。
+ * @param config mapRequestOptions 的结果
+ * @param plugins 场景的中立插件配置（只在装了 filter 时才补 `filter: false`）
+ * @returns 补完默认的请求级配置（新对象）
+ * @example withNeutralDefaults({}, { filter: {} }) // { key: false, filter: false }
+ */
+export function withNeutralDefaults(config: MappedRequestConfig, plugins: PluginConfigs | undefined): MappedRequestConfig {
+  const out = { ...config };
+  if (out.key === undefined) out.key = false;
+  if (plugins?.filter !== undefined && out.filter === undefined) out.filter = false;
+  return out;
+}
+
+/** 跳过理由：axp 把归一化做进内核、不能关闭，testkit D21 的"未装 normalize 时业务码透传"在 axp 上不适用 */
+export const SKIP_NORMALIZE_KERNEL = "axp 归一化为内核能力，不支持关闭；testkit D21 的“未装 normalize 时业务码透传”不适用";
+/** 跳过理由：场景在 blackhole 下期望 timeout，却没有配置任何超时，请求挂住直到运行被强制结束 */
+export const SKIP_BLACKHOLE_NO_TIMEOUT = "场景未配置超时，blackhole 下请求无法落定";
+
+/** 注入"HTTP 状态"的查询参数名（CONTRACT §3） */
+const QUERY_STATUS = "status";
+/** 注入"业务码"的查询参数名（CONTRACT §3） */
+const QUERY_CODE = "code";
+/** 没注入 status 时的 HTTP 状态，也是 2xx 区间的起点 */
+const HTTP_OK = 200;
+/** 2xx 区间的终点（不含） */
+const HTTP_SUCCESS_END = 300;
+/** 业务成功的码 */
+const CODE_OK = 0;
+/** 预期里"超时"类别的名字 */
+const EXPECT_TIMEOUT = "timeout";
+
+/**
+ * 判断一个请求按服务端规则会不会返回"HTTP 2xx + 非 0 业务码"的纯业务失败（CONTRACT 附录 A.4、B.1）：
+ * http 风格下 HTTP 状态取 `status`，business 风格下一律 200；业务码取 `code`，没写就取 `status`（`status` 为 200 时取 0）。
+ * @param query 请求的查询参数
+ * @param style 响应风格
+ * @returns 是纯业务失败时为 true
+ * @example injectsBusinessFailure({ status: 500 }, 'business') // true；同样的请求在 'http' 下是 HTTP 500，返回 false
+ */
+export function injectsBusinessFailure(query: Record<string, unknown> | undefined, style: Style): boolean {
+  const status = Number(query?.[QUERY_STATUS] ?? HTTP_OK);
+  const code = query?.[QUERY_CODE] === undefined ? (status === HTTP_OK ? CODE_OK : status) : Number(query[QUERY_CODE]);
+  const httpStatus = style === "http" ? status : HTTP_OK;
+  return Number.isFinite(code) && code !== CODE_OK && httpStatus >= HTTP_OK && httpStatus < HTTP_SUCCESS_END;
+}
+
+/** 某个请求 id 在预期里的结果（repeat 展开的 `id#i` 也算该请求） */
+function resultsOf(exp: Expectation, id: string): ResultExpect[] {
+  return Object.entries(exp.results ?? {})
+    .filter(([key]) => key === id || key.startsWith(`${id}#`))
+    .map(([, r]) => r);
+}
+
+/**
+ * 判断一个 网络×风格 格子在 axp 上是否不适用，不适用就跳过（返回理由，适用返回 null）。两条规则：
+ * 1. testkit D21：场景没装 normalize，却期望某个被注入"HTTP 2xx + 非 0 业务码"的请求成功（`ok: true`，业务码透传）。
+ *    axp 的归一化是内核能力、不能关闭，这类请求一定判失败，所以跳过；请求自己写了 `normalize: false` 的不算（映射成 `throws: false`，本来就 resolve）。
+ * 2. blackhole：期望某个请求 `timeout`，场景却没有 `base_timeout_ms`，请求也没有 `timeout_ms`，请求会一直挂到运行被强制结束，无法落定。
+ * @param scenario 场景
+ * @param network 网络预设名
+ * @param style 响应风格
+ * @param exp 该格子合并后的预期
+ * @returns 跳过理由；适用返回 null
+ * @example inapplicableReason(sc, 'normal', 'business', exp) // SKIP_NORMALIZE_KERNEL
+ */
+export function inapplicableReason(scenario: Scenario, network: NetworkName, style: Style, exp: Expectation): string | null {
+  const requests = collectRequests(scenario.steps);
+  if (scenario.client?.plugins?.normalize === undefined) {
+    const passthrough = requests.some((req) => req.options?.normalize !== false && injectsBusinessFailure(req.query, style) && resultsOf(exp, req.id).some((r) => r.ok === true));
+    if (passthrough) return SKIP_NORMALIZE_KERNEL;
+  }
+  if (network === "blackhole" && scenario.client?.base_timeout_ms === undefined) {
+    const hangs = requests.some((req) => req.options?.timeout_ms === undefined && resultsOf(exp, req.id).some((r) => [r.error].flat().includes(EXPECT_TIMEOUT)));
+    if (hangs) return SKIP_BLACKHOLE_NO_TIMEOUT;
+  }
+  return null;
 }

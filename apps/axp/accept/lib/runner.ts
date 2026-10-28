@@ -38,7 +38,7 @@ const TIMEOUT = Symbol("run-timeout");
  * @param fn 处理函数
  */
 export async function mapPool<T, R>(items: T[], limit: number, fn: (item: T, index: number) => Promise<R>): Promise<R[]> {
-  const out = new Array<R>(items.length);
+  const out: R[] = [];
   let next = 0;
   const worker = async (): Promise<void> => {
     while (next < items.length) {
@@ -130,10 +130,9 @@ export async function runEntry(entry: PlanEntry, seq: number, deps: RunnerDeps):
       loading: events.onLoading,
       notify: events.onNotify,
       refresh: events.onRefresh,
-      expired: (t) => events.onExpired(t),
-      denied: (t) => events.onDenied(t),
-      unauthenticated: (t) => events.onUnauthenticated(t),
-      expiredMarked: (t) => events.markExpired(t),
+      expired: events.onExpired,
+      denied: events.onDenied,
+      unauthenticated: events.onUnauthenticated,
     },
     getStyle: () => server.style,
     runId,
@@ -143,7 +142,6 @@ export async function runEntry(entry: PlanEntry, seq: number, deps: RunnerDeps):
     server,
     netem: deps.netem,
     tokens,
-    events,
     tracker,
     serverUrl: deps.config.server,
     proxy,

@@ -3,7 +3,7 @@ import { classifyError } from "./classify.ts";
 import type { ClientHandle } from "./client-factory.ts";
 import { DNS_FAIL_HOST, EXPIRE_LOCAL_TTL_MS, EXPIRE_LOCAL_WAIT_MS } from "./constants.ts";
 import type { Style } from "./constants.ts";
-import type { EventLog, PendingTracker } from "./events.ts";
+import type { PendingTracker } from "./events.ts";
 import type { RequestRecord } from "./assertions.ts";
 import { reachedServer, serverKeyOf } from "./matchers.ts";
 import type { Observation } from "./matchers.ts";
@@ -26,7 +26,6 @@ export interface RunEnvDeps {
   server: ServerClient;
   netem: NetemClient;
   tokens: TokenStore;
-  events: EventLog;
   tracker: PendingTracker;
   /** 测试服务器地址（dns 切换与 netem upstream 用） */
   serverUrl: string;
@@ -51,7 +50,6 @@ export class RunEnvironment implements StepEnv {
   readonly order: string[] = [];
   /** 运行被中止（超时）后，不再发起新动作 */
   stopped = false;
-  #seq = 0;
   #d: RunEnvDeps;
   #proxy: ProxyEndpoint | undefined;
 
@@ -81,9 +79,8 @@ export class RunEnvironment implements StepEnv {
 
   async request(spec: RequestSpec, idSuffix: string): Promise<void> {
     if (this.stopped) return;
-    const { client, tracker, events, server } = this.#d;
+    const { client, tracker, server } = this.#d;
     const id = `${spec.id}${idSuffix}`;
-    const tkReq = `${id}~${++this.#seq}`;
     const style: Style = server.style;
     const probe = this.#d.reachIds.has(id);
     const before = probe ? await this.#observe() : undefined;
@@ -92,20 +89,13 @@ export class RunEnvironment implements StepEnv {
     const record: RequestRecord = { id, style, ok: false };
     tracker.start();
     try {
-      record.data = await client.send(spec, { tkReq, signal: ctrl?.signal });
+      record.data = await client.send(spec, { signal: ctrl?.signal });
       record.ok = true;
     } catch (e) {
-      record.kind = classifyError(e, { style, tags: events.tagsOf(tkReq) });
+      record.kind = classifyError(e);
       record.message = (e as Error)?.message;
     } finally {
       if (timer) clearTimeout(timer);
-    }
-    // 业务风格下 auth 在"过期/越权"后会把失败响应原样 resolve，此时以 auth 标签为准判为失败
-    const tags = events.tagsOf(tkReq);
-    if (record.ok && tags.size > 0) {
-      record.ok = false;
-      record.data = undefined;
-      record.kind = classifyError(undefined, { style, tags });
     }
     tracker.settle();
     this.order.push(id);
@@ -121,7 +111,6 @@ export class RunEnvironment implements StepEnv {
     const t = await server.login(spec);
     tokens.set(t.accessToken, t.refreshToken);
     tokens.user = spec.user ?? DEFAULT_USER;
-    tokens.canRefresh = true;
   }
 
   setToken(spec: SetTokenSpec): void {
@@ -146,7 +135,6 @@ export class RunEnvironment implements StepEnv {
     // 向服务器重新登录一个 ttl=1 的会话，只取它的 access，refresh 保持不变
     const t = await server.login({ user: tokens.user, access_ttl_ms: EXPIRE_LOCAL_TTL_MS });
     tokens.setAccessHeader(`Bearer ${t.accessToken}`);
-    tokens.canRefresh = true;
     await this.sleep(EXPIRE_LOCAL_WAIT_MS);
   }
 

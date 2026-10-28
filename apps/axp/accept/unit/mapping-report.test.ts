@@ -3,7 +3,19 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 import { KERNEL_CAPABILITIES, PLUGIN_CAPABILITIES, SUPPORTED_CAPABILITIES } from "../lib/constants.ts";
-import { checkRequestOptions, validateScenarioMapping, mapCacheOptions, mapKeyOption, mapRequestOptions, authUrlPatterns, PLUGIN_OPTION_MAP, REQUEST_OPTION_MAP, UNSUPPORTED_PLUGINS } from "../lib/mapping.ts";
+import {
+  checkRequestOptions,
+  validateScenarioMapping,
+  mapCacheOptions,
+  mapKeyOption,
+  mapRequestOptions,
+  withNeutralDefaults,
+  injectsBusinessFailure,
+  authUrlPatterns,
+  PLUGIN_OPTION_MAP,
+  REQUEST_OPTION_MAP,
+  UNSUPPORTED_PLUGINS,
+} from "../lib/mapping.ts";
 import { parseConfig } from "../lib/config.ts";
 import { analyzeDryRun, renderDryRun } from "../lib/dry-run.ts";
 import { buildPlan } from "../lib/plan.ts";
@@ -27,9 +39,25 @@ describe("映射：中立选项 → axp 参数", () => {
       share: "race",
       loading: false,
       mock: true,
-      normalize: false,
+      throws: false,
     });
     expect(mapRequestOptions(undefined)).toEqual({});
+  });
+
+  it("normalize: false 翻成 throws: false（失败也 resolve 出响应）；normalize: true 是内核默认，不输出任何字段", () => {
+    expect(mapRequestOptions({ normalize: false })).toEqual({ throws: false });
+    expect(mapRequestOptions({ normalize: true })).toEqual({});
+    expect(mapRequestOptions({ normalize: false })).not.toHaveProperty("normalize");
+  });
+
+  it("share: 'none' 翻成 false（新架构没有 'none' 策略）；true 与策略名原样", () => {
+    expect(mapRequestOptions({ share: "none" }).share).toBe(false);
+    expect(mapRequestOptions({ share: false }).share).toBe(false);
+    expect(mapRequestOptions({ share: true }).share).toBe(true);
+    for (const policy of ["start", "end", "race"] as const) expect(mapRequestOptions({ share: policy }).share).toBe(policy);
+    expect(mapRequestOptions({})).not.toHaveProperty("share");
+    // 'none' 仍是合法的中立写法，能过校验
+    expect(checkRequestOptions({ id: "r", path: "/x", options: { share: "none" } })).toEqual([]);
   });
 
   it("key：中立 true 直接是 axp 默认行为（含参数），'deep' 是同义写法也翻成 true；false 与显式字符串原样", () => {
@@ -57,6 +85,36 @@ describe("映射：中立选项 → axp 参数", () => {
     expect(mapCacheOptions({ methods: [] })).toEqual({ methods: [] });
     expect(validateScenarioMapping(sc({ client: { plugins: { cache: { ttl_ms: 1, methods: ["GET", "PUT"] } } } }))).toEqual([]);
     expect(validateScenarioMapping(sc({ client: { plugins: { cache: { methods: "GET" } } } }))[0]).toMatch(/cache\.methods: 需要字符串数组/);
+  });
+
+  it("中立默认：请求没写 key 就显式 key: false；装了 filter 且请求没写时显式 filter: false；写了的不动", () => {
+    expect(withNeutralDefaults({}, undefined)).toEqual({ key: false });
+    expect(withNeutralDefaults({}, { filter: {} })).toEqual({ key: false, filter: false });
+    expect(withNeutralDefaults({ key: true, filter: true }, { filter: {} })).toEqual({ key: true, filter: true });
+    expect(withNeutralDefaults({ key: "fixed" }, { cache: {} })).toEqual({ key: "fixed" });
+    // 没装 filter 就不碰 filter
+    expect(withNeutralDefaults({}, { cache: {} })).not.toHaveProperty("filter");
+    // 不改入参
+    const input = {};
+    withNeutralDefaults(input, { filter: {} });
+    expect(input).toEqual({});
+  });
+
+  it("injectsBusinessFailure：按服务端规则判断是否纯业务失败（HTTP 2xx + 非 0 业务码）", () => {
+    // status=500：http 风格是 HTTP 500（不是纯业务失败），business 风格是 HTTP 200 + code 500
+    expect(injectsBusinessFailure({ status: 500 }, "http")).toBe(false);
+    expect(injectsBusinessFailure({ status: 500 }, "business")).toBe(true);
+    // code=1001（不写 status）：两种风格都是 HTTP 200 + 业务码
+    expect(injectsBusinessFailure({ code: 1001 }, "http")).toBe(true);
+    expect(injectsBusinessFailure({ code: 1001 }, "business")).toBe(true);
+    // status 与 code 同时出现：http 风格以 HTTP 状态为准
+    expect(injectsBusinessFailure({ status: 500, code: 5001 }, "http")).toBe(false);
+    expect(injectsBusinessFailure({ status: 500, code: 5001 }, "business")).toBe(true);
+    // 没注入、code=0、非数字：都不是
+    expect(injectsBusinessFailure(undefined, "business")).toBe(false);
+    expect(injectsBusinessFailure({ delay_ms: 5 }, "business")).toBe(false);
+    expect(injectsBusinessFailure({ code: 0 }, "business")).toBe(false);
+    expect(injectsBusinessFailure({ code: "abc" }, "business")).toBe(false);
   });
 
   it("filter：请求级布尔原样映射成 config.filter；非布尔显式报错", () => {

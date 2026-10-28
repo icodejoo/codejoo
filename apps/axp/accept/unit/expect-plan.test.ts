@@ -68,6 +68,50 @@ describe("plan：场景 × 网络 × 风格 × adapter", () => {
     expect(plan.find((e) => e.network === "offline")?.decision).toMatchObject({ category: "not-applicable", reason: "not applicable: 断网时无意义" });
   });
 
+  it("D21：没装 normalize 却期望业务码透传成功 → 该风格跳过（理由写明内核不可关闭）；装了 normalize 或失败本就是 HTTP 失败则照常执行", () => {
+    const req = (id: string, query: Record<string, unknown>, options?: Record<string, unknown>) => ({ request: { id, path: "/t/echo", query, ...(options ? { options } : {}) } });
+    const decisions = (s: Scenario) => Object.fromEntries(buildPlan([s], { ...NO_FILTER, adapters: ["http"] }).map((e) => [e.style, e.decision.kind]));
+    // status=500：business 风格是 HTTP 200 + code 500（业务失败，期望透传成功 → 跳过），http 风格是 HTTP 500（照常执行）
+    const status500 = sc({ steps: [req("r", { status: 500 })], expect: { "*": { results: { r: { ok: false } } }, "normal@business": { results: { r: { ok: true } } } } });
+    expect(decisions(status500)).toEqual({ http: "run", business: "skip" });
+    expect(buildPlan([status500], { ...NO_FILTER, adapters: ["http"], styles: ["business"] })[0]?.decision).toMatchObject({
+      category: "not-applicable",
+      reason: expect.stringContaining("axp 归一化为内核能力，不支持关闭"),
+    });
+    // code=5001（不写 status）：两种风格都是 HTTP 200 + 业务码，都跳过
+    const code5001 = sc({ steps: [req("r", { code: 5001 })], expect: { "*": { results: { r: { ok: true } } } } });
+    expect(decisions(code5001)).toEqual({ http: "skip", business: "skip" });
+    // 装了 normalize：业务码本来就判失败，不属于这条规则
+    expect(decisions({ ...code5001, client: { plugins: { normalize: {} } } })).toEqual({ http: "run", business: "run" });
+    // 请求自己写了 normalize: false（映射成 throws: false）：本来就 resolve，照常执行
+    expect(decisions(sc({ steps: [req("r", { code: 5001 }, { normalize: false })], expect: { "*": { results: { r: { ok: true } } } } }))).toEqual({ http: "run", business: "run" });
+    // 期望的就是失败：照常执行
+    expect(decisions(sc({ steps: [req("r", { code: 5001 })], expect: { "*": { results: { r: { ok: false, error: "business:5001" } } } } }))).toEqual({ http: "run", business: "run" });
+    // 没有注入失败的普通请求：照常执行
+    expect(decisions(sc({ steps: [req("r", {})], expect: { "*": { results: { r: { ok: true } } } } }))).toEqual({ http: "run", business: "run" });
+    // repeat 展开的 id#i 也算同一个请求
+    const repeated = sc({ steps: [{ repeat: { times: 2, step: req("r", { code: 5001 }) } }], expect: { "*": { results: { "r#0": { ok: true }, "r#1": { ok: true } } } } });
+    expect(decisions(repeated)).toEqual({ http: "skip", business: "skip" });
+  });
+
+  it("blackhole 下期望 timeout 却没配任何超时 → 只跳过 blackhole 档；配了 base_timeout_ms 或请求 timeout_ms 的照常执行", () => {
+    const hang = sc({ networks: ["normal", "blackhole"], steps: [{ request: { id: "r", path: "/t/echo" } }], expect: { "*": {}, blackhole: { results: { r: { ok: false, error: "timeout" } } } } });
+    const byNet = (s: Scenario) => Object.fromEntries(buildPlan([s], { ...NO_FILTER, adapters: ["http"], styles: ["http"] }).map((e) => [e.network, e.decision]));
+    const planned = byNet(hang);
+    expect(planned.normal).toEqual({ kind: "run" });
+    expect(planned.blackhole).toMatchObject({ kind: "skip", category: "not-applicable", reason: "not applicable: 场景未配置超时，blackhole 下请求无法落定" });
+    expect(byNet({ ...hang, client: { base_timeout_ms: 500 } }).blackhole).toEqual({ kind: "run" });
+    const requestLevel = sc({
+      networks: ["blackhole"],
+      steps: [{ request: { id: "r", path: "/t/echo", options: { timeout_ms: 300 } } }],
+      expect: { "*": { results: { r: { ok: false, error: ["network", "timeout"] } } } },
+    });
+    expect(byNet(requestLevel).blackhole).toEqual({ kind: "run" });
+    // 期望里没有 timeout（例如只断言 pending_after），不跳过
+    const noTimeoutExpected = sc({ networks: ["blackhole"], steps: [{ request: { id: "r", path: "/t/echo" } }], expect: { "*": { results: { r: { ok: false, error: "network" } } } } });
+    expect(byNet(noTimeoutExpected).blackhole).toEqual({ kind: "run" });
+  });
+
   it("过滤：id 前缀、网络、风格、adapter", () => {
     const list = [sc({ id: "auth.a", networks: ["normal", "weak"] }), sc({ id: "cache.b", networks: ["normal"] })];
     expect(buildPlan(list, { ...NO_FILTER, ids: ["auth."] }).every((e) => e.scenario.id === "auth.a")).toBe(true);
