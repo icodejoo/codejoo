@@ -29,6 +29,7 @@ A 批（单插件规则/补丁/覆盖文件）迁移进行中，基线冻结于 
 | key（key.test、key.review、key.coverage） | 本批提交 | 83 | 0 | 0 | 0 | 0 | 0 | 83 | 是 |
 | loading（loading.test 全部 + lifecycle.coverage 的 2 条 + mock.test 的 1 条） | 本批提交 | 53 | 0 | 0 | 0 | 0 | 0 | 53 | 是 |
 | mock（mock.test 余下、mock.coverage） | 本批提交 | 29 | 0 | 0 | 0 | 0 | 0 | 29 | 是 |
+| repath（repath.test 全部 + lifecycle.coverage 的 2 条） | 本批提交 | 23 | 0 | 0 | 0 | 0 | 0 | 23 | 是 |
 
 ## 映射
 
@@ -405,3 +406,23 @@ A 批（单插件规则/补丁/覆盖文件）迁移进行中，基线冻结于 
 | test/mock.coverage.test.ts::mock — 回落决策与 adapter 配置隔离 > 缺少 mockUrl 直接发送真实请求并经自定义 sink 记录警告 | boundary/mock.boundary.test.ts::mock — 回落决策与 adapter 配置隔离 > [mock.opt.mockUrl] 缺少 mockUrl 直接发送真实请求并经自定义 sink 记录警告 | rename | 缺少 mockUrl |  |
 | test/mock.coverage.test.ts::mock — 回落决策与 adapter 配置隔离 > 真实回落失败保留真实错误，不再重复回落 | boundary/mock.boundary.test.ts::mock — 回落决策与 adapter 配置隔离 > [mock.fn.axpMock] 真实回落失败保留真实错误，不再重复回落 | rename | 回落失败不再重复回落 |  |
 | test/mock.coverage.test.ts::mock — 回落决策与 adapter 配置隔离 > 自定义判定抛错会拒绝，不发送真实回落；卸载后保持原 adapter | boundary/mock.boundary.test.ts::mock — 回落决策与 adapter 配置隔离 > [mock.cb.fallbackWhen][mock.method.cleanup] 自定义判定抛错会拒绝，不发送真实回落；卸载后保持原 adapter | rename | 判定回调抛错 |  |
+| test/repath.test.ts::repath — 三种占位风格 > {} 风格：/u/{id} + params → 替换并删除 key | rule/repath.rule.test.ts::repath — 三种占位风格 > [repath.fn.axpRepath] {} 风格：/u/{id} + params → 替换并删除 key | rename | 三种占位风格，声明行为 |  |
+| test/repath.test.ts::repath — 三种占位风格 > [] 风格：/u/[id] | rule/repath.rule.test.ts::repath — 三种占位风格 > [repath.fn.axpRepath] [] 风格：/u/[id] | rename | 三种占位风格，声明行为 |  |
+| test/repath.test.ts::repath — 三种占位风格 > : 风格单变量：/u/:id | rule/repath.rule.test.ts::repath — 三种占位风格 > [repath.fn.axpRepath] : 风格单变量：/u/:id | rename | 三种占位风格，声明行为 |  |
+| test/repath.test.ts::repath — B1 回归：冒号多段路径 > /users/:id/posts/:pid 两段都正确替换（旧版贪婪正则会吞成一段） | rule/repath.rule.test.ts::repath — B1 回归：冒号多段路径 > [repath.fn.axpRepath] /users/:id/posts/:pid 两段都正确替换（旧版贪婪正则会吞成一段） | rename | 冒号多段路径回归 B1 |  |
+| test/repath.test.ts::repath — B1 回归：冒号多段路径 > 混合风格：/mix/:id/{x}/[y] | rule/repath.rule.test.ts::repath — B1 回归：冒号多段路径 > [repath.fn.axpRepath] 混合风格：/mix/:id/{x}/[y] | rename | 冒号多段路径回归 B1 |  |
+| test/repath.test.ts::repath — 取值来源与边界 > params 缺失 → 回退 data 对象 | rule/repath.rule.test.ts::repath — 取值来源与边界 > [repath.fn.axpRepath] params 缺失 → 回退 data 对象 | rename | 取值来源（params/data） |  |
+| test/repath.test.ts::repath — 取值来源与边界 > data 为原始值 → 直接用作变量值并删除 config.data | rule/repath.rule.test.ts::repath — 取值来源与边界 > [repath.fn.axpRepath] data 为原始值 → 直接用作变量值并删除 config.data | rename | 取值来源（params/data） |  |
+| test/repath.test.ts::repath — 取值来源与边界 > 值为 0 → 用 ?? 兜底，仍替换为 "0" | boundary/repath.boundary.test.ts::repath — 取值来源与边界 > [repath.fn.axpRepath] 值为 0 → 用 ?? 兜底，仍替换为 "0" | rename | 值为 0 的零值边缘 |  |
+| test/repath.test.ts::repath — 取值来源与边界 > 无匹配值 → 原样保留占位符 | boundary/repath.boundary.test.ts::repath — 取值来源与边界 > [repath.fn.axpRepath] 无匹配值 → 原样保留占位符 | rename | 无匹配值 |  |
+| test/repath.test.ts::repath — 取值来源与边界 > removeKey:false → 替换但保留 key | rule/repath.rule.test.ts::repath — 取值来源与边界 > [repath.opt.removeKey] removeKey:false → 替换但保留 key | rename | 规则层（rule） |  |
+| test/repath.test.ts::repath — 取值来源与边界 > params 优先于 data（同名时不再 fallback 到 data） | rule/repath.rule.test.ts::repath — 取值来源与边界 > [repath.fn.axpRepath] params 优先于 data（同名时不再 fallback 到 data） | rename | params 优先于 data |  |
+| test/repath.test.ts::repath — enable 开关 > enable:false → 不安装拦截器 | rule/repath.rule.test.ts::repath — enable 开关 > [repath.opt.enable] enable:false → 不安装拦截器 | rename | 规则层（rule） |  |
+| test/repath.test.ts::repath — enable 开关 > 自定义 pattern 生效 | rule/repath.rule.test.ts::repath — enable 开关 > [repath.opt.pattern] 自定义 pattern 生效 | rename | 规则层（rule） |  |
+| test/repath.test.ts::repath — review #22 路径边界 > 只替换 pathname，完整保留 query 与 hash | boundary/repath.boundary.test.ts::repath — 路径边界 > [repath.fn.axpRepath] 只替换 pathname，完整保留 query 与 hash | rename | 路径边界，review #22 |  |
+| test/repath.test.ts::repath — review #22 路径边界 > 重复占位符从 %s 读取后统一删除（each） | boundary/repath.boundary.test.ts::repath — 路径边界 > [repath.fn.axpRepath] 重复占位符从 %s 读取后统一删除 | rename | 路径边界，review #22 |  |
+| test/repath.test.ts::repath — review #22 路径边界 > 原始 data 可用于重复占位符，替换后统一删除 | boundary/repath.boundary.test.ts::repath — 路径边界 > [repath.fn.axpRepath] 原始 data 可用于重复占位符，替换后统一删除 | rename | 路径边界，review #22 |  |
+| test/repath.test.ts::repath — review #22 路径边界 > 值按路径段编码，不能注入斜杠、query 或 hash | boundary/repath.boundary.test.ts::repath — 路径边界 > [repath.fn.axpRepath] 值按路径段编码，不能注入斜杠、query 或 hash | rename | 路径边界，review #22 |  |
+| test/repath.test.ts::repath — review #22 路径边界 > 绝对 URL 的协议和端口保持原样 | boundary/repath.boundary.test.ts::repath — 路径边界 > [repath.fn.axpRepath] 绝对 URL 的协议和端口保持原样 | rename | 路径边界，review #22 |  |
+| test/lifecycle.coverage.test.ts::envs/filter/repath — 次要分支与卸载 > repath 无 url 与无捕获组模式原样返回，卸载后不替换 | boundary/repath.boundary.test.ts::envs/filter/repath — 次要分支与卸载 > [repath.opt.pattern][repath.method.cleanup] repath 无 url 与无捕获组模式原样返回，卸载后不替换 | rename | 无 url / 无捕获组 / 卸载 |  |
+| test/lifecycle.coverage.test.ts::envs/filter/repath — 次要分支与卸载 > repath 原始请求体 %s 应可用于路径变量（each） | boundary/repath.boundary.test.ts::envs/filter/repath — 次要分支与卸载 > [repath.fn.axpRepath] repath 原始请求体 %s 应可用于路径变量 | rename | 原始请求体为 0/false/空串（each） |  |

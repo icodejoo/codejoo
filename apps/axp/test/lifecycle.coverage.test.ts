@@ -2,7 +2,6 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import axios, { AxiosError } from 'axios';
 import envs from '../src/plugins/envs';
 import filter, { $filter } from '../src/plugins/filter';
-import repath from '../src/plugins/repath';
 import normalize from '../src/plugins/normalize';
 import notify from '../src/plugins/notify';
 import cancel, { cancelAll } from '../src/plugins/cancel';
@@ -56,24 +55,6 @@ describe('envs/filter/repath — 次要分支与卸载', () => {
         off?.();
         await ax.get('/', { params: { empty: null }, filter: true });
         expect(adapter.mock.calls[1][0].params).toEqual({ empty: null });
-    });
-    it('repath 无 url 与无捕获组模式原样返回，卸载后不替换', async () => {
-        const { ax, request } = interceptors();
-        const off = repath({ pattern: /(?:x)/g }).install(ax);
-        const handler = request.use.mock.calls[0][0];
-        const config = { url: undefined, params: { id: 1 } };
-        expect(handler(config)).toBe(config);
-        expect(handler({ url: 'x' }).url).toBe('x');
-        off?.();
-        expect(request.eject).toHaveBeenCalledOnce();
-    });
-    it.each([0, false, ''])('repath 原始请求体 %s 应可用于路径变量', async (data) => {
-        const { ax, request } = interceptors();
-        repath().install(ax);
-        const config = { url: '/:id', data };
-        const result = request.use.mock.calls[0][0](config);
-        // 原始值 0/false/'' 也是有效路径值，不能被 truthy 守卫漏掉。
-        expect(result.url).toBe('/' + encodeURIComponent(String(data)));
     });
 });
 
