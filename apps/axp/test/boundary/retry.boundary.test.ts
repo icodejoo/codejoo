@@ -157,3 +157,40 @@ describe('retry: business-failure loop exhaustion and error-path behavior', () =
     expect(resp.data.code).toBe(1);
   });
 });
+
+/** 请求用的测试路径 */
+const PATH = '/attempt';
+
+describe('review #8 — 重发/重放保持请求体与首发一致', () => {
+  const transformRequest = [(d: unknown) => JSON.stringify({ payload: d })];
+
+  it('[retry.fn.axpRetry][retry.opt.methods] retry：自定义 transformRequest 不被套两层', async () => {
+    const bodies: unknown[] = [];
+    const net = makeNetwork().on('POST', PATH, (config, hit) => {
+      bodies.push(config.data);
+      return { status: hit === 1 ? 500 : 200 };
+    });
+    const ax = axios.create({ adapter: net.adapter, transformRequest });
+    Axp.install(ax, { retry: retry({ max: 1, delay: 1, methods: ['post'] }) });
+    await ax.post(PATH, { a: 1 });
+    expect(bodies).toEqual(['{"payload":{"a":1}}', '{"payload":{"a":1}}']);
+  });
+});
+
+describe('review #P3 — transformRequest 原地改 data 时重发仍用原始快照', () => {
+  it('[retry.fn.axpRetry][retry.opt.max] retry 重发的请求体不累加', async () => {
+    const bodies: unknown[] = [];
+    const net = makeNetwork().on('PUT', PATH, (config, hit) => {
+      bodies.push(config.data);
+      return { status: hit === 1 ? 500 : 200 };
+    });
+    const ax = axios.create({
+      adapter: net.adapter,
+      transformRequest: [(d: any) => { d.n++; return JSON.stringify(d); }],
+    });
+    Axp.install(ax, { retry: retry({ max: 2, delay: 1 }) });
+    const r = await ax.put(PATH, { n: 0 });
+    expect(r.status).toBe(200);
+    expect(bodies).toEqual(['{"n":1}', '{"n":1}']);
+  });
+});

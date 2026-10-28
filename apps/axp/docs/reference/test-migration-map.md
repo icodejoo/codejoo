@@ -42,6 +42,7 @@ A 批（单插件规则/补丁/覆盖文件，共 16 个提交）已迁移完成
 | powerset（dioman-powerset.test） | 待回填 | 2 | 0 | 0 | 0 | 0 | 0 | 2 | 是 |
 | auth.integration（auth.integration.test） | 待回填 | 24 | 0 | 0 | 0 | 0 | 0 | 24 | 是 |
 | integration（integration.test） | 待回填 | 8 | 0 | 0 | 0 | 0 | 0 | 8 | 是 |
+| attempt（attempt.test） | 待回填 | 5 | 0 | 0 | 0 | 0 | 0 | 5 | 是 |
 
 ## 判层备注（A 批）
 
@@ -626,3 +627,8 @@ A 批（单插件规则/补丁/覆盖文件，共 16 个提交）已迁移完成
 | test/integration.test.ts::集成 — 高并发乱序夹杂错误：无串扰 > 20 个不同请求，偶数成功/奇数 400，乱序完成 → 各自结果正确、互不串扰 | integration/core.integration.test.ts::集成 — 高并发乱序夹杂错误：无串扰 > [public.member.Core.get] 20 个不同请求，偶数成功/奇数 400，乱序完成 → 各自结果正确、互不串扰 | rename | 不装任何插件的纯 Core 并发隔离，属装配层 |  |
 | test/integration.test.ts::集成 — mock 插件「客户端回落」（404 → axios 层重发真实） > mock 路径 404 → 插件在 axios 层改打真实路径并返回真实数据 | rule/mock.rule.test.ts::集成 — mock 插件「客户端回落」（404 → axios 层重发真实） > [mock.fn.axpMock][mock.cb.fallbackWhen] mock 路径 404 → 插件在 axios 层改打真实路径并返回真实数据 | rename | 单插件声明行为：mock 路径 404 在 axios 层回落真实路径 |  |
 | test/integration.test.ts::集成 — loading 并发计数 > 多并发只 show 一次、hide 一次（计数边界） | rule/loading.rule.test.ts::集成 — loading 并发计数 > [loading.fn.$wrap][loading.cb.loading] 多并发只 show 一次、hide 一次（计数边界） | rename | 单插件声明行为：多并发只 show/hide 一次（rule 已有两并发变体） |  |
+| test/attempt.test.ts::review #7 — retry 的每次尝试经过 auth 单次尝试阶段 > 500 → 401 → 刷新 → 成功：onRefresh 1 次，最终 200 | combo/auth+retry.combo.test.ts::review #7 — retry 的每次尝试经过 auth 单次尝试阶段 > [auth.cb.onRefresh × retry.opt.max] 500 → 401 → 刷新 → 成功：onRefresh 1 次，最终 200 | rename | 两个插件交互：retry 的每次尝试都经过 auth 单次尝试阶段（500 → 401 → 刷新 → 成功）；review #7 |  |
+| test/attempt.test.ts::review #7 — retry 的每次尝试经过 auth 单次尝试阶段 > 等待重试期间 token 被别的请求刷新：重发带新 token | combo/auth+retry.combo.test.ts::review #7 — retry 的每次尝试经过 auth 单次尝试阶段 > [auth.cb.onRefresh × retry.opt.delay] 等待重试期间 token 被别的请求刷新：重发带新 token | rename | 两个插件交互：等待重试期间 token 被刷新，重发带新 token；review #7 |  |
+| test/attempt.test.ts::review #8 — 重发/重放保持请求体与首发一致 > retry：自定义 transformRequest 不被套两层 | boundary/retry.boundary.test.ts::review #8 — 重发/重放保持请求体与首发一致 > [retry.fn.axpRetry][retry.opt.methods] retry：自定义 transformRequest 不被套两层 | rename | 单插件：自定义 transformRequest 下重发请求体不被套两层，属极端输入；review #8 |  |
+| test/attempt.test.ts::review #8 — 重发/重放保持请求体与首发一致 > auth：401 刷新重放不被套两层 | boundary/auth.boundary.test.ts::review #8 — 重发/重放保持请求体与首发一致 > [auth.fn.axpAuth][auth.cb.onRefresh] auth：401 刷新重放不被套两层 | rename | 单插件：自定义 transformRequest 下 401 刷新重放请求体不被套两层，属极端输入；review #8 |  |
+| test/attempt.test.ts::review #P3 — transformRequest 原地改 data 时重发仍用原始快照 > retry 重发的请求体不累加 | boundary/retry.boundary.test.ts::review #P3 — transformRequest 原地改 data 时重发仍用原始快照 > [retry.fn.axpRetry][retry.opt.max] retry 重发的请求体不累加 | rename | 单插件：transformRequest 原地改 data 时重发仍用原始快照，属极端输入；review #P3 |  |

@@ -235,3 +235,25 @@ describe('auth: additional realistic branches', () => {
     expect(expiredCalls).toBe(1);
   });
 });
+
+/** 请求用的测试路径 */
+const PATH = '/attempt';
+
+describe('review #8 — 重发/重放保持请求体与首发一致', () => {
+  const transformRequest = [(d: unknown) => JSON.stringify({ payload: d })];
+
+  it('[auth.fn.axpAuth][auth.cb.onRefresh] auth：401 刷新重放不被套两层', async () => {
+    const bodies: unknown[] = [];
+    const net = makeNetwork().on('POST', PATH, (config, hit) => {
+      bodies.push(config.data);
+      return { status: hit === 1 ? 401 : 200 };
+    });
+    const ax = axios.create({ adapter: net.adapter, transformRequest });
+    const tm = makeTM('old');
+    Axp.install(ax, {
+      auth: auth({ tokenManager: tm, onRefresh: () => { tm.set('fresh'); return true; }, onAccessExpired: vi.fn() }),
+    });
+    await ax.post(PATH, { a: 1 });
+    expect(bodies).toEqual(['{"payload":{"a":1}}', '{"payload":{"a":1}}']);
+  });
+});
