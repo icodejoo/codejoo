@@ -4,8 +4,6 @@
 
 这是导读，不是规格。字段级细节、选项表、行为变化都在 [docs/design](docs/design/)，文中遇到会给链接，不在这里重抄。
 
-<!-- TODO: 待实现确认：§2 的内核文件（B1、B2）、plugins/ 下的 retry、auth、mock、share、cache 与三个算法模块、objects/TokenManager.ts（B3、B4）已对照 src/ 核对；index.ts 和子路径入口等 B6 落地后复核。旧实现（core.ts、install.ts、helper.ts、bag.ts、objects/Response.ts，以及 plugins/ 下的 cancel.ts、key.ts、logger.ts、normalize.ts）B5 才删除，目前与新内核并存。 -->
-
 ## 1. 一段话概述
 
 `createAxp<Schema, R>()` 造出一个客户端。一次调用就是一个逻辑请求：它从外到内穿过 5 个阶段的中间件（洋葱管线），最里面一层才调 `axios.request`。传输边界把 axios 的响应或异常判定成统一的 `R extends IAxpResponse`，链路里只流转这一种对象，`next()` 从不抛错；最外层再"落定"：成功返回 data，可预期的失败直接抛 `R`，程序 bug 抛原始异常。
@@ -39,11 +37,30 @@
 | `objects/TokenManager.ts` | 令牌管理：`ITokenManager` 接口和默认实现 `TokenManager`（内存存放，镜像到 `localStorage`），去掉了 `canRefresh`                                      |
 | `index.ts`                | 包入口，见下                                                                                                                                         |
 
+旧版的 `core.ts`、`install.ts`、`helper.ts`、`bag.ts`、`objects/Response.ts`，以及 `plugins/` 下的 `cancel.ts`、`key.ts`、`logger.ts`、`normalize.ts` 已经删除，`src/` 里只有上表这些文件。
+
 `debug` 没有独立的文件：`createAxp` 按选项挑日志器（`true` 用 `console`，对象原样用，关闭时用 `context.ts` 里共享的空实现 `NO_LOG`），插件经 `ctx.log` 使用。
 
-入口：`index.ts` 导出 `createAxp`、响应与类型、10 个插件工厂、`TokenManager` 等；子路径保留 10 个插件各自的 `./<name>` 和 `./min`，删除 `./cancel`、`./key`、`./logger`、`./normalize`。
+### 入口、子路径与产物
 
-<!-- TODO: 待实现确认：index.ts 的导出清单和 package.json exports 的最终形态，等 B6 打包后核对 -->
+`index.ts` 导出：
+
+- `createAxp`、响应相关的 `AxpResponse`、`axpResponse`、`isAxpResponse`、品牌 `AXP_RESPONSE`、类别常量 `AXP_KINDS`，以及 `stateKey`、`TokenManager`。
+- 10 个插件工厂，加上 auth 的 `AuthFailureAction`、`defaultAuthFailure` 和 cache 的 `removeCache`、`clearCache`。
+- 全部公开类型：`types.ts` 整体 `export type *`，再加上响应、context、key、`TokenManager` 和各插件选项的类型。
+
+每个带 `declare module "../types"` 的插件文件都由入口引入，请求选项的类型增强才会进入使用者的程序。
+
+构建配置在 `vite.config.ts`，产出两份：
+
+- `dist/esm/`：不打包的 ESM，入口显式列出 `src/index.ts` 和 10 个插件文件，一个源文件对应一个 `.mjs` 和一个 `.d.mts`。根入口 `.` 与插件子路径都指向这份，共用同一份模块实例。
+- `dist/index.min.js`：`./min` 指向的单文件压缩版，自带一份模块实例，类型借用 `dist/esm/index.d.mts`。和根入口混用时，品牌是 `Symbol.for`，`isAxpResponse` 能互认；插件状态、客户端实例不共享。
+
+`package.json` 的 `exports` 共 13 项：`.`、`./min`、10 个插件各自的 `./<name>`（auth、cache、envs、filter、loading、mock、notify、repath、retry、share）和 `./package.json`。`retry-timing`、`auth-match`、`cache-store` 是插件内部的算法模块，只随插件产出，不是入口，不在 `exports` 里，包外导入会报 `ERR_PACKAGE_PATH_NOT_EXPORTED`。`./cancel`、`./key`、`./logger`、`./normalize` 已删除，对应能力进了内核。新增插件要同步改 `src/index.ts`、`exports` 和 `vite.config.ts` 的 `PLUGIN_NAMES`，`test/integration/dist.integration.test.ts` 会核对 `exports` 与产物是否一致。
+
+产物里的相对 `declare module` 说明符由构建插件（`vite.config.ts` 的 `dtsAugmentationSpecifier`）改写为 `.mjs`，源码保持 `"../types"`。原因是产物里的目标文件是 `types.d.mts`，不带扩展名的相对说明符在 nodenext 和 bundler 下都解析不到，请求选项的类型增强会整体失效。
+
+### 内置插件的阶段分布
 
 10 个内置插件按阶段分布：
 

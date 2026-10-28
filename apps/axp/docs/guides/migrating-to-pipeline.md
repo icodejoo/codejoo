@@ -1,6 +1,6 @@
 ---
 title: 从旧版迁移到洋葱管线
-status: draft
+status: active
 updated: 2026-10-28
 summary: 旧写法到新写法的逐项对照：入口、错误、返回形态、删除的插件、默认值与回调签名的变化
 ---
@@ -11,7 +11,7 @@ summary: 旧写法到新写法的逐项对照：入口、错误、返回形态�
 - 失败不再是 `ApiError` 或 `AxiosError`，而是抛出归一化响应 `IAxpResponse`。判断用 `api.isResponse(e)`，需要 `Error` 时用 `reject` 适配。
 - `raw: true` 改为 `wrap: true` 后读 `r.raw`；`normalize: false` 改为 `throws: false`。
 - `axpCancel`、`axpKey`、`axpLogger`、`axpNormalize` 删除，能力并入内核。retry、filter、cache 的默认值变了，升级后要复查这几个插件的行为。
-- 下面按"旧代码 → 新代码"逐项对照。标了 TODO 的地方（子路径、根入口导出）要等 B6 打包后再校对。
+- 下面按"旧代码 → 新代码"逐项对照。删除的子路径在第 11 节，删除的类型在第 13 节。
 
 ## 1. 入口
 
@@ -245,7 +245,18 @@ axpAuth({
 - 尝试钩子 `registerAttemptHook` 删除。retry 的每次尝试本来就会经过 auth。
 - `AuthFailureAction` 有五个动作：`Refresh`、`Replay`、`Deny`、`Expired`、`Others`。第五个 `Others`（值为 `'others'`）表示与鉴权无关的失败，原样返回；`onFailure` 返回 `null`、`undefined` 或不认识的值时效果相同。
 - 本地没有 token 时，每个受保护请求都会调用一次 `onAccessDenied`，没配就回退到 `onAccessExpired`，不去重。旧版也是这样；"每一轮只通知一次"只管 401、刷新失败那条路径。
-<!-- TODO: 待实现确认：根入口是否导出 defaultAuthFailure，待 B6 确认 -->
+- 根入口导出了 `defaultAuthFailure` 和 `AuthFailureAction`（`@codejoo/axp/auth` 子路径里也有）。自定义 `onFailure` 只想改个别情况、其余沿用默认判定时，可以直接调用 `defaultAuthFailure(r, tm, ctx)`：
+
+  ```ts
+  import { AuthFailureAction, defaultAuthFailure } from "@codejoo/axp";
+
+  axpAuth({
+    tokenManager,
+    onFailure: (r, tm, ctx) => (r.code === "SESSION_KICKED" ? AuthFailureAction.Expired : defaultAuthFailure(r, tm, ctx)),
+    onRefresh: (r, tm) => refresh(tm),
+    onAccessExpired: (r, tm) => logout(),
+  });
+  ```
 
 ## 8. 请求选项不再接受函数
 
@@ -311,9 +322,13 @@ const other = api.extend({ baseURL: "/v2" }, { plugins: [axpCache()] }); // 或�
 | `@codejoo/axp/logger`    | 删除。用 `debug` 选项    |
 | `@codejoo/axp/normalize` | 删除。归一化由内核完成   |
 
-其它插件子路径（`/retry`、`/cache`、`/auth` 等）保留。
+这四个子路径已经从 `exports` 里删掉，也没有产物文件，导入会报 `ERR_PACKAGE_PATH_NOT_EXPORTED`。
 
-<!-- TODO: 待实现确认：保留的子路径清单和 package exports，等 B6 打包后确认 -->
+保留的子路径是 10 个插件各自的 `./<name>`：`auth`、`cache`、`envs`、`filter`、`loading`、`mock`、`notify`、`repath`、`retry`、`share`，以及单文件压缩版 `./min`。`package.json` 的 `exports` 另有根入口 `.` 和 `./package.json`，一共 13 项。
+
+- 插件子路径默认导出对应的工厂（`axpRetry` 等）；`./auth` 另外导出 `AuthFailureAction` 和 `defaultAuthFailure`，`./cache` 另外导出 `removeCache` 和 `clearCache`。它们和根入口给出的是同一份函数，混着导入没问题。
+- `./min` 是单文件压缩版，自带一份模块实例，类型沿用根入口。和根入口混用时 `isAxpResponse` 仍能互认，但插件状态和客户端实例不共享，一个应用里选一个用。
+- 插件内部的算法模块（`retry-timing`、`auth-match`、`cache-store`）不在 `exports` 里，包外导入不了。
 
 ## 12. 其它删除或改名
 
@@ -335,6 +350,32 @@ const other = api.extend({ baseURL: "/v2" }, { plugins: [axpCache()] }); // 或�
 | `Axp.create<T>` 的 `T`                     | `createAxp<S>` 的 `S`                                                                              |
 | `Core` 类                                  | `AxpClient`，由 `createAxp` 创建                                                                   |
 
+## 13. 已删除的类型
+
+旧版 `src/types.ts` 里的这些类型都服务于拦截器时代的 `Core` 和 `Axp.install`，已经删除。它们原先都能从 `@codejoo/axp` 导入，用到的代码会编译失败，按下表替换：
+
+| 旧类型                         | 新写法                                                                                                    |
+| ------------------------------ | --------------------------------------------------------------------------------------------------------- |
+| `Plugin`                       | `AxpPlugin`：`{ name, stage, setup, handle, taps }`                                                       |
+| `PluginCleanup`                | 无独立类型。需要清理时，在 `setup` 返回的实例上写 `dispose()`                                             |
+| `PluginLogger`                 | 并入 `AxpLogger`，成员不变，仍是 `log`、`warn`、`error`                                                   |
+| `CoreOptions`                  | `AxpOptions`，即 `createAxp` 的选项                                                                       |
+| `ICommonOptions`               | 无。它是旧插件往请求选项上加字段的空接口，现在扩展 `AxpRequestOptions`（`declare module '@codejoo/axp'`） |
+| `IPluginCommonRequestOptions`  | 无，已无对应概念。它只给 `axpKey` 的 `before`、`after` 用，两者随 `axpKey` 一起删除                       |
+| `IPluginCommonResponseOptions` | 无，已无对应概念。本来就是没启用过的空占位                                                                |
+| `IBaseOptions`                 | `AxpRequestConfig`                                                                                        |
+| `IMethodOptions`               | `AxpRequestConfig`，`api.get(path, config)` 的方法配置也是这个类型                                        |
+| `IHttpOptions`                 | `AxpRequestConfig`。`wrap`、`throws` 已经在里面，`raw`、`nullable` 删除                                   |
+| `IInnerOptions`                | 无，已无对应概念。`_debug`、`_logger` 删除，调试开关用 `createAxp({ debug })`，插件里用 `ctx.log`         |
+| `NormalizeOptions`             | 无，已无对应概念。归一化由内核完成，没有 `normalize` 选项                                                 |
+| `HttpInternalRequestConfig`    | 无，已无对应概念。key 不再写在请求配置上，插件里调 `ctx.key()` 取                                         |
+| `HttpPrototype<T>`             | `HttpVerbs<S, R>`，即 `AxpClient` 上的十个动词；一般直接写 `AxpClient<S, R>`                              |
+| `Primitive`                    | 无，已无对应概念                                                                                          |
+| `MaybeFun`                     | 无，已无对应概念。请求选项不再接受函数，见第 8 节                                                         |
+| `Falsy`                        | 无，已无对应概念                                                                                          |
+
+`MethodSchema` 和 `HttpMethodLower` 保留不变，Schema 推断的写法照旧。
+
 ## 迁移检查清单
 
 - [ ] 所有 `Axp.install`、`Axp.create`、`Core` 换成 `createAxp`。
@@ -346,5 +387,6 @@ const other = api.extend({ baseURL: "/v2" }, { plugins: [axpCache()] }); // 或�
 - [ ] 请求选项里的函数形式，改为调用处判断或字符串 key。
 - [ ] 需要 `Error` 的上报或状态库，配置 `reject`。
 - [ ] 删除 `./cancel`、`./key`、`./logger`、`./normalize` 子路径的引用。
+- [ ] 搜索 `IHttpOptions`、`IMethodOptions`、`HttpPrototype`、`Plugin`、`PluginLogger` 等旧类型名，按第 13 节替换。
 - [ ] 登出和切换账号时，清理缓存（`clearCache`）并确认 key 的 scope 正确。
 - [ ] 派生实例（`extend`）现在默认带插件，确认是否符合预期。

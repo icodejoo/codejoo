@@ -51,13 +51,17 @@ api.get('/pet/{id}')(payload, opts)
 | `transport.ts`            | 调 `axios.request`、按需克隆请求体、交给响应工厂判定                                                                |
 | `response.ts`             | `IAxpResponse`、`AxpResponse`、`IAxpResponseFactory`、`axpResponse()`、`isAxpResponse`                              |
 | `key.ts`                  | key 服务（由 `plugins/key.ts` 的哈希算法迁来）                                                                      |
+| `brand.ts`                | 响应品牌 `Symbol.for('axp.response')` 与 `AXP_KINDS`，`./min` 与根入口共用                                          |
+| `stages.ts`               | 阶段顺序与内置插件位置表                                                                                            |
+| `methods.ts`              | HTTP 方法名归一                                                                                                     |
+| `utils.ts`                | 内部工具：对象判断、axios defaults 克隆、通知隔离 `fireNotice` 等                                                   |
 | `types.ts`                | Schema 推断（保留现有机制）、请求选项、插件类型                                                                     |
 | `plugins/*.ts`            | 10 个内置插件                                                                                                       |
 | `objects/TokenManager.ts` | 保留，去掉 `canRefresh`                                                                                             |
 
 删除：`core.ts`、`install.ts`、`helper.ts` 中的 adapter 链与单次尝试机制、`bag.ts`、`objects/Response.ts`、`plugins/{cancel,key,logger,normalize}.ts`。
 
-入口：`index.ts` 导出新 API（`createAxp`、响应与类型、10 个插件工厂、`TokenManager` 等）；子路径保留 10 个插件各自的 `./<name>` 与 `./min`，删除 `./cancel`、`./key`、`./logger`、`./normalize`（B6 落地）。
+入口：`index.ts` 导出新 API（`createAxp`、响应与类型、10 个插件工厂、`TokenManager` 等）；子路径保留 10 个插件各自的 `./<name>` 与 `./min`，删除 `./cancel`、`./key`、`./logger`、`./normalize`。产物结构见 [ARCHITECTURE](../../ARCHITECTURE.md)。
 
 ## 3. 一次请求的数据流
 
@@ -329,7 +333,7 @@ const res = await api.post("/pet")(body, { throws: false }); // 不写 try/catch
 - **两个泛型都要显式写**：TS 不支持部分推断，写了 `S` 就推不出 `R`。`AxpOptions` 用条件类型约束：`R` 不是 `AxpResponse` 时 `response` 必填，且其产出必须是 `R`。
 - **`WithData<R, D>`** = `Omit<R, 'data'> & { readonly data: D }`：TS 没有高阶类型，`R` 里的 `data` 是 `unknown`，每个接口的具体类型靠它替换。
 - **插件工厂推断**：`R` 只由显式泛型或 `response` 工厂决定，`plugins` 与 `reject` 用 `NoInfer` 不参与推断。内联写在 `createAxp<S, MyResponse>` 的 `plugins` 里时从上下文推出 `R`；单独定义成变量时手写 `axpRetry<MyResponse>()`，不写则是默认的 `AxpResponse`。用 `expectTypeOf` 守住。
-- **请求选项**：插件通过 `declare module '@codejoo/axp' { interface AxpRequestOptions { retry?: … } }` 扩展，不再污染 `axios` 模块的 `AxiosRequestConfig`。
+- **请求选项**：插件通过 `declare module '@codejoo/axp' { interface AxpRequestOptions { retry?: … } }` 扩展，不再污染 `axios` 模块的 `AxiosRequestConfig`。内置插件在源码里写的是相对说明符 `declare module "../types"`，产物里的这类说明符由构建插件改写为 `.mjs`（`vite.config.ts` 的 `dtsAugmentationSpecifier`），否则 nodenext 与 bundler 的使用者解析不到，增强会整体失效。
 
 ## 11. 性能设计
 
