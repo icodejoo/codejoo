@@ -28,6 +28,7 @@ A 批（单插件规则/补丁/覆盖文件）迁移进行中，基线冻结于 
 | cache（cache.test、cache.review、cache.coverage） | 本批提交 | 60 | 0 | 0 | 0 | 0 | 0 | 60 | 是 |
 | key（key.test、key.review、key.coverage） | 本批提交 | 83 | 0 | 0 | 0 | 0 | 0 | 83 | 是 |
 | loading（loading.test 全部 + lifecycle.coverage 的 2 条 + mock.test 的 1 条） | 本批提交 | 53 | 0 | 0 | 0 | 0 | 0 | 53 | 是 |
+| mock（mock.test 余下、mock.coverage） | 本批提交 | 29 | 0 | 0 | 0 | 0 | 0 | 29 | 是 |
 
 ## 映射
 
@@ -375,3 +376,32 @@ A 批（单插件规则/补丁/覆盖文件）迁移进行中，基线冻结于 
 | test/lifecycle.coverage.test.ts::cancel/loading — 资源释放边界 > loading dispose 后旧 wrapper 直通且 finish 对无配置幂等 | boundary/loading.boundary.test.ts::cancel/loading — 资源释放边界 > [loading.method.cleanup][loading.fn.$wrap] loading dispose 后旧 wrapper 直通且 finish 对无配置幂等 | rename | dispose 后旧 wrapper 直通 |  |
 | test/lifecycle.coverage.test.ts::cancel/loading — 资源释放边界 > loading enable:false 不包装 adapter | rule/loading.rule.test.ts::cancel/loading — 资源释放边界 > [loading.opt.enable] loading enable:false 不包装 adapter | rename | 总开关 |  |
 | test/mock.test.ts::loading 先卸载时外层 mock 保持生效，两者全卸载后还原原 adapter | combo/loading+mock.combo.test.ts::[loading.fn.axpLoading × mock.opt.mock] loading 先卸载时外层 mock 保持生效，两者全卸载后还原原 adapter | rename | 两个插件交互：卸载顺序，review（与 loading.test 首条为安装顺序相反的变体，不判重复） |  |
+| test/mock.test.ts::review #2 — retry 保留请求级 mock:false | combo/mock+retry.combo.test.ts::[mock.req.mock × retry.opt.max] review #2 — retry 保留请求级 mock:false | rename | 两个插件交互：重试重发时请求级 mock:false 是否保留，review #2 |  |
+| test/mock.test.ts::$shouldMock — runWhen 守卫 > config.mock === true → true | unit/mock.unit.test.ts::$shouldMock — runWhen 守卫 > [mock.fn.$shouldMock][mock.req.mock] config.mock === true → true | rename | 纯函数 |  |
+| test/mock.test.ts::$shouldMock — runWhen 守卫 > config.mock === false → false | unit/mock.unit.test.ts::$shouldMock — runWhen 守卫 > [mock.fn.$shouldMock][mock.req.mock] config.mock === false → false | rename | 纯函数 |  |
+| test/mock.test.ts::$shouldMock — runWhen 守卫 > config.mock 对象含 mockUrl → true | unit/mock.unit.test.ts::$shouldMock — runWhen 守卫 > [mock.fn.$shouldMock][mock.req.mock] config.mock 对象含 mockUrl → true | rename | 纯函数 |  |
+| test/mock.test.ts::$shouldMock — runWhen 守卫 > config.mock 对象 mock=false → false | unit/mock.unit.test.ts::$shouldMock — runWhen 守卫 > [mock.fn.$shouldMock][mock.req.mock] config.mock 对象 mock=false → false | rename | 纯函数 |  |
+| test/mock.test.ts::$shouldMock — runWhen 守卫 > config 未指定 → 插件级 mock 值 | unit/mock.unit.test.ts::$shouldMock — runWhen 守卫 > [mock.fn.$shouldMock][mock.req.mock] config 未指定 → 插件级 mock 值 | rename | 纯函数 |  |
+| test/mock.test.ts::$resolveMock > false → null | unit/mock.unit.test.ts::$resolveMock > [mock.fn.$resolveMock][mock.req.mock][mock.opt.mockUrl] false → null | rename | 纯函数 |  |
+| test/mock.test.ts::$resolveMock > true → 插件级 mockUrl | unit/mock.unit.test.ts::$resolveMock > [mock.fn.$resolveMock][mock.req.mock][mock.opt.mockUrl] true → 插件级 mockUrl | rename | 纯函数 |  |
+| test/mock.test.ts::$resolveMock > 对象 → 优先请求级 mockUrl | unit/mock.unit.test.ts::$resolveMock > [mock.fn.$resolveMock][mock.req.mock][mock.opt.mockUrl] 对象 → 优先请求级 mockUrl | rename | 纯函数 |  |
+| test/mock.test.ts::$resolveMock > 对象 mock=false → null（即使有 mockUrl） | unit/mock.unit.test.ts::$resolveMock > [mock.fn.$resolveMock][mock.req.mock][mock.opt.mockUrl] 对象 mock=false → null（即使有 mockUrl） | rename | 纯函数 |  |
+| test/mock.test.ts::$resolveMock > 未指定 + 插件级 mock=true → 插件级 | unit/mock.unit.test.ts::$resolveMock > [mock.fn.$resolveMock][mock.req.mock][mock.opt.mockUrl] 未指定 + 插件级 mock=true → 插件级 | rename | 纯函数 |  |
+| test/mock.test.ts::$resolveMock > 未指定 + 插件级 mock=false → null | unit/mock.unit.test.ts::$resolveMock > [mock.fn.$resolveMock][mock.req.mock][mock.opt.mockUrl] 未指定 + 插件级 mock=false → null | rename | 纯函数 |  |
+| test/mock.test.ts::$rewriteUrl > 相对 url：拼接 mockUrl | unit/mock.unit.test.ts::$rewriteUrl > [mock.fn.$rewriteUrl][mock.opt.mockUrl] 相对 url：拼接 mockUrl | rename | 纯函数 |  |
+| test/mock.test.ts::$rewriteUrl > 绝对 url：去掉原 origin，拼到 mockUrl | unit/mock.unit.test.ts::$rewriteUrl > [mock.fn.$rewriteUrl][mock.opt.mockUrl] 绝对 url：去掉原 origin，拼到 mockUrl | rename | 纯函数 |  |
+| test/mock.test.ts::$rewriteUrl > url 未提供：改写 baseURL | unit/mock.unit.test.ts::$rewriteUrl > [mock.fn.$rewriteUrl][mock.opt.mockUrl] url 未提供：改写 baseURL | rename | 纯函数 |  |
+| test/mock.test.ts::$rewriteUrl > mockUrl 末尾 / 与 url 开头 / 不会重复 | unit/mock.unit.test.ts::$rewriteUrl > [mock.fn.$rewriteUrl][mock.opt.mockUrl] mockUrl 末尾 / 与 url 开头 / 不会重复 | rename | 纯函数 |  |
+| test/mock.test.ts::$rewriteUrl > mockUrl 不带 / 也能正确拼接 | unit/mock.unit.test.ts::$rewriteUrl > [mock.fn.$rewriteUrl][mock.opt.mockUrl] mockUrl 不带 / 也能正确拼接 | rename | 纯函数 |  |
+| test/mock.test.ts::$rewriteUrl > 保留 query 与 hash | unit/mock.unit.test.ts::$rewriteUrl > [mock.fn.$rewriteUrl][mock.opt.mockUrl] 保留 query 与 hash | rename | 纯函数 |  |
+| test/mock.test.ts::$rewriteUrl > 解析失败的 url → 退化为简单拼接 | unit/mock.unit.test.ts::$rewriteUrl > [mock.fn.$rewriteUrl][mock.opt.mockUrl] 解析失败的 url → 退化为简单拼接 | rename | 纯函数 |  |
+| test/mock.test.ts::$shouldFallback — 默认“mock 不存在”判定 > error.response 为 403/500 → false（mock 存在，只是业务/服务端错误） | unit/mock.unit.test.ts::$shouldFallback — 默认“mock 不存在”判定 > [mock.fn.$shouldFallback][mock.cb.fallbackWhen] error.response 为 403/500 → false（mock 存在，只是业务/服务端错误） | rename | 纯函数 |  |
+| test/mock.test.ts::$shouldFallback — 默认“mock 不存在”判定 > error.response 为 404 → true；直接给 response 的 404 / 200 同理 | unit/mock.unit.test.ts::$shouldFallback — 默认“mock 不存在”判定 > [mock.fn.$shouldFallback][mock.cb.fallbackWhen] error.response 为 404 → true；直接给 response 的 404 / 200 同理 | rename | 纯函数 |  |
+| test/mock.test.ts::$shouldFallback — 默认“mock 不存在”判定 > 无 response 的网络错误 → true（mock 不可达） | unit/mock.unit.test.ts::$shouldFallback — 默认“mock 不存在”判定 > [mock.fn.$shouldFallback][mock.cb.fallbackWhen] 无 response 的网络错误 → true（mock 不可达） | rename | 纯函数 |  |
+| test/mock.test.ts::$shouldFallback — 默认“mock 不存在”判定 > 取消 → false | unit/mock.unit.test.ts::$shouldFallback — 默认“mock 不存在”判定 > [mock.fn.$shouldFallback][mock.cb.fallbackWhen] 取消 → false | rename | 纯函数 |  |
+| test/mock.test.ts::mock — 裸 axios.create()（非函数 adapter） > 安装不崩；mock 返回 403 时不回落真实接口 | boundary/mock.boundary.test.ts::mock — 裸 axios.create()（非函数 adapter） > [mock.fn.axpMock] 安装不崩；mock 返回 403 时不回落真实接口 | rename | 裸 axios.create() 数组 adapter |  |
+| test/mock.coverage.test.ts::mock — 回落决策与 adapter 配置隔离 > resolve 的 404 也回落真实请求，mock 探测关闭 cache/share，原请求保持选项 | rule/mock.rule.test.ts::mock — 回落决策与 adapter 配置隔离 > [mock.fn.axpMock][mock.cb.fallbackWhen] resolve 的 404 也回落真实请求，mock 探测关闭 cache/share，原请求保持选项 | rename | 单插件声明行为：404 回落、探测关闭 cache/share |  |
+| test/mock.coverage.test.ts::mock — 回落决策与 adapter 配置隔离 > 请求级 fallbackWhen 覆盖插件级判定 | rule/mock.rule.test.ts::mock — 回落决策与 adapter 配置隔离 > [mock.req.mock.fallbackWhen][mock.cb.fallbackWhen] 请求级 fallbackWhen 覆盖插件级判定 | rename | 请求级覆盖插件级 |  |
+| test/mock.coverage.test.ts::mock — 回落决策与 adapter 配置隔离 > 缺少 mockUrl 直接发送真实请求并经自定义 sink 记录警告 | boundary/mock.boundary.test.ts::mock — 回落决策与 adapter 配置隔离 > [mock.opt.mockUrl] 缺少 mockUrl 直接发送真实请求并经自定义 sink 记录警告 | rename | 缺少 mockUrl |  |
+| test/mock.coverage.test.ts::mock — 回落决策与 adapter 配置隔离 > 真实回落失败保留真实错误，不再重复回落 | boundary/mock.boundary.test.ts::mock — 回落决策与 adapter 配置隔离 > [mock.fn.axpMock] 真实回落失败保留真实错误，不再重复回落 | rename | 回落失败不再重复回落 |  |
+| test/mock.coverage.test.ts::mock — 回落决策与 adapter 配置隔离 > 自定义判定抛错会拒绝，不发送真实回落；卸载后保持原 adapter | boundary/mock.boundary.test.ts::mock — 回落决策与 adapter 配置隔离 > [mock.cb.fallbackWhen][mock.method.cleanup] 自定义判定抛错会拒绝，不发送真实回落；卸载后保持原 adapter | rename | 判定回调抛错 |  |
