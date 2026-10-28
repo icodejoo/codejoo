@@ -6,7 +6,7 @@ summary: 测试迁移到六层结构时，每条用例的旧位置、新位置�
 ---
 ## TL;DR
 
-A 批（单插件规则/补丁/覆盖文件）迁移进行中，基线冻结于 8c12b94。记录规则见 [测试六层分类规范 §4](../guides/test-layers.md)。迁移完成后状态改为 `archived`，不删除。「批次核对」的提交列在批次落地后统一回填哈希。
+A 批（单插件规则/补丁/覆盖文件，共 16 个提交）已迁移完成，基线冻结于 8c12b94；B 批（dioman-coverage、dioman-powerset、auth.integration、integration、attempt、adapter-layers、axp-install、types、e2e）尚未开始。记录规则见 [测试六层分类规范 §4](../guides/test-layers.md)。迁移完成后状态改为 `archived`，不删除。mirror 列待验收场景 id 对照后统一回填，A 批暂空。
 
 ## 基线（迁移开始时冻结）
 
@@ -22,22 +22,32 @@ A 批（单插件规则/补丁/覆盖文件）迁移进行中，基线冻结于 
 
 | 批次 | 提交 | 旧总数 | drop | N/A | merge 减少 | split 增加 | 新增 | 新总数 | 平 |
 |---|---|---|---|---|---|---|---|---|---|
-| auth（auth.test、auth.coverage） | 本批提交 | 42 | 0 | 0 | 0 | 0 | 0 | 42 | 是 |
-| retry（retry.test、retry.coverage） | 本批提交 | 74 | 0 | 0 | 0 | 0 | 0 | 74 | 是 |
-| share（share.test、share.review、share.coverage） | 本批提交 | 56 | 0 | 0 | 0 | 0 | 0 | 56 | 是 |
-| cache（cache.test、cache.review、cache.coverage） | 本批提交 | 60 | 0 | 0 | 0 | 0 | 0 | 60 | 是 |
-| key（key.test、key.review、key.coverage） | 本批提交 | 83 | 0 | 0 | 0 | 0 | 0 | 83 | 是 |
-| loading（loading.test 全部 + lifecycle.coverage 的 2 条 + mock.test 的 1 条） | 本批提交 | 53 | 0 | 0 | 0 | 0 | 0 | 53 | 是 |
-| mock（mock.test 余下、mock.coverage） | 本批提交 | 29 | 0 | 0 | 0 | 0 | 0 | 29 | 是 |
-| repath（repath.test 全部 + lifecycle.coverage 的 2 条） | 本批提交 | 23 | 0 | 0 | 0 | 0 | 0 | 23 | 是 |
-| filter（filter.test 全部 + lifecycle.coverage 的 2 条） | 本批提交 | 19 | 0 | 0 | 0 | 0 | 0 | 19 | 是 |
-| envs（envs.test 全部 + lifecycle.coverage 的 2 条） | 本批提交 | 8 | 0 | 0 | 0 | 0 | 0 | 8 | 是 |
-| normalize（normalize.test 全部 + lifecycle.coverage 的 2 条） | 本批提交 | 24 | 0 | 0 | 0 | 0 | 0 | 24 | 是 |
-| notify（notify.test 全部 + lifecycle.coverage 的 2 条） | 本批提交 | 10 | 0 | 0 | 0 | 0 | 0 | 10 | 是 |
-| cancel（cancel.test 全部 + lifecycle.coverage 余下 1 条，该文件至此清空） | 本批提交 | 16 | 0 | 0 | 0 | 0 | 0 | 16 | 是 |
-| helper+logger（helper.coverage、logger.coverage） | 本批提交 | 38 | 0 | 0 | 0 | 0 | 0 | 38 | 是 |
-| core（core.coverage） | 本批提交 | 22 | 0 | 0 | 0 | 0 | 0 | 22 | 是 |
-| install（install.coverage） | 本批提交 | 2 | 0 | 0 | 0 | 0 | 0 | 2 | 是 |
+| auth（auth.test、auth.coverage） | b75ccff | 42 | 0 | 0 | 0 | 0 | 0 | 42 | 是 |
+| retry（retry.test、retry.coverage） | 108d3fb | 74 | 0 | 0 | 0 | 0 | 0 | 74 | 是 |
+| share（share.test、share.review、share.coverage） | d0258a4 | 56 | 0 | 0 | 0 | 0 | 0 | 56 | 是 |
+| cache（cache.test、cache.review、cache.coverage） | f24c00a | 60 | 0 | 0 | 0 | 0 | 0 | 60 | 是 |
+| key（key.test、key.review、key.coverage） | 9ea5319 | 83 | 0 | 0 | 0 | 0 | 0 | 83 | 是 |
+| loading（loading.test 全部 + lifecycle.coverage 的 2 条 + mock.test 的 1 条） | 1ec3756 | 53 | 0 | 0 | 0 | 0 | 0 | 53 | 是 |
+| mock（mock.test 余下、mock.coverage） | 8ca7ba0 | 29 | 0 | 0 | 0 | 0 | 0 | 29 | 是 |
+| repath（repath.test 全部 + lifecycle.coverage 的 2 条） | b80cebc | 23 | 0 | 0 | 0 | 0 | 0 | 23 | 是 |
+| filter（filter.test 全部 + lifecycle.coverage 的 2 条） | 920bbba | 19 | 0 | 0 | 0 | 0 | 0 | 19 | 是 |
+| envs（envs.test 全部 + lifecycle.coverage 的 2 条） | bf7985e | 8 | 0 | 0 | 0 | 0 | 0 | 8 | 是 |
+| normalize（normalize.test 全部 + lifecycle.coverage 的 2 条） | 27f2e5b | 24 | 0 | 0 | 0 | 0 | 0 | 24 | 是 |
+| notify（notify.test 全部 + lifecycle.coverage 的 2 条） | 6235d88 | 10 | 0 | 0 | 0 | 0 | 0 | 10 | 是 |
+| cancel（cancel.test 全部 + lifecycle.coverage 余下 1 条，该文件至此清空） | e68c350 | 16 | 0 | 0 | 0 | 0 | 0 | 16 | 是 |
+| helper+logger（helper.coverage、logger.coverage） | 8f1a010 | 38 | 0 | 0 | 0 | 0 | 0 | 38 | 是 |
+| core（core.coverage） | 6e15e36 | 22 | 0 | 0 | 0 | 0 | 0 | 22 | 是 |
+| install（install.coverage） | 96db491 | 2 | 0 | 0 | 0 | 0 | 0 | 2 | 是 |
+
+## 判层备注（A 批）
+
+- 纯函数 `$resolve*`、`$compile*`、`$parse`、`$key`、`authFailureFactory`、`$filter`、`$rewriteUrl` 等判 unit，ledger 里有 id 的直接用 ledger id，没有的写 `[模块.函数]`（helper、bag 无台账 id）。
+- `$start/$end/$race`（share）、`$wrap`（loading）以假 adapter 驱动，没有 axios 实例，但表达的是 `policy` / `delay` 等选项的声明行为，判 rule 而非 unit。
+- helper.coverage 中用到 `axios.create()` 的用例（resolveAdapter、wrapAdapter、尝试钩子）判 integration；纯函数判 unit。
+- 两个及以上插件交互的用例进 `combo/`；个别用例同时涉及第三个插件（如 loading+retry 里含 normalize、cancel；auth+loading 里含 retry）按主题插件命名，不再拼第三段，依据列有注明。
+- 同名辅助函数/导入在不同来源里等价时（`mockResp`、`deferred`、`notify`）合并为一份，不改断言。
+- 3 条 expected fail（auth 的 authExpired、share 的冻结 AxiosError 与全订阅者 timeout）原样保留为 `it.fails`，在 boundary。
+- A 批无 drop/N/A/merge：同 id 的不同输入一律视为变体，跨层的 `retry:false` 类（unit `$shouldRetry` vs rule 端到端）输入不同，保留。
 
 ## 映射
 
