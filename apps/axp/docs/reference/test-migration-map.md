@@ -46,6 +46,7 @@ A 批（单插件规则/补丁/覆盖文件，共 16 个提交）已迁移完成
 | adapter-layers（adapter-layers.test） | 待回填 | 6 | 0 | 0 | 0 | 0 | 0 | 6 | 是 |
 | axp-install（axp-install.test） | 待回填 | 17 | 0 | 0 | 0 | 0 | 0 | 17 | 是 |
 | types（types.test） | 待回填 | 2 | 0 | 0 | 0 | 0 | 0 | 2 | 是 |
+| e2e（e2e.test） | 待回填 | 18 | 0 | 0 | 0 | 0 | 0 | 18 | 是 |
 
 ## 判层备注（A 批）
 
@@ -660,3 +661,10 @@ A 批（单插件规则/补丁/覆盖文件，共 16 个提交）已迁移完成
 | test/axp-install.test.ts::Axp.install — 裸 axios.create() 上的 adapter 类插件 > 不经 Core，cache/share/mock/loading 一起装到带数组 adapter 的实例上请求正常 | integration/install-order.integration.test.ts::Axp.install — 裸 axios.create() 上的 adapter 类插件 > [public.fn.Axp.install] 不经 Core，cache/share/mock/loading 一起装到带数组 adapter 的实例上请求正常 | rename | 装配/adapter 分层：不经 Core，adapter 类插件一起装到带数组 adapter 的裸实例上 |  |
 | test/types.test.ts::Core 类型契约 > 类型回归用例由 tsgo 检查且不会发出网络请求 | integration/types.integration.test.ts::Core 类型契约 > [public.fn.Axp.create] 类型回归用例由 tsgo 检查且不会发出网络请求 | rename | 类型回归（expectTypeOf/ts-expect-error）由 tsgo 检查，规范 §1 归 integration |  |
 | test/types.test.ts::Core 类型契约 > 本地类型测试使用与模板完全一致的声明 | integration/types.integration.test.ts::Core 类型契约 > [public.fn.Axp.create] 本地类型测试使用与模板完全一致的声明 | rename | 本地 schema 夹具与模板一致，属类型回归支撑，归 integration |  |
+| test/e2e.test.ts::e2e review #28/#29 回归 > runner 的每个动作和结果面板都有页面实现 | integration/e2e.integration.test.ts::e2e review #28/#29 回归 > runner 的每个动作和结果面板都有页面实现 | move | 真实环境（e2e runner 与页面契约），归 integration；无台账 id |  |
+| test/e2e.test.ts::e2e 页面动作 — 真实本地 HTTP > 真实计数可归零，读取不增加命中数，失败次数在重置后恢复 | integration/e2e.integration.test.ts::e2e 页面动作 — 真实本地 HTTP > 真实计数可归零，读取不增加命中数，失败次数在重置后恢复 | move | 真实本地 HTTP 计数器，e2e 演练场支撑，归 integration；无台账 id |  |
+| test/e2e.test.ts::e2e 页面动作 — 真实本地 HTTP > cache 真正省去第二次网络请求，remove 后重新请求 | integration/e2e.integration.test.ts::e2e 页面动作 — 真实本地 HTTP > [cache.fn.axpCache][cache.fn.removeCache] cache 真正省去第二次网络请求，remove 后重新请求 | rename | 真实本地 HTTP 上 cache 省网络请求，归 integration |  |
+| test/e2e.test.ts::e2e 页面动作 — 真实本地 HTTP > %s 的真实网络次数符合策略（each） | integration/e2e.integration.test.ts::e2e 页面动作 — 真实本地 HTTP > [share.opt.policy] %s 的真实网络次数符合策略 | rename | 真实本地 HTTP 上 share 三策略的真实网络次数，归 integration |  |
+| test/e2e.test.ts::e2e 页面动作 — 真实本地 HTTP > retry 前两次真实 HTTP 500，第三次恢复；禁用后仅一次网络 | integration/e2e.integration.test.ts::e2e 页面动作 — 真实本地 HTTP > [retry.opt.max] retry 前两次真实 HTTP 500，第三次恢复；禁用后仅一次网络 | rename | 真实本地 HTTP 上 retry 恢复与禁用，归 integration |  |
+| test/e2e.test.ts::e2e 页面动作 — 真实本地 HTTP > %s 在真实网络上收敛（each） | integration/e2e.integration.test.ts::e2e 页面动作 — 真实本地 HTTP > %s 在真实网络上收敛 | move | 真实本地 HTTP 上多插件场景收敛（int-* 动作），归 integration；无单一台账 id |  |
+| test/e2e.test.ts::e2e 页面动作 — 真实本地 HTTP > mock 真正改写 URL，404 后真正回落到原始接口 | integration/e2e.integration.test.ts::e2e 页面动作 — 真实本地 HTTP > [mock.fn.axpMock] mock 真正改写 URL，404 后真正回落到原始接口 | rename | 真实本地 HTTP 上 mock 改写 URL 并回落，归 integration |  |

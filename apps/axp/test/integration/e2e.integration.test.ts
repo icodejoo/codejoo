@@ -4,7 +4,7 @@ import type { Server } from 'node:http';
 
 /** 读取 e2e 源文件，检查 runner 与页面对外的自动化契约。 */
 function source(path: string) {
-  return readFileSync(new URL(`../e2e/${path}`, import.meta.url), 'utf8');
+  return readFileSync(new URL(`../../e2e/${path}`, import.meta.url), 'utf8');
 }
 
 describe('e2e review #28/#29 回归', () => {
@@ -31,8 +31,8 @@ describe('e2e 页面动作 — 真实本地 HTTP', () => {
 
   beforeAll(async () => {
     // 变量导入让 tsgo 只检查测试代码，演练场由 Vite 转换执行。
-    const backendPath = '../e2e/server/mock-server.mjs';
-    const playgroundPath = '../e2e/playground/main.ts';
+    const backendPath = '../../e2e/server/mock-server.mjs';
+    const playgroundPath = '../../e2e/playground/main.ts';
     const { createMockServer } = await import(backendPath);
     server = createMockServer();
     await new Promise<void>((resolve, reject) => {
@@ -76,21 +76,21 @@ describe('e2e 页面动作 — 真实本地 HTTP', () => {
     expect((await hit()).status).toBe(500);
   });
 
-  it('cache 真正省去第二次网络请求，remove 后重新请求', async () => {
+  it('[cache.fn.axpCache][cache.fn.removeCache] cache 真正省去第二次网络请求，remove 后重新请求', async () => {
     const cached = await run('cache-hit-twice');
     expect(cached.serverHits).toBe(1);
     expect(cached.r2.hits).toBe(1);
     expect((await run('cache-remove')).serverHits).toBe(2);
   });
 
-  it.each(['share-start', 'share-race', 'share-end'])('%s 的真实网络次数符合策略', async (id) => {
+  it.each(['share-start', 'share-race', 'share-end'])('[share.opt.policy] %s 的真实网络次数符合策略', async (id) => {
     const result = await run(id);
     expect(result.serverHits).toBe(id === 'share-start' ? 1 : 3);
     if (id === 'share-start') expect(result.hitsSeen).toEqual([1, 1, 1, 1, 1]);
     if (id === 'share-end') expect(result.sameResult).toBe(1);
   });
 
-  it('retry 前两次真实 HTTP 500，第三次恢复；禁用后仅一次网络', async () => {
+  it('[retry.opt.max] retry 前两次真实 HTTP 500，第三次恢复；禁用后仅一次网络', async () => {
     const recovered = await run('retry-run');
     expect(recovered.serverHits).toBe(3);
     expect(recovered.result.hits).toBe(3);
@@ -105,7 +105,7 @@ describe('e2e 页面动作 — 真实本地 HTTP', () => {
     expect((await run(id)).pass).toBe(true);
   });
 
-  it('mock 真正改写 URL，404 后真正回落到原始接口', async () => {
+  it('[mock.fn.axpMock] mock 真正改写 URL，404 后真正回落到原始接口', async () => {
     expect((await run('mock-run')).mocked).toBe(true);
     const fallback = await run('mock-fallback');
     expect(fallback.path).toBe('/api/echo');
