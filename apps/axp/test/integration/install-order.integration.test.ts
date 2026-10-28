@@ -3,8 +3,8 @@
 // src/install.ts's class doc for the derivation.
 import { describe, it, expect, vi } from 'vitest';
 import axios from 'axios';
-import { Axp, axpShare, axpMock, axpLoading, axpKey as key, axpFilter as filter, axpCache as cache, axpAuth as auth, axpRetry as retry, axpNormalize as normalize } from '../src';
-import { makeNetwork } from './helpers/network';
+import { Axp, axpShare, axpMock, axpLoading, axpKey as key, axpFilter as filter, axpCache as cache, axpAuth as auth, axpRetry as retry, axpNormalize as normalize } from '../../src';
+import { makeNetwork } from '../helpers/network';
 
 function mkApi() {
   const net = makeNetwork();
@@ -23,7 +23,7 @@ class FakeTokenManager {
 }
 
 describe('Axp.install — canonical order', () => {
-  it('filter runs before key on request: an empty field stripped by filter must not affect the hash key computes', async () => {
+  it('[public.fn.Axp.install][filter.fn.axpFilter][key.fn.axpKey] filter runs before key on request: an empty field stripped by filter must not affect the hash key computes', async () => {
     const { net, api } = mkApi();
     let calls = 0;
     net.on('POST', '/data', () => { calls++; return { data: { code: 0, data: null } }; });
@@ -36,7 +36,7 @@ describe('Axp.install — canonical order', () => {
     expect(calls).toBe(1);
   });
 
-  it('auth runs before retry on response: a 401 gets refreshed+replayed WITHOUT retry burning attempts on the stale token first', async () => {
+  it('[public.fn.Axp.install][auth.fn.axpAuth][retry.fn.axpRetry] auth runs before retry on response: a 401 gets refreshed+replayed WITHOUT retry burning attempts on the stale token first', async () => {
     // The server checks the ACTUAL Authorization header, not just attempt
     // count — a blind retry with the still-stale token must keep failing.
     // Only a genuinely refreshed token ('Bearer t1') gets 200. This is what
@@ -71,7 +71,7 @@ describe('Axp.install — canonical order', () => {
     expect(attempts).toBe(2);
   });
 
-  it('normalize runs last on response: retry gets first crack at a business failure via shouldRetry before normalize hard-rejects it', async () => {
+  it('[public.fn.Axp.install][retry.fn.axpRetry][normalize.fn.axpNormalize] normalize runs last on response: retry gets first crack at a business failure via shouldRetry before normalize hard-rejects it', async () => {
     const { net, api } = mkApi();
     let attempts = 0;
     net.fallback(() => {
@@ -90,14 +90,14 @@ describe('Axp.install — canonical order', () => {
     expect(attempts).toBe(2);
   });
 
-  it('omitted plugins are skipped; a single plugin still installs correctly', async () => {
+  it('[public.fn.Axp.install] omitted plugins are skipped; a single plugin still installs correctly', async () => {
     const { net, api } = mkApi();
     net.fallback(() => ({ data: { code: 0, data: { v: 1 } } }));
     const handle = Axp.install(api.axios, { key: key() });
     expect(handle.plugins.map((p) => p.name)).toEqual(['axp:key']);
   });
 
-  it('the returned AxpHandle looks up installed plugins by name and dispose() ejects exactly that batch', async () => {
+  it('[public.handle.plugins][public.handle.plugin][public.handle.dispose] the returned AxpHandle looks up installed plugins by name and dispose() ejects exactly that batch', async () => {
     const { net, api } = mkApi();
     net.fallback(() => ({ data: { code: 0, data: { v: 1 } } }));
     const handle = Axp.install(api.axios, { key: key(), cache: cache() });
@@ -112,21 +112,21 @@ describe('Axp.install — canonical order', () => {
 
   const namedPlugin = (name: string) => ({ name, install() {} });
 
-  it('append adds after everything the handle tracks', () => {
+  it('[public.handle.append] append adds after everything the handle tracks', () => {
     const { api } = mkApi();
     const handle = Axp.install(api.axios, { key: key(), cache: cache() });
     handle.append(namedPlugin('custom'));
     expect(handle.plugins.map((p) => p.name)).toEqual(['axp:key', 'axp:cache', 'custom']);
   });
 
-  it('prepend adds before everything the handle tracks', () => {
+  it('[public.handle.prepend] prepend adds before everything the handle tracks', () => {
     const { api } = mkApi();
     const handle = Axp.install(api.axios, { key: key(), cache: cache() });
     handle.prepend(namedPlugin('custom'));
     expect(handle.plugins.map((p) => p.name)).toEqual(['custom', 'axp:key', 'axp:cache']);
   });
 
-  it('insertBefore/insertAfter slot a plugin relative to a tracked anchor', () => {
+  it('[public.handle.insertBefore][public.handle.insertAfter] insertBefore/insertAfter slot a plugin relative to a tracked anchor', () => {
     const { api } = mkApi();
     const handle = Axp.install(api.axios, { key: key(), cache: cache() });
     const keyPlugin = handle.plugin('axp:key')!;
@@ -137,7 +137,7 @@ describe('Axp.install — canonical order', () => {
     expect(handle.plugins.map((p) => p.name)).toEqual(['front', 'axp:key', 'middle', 'axp:cache']);
   });
 
-  it('insertBefore/insertAfter throw for an anchor this handle does not track', () => {
+  it('[public.handle.insertBefore][public.handle.insertAfter] insertBefore/insertAfter throw for an anchor this handle does not track', () => {
     const { api } = mkApi();
     const handle = Axp.install(api.axios, { key: key() });
     const foreign = namedPlugin('foreign');
@@ -152,7 +152,7 @@ describe('Axp.install — AxpHandle 内部簿记与回滚', () => {
   const activeReq = (ax: any) => ax.interceptors.request.handlers.filter(Boolean).length;
   const throwing = { name: 'boom', install(): void { throw new Error('install boom'); } };
 
-  it('同一个插件对象 append 两次：两份 cleanup 都保留，dispose 全部卸载', () => {
+  it('[public.handle.append][public.handle.dispose] 同一个插件对象 append 两次：两份 cleanup 都保留，dispose 全部卸载', () => {
     const ax = axios.create();
     const handle = Axp.install(ax, {});
     let active = 0;
@@ -164,7 +164,7 @@ describe('Axp.install — AxpHandle 内部簿记与回滚', () => {
     expect(active).toBe(0);
   });
 
-  it('同一个插件对象重复出现时，重排（prepend）也按下标拆装，数量不漂移', () => {
+  it('[public.handle.prepend][public.handle.dispose] 同一个插件对象重复出现时，重排（prepend）也按下标拆装，数量不漂移', () => {
     const ax = axios.create();
     const handle = Axp.install(ax, {});
     let active = 0;
@@ -177,13 +177,13 @@ describe('Axp.install — AxpHandle 内部簿记与回滚', () => {
     expect(active).toBe(0);
   });
 
-  it('Axp.install 中途有插件 install 抛错：先卸掉已装的（key 的拦截器被摘除）再 rethrow', () => {
+  it('[public.fn.Axp.install] Axp.install 中途有插件 install 抛错：先卸掉已装的（key 的拦截器被摘除）再 rethrow', () => {
     const ax = axios.create();
     expect(() => Axp.install(ax, { key: key(), cache: throwing })).toThrow('install boom');
     expect(activeReq(ax)).toBe(0);
   });
 
-  it('prepend 失败：list 与已装插件恢复原状，再 rethrow', () => {
+  it('[public.handle.prepend] prepend 失败：list 与已装插件恢复原状，再 rethrow', () => {
     const ax = axios.create();
     const handle = Axp.install(ax, { key: key() });
     const before = activeReq(ax);
@@ -195,7 +195,7 @@ describe('Axp.install — AxpHandle 内部簿记与回滚', () => {
     expect(activeReq(ax)).toBe(0);
   });
 
-  it('append 失败：失败的插件不留在 list 里', () => {
+  it('[public.handle.append] append 失败：失败的插件不留在 list 里', () => {
     const ax = axios.create();
     const handle = Axp.install(ax, { key: key() });
     expect(() => handle.append(throwing)).toThrow('install boom');
@@ -205,7 +205,7 @@ describe('Axp.install — AxpHandle 内部簿记与回滚', () => {
 
 
 describe('Core — 运行时动词与 adapter 归一化', () => {
-  it('HttpPrototype 声明的全部动词运行时都存在，purge/link/unlink 走 params', async () => {
+  it('[public.member.Core.purge][public.member.Core.link][public.member.Core.unlink] HttpPrototype 声明的全部动词运行时都存在，purge/link/unlink 走 params', async () => {
     const seen: any[] = [];
     const adapter = async (config: any) => {
       seen.push(config);
@@ -220,7 +220,7 @@ describe('Core — 运行时动词与 adapter 归一化', () => {
     expect(seen[0].params).toEqual({ a: 1 });
   });
 
-  it('裸 axios.create() 构造 Core 后 defaults.adapter 已归一化为函数', () => {
+  it('[public.member.Core.constructor] 裸 axios.create() 构造 Core 后 defaults.adapter 已归一化为函数', () => {
     const ax = axios.create();
     expect(typeof ax.defaults.adapter).not.toBe('function');
     Axp.create(ax);
@@ -230,7 +230,7 @@ describe('Core — 运行时动词与 adapter 归一化', () => {
 
 
 describe('Axp.install — 裸 axios.create() 上的 adapter 类插件', () => {
-  it('不经 Core，cache/share/mock/loading 一起装到带数组 adapter 的实例上请求正常', async () => {
+  it('[public.fn.Axp.install] 不经 Core，cache/share/mock/loading 一起装到带数组 adapter 的实例上请求正常', async () => {
     const net = vi.fn(async (config: any) => ({ status: 200, statusText: 'OK', headers: {}, config, data: { n: 1 } }) as any);
     const ax = axios.create({ adapter: [net as any] });
     const onLoading = vi.fn();
