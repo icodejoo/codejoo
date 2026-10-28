@@ -63,7 +63,7 @@ describe('key — 拦截与空配置边界', () => {
         expect(() => $parse({ key: { scope: () => { throw error; } } })).toThrow(error);
     });
 
-    it.fails('[key.req.key.enable] 请求级关闭应阻止抛错的 scope 回调', () => {
+    it('[key.req.key.enable] 请求级关闭应阻止抛错的 scope 回调', () => {
         const scope = vi.fn(() => { throw new Error('不可执行'); });
         expect($parse({ key: { enable: false, scope } })).toBeNull();
         expect(scope).not.toHaveBeenCalled();

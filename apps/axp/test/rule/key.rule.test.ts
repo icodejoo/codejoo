@@ -46,7 +46,7 @@ describe('key — 钩子与开关', () => {
         expect(key().name).toBe('axp:key');
     });
 
-    it.fails('[key.req.key.enable] 请求级 enable:false 应保留原配置并跳过生成', async () => {
+    it('[key.req.key.enable] 请求级 enable:false 应保留原配置并跳过生成', async () => {
         const ax = axios.create({ adapter: async (config) => ({ config, status: 200, statusText: '', headers: {}, data: config.key }) });
         key().install(ax);
         const result = await ax.get('/x', { key: { enable: false } });
