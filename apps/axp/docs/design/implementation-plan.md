@@ -4,6 +4,7 @@ status: active
 updated: 2026-10-28
 summary: 重构分几批做、每批改哪些文件、交付什么、怎么验收，以及 Codex 派发约束和评审关卡
 ---
+
 ## TL;DR
 
 - 在新分支上分 8 批（B0–B7）推进，每批结束时 `vp test` 全绿，Codex 先自审，Claude 终审后再进入下一批。
@@ -19,23 +20,25 @@ summary: 重构分几批做、每批改哪些文件、交付什么、怎么验�
 
 ## 2. 批次
 
-| 批次 | 内容 | 主要文件 | 交付与验收 |
-|---|---|---|---|
-| B0 基线 ✅ | 量性能、体积、用例数；建行为清单 | `bench/pipeline.bench.ts`、`docs/reference/pipeline-migration/`、`docs/reports/2026-10-28-pipeline-baseline.md` | 836 处声明（执行 1002 条）：keep 346 / change 423 / drop 67；40 条存疑已终审裁决 |
-| B1 内核 ✅ | 归一化响应（含 `isAxpResponse`、判定 getter）、上下文、管线、传输、落定（含 bug 透传、`reject`、调用点 stack）、客户端、key、取消、日志开关 | `src/{client,pipeline,context,transport,response,key,types}.ts` | 测试方案 §3 全部单元用例；客户端与取消的 rule/boundary；类型测试中与插件无关的部分；`vitest.config.ts` 写入内核四文件分支 100% 门槛并达标 |
-| B2 无状态插件 ✅ | loading、notify、repath、filter、envs | `src/plugins/{loading,notify,repath,filter,envs}.ts` | 各插件 rule/boundary；loading 与 notify 的 I2、I4 |
-| B3 重试与鉴权 | retry、auth、TokenManager（O4） | `src/plugins/{retry,auth}.ts`、`src/objects/TokenManager.ts` | rule/boundary；auth + retry、loading + auth、notify + auth 组合 |
-| B4 结果来源 | mock、share、cache（O3、O6） | `src/plugins/{mock,share,cache}.ts` | rule/boundary；§5.2 余下组合 |
-| B5 测试收尾 | powerset、不变量、类型测试补齐、覆盖率门槛、删 `test/legacy/` 和旧源码 | `test/combo/powerset.combo.test.ts`、`vitest.config.ts`；删除 `src/{core,install,helper,bag}.ts`、`src/objects/Response.ts`、`src/plugins/{cancel,key,logger,normalize}.ts` | 全局覆盖率门槛写入并达标（内核分支 100% 持续保持）；映射核对公式成立；I1–I7 全部生效 |
-| B6 文档与产物 | README 中英文、ARCHITECTURE.md 重写、CHANGELOG（含迁移指南）、`package.json` exports、e2e playground | 同左 | `vp pack` 成功；子路径检查通过；性能与体积达到门槛并写进报告 |
-| B7 验收 | 改造执行器，跑 `npm run accept` | `accept/lib/*`、`accept/mapping.md` | 达到测试方案 §9.3；验收报告；testkit 台账在 api-ws-demo 单独提交 |
+| 批次             | 内容                                                                                                                                        | 主要文件                                                                                                                                                                    | 交付与验收                                                                                                                                |
+| ---------------- | ------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------- |
+| B0 基线 ✅       | 量性能、体积、用例数；建行为清单                                                                                                            | `bench/pipeline.bench.ts`、`docs/reference/pipeline-migration/`、`docs/reports/2026-10-28-pipeline-baseline.md`                                                             | 836 处声明（执行 1002 条）：keep 346 / change 423 / drop 67；40 条存疑已终审裁决                                                          |
+| B1 内核 ✅       | 归一化响应（含 `isAxpResponse`、判定 getter）、上下文、管线、传输、落定（含 bug 透传、`reject`、调用点 stack）、客户端、key、取消、日志开关 | `src/{client,pipeline,context,transport,response,key,types}.ts`                                                                                                             | 测试方案 §3 全部单元用例；客户端与取消的 rule/boundary；类型测试中与插件无关的部分；`vitest.config.ts` 写入内核四文件分支 100% 门槛并达标 |
+| B2 无状态插件 ✅ | loading、notify、repath、filter、envs                                                                                                       | `src/plugins/{loading,notify,repath,filter,envs}.ts`                                                                                                                        | 各插件 rule/boundary；loading 与 notify 的 I2、I4                                                                                         |
+| B3 重试与鉴权 ✅ | retry、auth、TokenManager（O4）                                                                                                             | `src/plugins/{retry,auth}.ts`、`src/objects/TokenManager.ts`                                                                                                                | rule/boundary；auth + retry、loading + auth、notify + auth 组合                                                                           |
+| B4 结果来源 ✅   | mock、share、cache（O3、O6）                                                                                                                | `src/plugins/{mock,share,cache}.ts`                                                                                                                                         | rule/boundary；§5.2 余下组合                                                                                                              |
+| B5 测试收尾      | powerset、不变量、类型测试补齐、覆盖率门槛、删 `test/legacy/` 和旧源码                                                                      | `test/combo/powerset.combo.test.ts`、`vitest.config.ts`；删除 `src/{core,install,helper,bag}.ts`、`src/objects/Response.ts`、`src/plugins/{cancel,key,logger,normalize}.ts` | 全局覆盖率门槛写入并达标（内核分支 100% 持续保持）；映射核对公式成立；I1–I7 全部生效                                                      |
+| B6 文档与产物    | README 中英文、ARCHITECTURE.md 重写、CHANGELOG（含迁移指南）、`package.json` exports、e2e playground                                        | 同左                                                                                                                                                                        | `vp pack` 成功；子路径检查通过；性能与体积达到门槛并写进报告                                                                              |
+| B7 验收          | 改造执行器，跑 `npm run accept`                                                                                                             | `accept/lib/*`、`accept/mapping.md`                                                                                                                                         | 达到测试方案 §9.3；验收报告；testkit 台账在 api-ws-demo 单独提交                                                                          |
 
 批次之间的依赖是线性的；B2 和 B3 都只依赖 B1，但它们共用 `test/helpers/` 和组合用例，**不并行**。
 
 **2026-10-28 提速调整（用户同意）**：
+
 - B3 与 B4 只依赖 B2 的 `resolveOption`，彼此代码不相交，**并行**，各占一个 worktree 槽位；跨批组合（auth+share、retry+cache、retry+share）合并后在 B5 统一测。
 - **worktree 槽位复用**：`E:\workspaces\codejoo-accept`、`E:\workspaces\codejoo-key` 两个 worktree 已装好依赖，后续任务一律在其中 `git switch -c <新分支> jelon/axp-pipeline` 复用，不再新建（Windows 上新建 + `pnpm install` 约 7 分钟）；锁文件变化时再 `pnpm install --offline`。目录不要改名或移动（pnpm 链接是绝对路径）。
 - **diff-simplify 改为阶段性**：B3、B4 不再逐批跑四代理精简，留到 B5 对全部插件统一做一次。
+- **B5 拆两块并行**：B5a 测试侧（跨批组合、powerset 扩到 9 插件、类型测试补齐）与 B5b 删除侧（删旧源码与 `test/legacy/`、入口切新 API、全局覆盖率门槛），文件不相交；两块合入后再统一 diff-simplify。
 
 ## 3. 每批的工作方式
 
@@ -65,13 +68,13 @@ summary: 重构分几批做、每批改哪些文件、交付什么、怎么验�
 
 ## 5. 风险与应对
 
-| 风险 | 应对 |
-|---|---|
-| 一次重写面太大，Codex 产出偏离文档 | 小批次 + 每批终审；B0 的行为清单先评审，后续评审以清单为准 |
+| 风险                                                           | 应对                                                                                                                               |
+| -------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------- |
+| 一次重写面太大，Codex 产出偏离文档                             | 小批次 + 每批终审；B0 的行为清单先评审，后续评审以清单为准                                                                         |
 | 类型层（两个泛型、`WithData`、插件泛型推断）写不出来或拖慢 IDE | B1 先做类型原型并用 `expectTypeOf` 锁住；IDE 卡顿时退回"`R` 只在客户端级生效、插件回调用 `IAxpResponse`"的简化方案，退回前先问用户 |
-| 行为变化（N1–N12）在验收里暴露意外 | B7 失败项逐条归因：是实现 bug 就修，是方案问题就回到文档改，再同步 CHANGELOG |
-| testkit 台账和执行器要跨仓改 | 只改 axp 相关文件；api-ws-demo 单独提交，提交前问用户 |
-| 性能门槛不达标 | 先用 bench 定位热点（上下文分配、patch 合并、key 计算），优化不得破坏不变量 |
+| 行为变化（N1–N12）在验收里暴露意外                             | B7 失败项逐条归因：是实现 bug 就修，是方案问题就回到文档改，再同步 CHANGELOG                                                       |
+| testkit 台账和执行器要跨仓改                                   | 只改 axp 相关文件；api-ws-demo 单独提交，提交前问用户                                                                              |
+| 性能门槛不达标                                                 | 先用 bench 定位热点（上下文分配、patch 合并、key 计算），优化不得破坏不变量                                                        |
 
 ## 6. 收尾
 
