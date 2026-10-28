@@ -17,9 +17,6 @@ export type { ITokenManager } from "./objects/TokenManager"
 export {
   default as axpAuth,
   AuthFailureAction,
-  authFailureFactory,
-  DEFAULT_ON_AUTH_FAILURE,
-  ACCESS_DENIED_CODE,
 } from "./plugins/auth"
 
 export type { IAuthOptions, TAuthFunc } from "./plugins/auth"
