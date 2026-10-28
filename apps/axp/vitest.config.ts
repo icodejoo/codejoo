@@ -6,8 +6,12 @@ export default defineConfig({
     include: ["test/**/*.{test,spec}.ts"],
     // 旧架构测试仅供迁移审计，B1 加入新用例后移除空集放行。
     exclude: ["test/legacy/**"],
-    // B0 只留基线与归档，暂时允许零用例。
-    passWithNoTests: true,
+    // B1 起只对内核四个文件启用分支满覆盖门槛。
+    coverage: {
+      provider: "v8",
+      include: ["src/{client,pipeline,context,transport,response,key}.ts"],
+      thresholds: { "src/{pipeline,context,transport,response}.ts": { branches: 100 } },
+    },
     // 关闭 console intercept，让 console.log 实时打印（即使测试通过也显示）
     disableConsoleIntercept: true,
     // 默认 verbose，列出每个 it 块
