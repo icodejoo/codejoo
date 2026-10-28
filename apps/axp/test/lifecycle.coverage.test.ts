@@ -1,6 +1,4 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import axios, { AxiosError } from 'axios';
-import normalize from '../src/plugins/normalize';
 import notify from '../src/plugins/notify';
 import cancel, { cancelAll } from '../src/plugins/cancel';
 
@@ -20,22 +18,6 @@ function response(config: any, data: unknown = 'ok') {
 }
 
 describe('normalize/notify — 失败旁路与清理', () => {
-    it.each([true, { enable: true }, () => ({ enable: true })])('normalize=%s 仍校验业务失败并携带 config', async (option) => {
-        const ax = axios.create({ adapter: async (c) => response(c, { code: 1 }) });
-        normalize().install(ax);
-        const error = await ax.get('/', { normalize: option }).catch((e) => e);
-        expect(error.name).toBe('ApiError');
-        expect(error.config.url).toBe('/');
-    });
-    it('normalize 无 response 时读取 err.status，卸载后不附加 api', async () => {
-        const { ax, response: hooks } = interceptors();
-        const off = normalize().install(ax);
-        const error = Object.assign(new AxiosError('offline'), { status: 504 });
-        await expect(hooks.use.mock.calls[0][1](error)).rejects.toBe(error);
-        expect((error as any).api.status).toBe(504);
-        off?.();
-        expect(hooks.eject).toHaveBeenCalledOnce();
-    });
     it.each(['stringify', 'notify'])('HTTP 错误路径 %s 抛错仍保留原错误，并记录日志', async (phase) => {
         const sink = { log: vi.fn(), warn: vi.fn(), error: vi.fn() };
         const { ax, response: hooks } = interceptors();

@@ -32,6 +32,7 @@ A 批（单插件规则/补丁/覆盖文件）迁移进行中，基线冻结于 
 | repath（repath.test 全部 + lifecycle.coverage 的 2 条） | 本批提交 | 23 | 0 | 0 | 0 | 0 | 0 | 23 | 是 |
 | filter（filter.test 全部 + lifecycle.coverage 的 2 条） | 本批提交 | 19 | 0 | 0 | 0 | 0 | 0 | 19 | 是 |
 | envs（envs.test 全部 + lifecycle.coverage 的 2 条） | 本批提交 | 8 | 0 | 0 | 0 | 0 | 0 | 8 | 是 |
+| normalize（normalize.test 全部 + lifecycle.coverage 的 2 条） | 本批提交 | 24 | 0 | 0 | 0 | 0 | 0 | 24 | 是 |
 
 ## 映射
 
@@ -454,3 +455,17 @@ A 批（单插件规则/补丁/覆盖文件）迁移进行中，基线冻结于 
 | test/envs.test.ts::envs > 合并是浅 Object.assign（不递归） | rule/envs.rule.test.ts::envs > [envs.opt.rules[].config] 合并是浅 Object.assign（不递归） | rename | 浅合并 |  |
 | test/lifecycle.coverage.test.ts::envs/filter/repath — 次要分支与卸载 > envs 无 baseURL 配置 %s 也可安装并还原（each） | boundary/envs.boundary.test.ts::envs/filter/repath — 次要分支与卸载 > [envs.opt.rules[].config][envs.method.cleanup] envs 无 baseURL 配置 %s 也可安装并还原 | rename | 无 baseURL 配置的安装与还原（each） |  |
 | test/lifecycle.coverage.test.ts::envs/filter/repath — 次要分支与卸载 > envs rule 抛错不修改 defaults | boundary/envs.boundary.test.ts::envs/filter/repath — 次要分支与卸载 > [envs.cb.rules[].rule] envs rule 抛错不修改 defaults | rename | rule 抛错，异常回调 |  |
+| test/normalize.test.ts::review #24/#26 — 请求级归一化与原始响应包装 > normalize=%s 放行业务失败（each） | rule/normalize.rule.test.ts::请求级归一化与原始响应包装 > [normalize.req.normalize][normalize.req.normalize.enable][normalize.req.normalize.callback] normalize=%s 放行业务失败 | rename | 请求级关闭放行业务失败，review #24（each） |  |
+| test/normalize.test.ts::review #24/#26 — 请求级归一化与原始响应包装 > normalize:false 的 HTTP 错误原样拒绝且不附加 api | rule/normalize.rule.test.ts::请求级归一化与原始响应包装 > [normalize.req.normalize] normalize:false 的 HTTP 错误原样拒绝且不附加 api | rename | HTTP 错误原样拒绝，review #24 |  |
+| test/normalize.test.ts::review #24/#26 — 请求级归一化与原始响应包装 > wrap 保留非信封 body：$body（each） | rule/normalize.rule.test.ts::请求级归一化与原始响应包装 > [public.req.wrap][normalize.fn.axpNormalize] wrap 保留非信封 body：$body | rename | wrap 保留非信封 body，review #26（each） |  |
+| test/normalize.test.ts::normalize — 成功路径 > 业务成功（code=0）→ 原样返回 response（不改写 data） | rule/normalize.rule.test.ts::normalize — 成功路径 > [normalize.fn.axpNormalize] 业务成功（code=0）→ 原样返回 response（不改写 data） | rename | 成功路径 |  |
+| test/normalize.test.ts::normalize — 成功路径 > 业务成功（code='0000'）→ 原样返回 | rule/normalize.rule.test.ts::normalize — 成功路径 > [normalize.fn.axpNormalize] 业务成功（code='0000'）→ 原样返回 | rename | 成功路径 |  |
+| test/normalize.test.ts::normalize — 成功路径 > 非信封式（无 code）→ 退化为 HTTP 语义，2xx 即成功 | rule/normalize.rule.test.ts::normalize — 成功路径 > [normalize.fn.axpNormalize] 非信封式（无 code）→ 退化为 HTTP 语义，2xx 即成功 | rename | 成功路径 |  |
+| test/normalize.test.ts::normalize — 业务失败路径 > code 非成功码 → reject 一个 ApiError（携带结构化 ApiResponse） | rule/normalize.rule.test.ts::normalize — 业务失败路径 > [normalize.fn.axpNormalize] code 非成功码 → reject 一个 ApiError（携带结构化 ApiResponse） | rename | 业务失败路径 |  |
+| test/normalize.test.ts::normalize — 业务失败路径 > HTTP 2xx 但 code 失败 → 仍判失败 | rule/normalize.rule.test.ts::normalize — 业务失败路径 > [normalize.fn.axpNormalize] HTTP 2xx 但 code 失败 → 仍判失败 | rename | 业务失败路径 |  |
+| test/normalize.test.ts::normalize — 错误路径（onRejected） > 有 response → 附加 .api（结构化 ApiResponse）并透传原 error | rule/normalize.rule.test.ts::normalize — 错误路径（onRejected） > [normalize.fn.axpNormalize] 有 response → 附加 .api（结构化 ApiResponse）并透传原 error | rename | 有 response 的错误路径 |  |
+| test/normalize.test.ts::normalize — 错误路径（onRejected） > 无 response（网络错误/超时）→ fromResponse 防 null，仍附 .api | boundary/normalize.boundary.test.ts::normalize — 错误路径（onRejected） > [normalize.fn.axpNormalize] 无 response（网络错误/超时）→ fromResponse 防 null，仍附 .api | rename | 无 response 的网络错误 |  |
+| test/normalize.test.ts::normalize — 元信息 > enable:false → 不安装响应拦截器 | rule/normalize.rule.test.ts::normalize — 元信息 > [normalize.opt.enable] enable:false → 不安装响应拦截器 | rename | 规则层（rule） |  |
+| test/normalize.test.ts::normalize — 元信息 > 工厂 .name 对齐插件名 'axp:normalize' | rule/normalize.rule.test.ts::normalize — 元信息 > [normalize.prop.name] 工厂 .name 对齐插件名 'axp:normalize' | rename | 规则层（rule） |  |
+| test/lifecycle.coverage.test.ts::normalize/notify — 失败旁路与清理 > normalize=%s 仍校验业务失败并携带 config（each） | rule/normalize.rule.test.ts::normalize/notify — 失败旁路与清理 > [normalize.req.normalize][normalize.fn.axpNormalize] normalize=%s 仍校验业务失败并携带 config | rename | 请求级 true/对象/函数仍校验业务失败（each） |  |
+| test/lifecycle.coverage.test.ts::normalize/notify — 失败旁路与清理 > normalize 无 response 时读取 err.status，卸载后不附加 api | boundary/normalize.boundary.test.ts::normalize/notify — 失败旁路与清理 > [normalize.fn.axpNormalize][normalize.method.cleanup] normalize 无 response 时读取 err.status，卸载后不附加 api | rename | 无 response 读取 err.status，卸载后不附加 api |  |
