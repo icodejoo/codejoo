@@ -7,6 +7,7 @@ import { Axp } from '../../src';
 import { makeNetwork } from '../helpers/network';
 import { use } from '../helpers/install';
 import { FakeTokenManager } from '../helpers/auth';
+import { authBackend, authHeader } from '../helpers/auth';
 
 /** 极简 TokenManager 替身：accessToken getter 加 Bearer 前缀（与真实实现一致） */
 function makeTM(token?: string): ITokenManager {
@@ -244,5 +245,68 @@ describe('auth: additional realistic branches', () => {
     const r = await api.axios.get('/public');
     expect(r.status).toBe(200);
     await expect(api.axios.get('/protected/x')).rejects.toBeTruthy();
+  });
+});
+
+/** 给请求加延迟（毫秒），配合 makeNetwork 制造乱序 */
+const lat = (ms: number) => ({ latency: ms } as any);
+
+describe('review — auth 重放的逻辑请求边界', () => {
+  const path = '/review-auth';
+  const initialToken = 'old';
+
+  it('[auth.opt.tokenManager.canRefresh][auth.cb.onRefresh] canRefresh=false 时不刷新；失败后保持禁止，登录方显式重置后才恢复', async () => {
+    const net = makeNetwork().on('GET', path, () => ({ status: 401 }));
+    const tm = makeTM(initialToken);
+    tm.canRefresh = false;
+    const onRefresh = vi.fn(() => false);
+    const onAccessExpired = vi.fn();
+    const ax = axios.create({ adapter: net.adapter });
+    Axp.install(ax, { auth: auth({ tokenManager: tm, onRefresh, onAccessExpired }) });
+    await expect(ax.get(path)).rejects.toMatchObject({ status: 401 });
+    expect(onRefresh).not.toHaveBeenCalled();
+    expect(onAccessExpired).toHaveBeenCalledOnce();
+    tm.set('login');
+    expect(tm.canRefresh).toBe(false);
+    tm.canRefresh = true;
+    await expect(ax.get(path)).rejects.toMatchObject({ status: 401 });
+    expect(onRefresh).toHaveBeenCalledOnce();
+    expect(tm.canRefresh).toBe(false);
+  });
+});
+
+describe('auth 集成 — 刷新失败', () => {
+  it('[auth.req.authExpired] 成功（刷新后重放）的请求不带 authExpired 标记', async () => {
+    const net = authBackend('srv-1');
+    const tm = makeTM('stale');
+    const inst = axios.create({ adapter: net.adapter });
+    let seen: unknown = 'unset';
+    const api = Axp.create(inst);
+    use(api, auth({ tokenManager: tm, urlPattern: ['/me'], onRefresh: () => { tm.set('srv-1'); return true; }, onAccessExpired: vi.fn() }));
+    inst.interceptors.response.use((res) => { seen = res.config?.authExpired; return res; });
+    await api.get('/me')(undefined, lat(5));
+    expect(seen).toBeUndefined();
+  });
+});
+
+describe('auth 集成 — urlPattern 按 pathname 匹配', () => {
+  it("[auth.opt.urlPattern] urlPattern:'/me' 命中绝对 URL 与带查询串的 URL，不命中其它路径", async () => {
+    const net = makeNetwork();
+    const seen: Record<string, string | undefined> = {};
+    net.fallback((c) => { seen[c.url!] = authHeader(c); return { data: { code: 0, data: null } }; });
+    const tm = makeTM('t1');
+    const api = Axp.create(axios.create({ adapter: net.adapter }));
+    use(api, auth({ tokenManager: tm, urlPattern: ['/me'], onRefresh: () => true, onAccessExpired: () => { } }));
+
+    await api.get('/me')();
+    await api.get('/me?x=1')();
+    await api.get('https://x.com/me')();
+    await api.get('https://x.com/me?x=1#h')();
+    await api.get('/other')();
+    expect(seen['/me']).toBe('Bearer t1');
+    expect(seen['/me?x=1']).toBe('Bearer t1');
+    expect(seen['https://x.com/me']).toBe('Bearer t1');
+    expect(seen['https://x.com/me?x=1#h']).toBe('Bearer t1');
+    expect(seen['/other']).toBeUndefined();
   });
 });
