@@ -30,6 +30,8 @@ const REFRESHED = `${name}:refreshed`;
 const DENIED = `${name}:denied`;
 /** 保存会被 share adapter 消费的请求选项，供鉴权重放恢复。 */
 const SHARE = `${name}:share`;
+/** 保存会被 cache adapter 消费并删除的请求开关，供鉴权重放恢复，保证重放成功后能写缓存。 */
+const CACHE = `${name}:cache`;
 
 /** 默认越权业务码，用于 `$synthDenied` 合成的响应 / default access-denied business code, used by `$synthDenied`'s synthesized response. */
 export const ACCESS_DENIED_CODE = 'ACCESS_DENIED';
@@ -48,7 +50,19 @@ export const ACCESS_DENIED_CODE = 'ACCESS_DENIED';
  * The state records its owning tokenManager and is reused only by a reinstall with the
  * same tm; an install with a different tm must not wait on the old session's refresh.
  */
-const refreshStates = new WeakMap<AxiosInstance, { current: Promise<boolean> | null; tm: ITokenManager }>();
+/**
+ * 给因会话过期而失败的请求打上 `authExpired` 标记，写在响应 config 与请求 config 上，
+ * 失败响应（business 风格被 resolve）和 reject 的错误都能从各自的 `config` 读到。
+ *
+ * @param response 触发过期判定的响应
+ * @param config 该请求的 config
+ */
+function markExpired(response: AxiosResponse, config: AxiosRequestConfig): void {
+  config.authExpired = true;
+  if (response.config) response.config.authExpired = true;
+}
+
+const refreshStates = new WeakMap<AxiosInstance, { current: Promise<boolean> | null; tm: ITokenManager; expired: boolean }>();
 
 
 /* ── onFailure 路由动作 ──────────────────────────────────────────────────── */
@@ -159,7 +173,7 @@ export default function axpAuth(options: IAuthOptions): Plugin {
       const { tokenManager: tm, matchMethod, matchUrl } = cfg;
       let refreshState = refreshStates.get(axios);
       if (!refreshState || refreshState.tm !== tm) {
-        refreshState = { current: null, tm };
+        refreshState = { current: null, tm, expired: false };
         refreshStates.set(axios, refreshState);
       }
 
@@ -192,8 +206,16 @@ export default function axpAuth(options: IAuthOptions): Plugin {
         return p;
       };
 
-      /** 判定过期：tm.clear() 后调用 onAccessExpired / handles expiry: tm.clear() then calls onAccessExpired. */
+      /**
+       * 判定过期：tm.clear() 后调用 onAccessExpired。一轮失败只通知一次：已通知且 tm 仍无 token
+       * （没有重新登录/刷新成功）时，并发的其余请求直接跳过，只由调用方各自传播失败。
+       *
+       * Handles expiry: tm.clear() then onAccessExpired. Notifies once per failure round: if already
+       * notified and tm still has no token (no re-login / successful refresh), concurrent peers skip.
+       */
       const expire = async (resp: AxiosResponse): Promise<void> => {
+        if (refreshState.expired && !tm.accessToken) return;
+        refreshState.expired = true;
         tm.canRefresh = false;
         tm.clear();
         await safe('onAccessExpired', () => cfg.onAccessExpired(tm, resp));
@@ -234,6 +256,7 @@ export default function axpAuth(options: IAuthOptions): Plugin {
         $throwIfCanceled(config);
         const bag = config as unknown as Record<string, unknown>;
         if (!(SHARE in bag)) bag[SHARE] = config.share;
+        if (!(CACHE in bag)) bag[CACHE] = config.cache;
         const prot = isProtected(config);
         bag[DECISION] = prot;
         if (!prot) { delete config.protected; return config; }
@@ -246,6 +269,8 @@ export default function axpAuth(options: IAuthOptions): Plugin {
           $throwIfCanceled(config);
           if (!refreshed) {
             bag[DENIED] = true;
+            // 与触发刷新失败的请求一致，标记会话过期
+            config.authExpired = true;
             // 附 .config：cancel 插件靠 error.config 释放它的 AbortController，没有会永久泄漏
             //
             // attaches .config: cancel plugin releases its AbortController via error.config; without it, that controller leaks forever
@@ -267,7 +292,11 @@ export default function axpAuth(options: IAuthOptions): Plugin {
         const bag = config as Record<string, unknown>;
         bag[REFRESHED] = true;
         try {
-          return await runAttempt(axios, { ...config, share: bag[SHARE] as AxiosRequestConfig['share'] });
+          return await runAttempt(axios, {
+            ...config,
+            share: bag[SHARE] as AxiosRequestConfig['share'],
+            cache: bag[CACHE] as AxiosRequestConfig['cache'],
+          });
         } finally {
           $clearFlags(bag);
         }
@@ -305,6 +334,7 @@ export default function axpAuth(options: IAuthOptions): Plugin {
         // already replayed and onFailure still says Refresh/Replay — falls back to expired, guards against loops; other actions (e.g. a 500 → Others) route normally, no spurious logout
         if (bag[REFRESHED] === true && (action === AuthFailureAction.Refresh || action === AuthFailureAction.Replay)) {
           await expire(response);
+          markExpired(response, config);
           $clearFlags(bag);
           return propagate();
         }
@@ -316,6 +346,7 @@ export default function axpAuth(options: IAuthOptions): Plugin {
               return replay(config);
             }
             await expire(response);
+          markExpired(response, config);
             $clearFlags(bag);
             return propagate();
           }
@@ -330,6 +361,7 @@ export default function axpAuth(options: IAuthOptions): Plugin {
           }
           case AuthFailureAction.Expired: {
             await expire(response);
+          markExpired(response, config);
             $clearFlags(bag);
             return propagate();
           }
@@ -426,6 +458,7 @@ function $clearFlags(bag: Record<string, unknown>): void {
   delete bag[REFRESHED];
   delete bag[DENIED];
   delete bag[SHARE];
+  delete bag[CACHE];
 }
 
 /** 等待刷新后仍尊重逻辑请求的取消状态，并附上配置供最终清理。 */
@@ -654,5 +687,13 @@ declare module 'axios' {
   interface AxiosRequestConfig {
     /** 请求级是否受保护，单次覆盖插件级判定：true/false 强制，或函数 MaybeFun / request-level protected override: true/false forces it, or a MaybeFun. */
     protected?: MaybeFun<boolean | undefined | null | void>;
+    /**
+     * 只读结果标记：该请求因会话过期而失败时为 true，出现在失败响应/错误的 `config` 上。
+     * `onAccessExpired` 一轮只通知一次，每个受影响的请求靠它判断自己是否因过期失败。
+     *
+     * Read-only outcome flag: true on the `config` of a response/error that failed because the session expired.
+     * `onAccessExpired` fires once per round; each affected request uses this to tell it failed due to expiry.
+     */
+    authExpired?: boolean;
   }
 }

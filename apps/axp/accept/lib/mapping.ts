@@ -51,6 +51,7 @@ export const REQUEST_OPTION_MAP: Record<string, OptionCheck> = {
   key: (v) => (typeof v === 'boolean' || typeof v === 'string' ? null : '需要 boolean 或字符串'),
   mock: isBool,
   normalize: isBool,
+  filter: isBool,
   breaker: () => 'axp 没有 breaker 能力',
 };
 
@@ -145,6 +146,7 @@ export interface MappedRequestConfig {
   key?: boolean | string;
   mock?: boolean;
   normalize?: boolean;
+  filter?: boolean;
 }
 
 /**
@@ -194,6 +196,7 @@ export function mapRequestOptions(options: RequestOptions | undefined): MappedRe
   if (o.key !== undefined) out.key = mapKeyOption(o.key);
   if (o.mock !== undefined) out.mock = o.mock;
   if (o.normalize !== undefined) out.normalize = o.normalize;
+  if (o.filter !== undefined) out.filter = o.filter;
   return out;
 }
 

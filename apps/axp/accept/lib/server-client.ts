@@ -33,7 +33,7 @@ export class ServerClient {
   #style: Style;
 
   /**
-   * @param baseUrl 测试服务器地址，如 `http://127.0.0.1:8080`
+   * @param baseUrl 测试服务器地址，如 `http://127.0.0.1:47080`
    * @param runId 本次运行的唯一轮次 id
    * @param style 初始响应风格
    */

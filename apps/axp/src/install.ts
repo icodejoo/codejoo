@@ -79,9 +79,26 @@ export const Axp = {
     // 按倒序拆卸已装的插件，使包装 adapter 的插件在恢复时正好还原到前一个插件保存的状态，与安装顺序对称。
     //
     // Tears down installed plugins in reverse so an adapter-wrapping plugin's restore unwinds onto whatever its predecessor saved, mirroring install order symmetrically.
-    const teardownAll = (): void => {
-      for (let i = cleanups.length - 1; i >= 0; i--) cleanups[i]?.();
+    //
+    // 某个 cleanup 抛错不中断后续：全部尽力执行并清空表，返回第一个错误（无则 undefined）由调用方决定是否抛出。
+    //
+    // A throwing cleanup doesn't stop the rest: all run best-effort and the list is cleared; returns the first error (or undefined) for the caller to decide whether to throw.
+    const teardownAll = (): unknown => {
+      let firstErr: unknown;
+      let failed = false;
+      for (let i = cleanups.length - 1; i >= 0; i--) {
+        try {
+          cleanups[i]?.();
+        } catch (e) {
+          if (!failed) { failed = true; firstErr = e; }
+        }
+      }
       cleanups.length = 0;
+      return failed ? { error: firstErr } : undefined;
+    };
+    // 把 teardownAll 的结果抛出（若有）
+    const rethrowTeardown = (r: unknown): void => {
+      if (r) throw (r as { error: unknown }).error;
     };
     // 按 `list` 顺序逐个安装；任一抛错则先倒序拆掉已装的再 rethrow，不留半装状态。
     //
@@ -90,6 +107,7 @@ export const Axp = {
       try {
         for (const p of list) cleanups.push(p.install(axios));
       } catch (e) {
+        // 回滚中的 cleanup 错误不应掩盖原始安装错误
         teardownAll();
         throw e;
       }
@@ -105,7 +123,7 @@ export const Axp = {
     //
     // Full teardown + reinstall in the new `list` order, operating directly on each plugin's own install()/cleanup() (not via Core.use()/eject()); see the file doc for why. If the new plugin fails to install, it's removed from `list`, the original set is restored, then the error is rethrown.
     const insertAt = (idx: number, p: Plugin): void => {
-      teardownAll();
+      const tornDown = teardownAll();
       list.splice(idx, 0, p);
       try {
         installAll();
@@ -114,6 +132,8 @@ export const Axp = {
         installAll();
         throw e;
       }
+      // 重装完成后再上抛拆卸阶段的第一个错误
+      rethrowTeardown(tornDown);
     };
 
     installAll();
@@ -125,8 +145,9 @@ export const Axp = {
         return list.find((p) => p.name === name);
       },
       dispose(): void {
-        teardownAll();
+        const r = teardownAll();
         list.length = 0;
+        rethrowTeardown(r);
       },
       prepend(p: Plugin): void {
         insertAt(0, p);

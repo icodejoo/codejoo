@@ -42,6 +42,14 @@ export class EventLog {
   }
 
   /**
+   * 请求自身带有`authExpired`标记：只打 expired 标签，不增加回调计数。
+   * @param reqTag 请求标签
+   */
+  markExpired(reqTag: string | undefined): void {
+    this.#tag(reqTag, 'expired');
+  }
+
+  /**
    * 越权回调（HTTP/业务码 403）。
    * @param reqTag 触发该回调的请求标签
    */

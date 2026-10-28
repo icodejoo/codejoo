@@ -134,6 +134,7 @@ export async function runEntry(entry: PlanEntry, seq: number, deps: RunnerDeps):
       expired: (t) => events.onExpired(t),
       denied: (t) => events.onDenied(t),
       unauthenticated: (t) => events.onUnauthenticated(t),
+      expiredMarked: (t) => events.markExpired(t),
     },
     getStyle: () => server.style,
     runId,

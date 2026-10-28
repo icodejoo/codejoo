@@ -320,12 +320,14 @@ axpMock({ enable: import.meta.env.DEV, mockUrl: 'http://localhost:4000' })
 api.get('/pet/1')(undefined, { mock: true })
 ```
 
+The mock probe request bypasses `cache` and `share`: it neither reads nor writes the cache and is never merged with concurrent requests. Only the real request issued after a fallback goes through `cache`/`share`. So N same-key mock requests always fire N probes, and a mocked response is never cached.
+
 ### `axpFilter(options?)`
 Strips empty `params`/`data` fields before send.
 
 | option | type | default |
 | --- | --- | --- |
-| `predicate` | `(kv: [key, value]) => boolean` | drops `null`/`undefined`/`NaN`/blank string |
+| `predicate` | `(kv: [key, value]) => boolean` | drops `null`/`undefined`/`NaN`/blank string; an entry is dropped only when it returns exactly `true` |
 | `ignoreKeys` / `ignoreValues` | `array` | — |
 
 Request field `filter`: `false` \| `true` \| `IFilterOptions` \| `(config) => …`.

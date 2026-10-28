@@ -58,7 +58,7 @@ export default function axpRepath(
                         //fall back to data ONLY when params didn't supply the value
                         //（`==` on purpose: params[key] can legitimately be `undefined`,
                         // not just the `null` this variable starts at — either means "no value"）
-                        if (value == null && data) {
+                        if (value == null && data != null) {
                             if (isObject(data) && key in data) {
                                 value = data[key];
                                 dataKeys.add(key);

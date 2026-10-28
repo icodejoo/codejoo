@@ -24,7 +24,7 @@ export interface ProxyStats { connections: number; active: number; bytes_up: num
 export class NetemClient {
   readonly controlUrl: string;
 
-  /** @param controlUrl 控制地址，如 `http://127.0.0.1:9090` */
+  /** @param controlUrl 控制地址，如 `http://127.0.0.1:47090` */
   constructor(controlUrl: string) {
     this.controlUrl = controlUrl.replace(/\/+$/, '');
   }
@@ -104,7 +104,7 @@ export interface ProxyEndpointInfo {
  * 把 URL 的 host 换成指定主机，保留端口与协议。
  * @param url 原始地址
  * @param host 新主机名
- * @example swapHost('http://127.0.0.1:8080', 'nonexistent.invalid') // 'http://nonexistent.invalid:8080'
+ * @example swapHost('http://127.0.0.1:47080', 'nonexistent.invalid') // 'http://nonexistent.invalid:47080'
  */
 export function swapHost(url: string, host: string): string {
   const u = new URL(url);

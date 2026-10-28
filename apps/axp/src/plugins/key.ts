@@ -47,6 +47,8 @@ export default function axpKey({ after, before, enable = true, fastMode, ignores
 function isEnabled(k: unknown): boolean {
     if (k === 0) return true;
     if (!k) return false;
+    // 请求级 key 对象 enable:false → 本请求不生成
+    if (typeof k === 'object' && (k as IKeyObject).enable === false) return false;
     if (typeof k === 'string') return k.trim() !== '';
     return true;
 }
@@ -91,6 +93,8 @@ function $resolveScope(scope: IKeyObject['scope'], config: AxiosRequestConfig): 
 function $parseBase(config: AxiosRequestConfig, defaults?: IKeyObject): string | null {
     const build = config.key
     if (!build && build !== 0) return null
+    // 请求级 enable:false → 不生成（$parse 直接调用时同样生效）
+    if (typeof build === 'object' && build.enable === false) return null
     // key:true → 默认 simple，插件级 fastMode 可覆盖；插件级 ignore 列表透传
     if (build === true) return $key(config, defaults?.fastMode ?? true, defaults, defaults?.sample ?? false)
     if (typeof build === 'number') return build.toString()
@@ -375,7 +379,7 @@ export interface IKeyOptions extends IPluginCommonRequestOptions, IKeyObject {
 
 
 export interface IKeyObject {
-    /** 插件级总开关 / plugin-level master switch @default true */
+    /** 总开关：插件级 false 则整个插件不生效；请求级 `key: { enable: false }` 仅本请求不生成 key / master switch: plugin-level false disables the plugin; request-level `key: { enable: false }` skips key generation for that request only @default true */
     enable?: boolean
     /**
      * 是否启用简单模式：`true` 仅用 method+url（性能最高），`false` 用 method+url+params+data（准确度最高）

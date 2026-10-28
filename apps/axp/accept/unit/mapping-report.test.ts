@@ -30,6 +30,14 @@ describe('映射：中立选项 → axp 参数', () => {
     expect(mapRequestOptions({ key: 'fixed' }).key).toBe('fixed');
   });
 
+  it('filter：请求级布尔原样映射成 config.filter；非布尔显式报错', () => {
+    expect(mapRequestOptions({ filter: true })).toEqual({ filter: true });
+    expect(mapRequestOptions({ filter: false })).toEqual({ filter: false });
+    expect(mapRequestOptions({})).not.toHaveProperty('filter');
+    expect(checkRequestOptions({ id: 'r', path: '/x', options: { filter: true } })).toEqual([]);
+    expect(checkRequestOptions({ id: 'r', path: '/x', options: { filter: { ignoreKeys: ['a'] } as never } })[0]).toMatch(/filter/);
+  });
+
   it('retry：数字/布尔原样，对象翻译并把方法转小写', () => {
     expect(mapRequestOptions({ retry: 1 }).retry).toBe(1);
     expect(mapRequestOptions({ retry: false }).retry).toBe(false);
@@ -67,7 +75,7 @@ describe('映射不了的选项要显式报错', () => {
 
   it('映射表的每个插件都有登记，step 类型共 16 种', () => {
     expect(Object.keys(PLUGIN_OPTION_MAP).sort()).toEqual(['auth', 'cache', 'cancel', 'envs', 'filter', 'key', 'loading', 'log', 'mock', 'normalize', 'notify', 'repath', 'retry', 'share']);
-    expect(Object.keys(REQUEST_OPTION_MAP).sort()).toEqual(['auth', 'breaker', 'cache', 'key', 'loading', 'mock', 'normalize', 'retry', 'share', 'silent', 'timeout_ms']);
+    expect(Object.keys(REQUEST_OPTION_MAP).sort()).toEqual(['auth', 'breaker', 'cache', 'filter', 'key', 'loading', 'mock', 'normalize', 'retry', 'share', 'silent', 'timeout_ms']);
     expect(STEP_KINDS).toHaveLength(16);
   });
 
@@ -84,8 +92,8 @@ describe('config：命令行优先于环境变量，未知过滤值直接报错'
   const acceptDir = path.resolve('accept');
   it('默认值与相对路径', () => {
     const c = parseConfig([], { TESTKIT_SCENARIOS: 'rel/dir' }, '/work', acceptDir);
-    expect(c.server).toBe('http://127.0.0.1:8080');
-    expect(c.netem).toBe('http://127.0.0.1:9090');
+    expect(c.server).toBe('http://127.0.0.1:47080');
+    expect(c.netem).toBe('http://127.0.0.1:47090');
     expect(c.scenarios).toBe(path.resolve('/work', 'rel/dir'));
     expect(c.dry).toBe(false);
   });

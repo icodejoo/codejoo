@@ -22,9 +22,9 @@ export const ENV_NETEM = 'TESTKIT_NETEM';
 export const ENV_SCENARIOS = 'TESTKIT_SCENARIOS';
 
 /** 测试服务器默认地址 */
-export const DEFAULT_SERVER = 'http://127.0.0.1:8080';
+export const DEFAULT_SERVER = 'http://127.0.0.1:47080';
 /** netem 控制 API 默认地址 */
-export const DEFAULT_NETEM = 'http://127.0.0.1:9090';
+export const DEFAULT_NETEM = 'http://127.0.0.1:47090';
 /** 场景目录默认位置 */
 export const DEFAULT_SCENARIOS = 'E:/workspaces/api-ws-demo/testkit/scenarios';
 
@@ -65,6 +65,9 @@ export const MOCK_PREFIX = '/t/mock';
 export const DEFAULT_RETRY_STATUSES: readonly number[] = [500, 502, 503, 504];
 /** 默认可重试的幂等方法（大写） */
 export const DEFAULT_RETRY_METHODS: readonly string[] = ['GET', 'PUT', 'HEAD', 'DELETE', 'OPTIONS'];
+
+/** 默认可缓存的方法（大写）：axp 的缓存不分方法，中立默认只缓存读请求，与 retry 默认方法对称 */
+export const DEFAULT_CACHE_METHODS: readonly string[] = ['GET', 'HEAD'];
 
 /** axp 具备的能力名（CONTRACT §7）；不在其中的能力，场景直接跳过 */
 export const SUPPORTED_CAPABILITIES: ReadonlySet<string> = new Set([

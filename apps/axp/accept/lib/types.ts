@@ -56,6 +56,7 @@ export interface RequestOptions {
   key?: boolean | string;
   mock?: boolean;
   normalize?: boolean;
+  filter?: boolean;
   breaker?: boolean;
 }
 

@@ -28,7 +28,7 @@ export interface RawReply {
  * @param headers 额外请求头
  * @param onConnectError 连接失败时把原始异常转换成调用方自己的错误类型
  * @returns 状态码与响应文本
- * @example const r = await rawJson('http://127.0.0.1:9090/presets', 'GET', undefined, {}, (m) => new Error(m));
+ * @example const r = await rawJson('http://127.0.0.1:47090/presets', 'GET', undefined, {}, (m) => new Error(m));
  */
 export async function rawJson(
   url: string,

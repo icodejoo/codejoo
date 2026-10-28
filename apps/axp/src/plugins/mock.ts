@@ -83,25 +83,6 @@ export default function axpMock(
 
 
 /**
- * 仅判断"是否启用 mock" / determines only "whether mock is enabled" for this request.
- * @internal exported for unit tests
- * @param config 请求配置 / the request config
- * @param defaults 插件级默认配置 / plugin-wide defaults
- * @returns 本次请求是否应该走 mock / whether this request should go through mock
- */
-export function $shouldMock(config: AxiosRequestConfig, defaults: IMockOptions): boolean {
-  const v = config.mock;
-  if (v === false) return false;
-  if (v === true) return true;
-  if (typeof v === 'object' && v !== null) {
-    if (v.mock === false) return false;
-    return v.mock === true || !!v.mockUrl;
-  }
-  return !!defaults.mock;
-}
-
-
-/**
  * 解析 mock 配置；null 表示本请求不 mock / resolves the mock config; null means not mocked.
  * @internal
  * @param config 请求配置 / the request config

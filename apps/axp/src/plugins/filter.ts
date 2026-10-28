@@ -102,7 +102,7 @@ export function $filter(
         const val = obj[key];
         if (hasKeys && ignoreKeys!.includes(key)) { out[key] = val; continue; }
         if (hasVals && ignoreValues!.includes(val)) { out[key] = val; continue; }
-        if (predicate([key, val])) {
+        if (predicate([key, val]) === true) {
             dropped?.push([key, val]);
             continue;
         }
