@@ -35,6 +35,7 @@ A 批（单插件规则/补丁/覆盖文件）迁移进行中，基线冻结于 
 | normalize（normalize.test 全部 + lifecycle.coverage 的 2 条） | 本批提交 | 24 | 0 | 0 | 0 | 0 | 0 | 24 | 是 |
 | notify（notify.test 全部 + lifecycle.coverage 的 2 条） | 本批提交 | 10 | 0 | 0 | 0 | 0 | 0 | 10 | 是 |
 | cancel（cancel.test 全部 + lifecycle.coverage 余下 1 条，该文件至此清空） | 本批提交 | 16 | 0 | 0 | 0 | 0 | 0 | 16 | 是 |
+| helper+logger（helper.coverage、logger.coverage） | 本批提交 | 38 | 0 | 0 | 0 | 0 | 0 | 38 | 是 |
 
 ## 映射
 
@@ -496,3 +497,24 @@ A 批（单插件规则/补丁/覆盖文件）迁移进行中，基线冻结于 
 | test/cancel.test.ts::cancel — 与 cache / share / retry 组合（Axp.install 规范顺序） > cancel + retry：重试等待期间 cancelAll 能中止（返回 1），请求以取消告终 | combo/cancel+retry.combo.test.ts::cancel — 与 cache / share / retry 组合（Axp.install 规范顺序） > [cancel.fn.cancelAll × retry.opt.max] cancel + retry：重试等待期间 cancelAll 能中止（返回 1），请求以取消告终 | rename | 两个插件交互：重试等待期间可取消 |  |
 | test/cancel.test.ts::cancel — 与 cache / share / retry 组合（Axp.install 规范顺序） > cancel + retry：重试最终成功后 controller 被释放（cancelAll 返回 0） | combo/cancel+retry.combo.test.ts::cancel — 与 cache / share / retry 组合（Axp.install 规范顺序） > [cancel.fn.cancelAll × retry.opt.max] cancel + retry：重试最终成功后 controller 被释放（cancelAll 返回 0） | rename | 两个插件交互：重试成功后 controller 被释放 |  |
 | test/lifecycle.coverage.test.ts::cancel/loading — 资源释放边界 > cancel 完成后的旧 signal 再进请求链应签发新 signal；无 config 错误原样透传 | boundary/cancel.boundary.test.ts::cancel/loading — 资源释放边界 > [cancel.fn.cancelAll][cancel.method.cleanup] cancel 完成后的旧 signal 再进请求链应签发新 signal；无 config 错误原样透传 | rename | 旧 signal 再进请求链、卸载 |  |
+| test/logger.coverage.test.ts::logger — 日志级别、默认值与卸载 > $method 关闭时静默，开启时转发全部参数并可回退默认 sink（each） | unit/helper.unit.test.ts::logger — 日志级别、默认值与卸载 > [public.export.pluginLog][public.export.pluginWarn][public.export.pluginError][logger.opt.debug][logger.opt.logger] $method 关闭时静默，开启时转发全部参数并可回退默认 sink | rename | 纯函数 pluginLog/Warn/Error，无 axios 实例（each） |  |
+| test/logger.coverage.test.ts::logger — 日志级别、默认值与卸载 > 空配置使用 debug:false 与默认 sink，cleanup 恢复之前的引用 | rule/logger.rule.test.ts::logger — 日志级别、默认值与卸载 > [logger.fn.axpLogger][logger.opt.debug][logger.opt.logger][logger.method.cleanup] 空配置使用 debug:false 与默认 sink，cleanup 恢复之前的引用 | rename | 插件装配后的默认值与还原 |  |
+| test/logger.coverage.test.ts::logger — 日志级别、默认值与卸载 > 请求可覆盖 defaults 的 debug 和 sink | rule/logger.rule.test.ts::logger — 日志级别、默认值与卸载 > [logger.req.debug][logger.req.logger] 请求可覆盖 defaults 的 debug 和 sink | rename | 请求级覆盖 defaults |  |
+| test/helper.coverage.test.ts::helper — 基础值与克隆边界 > asArray(%s) 返回新空数组（each） | unit/helper.unit.test.ts::helper — 基础值与克隆边界 > [helper.asArray] asArray(%s) 返回新空数组 | rename | 纯函数，台账无 id（each） |  |
+| test/helper.coverage.test.ts::helper — 基础值与克隆边界 > asArray 复制数组且保留单值身份 | unit/helper.unit.test.ts::helper — 基础值与克隆边界 > [helper.asArray] asArray 复制数组且保留单值身份 | rename | 纯函数，台账无 id |  |
+| test/helper.coverage.test.ts::helper — 基础值与克隆边界 > isPrimitive 接受 %s（each） | unit/helper.unit.test.ts::helper — 基础值与克隆边界 > [helper.isPrimitive][helper.isObject] isPrimitive 接受 %s | rename | 纯函数，台账无 id（each） |  |
+| test/helper.coverage.test.ts::helper — 基础值与克隆边界 > isPrimitive 拒绝引用值 %s（each） | unit/helper.unit.test.ts::helper — 基础值与克隆边界 > [helper.isPrimitive] isPrimitive 拒绝引用值 %s | rename | 纯函数，台账无 id（each） |  |
+| test/helper.coverage.test.ts::helper — 基础值与克隆边界 > isObject 接受无原型对象并拒绝数组 | unit/helper.unit.test.ts::helper — 基础值与克隆边界 > [helper.isObject] isObject 接受无原型对象并拒绝数组 | rename | 纯函数，台账无 id |  |
+| test/helper.coverage.test.ts::helper — 基础值与克隆边界 > headers 缺失原样返回；AxiosHeaders 复制后独立 | unit/helper.unit.test.ts::helper — 基础值与克隆边界 > [helper.cloneAxiosHeaders] headers 缺失原样返回；AxiosHeaders 复制后独立 | rename | 纯函数，台账无 id |  |
+| test/helper.coverage.test.ts::helper — 基础值与克隆边界 > defaults 复制方法头、params、转换数组与 transitional，函数保留引用 | unit/helper.unit.test.ts::helper — 基础值与克隆边界 > [helper.cloneAxiosDefaults] defaults 复制方法头、params、转换数组与 transitional，函数保留引用 | rename | 纯函数，台账无 id |  |
+| test/helper.coverage.test.ts::helper — 基础值与克隆边界 > callAdapter 将同步异常转换成同一错误的 rejection | unit/helper.unit.test.ts::helper — 基础值与克隆边界 > [helper.callAdapter] callAdapter 将同步异常转换成同一错误的 rejection | rename | 纯函数（假 adapter），台账无 id |  |
+| test/helper.coverage.test.ts::helper — 基础值与克隆边界 > resolveAdapter 缺省候选、字符串和函数均可解析；非法名称抛错 | integration/helper.integration.test.ts::helper — 基础值与克隆边界 > [helper.resolveAdapter] resolveAdapter 缺省候选、字符串和函数均可解析；非法名称抛错 | rename | 用到真实 axios 实例与 adapter 解析，属装配层，台账无 id |  |
+| test/helper.coverage.test.ts::bag — 私有数据生命周期 > 读删不存在的 bag 不创建任何属性 | unit/bag.unit.test.ts::bag — 私有数据生命周期 > [bag.getInternal][bag.setInternal][bag.delInternal] 读删不存在的 bag 不创建任何属性 | rename | 单个对象，台账无 id |  |
+| test/helper.coverage.test.ts::bag — 私有数据生命周期 > 覆写与删除只影响对应 config，枚举、展开与 axios 合并均不可见 | unit/bag.unit.test.ts::bag — 私有数据生命周期 > [bag.getInternal][bag.setInternal][bag.delInternal] 覆写与删除只影响对应 config，枚举、展开与 axios 合并均不可见 | rename | 单个对象，台账无 id |  |
+| test/helper.coverage.test.ts::helper — adapter 外部替换与旧引用 > 外部替换后移除旧层不覆盖新 adapter，旧层引用退化为直通 | integration/helper.integration.test.ts::helper — adapter 外部替换与旧引用 > [helper.wrapAdapter][helper.getBaseAdapter] 外部替换后移除旧层不覆盖新 adapter，旧层引用退化为直通 | rename | axios 实例上的 adapter 分层装配，台账无 id |  |
+| test/helper.coverage.test.ts::helper — 原始请求体与单次尝试钩子 > 重复 captureRawRequest 不重复插入捕获项，未捕获配置返回新外壳 | unit/helper.unit.test.ts::helper — 原始请求体与单次尝试钩子 > [helper.captureRawRequest][helper.withRawRequest] 重复 captureRawRequest 不重复插入捕获项，未捕获配置返回新外壳 | rename | 纯函数，台账无 id |  |
+| test/helper.coverage.test.ts::helper — 原始请求体与单次尝试钩子 > 纯数据快照与每次还原均独立：$data（each） | unit/helper.unit.test.ts::helper — 原始请求体与单次尝试钩子 > [helper.withRawRequest] 纯数据快照与每次还原均独立：$data | rename | 纯函数，台账无 id |  |
+| test/helper.coverage.test.ts::helper — 原始请求体与单次尝试钩子 > 非纯数据保持原值或引用：%s（each） | unit/helper.unit.test.ts::helper — 原始请求体与单次尝试钩子 > [helper.withRawRequest] 非纯数据保持原值或引用：%s | rename | 纯函数，台账无 id |  |
+| test/helper.coverage.test.ts::helper — 原始请求体与单次尝试钩子 > structuredClone 缺失或失败均回退原引用 | unit/helper.unit.test.ts::helper — 原始请求体与单次尝试钩子 > [helper.withRawRequest] structuredClone 缺失或失败均回退原引用 | rename | 纯函数，台账无 id |  |
+| test/helper.coverage.test.ts::helper — 原始请求体与单次尝试钩子 > 钩子按登记顺序运行且注销幂等，运行中注销不改变本次快照 | integration/helper.integration.test.ts::helper — 原始请求体与单次尝试钩子 > [helper.registerAttemptHook][helper.runAttempt] 钩子按登记顺序运行且注销幂等，运行中注销不改变本次快照 | rename | 以 axios 实例为键的尝试钩子装配，台账无 id |  |
+| test/helper.coverage.test.ts::helper — 原始请求体与单次尝试钩子 > 请求准备失败不发送网络，错误钩子可恢复并交给后续响应钩子 | integration/helper.integration.test.ts::helper — 原始请求体与单次尝试钩子 > [helper.registerAttemptHook][helper.runAttempt] 请求准备失败不发送网络，错误钩子可恢复并交给后续响应钩子 | rename | 以 axios 实例为键的尝试钩子装配，台账无 id |  |
