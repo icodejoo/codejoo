@@ -1,7 +1,7 @@
 import axios from "axios";
 import type { AxiosInstance } from "axios";
 import { AxpResponse, axpAuth, axpCache, axpEnvs, axpFilter, axpLoading, axpMock, axpNotify, axpRepath, axpResponse, axpRetry, axpShare, clearCache, createAxp, defaultAuthFailure, failureOf } from "@codejoo/axp";
-import type { AxpPlugin, AxpRequestConfig, IAuthOptions, IRetryOptions, MaybePromise } from "@codejoo/axp";
+import type { AxpContext, AxpPlugin, AxpRequestConfig, IAuthOptions, IRetryOptions, MaybePromise } from "@codejoo/axp";
 import { HEADER_RUN, HEADER_STYLE, MOCK_PREFIX, DEFAULT_RETRY_METHODS, DEFAULT_RETRY_STATUSES } from "./constants.ts";
 import type { AdapterName, Style } from "./constants.ts";
 import { authUrlPatterns, lowerMethods, mapCacheOptions, mapRequestOptions, withNeutralDefaults } from "./mapping.ts";
@@ -91,25 +91,37 @@ export function businessStyleOptions(
   retryStatusCodes: readonly number[] = DEFAULT_RETRY_STATUSES,
 ): { /** 鉴权配置。 */ auth: Partial<IAuthOptions<AxpResponse>>; /** 重试配置。 */ retry: Partial<IRetryOptions<AxpResponse>> } {
   if (opts.getStyle() === "http" && !opts.styleChanges) return { auth: {}, retry: {} };
-  /** 请求快照优先于可能已被后续 style step 改动的全局风格。 */
-  const isBusiness = (r: AxpResponse): boolean => (r.request.params?.style ?? r.request.headers?.[HEADER_STYLE] ?? opts.getStyle()) === "business";
+  /**
+   * 请求快照优先于可能已被后续 style step 改动的全局风格。
+   * 读 ctx.originRequest（用户发起的这次请求），不读 ctx.request：后者会被重试、鉴权重放按次打补丁，R.request 已瘦身不再带参数。
+   */
+  const isBusiness = (ctx: AxpContext): boolean => (ctx.originRequest.params?.style ?? ctx.originRequest.headers?.[HEADER_STYLE] ?? opts.getStyle()) === "business";
   return {
     auth: {
       /** 仅业务风格借用业务码路由；401 的 token 快照判定复用默认实现。 */
-      onFailure: (r, tm, ctx) => defaultAuthFailure(isBusiness(r) && r.status >= HTTP_SUCCESS_START && r.status < HTTP_SUCCESS_END ? new AxpResponse({ from: r, status: Number(r.code) }) : r, tm, ctx),
+      onFailure: (r, tm, ctx) => defaultAuthFailure(isBusiness(ctx) && r.status >= HTTP_SUCCESS_START && r.status < HTTP_SUCCESS_END ? new AxpResponse({ from: r, status: Number(r.code) }) : r, tm, ctx),
     },
     retry: {
       /** 未命中业务码时交还内置网络、超时和 HTTP 状态规则。 */
       shouldRetry: (r, _attempt, ctx) => {
-        if (!isBusiness(r)) return undefined;
+        if (!isBusiness(ctx)) return undefined;
         const retry = ctx.request.retry;
         const statusCodes = retry && typeof retry === "object" ? (retry.statusCodes ?? retryStatusCodes) : retryStatusCodes;
         return statusCodes.includes(Number(r.code)) ? true : undefined;
       },
       /** 函数独立决定采信；http 分支等价于插件默认状态表。 */
-      respectRetryAfter: (r) => RETRY_AFTER_CODES.includes(isBusiness(r) ? Number(r.code) : r.status),
+      respectRetryAfter: (r, ctx) => RETRY_AFTER_CODES.includes(isBusiness(ctx) ? Number(r.code) : r.status),
     },
   };
+}
+
+/**
+ * 通知文案：复刻旧默认行为（message、失败类别、`status N code M`）；成功、取消、silent 由内核先过滤。
+ * @param r 最终响应
+ * @returns 非空文案
+ */
+function notifyText(r: AxpResponse): string {
+  return r.message || failureOf(r)?.type || `status ${r.status}${r.code !== 0 ? ` code ${r.code}` : ""}`;
 }
 
 /**
@@ -181,7 +193,7 @@ function buildPlugins(opts: ClientOptions, p: PluginConfigs, instance: AxiosInst
       }),
     );
   }
-  if (p.notify) plugins.push(axpNotify({ notify: (message) => opts.hooks.notify(message) }));
+  if (p.notify) plugins.push(axpNotify({ stringify: notifyText, notify: (message) => opts.hooks.notify(message) }));
   if (p.cache) plugins.push(axpCache(mapCacheOptions(p.cache as { ttl_ms?: number; max?: number; methods?: string[] })));
   if (p.share) plugins.push(axpShare({ policy: (p.share as { policy?: "start" | "end" | "race" }).policy }));
   if (p.mock) {

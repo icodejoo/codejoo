@@ -169,6 +169,9 @@ type Feature = { id: string; title: string; desc: string; actions: Action[] };
  */
 const act = (id: string, label: string, run: () => unknown): Action => ({ id, label, run });
 
+/** 通知文案：失败类别或状态码；成功、取消、silent 由内核先过滤。 */
+const notifyText = (r: AxpResponse): string => failureOf(r)?.type ?? `status ${r.status}`;
+
 /** 将动作结果序列化到结果面板；AxpResponse 自带 toJSON（不含 raw / error）。 */
 function stringify(v: unknown): string {
   return JSON.stringify(
@@ -221,7 +224,7 @@ export const features: Feature[] = [
   {
     id: "core",
     title: "createAxp · 七个动词 + 三种返回形态",
-    desc: "createAxp() 包装 axios；get/post/put/delete/patch/head/options；默认解包 / wrap（r.raw 逃生口）/ throws:false",
+    desc: "createAxp() 包装 axios；get/post/put/delete/patch/head/options；默认解包 / raw:true（r.raw 逃生口）/ throws:false",
     actions: [
       act("core-get", "get", () => mkApi().get(ECHO)({ q: 1 })),
       act("core-post", "post", () => mkApi().post(ECHO)({ name: "x" })),
@@ -237,8 +240,8 @@ export const features: Feature[] = [
         return { options: "resolved" };
       }),
       act("core-plain", "默认 → 解包 data", () => mkApi().get(ECHO)({ shape: "plain" })),
-      act("core-raw", "wrap → r.raw 原始响应", async () => {
-        const r = await mkApi().get(ECHO)(undefined, { wrap: true });
+      act("core-raw", "raw:true → r.raw 原始响应", async () => {
+        const r = await mkApi().get(ECHO)(undefined, { raw: true });
         return { code: r.code, message: r.message, data: r.data, rawStatus: r.raw?.status, rawEnvelope: r.raw?.data };
       }),
       act("core-wrap", "wrap → IAxpResponse", async () => {
@@ -293,7 +296,7 @@ export const features: Feature[] = [
             axpRetry(),
             axpFilter(),
             axpRepath(),
-            axpNotify({ notify: () => {} }),
+            axpNotify({ stringify: notifyText, notify: () => {} }),
             axpLoading(),
           ],
         });
@@ -533,7 +536,7 @@ export const features: Feature[] = [
     actions: [
       act("notify-run", "失败通知一次", async () => {
         const messages: string[] = [];
-        const api = mkApi({ plugins: [axpNotify({ notify: (message) => messages.push(message) })] });
+        const api = mkApi({ plugins: [axpNotify({ stringify: notifyText, notify: (message) => messages.push(message) })] });
         const count = () => messages.length;
         await api.get(ECHO)({ status: BAD_REQUEST }, { throws: false });
         const failed = count();

@@ -47,7 +47,7 @@ ALL E2E PASSED ✅
 
 | 模块           | 覆盖的导出 / 行为                                                                                                                                               |
 | -------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| createAxp      | `get/post/put/delete/patch/head/options` · 默认解包 / `wrap`(`r.raw` 逃生口) / `throws:false` · 默认抛出 `IAxpResponse`(不是 Error、默认无 stack)               |
+| createAxp      | `get/post/put/delete/patch/head/options` · 默认解包 / `raw:true`(`r.raw` 逃生口) / `throws:false` · 默认抛出 `IAxpResponse`(不是 Error、默认无 stack)           |
 | 客户端生命周期 | `use` / `eject` / `inspect`(内置插件按 stage 排序) / `plugin` / `extend`(默认继承、状态独立) / `dispose` / `pending` / `isResponse` / `stateKey`                |
 | key(内核服务)  | 自动 key 含 params · 请求级显式字符串 key · `createAxp({ key: { scope } })` 切账号                                                                              |
 | cache          | `axpCache` · `removeCache` · `clearCache`(用服务端命中数证明只发一次网络) · POST 默认不缓存                                                                     |

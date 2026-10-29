@@ -39,7 +39,7 @@ const cases = [
   {
     action: "core-raw",
     result: "core-result",
-    exports: ["wrap → r.raw"],
+    exports: ["raw:true → r.raw"],
     check: (j) => {
       ok(j.code === "0000" && j.data && "message" in j, "envelope fields on r");
       eq(j.rawStatus, 200, "raw AxiosResponse status");

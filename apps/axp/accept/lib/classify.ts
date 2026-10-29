@@ -60,6 +60,15 @@ export function hasAxpBrand(e: unknown): e is IAxpResponse<unknown, string | num
 }
 
 /**
+ * 安全读取响应上的 message：IAxpResponse 接口已无该字段，只有默认 AxpResponse 类才带。
+ * @param r 任意响应
+ * @returns 字符串消息，没有则空串
+ */
+function messageText(r: IAxpResponse<unknown, string | number>): string {
+  return "message" in r && typeof r.message === "string" ? r.message : "";
+}
+
+/**
  * 把抛出的 IAxpResponse 直接按字段归到错误类别，不看 message、不猜形状。
  * `cancel`→canceled，`timeout`→timeout，`network`→network，`parse`→parse；
  * `auth` 按隐藏标记的 reason；无标记的失败按 HTTP status 区分 HTTP 与业务码失败。
@@ -74,9 +83,9 @@ export function classifyResponse(r: IAxpResponse<unknown, string | number>): str
   if (direct) return direct;
   if (failure) {
     if (failure.type === AXP_FAILURES.AUTH && failure.reason && AUTH_REASON_CLASSES.has(failure.reason)) return failure.reason;
-    return unknownClass(failure.type, failure.reason ?? r.message ?? "");
+    return unknownClass(failure.type, failure.reason ?? messageText(r));
   }
-  if (r.ok || r.status === 0) return unknownClass(r.ok ? "ok" : "response", r.message ?? "");
+  if (r.ok || r.status === 0) return unknownClass(r.ok ? "ok" : "response", messageText(r));
   return r.status >= HTTP_SUCCESS_START && r.status < HTTP_SUCCESS_END ? businessClass(r.code) : httpClass(r.status);
 }
 
