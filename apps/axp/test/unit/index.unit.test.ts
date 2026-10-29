@@ -175,7 +175,7 @@ it("[index.fn.createAxp] 入口的内置插件可直接装配，inspect 按阶�
       entry.axpRetry(),
       entry.axpFilter(),
       entry.axpRepath(),
-      entry.axpNotify({ notify: () => {} }),
+      entry.axpNotify({ notify: () => {}, stringify: () => null }),
       entry.axpLoading(),
       entry.axpEnvs([]),
     ],

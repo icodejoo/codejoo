@@ -12,7 +12,7 @@ import type { AxpResponse } from "../../src/response";
 import type { AxpPlugin, AxpRequestConfig, AxpStage } from "../../src/types";
 import { authClient, failure, guarded, TOKEN_NEW, TOKEN_OLD } from "../helpers/b3";
 import { settleAll } from "../helpers/source";
-import { UI_OBSERVER } from "../helpers/ui";
+import { UI_OBSERVER, legacyStringify } from "../helpers/ui";
 
 /** 带路径变量的接口，repath 把 `{id}` 换成 params 里的值。 */
 const TEMPLATE_URL = "/users/{id}/orders";
@@ -126,7 +126,7 @@ function client(notify: (message: string, response: AxpResponse) => unknown = ()
   const h = authClient({}, [
     audit,
     axpLoading({ loading: () => undefined }),
-    axpNotify<AxpResponse>({ notify }),
+    axpNotify<AxpResponse>({ notify, stringify: legacyStringify }),
     axpRepath(),
     axpFilter(),
     axpRetry({ max: 2, delay: 0 }),

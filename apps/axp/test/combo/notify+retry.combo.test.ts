@@ -4,7 +4,7 @@ import axpNotify from "../../src/plugins/notify";
 import axpRetry from "../../src/plugins/retry";
 import type { AxpResponse } from "../../src/response";
 import { b3Client, failure, REQUEST_URL, run } from "../helpers/b3";
-import { notifyRecorder } from "../helpers/ui";
+import { notifyRecorder, legacyStringify } from "../helpers/ui";
 
 /** 重试等待时长。 */
 const RETRY_WAIT = 100;
@@ -17,7 +17,7 @@ beforeEach(() => {
 function notifyRetryClient(max = 2, business = false) {
   const h = b3Client([axpRetry({ max, delay: RETRY_WAIT, shouldRetry: business ? /** 使用者显式允许业务重试。 */ (r) => r.code === 500 : undefined })]);
   const notify = vi.fn(notifyRecorder(h.events));
-  h.api.use(axpNotify<AxpResponse>({ notify }));
+  h.api.use(axpNotify<AxpResponse>({ notify, stringify: legacyStringify }));
   return { ...h, notify };
 }
 

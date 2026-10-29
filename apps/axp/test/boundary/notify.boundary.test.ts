@@ -5,7 +5,7 @@ import { AXP_FAILURE } from "../../src/response";
 import type { AxpResponse } from "../../src/response";
 import { beforeEach, expect, it, vi } from "vitest";
 import axpNotify from "../../src/plugins/notify";
-import { notifyRecorder, uiClient } from "../helpers/ui";
+import { notifyRecorder, uiClient, legacyStringify } from "../helpers/ui";
 
 /** 消息生成故障模式。 */
 const STRINGIFY_FAILURE = "stringify";
@@ -26,7 +26,7 @@ const BUG = new Error("notify bug");
 const NAME = "axp:notify";
 
 it.each([STRINGIFY_FAILURE, "notify", ASYNC_FAILURE])(
-  "[notify.cb.error] %s 故障不改变成功和 HTTP 失败，console.error 每故障一次",
+  "[notify.cb.error] %s 故障不改变成功和 HTTP 失败，仅失败路径触发回调且 console.error 一次",
   /** 两类同步回调与异步通知错误。 */ async (source) => {
     const error = vi.spyOn(console, "error").mockImplementation(/** 隔离预期日志。 */ () => {});
     const h = uiClient();
@@ -50,8 +50,8 @@ it.each([STRINGIFY_FAILURE, "notify", ASYNC_FAILURE])(
       const pending = h.send();
       await vi.runAllTimersAsync();
       expect((await pending).status).toBe(status);
-      expect(error.mock.calls.length - before).toBe(1);
-      expect(error.mock.calls[before]?.[1]).toBe(BUG);
+      expect(error.mock.calls.length - before).toBe(status === 500 ? 1 : 0);
+      if (status === 500) expect(error.mock.calls[before]?.[1]).toBe(BUG);
     }
   },
 );
@@ -67,6 +67,7 @@ it.each([EMPTY_TEXT, undefined, null, false, 0, "   "])(
         stringify: /** 模拟 JS 调用者返回值。 */ () => message as string,
       }),
     );
+    h.net.fallback(/** 失败才会走格式化。 */ () => ({ status: 500 }));
     const pending = h.send();
     await vi.runAllTimersAsync();
     await pending;
@@ -77,7 +78,7 @@ it.each([EMPTY_TEXT, undefined, null, false, 0, "   "])(
 it("[notify.cb.cancel] 在途取消默认不通知且监听释放", /** cancel 分类跳过通知。 */ async () => {
   const h = uiClient();
   const notify = vi.fn(notifyRecorder(h.events));
-  h.api.use(axpNotify<AxpResponse>({ notify }));
+  h.api.use(axpNotify<AxpResponse>({ notify, stringify: legacyStringify }));
   const pending = h.send();
   expect(h.api.cancelAll()).toBe(1);
   await vi.runAllTimersAsync();
@@ -87,8 +88,9 @@ it("[notify.cb.cancel] 在途取消默认不通知且监听释放", /** cancel �
 
 it("[notify.opt.enable][notify.method.lifecycle] 禁用不 setup，重名拒绝，卸载重装不重复通知", /** 生命周期的新契约。 */ async () => {
   const h = uiClient();
+  h.net.fallback(/** 失败才会通知。 */ () => ({ status: 500 }));
   const notify = vi.fn(notifyRecorder(h.events));
-  const disabled = axpNotify<AxpResponse>({ enable: false, notify });
+  const disabled = axpNotify<AxpResponse>({ enable: false, notify, stringify: legacyStringify });
   h.api.use(disabled);
   expect(h.api.inspect().filter(/** 排除夹具自身的上下文观测层。 */ (item) => item.name !== UI_OBSERVER)).toEqual([]);
   let pending = h.send({ notify: true });
@@ -117,7 +119,7 @@ it("[notify.cb.missing] 无 config、message、response 的网络错误使用默
   const { AxiosError } = await import("axios");
   const h = uiClient([], {}, /** 空 AxiosError 不含请求和响应。 */ () => Promise.reject(new AxiosError()));
   const notify = vi.fn(notifyRecorder(h.events));
-  h.api.use(axpNotify<AxpResponse>({ notify }));
+  h.api.use(axpNotify<AxpResponse>({ notify, stringify: legacyStringify }));
   const response = await h.send();
   expect(response).toMatchObject({ status: 0, message: EMPTY_TEXT, [AXP_FAILURE]: { type: "network" } });
   expect(notify).toHaveBeenCalledExactlyOnceWith("network", response);
@@ -125,6 +127,7 @@ it("[notify.cb.missing] 无 config、message、response 的网络错误使用默
 it("[notify.method.lifecycle] 同一插件定义复用时，卸载一个客户端不影响另一个", /** 客户端注册和副作用隔离。 */ async () => {
   const first = uiClient();
   const second = uiClient();
+  for (const h of [first, second]) h.net.fallback(/** 失败才会通知。 */ () => ({ status: 500 }));
   const notify = vi.fn(notifyRecorder(first.events));
   const plugin = axpNotify<AxpResponse>({
     notify,
@@ -144,7 +147,7 @@ it("[notify.method.lifecycle] 同一插件定义复用时，卸载一个客户�
   expect(second.api.inspect().filter(/** 排除夹具自身的上下文观测层。 */ (item) => item.name !== UI_OBSERVER)).toEqual([{ stage: "outer", name: NAME }]);
 });
 it.each([undefined, null, false, 0, EMPTY_TEXT, true])(
-  "[notify.req.silent] 自定义 stringify 读取原始 silent=%s，可自行决定通知",
+  "[notify.req.silent] silent=%s：真值由内核过滤不调用 stringify，假值读到原始选项",
   /** 默认格式化和自定义扩展点保持各自契约。 */ async (silent) => {
     const h = uiClient();
     const notify = vi.fn(notifyRecorder(h.events));
@@ -154,10 +157,12 @@ it.each([undefined, null, false, 0, EMPTY_TEXT, true])(
         return "custom";
       },
     );
+    h.net.fallback(/** 失败才会走格式化。 */ () => ({ status: 500 }));
     h.api.use(axpNotify<AxpResponse>({ notify, stringify }));
     const pending = h.send({ silent: silent as boolean });
     await vi.runAllTimersAsync();
     await pending;
-    expect(notify).toHaveBeenCalledTimes(1);
+    expect(stringify).toHaveBeenCalledTimes(silent ? 0 : 1);
+    expect(notify).toHaveBeenCalledTimes(silent ? 0 : 1);
   },
 );

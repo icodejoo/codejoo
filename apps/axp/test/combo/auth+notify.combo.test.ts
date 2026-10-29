@@ -5,7 +5,7 @@ import type { IAuthOptions } from "../../src/plugins/auth";
 import axpNotify from "../../src/plugins/notify";
 import type { AxpResponse } from "../../src/response";
 import { authClient, failure, guarded, REQUEST_URL, run, TOKEN_NEW } from "../helpers/b3";
-import { notifyRecorder } from "../helpers/ui";
+import { notifyRecorder, legacyStringify } from "../helpers/ui";
 
 /** 每个组合用例使用独立假时钟。 */
 beforeEach(() => {
@@ -18,7 +18,7 @@ type Override = Partial<IAuthOptions<AxpResponse>>;
 function notifyAuthClient(override: Override = {}) {
   const h = authClient(override);
   const notify = vi.fn(notifyRecorder(h.events));
-  h.api.use(axpNotify<AxpResponse>({ notify }));
+  h.api.use(axpNotify<AxpResponse>({ notify, stringify: legacyStringify }));
   return { ...h, notify };
 }
 

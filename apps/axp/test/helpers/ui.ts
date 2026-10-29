@@ -2,7 +2,7 @@ import { AsyncLocalStorage } from "node:async_hooks";
 import { afterEach, vi } from "vitest";
 import { assertInvariants, createTestClient, recordEvents, type ITestEvents } from "./client";
 import type { AxpClient, AxpOptions, AxpPlugin, AxpRequestConfig } from "../../src/types";
-import type { AxpResponse, IAxpResponse } from "../../src/response";
+import { failureOf, messageOf, type AxpResponse, type IAxpResponse } from "../../src/response";
 import type { TLoadingFunc } from "../../src/plugins/loading";
 
 /** 使用 UI 事件不变量的测试客户端。 */
@@ -97,6 +97,14 @@ export function loadingRecorder(events: ITestEvents, key = "main"): TLoadingFunc
   return /** 保存每次可见性变更。 */ (visible) => {
     values.push(visible);
   };
+}
+/** 复刻旧默认文案：业务消息、失败类型、状态码依次回退。
+ * @param response 最终响应。
+ * @returns 提示文案。
+ * @example `axpNotify({ notify, stringify: legacyStringify })`
+ */
+export function legacyStringify(response: IAxpResponse<unknown, string | number>): string {
+  return messageOf(response) || failureOf(response)?.type || `status ${response.status}${response.code !== 0 ? ` code ${response.code}` : ""}`;
 }
 /** 对同一逻辑请求累计通知次数。
  * @param events 事件容器。

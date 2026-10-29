@@ -52,6 +52,11 @@ it("[loading.type.options][notify.type.response][repath.type.options][filter.typ
     void api.request({ repath: () => true });
     // @ts-expect-error notify 只提供开关，不接受替换回调。
     void api.request({ notify: () => "message" });
+    // @ts-expect-error notify 插件必须提供 stringify。
+    axpNotify({ notify: () => {} });
+    for (const stringify of [() => null, () => undefined, () => false as const, () => "message"]) axpNotify({ notify: () => {}, stringify });
+    // @ts-expect-error stringify 不能返回数字。
+    axpNotify({ notify: () => {}, stringify: () => 1 });
     // @ts-expect-error axios 原生配置不再扩展 loading。
     const axiosLoading: AxiosRequestConfig = { loading: true };
     // @ts-expect-error axios 原生配置不再扩展 filter。

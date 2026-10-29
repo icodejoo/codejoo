@@ -4,7 +4,7 @@ import axpLoading from "../../src/plugins/loading";
 import axpNotify from "../../src/plugins/notify";
 import type { AxpPlugin } from "../../src/types";
 import type { AxpResponse } from "../../src/response";
-import { loadingRecorder, notifyRecorder, uiClient } from "../helpers/ui";
+import { loadingRecorder, notifyRecorder, uiClient, legacyStringify } from "../helpers/ui";
 import { customResponse, type TestResponse } from "../helpers/client";
 
 /** 默认回调的事件标签。 */
@@ -32,7 +32,7 @@ const FINAL_MESSAGE = "final failure";
 it("[loading.cb.loading][notify.cb.notify] 任意注册顺序仍是一对显示隐藏和一次最终通知", /** 内置 outer 排序。 */ async () => {
   const h = uiClient();
   const notify = vi.fn(notifyRecorder(h.events));
-  h.api.use(axpNotify<AxpResponse>({ notify }));
+  h.api.use(axpNotify<AxpResponse>({ notify, stringify: legacyStringify }));
   h.api.use(axpLoading({ loading: loadingRecorder(h.events) }));
   h.net.fallback(/** 最终 HTTP 失败。 */ () => ({ status: 500 }));
   const pending = h.send();
@@ -65,7 +65,7 @@ it("[loading.cb.loading][notify.cb.stringify][notify.combo.taps] taps 的 outer 
     ],
   };
   h.api.use(taps);
-  h.api.use(axpNotify<TestResponse>({ notify }));
+  h.api.use(axpNotify<TestResponse>({ notify, stringify: legacyStringify }));
   h.api.use(axpLoading({ loading: loadingRecorder(h.events) }));
   h.net.fallback(/** 追踪字段来自假网络响应头。 */ () => ({ status: 500, headers: { "x-trace-id": TRACE_ID } }));
   const pending = h.send();
@@ -111,7 +111,7 @@ it("[core.req.throws][loading.cb.finally] 正常抛出最终失败 R 前，通�
   const h = uiClient();
   const notify = vi.fn(notifyRecorder(h.events));
   h.api.use(axpLoading({ loading: loadingRecorder(h.events) }));
-  h.api.use(axpNotify<AxpResponse>({ notify }));
+  h.api.use(axpNotify<AxpResponse>({ notify, stringify: legacyStringify }));
   h.net.fallback(/** 最终失败。 */ () => ({ status: 500 }));
   const pending = h.send({ throws: true }).catch(/** 捕获内核直接抛出的 R。 */ (response: unknown) => response);
   await vi.runAllTimersAsync();

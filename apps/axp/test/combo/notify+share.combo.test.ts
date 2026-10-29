@@ -1,9 +1,10 @@
 import { beforeEach, expect, it, vi } from "vitest";
 import axpNotify from "../../src/plugins/notify";
+import type { AxpResponse } from "../../src/response";
 import axpShare from "../../src/plugins/share";
 import { sourceClient } from "../helpers/source";
 import { assertInvariants, recordEvents } from "../helpers/client";
-import { notifyRecorder } from "../helpers/ui";
+import { notifyRecorder, legacyStringify } from "../helpers/ui";
 
 /** 并发共享通知的固定地址。 */
 const URL = "/notice-share";
@@ -15,7 +16,7 @@ beforeEach(/** 通知计数通过假时钟推进。 */ () => vi.useFakeTimers())
 it("[notify.cb.notify][share.req.share] 同一响应身份的通知按各自逻辑信号计数", /** 跟随者和领导者共享 R，但通知次数互不混淆。 */ async () => {
   const h = sourceClient([axpShare()]);
   const notify = vi.fn(notifyRecorder(h.events));
-  h.api.use(axpNotify({ notify }));
+  h.api.use(axpNotify({ notify, stringify: legacyStringify }));
   h.net.on("get", URL, /** 最终失败让双方各收到通知。 */ () => ({ status: 503 }));
   const config = { url: URL, share: true, latency: LATENCY };
   const first = h.send(config);
@@ -32,7 +33,8 @@ it("[notify.cb.notify] 迁移后的记录器仍能识别同一逻辑请求的重
   const record = notifyRecorder(events);
   const h = sourceClient();
   h.api.use(
-    axpNotify({
+    axpNotify<AxpResponse>({
+      stringify: legacyStringify,
       /** 模拟通知实现对同一请求重复记账。 */
       notify(message, response) {
         record(message, response);

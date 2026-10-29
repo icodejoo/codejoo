@@ -4,7 +4,7 @@ import axpLoading from "../../src/plugins/loading";
 import axpNotify from "../../src/plugins/notify";
 import type { AxpResponse } from "../../src/response";
 import { authClient, deferred, failure, REFRESH_TOKEN, REQUEST_URL, TOKEN_NEW } from "../helpers/b3";
-import { loadingRecorder, notifyRecorder } from "../helpers/ui";
+import { loadingRecorder, notifyRecorder, legacyStringify } from "../helpers/ui";
 
 /** 默认回调的事件标签。 */
 const LOADING_LABEL = "main";
@@ -26,7 +26,7 @@ it.each([true, false])(
     });
     const notify = vi.fn(notifyRecorder(h.events));
     h.api.use(axpLoading({ loading: loadingRecorder(h.events) }));
-    h.api.use(axpNotify<AxpResponse>({ notify }));
+    h.api.use(axpNotify<AxpResponse>({ notify, stringify: legacyStringify }));
     h.net.on("get", REQUEST_URL, () => failure(401));
     const waiting = h.send({ url: REQUEST_URL });
     await vi.runAllTimersAsync();
