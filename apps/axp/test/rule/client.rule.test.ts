@@ -1,3 +1,4 @@
+import { create as createAxios } from "axios";
 import { describe, expect, it, vi } from "vitest";
 import { createAxp } from "../../src/client";
 import { axpResponse, type AxpResponse } from "../../src/response";
@@ -12,6 +13,41 @@ const METHODS: HttpMethodLower[] = ["get", "head", "options", "purge", "link", "
 /** 数据回显 URL。 */
 const URL = "/dispatch";
 
+it("[core.method.extend] 指定 axios 保留拦截器，setup 后 overrides 优先，父 defaults 不复制也不受影响", async () => {
+  const setup: AxpPlugin = {
+    name: "child-defaults",
+    /** 子客户端装配时写入默认值。 */
+    setup(client) {
+      client.axios.defaults.timeout = 11;
+    },
+  };
+  const { api, net } = createTestClient();
+  api.axios.defaults.baseURL = "/parent";
+  api.axios.defaults.headers.common["parent-only"] = "parent";
+  const axios = createAxios({ adapter: net.adapter, baseURL: "/child" });
+  const interceptor = vi.fn(
+    /** 拦截器只安装在子实例上。 */ (config) => {
+      config.headers.set("child-interceptor", "yes");
+      return config;
+    },
+  );
+  axios.interceptors.request.use(interceptor);
+  const child = api.extend({ timeout: 22 }, { axios, plugins: [setup] });
+  expect(child.axios).toBe(axios);
+  expect(axios.defaults.baseURL).toBe("/child");
+  expect(axios.defaults.timeout).toBe(22);
+  expect(axios.defaults.headers.common["parent-only"]).toBeUndefined();
+  const result = await child.request({ url: URL, wrap: true });
+  expect(result.request.headers).toMatchObject({ "child-interceptor": "yes" });
+  expect(interceptor).toHaveBeenCalledOnce();
+  expect(api.axios.defaults.baseURL).toBe("/parent");
+  expect(api.axios.defaults.timeout).toBe(0);
+  await api.get(URL)();
+  expect(interceptor).toHaveBeenCalledOnce();
+  child.dispose();
+  api.dispose();
+});
+
 describe("客户端", /** 客户端的用例集合。 */ () => {
   it("[core.req.wrap][core.req.throws] 调用级覆盖方法级并以空值继承开关", /** 验证运行期有效选项。 */ async () => {
     const { api, net } = createTestClient();
@@ -25,19 +61,20 @@ describe("客户端", /** 客户端的用例集合。 */ () => {
       data: 1,
     });
     net.fallback(/** 返回 HTTP 失败。 */ () => ({ status: 500 }));
-    await expect(api.get(URL, { throws: false })(undefined, { throws: true })).rejects.toMatchObject({ kind: "http" });
+    await expect(api.get(URL, { throws: false })(undefined, { throws: true })).rejects.toMatchObject({ ok: false });
     expect(await api.get(URL, { throws: true })(undefined, { throws: false })).toMatchObject({
-      kind: "http",
+      ok: false,
     });
   });
   it.each([401, 403, 500])(
-    "[core.prop.status] 业务码 %s 映射逻辑状态",
-    /** 业务码 401、403、500 各自映射为对应的逻辑状态。 */ async (code) => {
+    "[core.prop.status] 业务码 %s 保留 HTTP 状态",
+    /** 业务码不改变 HTTP 状态，业务失败仍按 ok 判断。 */ async (code) => {
       const { api, net } = createTestClient();
       net.fallback(/** 返回带指定业务码的信封。 */ () => ({ data: { code, data: null } }));
       expect(await api.request({ url: URL, throws: false })).toMatchObject({
-        status: code,
-        kind: "biz",
+        status: 200,
+        code,
+
         ok: false,
       });
     },
@@ -74,7 +111,7 @@ describe("客户端", /** 客户端的用例集合。 */ () => {
           data: { code: 0, data: config.params },
         }),
       );
-      expect(await api.get(URL)(payload)).toBe(payload);
+      expect(await api.get(URL)(payload)).toBe(payload ?? null);
       expect(
         await api.get(URL, { url: "/method", method: "head", params: "method" })(payload, {
           url: "/call",
@@ -100,7 +137,7 @@ describe("客户端", /** 客户端的用例集合。 */ () => {
     expect(api.isResponse(wrapped)).toBe(true);
 
     net.fallback(/** 返回 HTTP 500。 */ () => ({ status: 500, data: "server" }));
-    await expect(api.get(URL)()).rejects.toMatchObject({ kind: "http", status: 500 });
+    await expect(api.get(URL)()).rejects.toMatchObject({ ok: false, status: 500 });
   });
   it("[core.method.use][core.method.eject][core.method.plugin][core.method.inspect] 装卸、API 与一次性 setup/dispose", /** 装卸、API 与一次性 setup/dispose。 */ async () => {
     const setup = vi.fn(/** 每个客户端建立独立实例与 API。 */ () => ({ handle: through, api: { value: 1 }, dispose }));
@@ -193,7 +230,7 @@ describe("客户端", /** 客户端的用例集合。 */ () => {
     assertInvariants(api, events);
   });
   it("[core.cb.reject] 适配可预期失败为 Error", /** 适配可预期失败为 Error。 */ async () => {
-    const reject = vi.fn(/** 把失败响应转为带消息的 Error。 */ (response: AxpResponse) => new Error(response.message));
+    const reject = vi.fn(/** 把失败响应转为带消息的 Error。 */ (response: AxpResponse) => new Error(response.message ?? ""));
     const { api, net } = createTestClient([], {
       reject,
       response: axpResponse({ expectJson: true }),

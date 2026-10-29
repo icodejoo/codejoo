@@ -20,7 +20,9 @@ it("[repath.fn.axpRepath × filter.fn.axpFilter × cache.req.cache] prepare 先�
   const plain = await h.send({ url: URL, params: { id: 1 }, cache: true });
   const withEmpty = await h.send({ url: URL, params: { id: 1, q: "", tag: null }, cache: true });
   const other = await h.send({ url: URL, params: { id: 2 }, cache: true });
-  expect(withEmpty).toBe(plain);
+  expect(withEmpty).not.toBe(plain);
+  expect(withEmpty.data).toEqual(plain.data);
+  expect(withEmpty.request).toMatchObject({ url: "/pet/1", params: {} });
   expect(other.data).toBe("two-1");
   expect(h.net.calls("get", "/pet/1")).toBe(1);
   expect(h.net.calls("get", "/pet/2")).toBe(1);

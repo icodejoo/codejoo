@@ -7,7 +7,7 @@ import * as entry from "../../src/index";
 import type {
   AxpClient,
   AxpContext,
-  AxpKind,
+  AxpFailureType,
   AxpMiddleware,
   AxpNext,
   AxpOptions,
@@ -23,7 +23,9 @@ import type {
   IAuthOptions,
   IAxpCacheEntry,
   IAxpCacheStore,
-  IAxpEnvelope,
+  IAxpCacheSnapshot,
+  MaybePromise,
+  IAxpFailure,
   IAxpResponse,
   IAxpResponseFactory,
   IAxpResponseOptions,
@@ -65,13 +67,14 @@ import axpNotify from "../../src/plugins/notify";
 import axpRepath from "../../src/plugins/repath";
 import axpRetry from "../../src/plugins/retry";
 import axpShare from "../../src/plugins/share";
-import { AXP_KINDS, AXP_RESPONSE, AxpResponse, axpResponse, isAxpResponse } from "../../src/response";
+import { AXP_FAILURE, AXP_FAILURES, AXP_RESPONSE, AxpResponse, axpResponse, failureOf, isAxpCancel, isAxpResponse } from "../../src/response";
 import { stateKey } from "../../src/context";
 import TokenManager from "../../src/objects/TokenManager";
 
 /** 文档规定对用户公开的运行时导出（core-architecture §2、plugin-spec、README）。 */
 const PUBLIC_VALUES = [
-  "AXP_KINDS",
+  "AXP_FAILURE",
+  "AXP_FAILURES",
   "AXP_RESPONSE",
   "AuthFailureAction",
   "AxpResponse",
@@ -90,6 +93,8 @@ const PUBLIC_VALUES = [
   "clearCache",
   "createAxp",
   "defaultAuthFailure",
+  "failureOf",
+  "isAxpCancel",
   "isAxpResponse",
   "removeCache",
   "stateKey",
@@ -102,7 +107,10 @@ const IDENTITIES: Array<[keyof typeof entry, unknown]> = [
   ["AxpResponse", AxpResponse],
   ["axpResponse", axpResponse],
   ["isAxpResponse", isAxpResponse],
-  ["AXP_KINDS", AXP_KINDS],
+  ["AXP_FAILURE", AXP_FAILURE],
+  ["AXP_FAILURES", AXP_FAILURES],
+  ["failureOf", failureOf],
+  ["isAxpCancel", isAxpCancel],
   ["AXP_RESPONSE", AXP_RESPONSE],
   ["stateKey", stateKey],
   ["TokenManager", TokenManager],
@@ -202,7 +210,9 @@ it("[index.fn.isAxpResponse] 入口创建的客户端抛出的失败是入口导
     .catch(/** 取出被抛出的响应。 */ (e: unknown) => e);
   expect(entry.isAxpResponse(failure)).toBe(true);
   expect(failure).toBeInstanceOf(entry.AxpResponse);
-  expect((failure as IAxpResponse).kind).toBe(entry.AXP_KINDS.HTTP);
+  expect((failure as IAxpResponse).ok).toBe(false);
+  expect((failure as IAxpResponse).status).toBe(500);
+  expect(entry.failureOf(failure)).toBeUndefined();
 });
 
 it("[index.fn.stateKey] 状态键从入口导出且同描述互不相等", /** 类型化 Symbol 键。 */ () => {
@@ -227,7 +237,7 @@ it("[index.type.exports] 入口的类型导出齐全，AuthFailureAction 同名�
   type Surface = [
     AxpClient,
     AxpContext,
-    AxpKind,
+    AxpFailureType,
     AxpMiddleware,
     AxpNext,
     AxpOptions,
@@ -241,9 +251,11 @@ it("[index.type.exports] 入口的类型导出齐全，AuthFailureAction 同名�
     AxpStateKey<number>,
     AxpTap,
     IAuthOptions,
-    IAxpCacheEntry<IAxpResponse>,
-    IAxpCacheStore<IAxpResponse>,
-    IAxpEnvelope,
+    IAxpCacheEntry,
+    IAxpCacheStore,
+    IAxpCacheSnapshot,
+    MaybePromise<number>,
+    IAxpFailure,
     IAxpResponse,
     IAxpResponseFactory,
     IAxpResponseOptions<IAxpResponse>,

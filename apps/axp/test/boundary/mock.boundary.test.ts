@@ -1,3 +1,4 @@
+import { failureOf } from "../../src/response";
 import { expect, it, vi } from "vitest";
 import axpMock, { type IMockOptions } from "../../src/plugins/mock";
 import type { AxpResponse } from "../../src/response";
@@ -102,7 +103,7 @@ it("[mock.cb.fallbackWhen] 探测期间取消：默认不回落，也不发送�
   } as never);
   controller.abort();
   const r = await pending;
-  expect(r.kind).toBe("cancel");
+  expect(failureOf(r)?.type).toBe("cancel");
   expect(h.net.calls("get", REAL)).toBe(0);
 });
 
@@ -115,7 +116,7 @@ it("[mock.cb.fallbackWhen] 回落前调用方已取消：即使判定要求回�
     },
   });
   const r = await h.send({ url: REAL, mock: true, signal: controller.signal });
-  expect(r.kind).toBe("cancel");
+  expect(failureOf(r)?.type).toBe("cancel");
   expect(h.net.calls("get", REAL)).toBe(0);
 });
 
@@ -124,7 +125,7 @@ it("[mock.fn.axpMock] 回落后真实接口失败：保留真实结果，只落�
   h.net.on("get", PROBE, () => ({ status: 404 }));
   h.net.on("get", REAL, () => ({ status: 500 }));
   const r = await h.send({ url: REAL, mock: true });
-  expect(r.httpStatus).toBe(500);
+  expect(r.status).toBe(500);
   expect(h.net.calls("get", PROBE)).toBe(1);
   expect(h.net.calls("get", REAL)).toBe(1);
 });

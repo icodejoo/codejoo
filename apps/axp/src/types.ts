@@ -125,11 +125,11 @@ export type WithData<R, D> = Omit<R, "data"> & { /** 当前接口的业务数据
 /** 从外到内的固定阶段。 */
 export type AxpStage = keyof typeof STAGE_BUILTINS;
 /** next 永远 resolve，程序异常临时归类为 internal。 */
-export type AxpNext<R extends IAxpResponse = AxpResponse> = (patch?: AxpRequestPatch) => Promise<R>;
+export type AxpNext<R extends IAxpResponse<unknown, string | number> = AxpResponse> = (patch?: AxpRequestPatch) => Promise<R>;
 /** 请求不可变的洋葱中间件。 */
-export type AxpMiddleware<R extends IAxpResponse = AxpResponse> = (ctx: AxpContext<R>, next: AxpNext<R>) => Promise<R>;
+export type AxpMiddleware<R extends IAxpResponse<unknown, string | number> = AxpResponse> = (ctx: AxpContext<R>, next: AxpNext<R>) => Promise<R>;
 /** 一个独立参与排序的请求/响应挂载段。 */
-export interface AxpTap<R extends IAxpResponse = AxpResponse> {
+export interface AxpTap<R extends IAxpResponse<unknown, string | number> = AxpResponse> {
   /** 挂载阶段。 */
   stage: AxpStage;
   /** 自定义段默认在内置段之后。 */
@@ -140,7 +140,7 @@ export interface AxpTap<R extends IAxpResponse = AxpResponse> {
   onResponse?(response: R, ctx: AxpContext<R>): void | R | Promise<void | R>;
 }
 /** 每个客户端独立的插件实例。 */
-export interface AxpPluginInstance<R extends IAxpResponse = AxpResponse, A = void> {
+export interface AxpPluginInstance<R extends IAxpResponse<unknown, string | number> = AxpResponse, A = void> {
   /** 有状态中间件。 */
   handle?: AxpMiddleware<R>;
   /** 有状态挂载段。 */
@@ -153,7 +153,7 @@ export interface AxpPluginInstance<R extends IAxpResponse = AxpResponse, A = voi
 /** 具名插件，状态必须在 setup 中建立以支持 extend。
  * @example `{ name: 'timing', async handle(ctx, next) { return next() } }`
  */
-export interface AxpPlugin<R extends IAxpResponse = AxpResponse, A = void> {
+export interface AxpPlugin<R extends IAxpResponse<unknown, string | number> = AxpResponse, A = void> {
   /** 客户端内唯一名称。 */
   readonly name: string;
   /** false 时不 setup、不进链。 */
@@ -170,7 +170,7 @@ export interface AxpPlugin<R extends IAxpResponse = AxpResponse, A = void> {
   taps?: readonly AxpTap<R>[];
 }
 /** 新客户端的共同选项。 */
-interface IAxpBaseOptions<R extends IAxpResponse> {
+interface IAxpBaseOptions<R extends IAxpResponse<unknown, string | number>> {
   /** 使用现有实例，省略时创建新实例。 */
   axios?: AxiosInstance;
   /** 初始化插件列表；不参与推断 R，R 只由显式泛型或 response 工厂决定。 */
@@ -187,14 +187,14 @@ export type TAxpDefaultResponse<R> = [R] extends [AxpResponse] ? ([AxpResponse] 
 /** 默认响应可省略选项，自定义响应必须提供完整选项。 */
 export type TAxpArgs<R, O> = TAxpDefaultResponse<R> extends true ? [options?: O] : [options: O];
 /** 自定义响应必须显式提供匹配的工厂。 */
-export type AxpOptions<R extends IAxpResponse = AxpResponse> = IAxpBaseOptions<R> &
+export type AxpOptions<R extends IAxpResponse<unknown, string | number> = AxpResponse> = IAxpBaseOptions<R> &
   (TAxpDefaultResponse<R> extends true ? { /** 默认响应工厂。 */ response?: IAxpResponseFactory<R> } : { /** 自定义响应工厂。 */ response: IAxpResponseFactory<R> });
 /** 根据选项决定返回形态。 */
-type TAxpResult<R extends IAxpResponse, D, O> = O extends { wrap: true } | { throws: false } ? WithData<R, D> : D;
+type TAxpResult<R extends IAxpResponse<unknown, string | number>, D, O> = O extends { wrap: true } | { throws: false } ? WithData<R, D> : D;
 /** 新动词的调用签名，沿用原有 Schema 查表和 NoInfer。 */
 type TAxpDispatchArgs<S, Mt extends HttpMethodLower, P, Q, C extends unknown[]> = Payload<ResolvePayload<S, Mt, P, NoInfer<Q>>, C>;
 /** 按调用级有效开关选择返回形态的动词签名。 */
-interface IAxpDispatch<S, Mt extends HttpMethodLower, P, R extends IAxpResponse, O> {
+interface IAxpDispatch<S, Mt extends HttpMethodLower, P, R extends IAxpResponse<unknown, string | number>, O> {
   /** 调用级明确包装或关闭抛错时返回响应。 */
   <D = unknown, Q = unknown>(...args: TAxpDispatchArgs<S, Mt, P, Q, [config: AxpRequestConfig & ({ wrap: true } | { throws: false })]>): Promise<WithData<R, ResolveResponse<S, Mt, P, D>>>;
   /** 调用级同时关闭包装并开启抛错时返回数据。 */
@@ -246,7 +246,7 @@ interface IAxpDispatch<S, Mt extends HttpMethodLower, P, R extends IAxpResponse,
   <D = unknown, Q = unknown>(...args: TAxpDispatchArgs<S, Mt, P, Q, [config?: AxpRequestConfig]>): Promise<TAxpResult<R, ResolveResponse<S, Mt, P, D>, O>>;
 }
 /** axios 的十个小写动词与柯里化 Schema 分派。 */
-export type HttpVerbs<S, R extends IAxpResponse> = {
+export type HttpVerbs<S, R extends IAxpResponse<unknown, string | number>> = {
   [Mt in HttpMethodLower]: <P extends LoosePath<S, Mt>, O extends AxpRequestConfig = AxpRequestConfig>(path: P, config?: O) => IAxpDispatch<S, Mt, P, R, O>;
 };
 /** 编译后的可观测挂载项。 */
@@ -259,7 +259,7 @@ export interface IAxpInspection {
 /** 洋葱管线客户端的公开契约。
  * @example `const data = await api.get('/pets')()`
  */
-export interface AxpClient<S = unknown, R extends IAxpResponse = AxpResponse> extends HttpVerbs<S, R> {
+export interface AxpClient<S = unknown, R extends IAxpResponse<unknown, string | number> = AxpResponse> extends HttpVerbs<S, R> {
   /** 底层传输实例。 */
   readonly axios: AxiosInstance;
   /** 逃生口，明确请求返回响应。
@@ -274,13 +274,13 @@ export interface AxpClient<S = unknown, R extends IAxpResponse = AxpResponse> ex
    * @example `api.request<Pet>({ url: '/pet' })`
    */
   request<D = unknown>(config: AxpRequestConfig): Promise<D>;
-  /** 克隆 defaults，默认继承插件并重新 setup。
-   * @param overrides 子客户端的 axios defaults 覆盖项。
-   * @param opts 插件列表或 inherit。
+  /** 默认克隆 defaults（不复制拦截器），继承插件并重新 setup；指定 axios 时原样使用该实例。
+   * @param overrides 插件 setup 完成后写入子实例的 axios defaults 覆盖项。
+   * @param opts 插件列表或 inherit，以及可选的子实例；指定实例时不复制父 defaults。
    * @returns 插件状态独立的子客户端。
    * @example `api.extend({ baseURL: '/v2' }, { plugins: 'inherit' })`
    */
-  extend(overrides?: AxiosRequestConfig, opts?: { /** inherit 为默认。 */ plugins?: "inherit" | readonly AxpPlugin<R, any>[] }): AxpClient<S, R>;
+  extend(overrides?: AxiosRequestConfig, opts?: { /** inherit 为默认。 */ plugins?: "inherit" | readonly AxpPlugin<R, any>[]; /** 原样使用并保留拦截器的子实例。 */ axios?: AxiosInstance }): AxpClient<S, R>;
   /** 安装插件并重新编译链；重名抛错，enable:false 不 setup。
    * @param plugin 客户端内具名插件。
    * @example `api.use(timing)`
@@ -317,9 +317,15 @@ export interface AxpClient<S = unknown, R extends IAxpResponse = AxpResponse> ex
   /** 品牌检查，收窄为当前响应类型。
    * @param value 任意捕获值。
    * @returns 是否携带共享响应品牌。
-   * @example `if (api.isResponse(error)) console.log(error.kind)`
+   * @example `if (api.isResponse(error)) console.log(failureOf(error)?.type)`
    */
   isResponse(value: unknown): value is R;
+  /** 判断是否为内核取消响应。
+   * @param value 任意响应或异常。
+   * @returns 是否带 cancel 标记。
+   * @example `if (api.isCancel(error)) return`
+   */
+  isCancel(value: unknown): boolean;
   /** 中止在途请求并逆序清理插件实例，可重复调用。
    * 清理异常不会中断其它实例，最后抛出首次异常；销毁后不能发起新请求。
    * @example `api.dispose()`

@@ -8,7 +8,6 @@ import type { AxpResponse } from "../../src/response";
 import type { AxpPlugin, AxpRequestConfig } from "../../src/types";
 import { cloneAxiosDefaults, effectiveHeaders } from "../../src/utils";
 import { requestKey } from "../../src/key";
-import { requestKey as referenceRequestKey } from "../helpers/key-reference";
 import { testContext } from "../helpers/context";
 import { preparedClient } from "../helpers/prepare";
 import { wireClient } from "../helpers/wire";
@@ -75,21 +74,20 @@ it("[filter.fn.$filter] 默认谓词直接判断值且仍生成新对象", /** �
   expect($filter(kept, options)).not.toBe(kept);
 });
 
-it("[core.method.key] 浅空预检继续读取继承的可枚举属性并保留异常", /** 删除预检会跳过旧实现可观察的 getter。 */ () => {
+it("[core.method.key] 非普通原型对象返回 null，不读取继承的 getter", /** 删除旧算法预检后按不透明对象拒绝生成指纹。 */ () => {
   const bug = new Error("inherited getter");
   const prototype = Object.defineProperty({}, PATH_FIELD, {
-    /** 旧预检会枚举继承字段。 */ enumerable: true,
+    /** 模拟可枚举的继承字段。 */ enumerable: true,
     /** 原样透传程序异常。 */ get() {
       throw bug;
     },
   });
   const request = {
-    /** 自有空字段使旧预检继续检查继承字段。 */ params: Object.assign(Object.create(prototype), {
+    /** 自有字段不改变不透明对象身份。 */ params: Object.assign(Object.create(prototype), {
       empty: null,
     }),
   };
-  expect(/** 参照实现读取继承字段。 */ () => referenceRequestKey(request)).toThrow(bug);
-  expect(/** 精简后仍保持相同异常。 */ () => requestKey(request)).toThrow(bug);
+  expect(requestKey(request)).toBeNull();
 });
 
 it("[filter.opt.snapshot] 装配配置快照不受原选项和豁免数组后续修改影响", /** 对象覆盖也应继承同一份配置。 */ async () => {

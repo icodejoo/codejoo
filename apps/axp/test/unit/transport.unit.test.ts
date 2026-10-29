@@ -1,13 +1,16 @@
+import { AXP_FAILURE } from "../../src/response";
+import { failureOf } from "../../src/response";
 import { AxiosError, AxiosHeaders, type AxiosInstance, type AxiosRequestConfig } from "axios";
 import { afterEach, expect, it, vi } from "vitest";
 import { axpResponse } from "../../src/response";
 import { createTransport } from "../../src/transport";
+import { requestContext } from "../../src/context";
 import { testContext } from "../helpers/context";
 
 /** 每例恢复全局克隆函数。 */
 afterEach(/** 每例恢复被替换的全局 structuredClone。 */ () => vi.unstubAllGlobals());
 /** 仅模拟 request 函数，不建立 axios 实例。 */
-function transport() {
+function transport(defaults: AxiosRequestConfig = {}) {
   const request = vi.fn(
     /** 返回成功的假 axios 响应，并回显请求配置。 */ async (config: AxiosRequestConfig) => ({
       status: 200,
@@ -17,7 +20,7 @@ function transport() {
       config: { ...config, headers: new AxiosHeaders() },
     }),
   );
-  const send = createTransport({ request, defaults: {} } as unknown as AxiosInstance, axpResponse());
+  const send = createTransport({ request, defaults } as unknown as AxiosInstance, axpResponse());
   return { send, request };
 }
 it("[core.fn.createTransport] 强制全状态放行，默认使用逻辑 signal", /** 强制全状态放行，默认使用逻辑 signal。 */ async () => {
@@ -38,7 +41,7 @@ it("[core.req.signal] 显式传输 signal 优先，已取消不发送", /** 显�
   await send(ctx);
   expect(request.mock.calls[0][0].signal).toBe(controller.signal);
   controller.abort();
-  expect((await send(ctx)).kind).toBe("cancel");
+  expect(failureOf(await send(ctx))?.type).toBe("cancel");
   expect(request).toHaveBeenCalledTimes(1);
 });
 it.each([{ a: [1] }, [1], Object.assign(Object.create(null), { a: 1 }), "data", null, new Date(), new Blob(["body"])].map(/** 把候选请求体包成 each 参数。 */ (data) => ({ data })))(
@@ -80,15 +83,15 @@ it("[core.fn.createTransport] 非 axios 的程序异常由传输自身兜底为 
   const { send, request } = transport();
   const bug = new TypeError("adapter bug");
   request.mockRejectedValue(bug);
-  expect(await send(testContext())).toMatchObject({ kind: "internal", error: bug });
+  expect(await send(testContext())).toMatchObject({ error: bug, [AXP_FAILURE]: { type: "internal" } });
 });
 it("[core.fn.createTransport] axios 异常交给响应工厂", /** axios 异常交给响应工厂。 */ async () => {
   const { send, request } = transport();
   const error = new AxiosError("offline");
   request.mockRejectedValue(error);
-  expect(await send(testContext())).toMatchObject({ kind: "network", error });
+  expect(await send(testContext())).toMatchObject({ error, [AXP_FAILURE]: { type: "network" } });
 });
-it("[core.fn.createTransport] 各层未改动 params / headers 时原样透传，不做二次合并掩码", /** 多数请求只付一次 mergeConfig，不再逐请求比对默认头。 */ async () => {
+it("[core.fn.createTransport] 未改动的纯对象默认 params 仍复制完整视图，headers 原样透传", /** 默认参数固定为视图，默认头继续以发送时为准。 */ async () => {
   const request = vi.fn(
     /** 回显请求配置。 */ async (config: AxiosRequestConfig) => ({
       status: 200,
@@ -109,6 +112,49 @@ it("[core.fn.createTransport] 各层未改动 params / headers 时原样透传�
   const headers = new AxiosHeaders({ Accept: "json" });
   await send(testContext({ params, headers }));
   const config = request.mock.calls[0][0];
-  expect(config.params).toBe(params);
+  expect(config.params).toEqual(params);
+  expect(config.params).not.toBe(params);
   expect(config.headers).toBe(headers);
+});
+
+it("[core.req.defaults] method 与 baseURL 固定为视图，缺省 baseURL 发空串", /** 已修改的 defaults 不影响 key 对应的发送字段。 */ async () => {
+  const { send, request } = transport({ method: "post", baseURL: "/changed", params: { page: 2, added: 1 } });
+  const ctx = testContext({ method: "get", baseURL: "/original", params: { page: 1 } });
+  await send(ctx);
+  expect(request.mock.lastCall![0]).toMatchObject({ method: "get", baseURL: "/original", params: { page: 1, added: null } });
+  await send(testContext({ method: "get" }));
+  expect(request.mock.lastCall![0]).toMatchObject({ method: "get", baseURL: "", params: { page: null, added: null } });
+});
+
+it.each([undefined, new URLSearchParams("page=2")])(
+  "[core.req.params] 非纯对象 defaults.params=%s 时不复制未修改的 params",
+  /** 没有默认参数的常见路径保持原引用，也不增加 params 字段。 */ async (defaults) => {
+    const { send, request } = transport({ params: defaults });
+    const params = { page: 1 };
+    await send(testContext({ params }));
+    expect(request.mock.lastCall![0].params).toBe(params);
+    await send(testContext());
+    expect(request.mock.lastCall![0]).not.toHaveProperty("params");
+  },
+);
+
+it("[core.req.params] 非纯对象默认参数下，补丁 params 仍取本层完整值", /** 补丁不可被原请求覆盖。 */ async () => {
+  const { send, request } = transport({ params: new URLSearchParams("page=2") });
+  const root = testContext({ params: { page: 1 } });
+  const params = { page: 3 };
+  await send(requestContext(root, { params }, { params }));
+  expect(request.mock.lastCall![0].params).toBe(params);
+});
+
+it("[core.method.canReplay] 传输记录一次性请求体，再发时返回原始 Error 且不调用 axios", /** 兜底保护不依赖内置插件。 */ async () => {
+  const { send, request } = transport();
+  const data = { pipe: vi.fn() };
+  const ctx = testContext({ data });
+  await send(ctx);
+  expect(ctx.canReplay()).toBe(false);
+  const failure = await send(ctx);
+  expect(failureOf(failure)?.type).toBe("internal");
+  expect(failure.error).toBeInstanceOf(Error);
+  expect((failure.error as Error).message).toBe("一次性请求体已发送，不能重放；重放前请先检查 ctx.canReplay()");
+  expect(request).toHaveBeenCalledTimes(1);
 });

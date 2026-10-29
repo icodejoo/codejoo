@@ -1,3 +1,5 @@
+import { businessAuthFailure } from "../helpers/b3";
+import { AXP_FAILURE } from "../../src/response";
 import { beforeEach, expect, it, vi } from "vitest";
 import axpRetry from "../../src/plugins/retry";
 import { authClient, deferred, failure, guarded, POLLUTED_ONCE, pollutingBody, pollutingTransform, REFRESH_TOKEN, REQUEST_URL, run, TOKEN_NEW, TOKEN_OLD } from "../helpers/b3";
@@ -16,7 +18,9 @@ beforeEach(() => {
 it.each([false, true])(
   "[auth.cb.onRefresh][retry.opt.max] 500 → 401 → 刷新 → 成功：onRefresh 一次，刷新重放不占重试次数（max=1 仍成功，business=%s）",
   /** 重试里遇 401 先刷新再继续。 */ async (business) => {
-    const h = authClient({}, [axpRetry({ max: ONE_RETRY, delay: 0 })]);
+    const h = authClient({ onFailure: business ? businessAuthFailure : undefined }, [
+      axpRetry({ shouldRetry: business ? /** 使用者按业务码选择重试。 */ (r) => [408, 429, 500, 502, 503, 504].includes(Number(r.code)) : undefined, max: ONE_RETRY, delay: 0 }),
+    ]);
     const route = guarded(() => TOKEN_NEW, business);
     h.net.on("get", REQUEST_URL, /** 首次服务端故障，其后按 token 放行。 */ (config, hit) => (hit === 1 ? failure(500, business) : route(config, hit)));
     expect((await run(h)).ok).toBe(true);
@@ -47,7 +51,7 @@ it.each([
     const shouldRetry = vi.fn(/** 不应被调用。 */ () => true);
     const h = authClient(override, [axpRetry({ max: 3, delay: 0, statusCodes: [401, 403], shouldRetry })]);
     h.net.on("get", REQUEST_URL, () => failure(status));
-    expect(await run(h)).toMatchObject({ kind: "auth", reason, status });
+    expect(await run(h)).toMatchObject({ status, [AXP_FAILURE]: { type: "auth", reason: reason } });
     expect(h.net.totalStarted).toBe(1);
     expect(shouldRetry).not.toHaveBeenCalled();
   },
@@ -57,7 +61,7 @@ it("[auth.const.AuthFailureAction.Others][retry.opt.statusCodes] 无关失败（
   const onFailure = vi.fn(/** 观察每次尝试都经过路由。 */ () => undefined);
   const h = authClient({ onFailure }, [axpRetry({ max: 2, delay: 0 })]);
   h.net.on("get", REQUEST_URL, () => failure(500));
-  expect(await run(h)).toMatchObject({ ok: false, status: 500, kind: "http" });
+  expect(await run(h)).toMatchObject({ status: 500, ok: false });
   expect(h.net.totalStarted).toBe(3);
   expect(onFailure).toHaveBeenCalledTimes(3);
   expect(h.settings.onRefresh).not.toHaveBeenCalled();

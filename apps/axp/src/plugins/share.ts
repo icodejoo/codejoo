@@ -1,7 +1,7 @@
 import { cancelIfAborted, type AxpContext } from "../context";
 import { methodSet, normalizeMethod, SAFE_METHODS } from "../methods";
 import { resolveOption, resolveRequestOption, type AxpOption, type IPluginSwitch } from "../options";
-import { AXP_KINDS, type AxpResponse, type IAxpResponse } from "../response";
+import { failureOf, AXP_FAILURES, type AxpResponse, type IAxpResponse } from "../response";
 import type { AxpNext, AxpPlugin, AxpRequestPatch } from "../types";
 import { waitAbortable } from "../utils";
 
@@ -42,7 +42,7 @@ const DEFAULTS = {
 type TShareConfig = ISharedOptions & Required<Pick<ISharedOptions, "policy" | "methods">>;
 
 /** 一组同 key 并发请求共享的状态。 */
-interface IShareEntry<R extends IAxpResponse> {
+interface IShareEntry<R extends IAxpResponse<unknown, string | number>> {
   /** 共享结果，永不 reject。 */
   promise: Promise<R>;
   /** 落定共享结果。 */
@@ -53,15 +53,24 @@ interface IShareEntry<R extends IAxpResponse> {
   subs: number;
   /** start：共享请求的取消控制器。 */
   controller?: AbortController;
-  /** end：已发出的请求序号，只有最新序号的结果有效。 */
+  /** end：单调递增的请求序号。 */
   seq: number;
+  /** end：仍在途、尚未完成或撤回的请求序号。 */
+  pending: Set<number>;
+  /** end：序号最大的已完成且未撤回的结果。 */
+  completed?: {
+    /** 已完成请求的序号。 */ seq: number;
+    /** 已完成请求的响应。 */ response: R;
+  };
   /** race：仍在途的请求数。 */
   inflight: number;
+  /** race：最后到达的未撤回失败。 */
+  failure?: R;
 }
 /** 同一策略下 key 到共享条目的索引。 */
-type TShareTable<R extends IAxpResponse> = Map<string, IShareEntry<R>>;
+type TShareTable<R extends IAxpResponse<unknown, string | number>> = Map<string, IShareEntry<R>>;
 /** 某个策略处理一次请求的入口。 */
-type TShareRunner = <R extends IAxpResponse>(ctx: AxpContext<R>, next: AxpNext<R>, key: string, table: TShareTable<R>) => Promise<R>;
+type TShareRunner = <R extends IAxpResponse<unknown, string | number>>(ctx: AxpContext<R>, next: AxpNext<R>, key: string, table: TShareTable<R>) => Promise<R>;
 
 /** 判断是否为合法策略名。 */
 function isPolicy(value: unknown): value is SharePolicy {
@@ -81,16 +90,16 @@ function resolvePolicy(value: unknown, base: TShareConfig): SharePolicy | null {
 }
 
 /** 新建一个尚未落定的共享条目。 */
-function createEntry<R extends IAxpResponse>(): IShareEntry<R> {
+function createEntry<R extends IAxpResponse<unknown, string | number>>(): IShareEntry<R> {
   let resolve!: (response: R) => void;
   const promise = new Promise<R>((done) => {
     resolve = done;
   });
-  return { promise, resolve, settled: false, subs: 0, seq: 0, inflight: 0 };
+  return { promise, resolve, settled: false, subs: 0, seq: 0, pending: new Set(), inflight: 0 };
 }
 
 /** 用共享结果落定条目并摘出索引；已落定或已放弃的条目忽略迟到的结果。 */
-function settleEntry<R extends IAxpResponse>(table: TShareTable<R>, key: string, entry: IShareEntry<R>, response: R): void {
+function settleEntry<R extends IAxpResponse<unknown, string | number>>(table: TShareTable<R>, key: string, entry: IShareEntry<R>, response: R): void {
   if (entry.settled) return;
   entry.settled = true;
   if (table.get(key) === entry) table.delete(key);
@@ -98,7 +107,7 @@ function settleEntry<R extends IAxpResponse>(table: TShareTable<R>, key: string,
 }
 
 /** 读取已含实例 defaults 的有效超时毫秒数；缺省或非法按无超时处理。 */
-function timeoutOf<R extends IAxpResponse>(ctx: AxpContext<R>): number {
+function timeoutOf<R extends IAxpResponse<unknown, string | number>>(ctx: AxpContext<R>): number {
   return ctx.request.timeout || NO_TIMEOUT;
 }
 
@@ -109,7 +118,7 @@ function timeoutOf<R extends IAxpResponse>(ctx: AxpContext<R>): number {
  * @param abandon 最后一个订阅者提前离开时调用，用于中止底层请求；落定后订阅者在同一轮微任务内收尾，不会再提前离开。
  * @returns 共享结果，或订阅者自己的取消、超时响应。
  */
-function subscribe<R extends IAxpResponse>(ctx: AxpContext<R>, entry: IShareEntry<R>, abandon?: () => void): Promise<R> {
+function subscribe<R extends IAxpResponse<unknown, string | number>>(ctx: AxpContext<R>, entry: IShareEntry<R>, abandon?: () => void): Promise<R> {
   entry.subs++;
   const limit = timeoutOf(ctx);
   return waitAbortable(entry.promise, ctx.signal, limit > 0 ? limit : undefined).then(
@@ -118,13 +127,13 @@ function subscribe<R extends IAxpResponse>(ctx: AxpContext<R>, entry: IShareEntr
       // 提前离开只结束自己；最后一个提前离开的负责放弃共享请求。
       if (--entry.subs === 0) abandon?.();
       // 已中止是调用方取消，否则是自己的超时；文案与 axios 的超时一致。
-      return cancelIfAborted(ctx) ?? ctx.fail({ kind: AXP_KINDS.TIMEOUT, message: ctx.request.timeoutErrorMessage || `timeout of ${limit}ms exceeded` });
+      return cancelIfAborted(ctx) ?? ctx.fail({ failure: AXP_FAILURES.TIMEOUT, message: ctx.request.timeoutErrorMessage || `timeout of ${limit}ms exceeded` });
     },
   );
 }
 
 /** 取出同 key 的共享条目，没有就新建并登记。 */
-function entryFor<R extends IAxpResponse>(table: TShareTable<R>, key: string): IShareEntry<R> {
+function entryFor<R extends IAxpResponse<unknown, string | number>>(table: TShareTable<R>, key: string): IShareEntry<R> {
   let entry = table.get(key);
   if (!entry) {
     entry = createEntry<R>();
@@ -134,7 +143,7 @@ function entryFor<R extends IAxpResponse>(table: TShareTable<R>, key: string): I
 }
 
 /** start：首发才真正发请求，后到的同 key 订阅者复用其结果。 */
-function shareStart<R extends IAxpResponse>(ctx: AxpContext<R>, next: AxpNext<R>, key: string, table: TShareTable<R>): Promise<R> {
+function shareStart<R extends IAxpResponse<unknown, string | number>>(ctx: AxpContext<R>, next: AxpNext<R>, key: string, table: TShareTable<R>): Promise<R> {
   let entry = table.get(key);
   if (!entry) {
     const created = createEntry<R>();
@@ -158,22 +167,43 @@ function shareStart<R extends IAxpResponse>(ctx: AxpContext<R>, next: AxpNext<R>
   );
 }
 
-/** end：每次调用都发请求，只有最新一次的结果落定共享条目。 */
-function shareEnd<R extends IAxpResponse>(ctx: AxpContext<R>, next: AxpNext<R>, key: string, table: TShareTable<R>): Promise<R> {
+/** end：每次调用都发请求，最新的未撤回请求落定共享条目。 */
+function shareEnd<R extends IAxpResponse<unknown, string | number>>(ctx: AxpContext<R>, next: AxpNext<R>, key: string, table: TShareTable<R>): Promise<R> {
   const shared = entryFor(table, key);
   const mine = ++shared.seq;
-  void next().then(/** 被更新的调用顶替后，这次的结果直接丢弃。 */ (response) => (mine === shared.seq ? settleEntry(table, key, shared, response) : undefined));
+  shared.pending.add(mine);
+  void next().then(
+    /** 最新者撤回后，回退到最新的在途请求或已完成结果。 */ (response) => {
+      shared.pending.delete(mine);
+      const withdrawn = failureOf(response)?.type === AXP_FAILURES.CANCEL && ctx.signal.aborted;
+      let latestPending = 0;
+      for (const sequence of shared.pending) latestPending = Math.max(latestPending, sequence);
+      if (!withdrawn) {
+        if (!shared.completed || mine > shared.completed.seq) shared.completed = { seq: mine, response };
+        if (mine > latestPending) settleEntry(table, key, shared, response);
+      } else if (shared.pending.size === 0) {
+        // 没有在途请求才回退已完成结果；全部撤回时用取消结果清表。
+        settleEntry(table, key, shared, shared.completed?.response ?? response);
+      }
+      return undefined;
+    },
+  );
   return subscribe(ctx, shared);
 }
 
-/** race：每次调用都发请求，第一个成功的胜出；全部失败时用最后一个。 */
-function shareRace<R extends IAxpResponse>(ctx: AxpContext<R>, next: AxpNext<R>, key: string, table: TShareTable<R>): Promise<R> {
+/** race：第一个成功的胜出；否则用最后一个未撤回失败，全部撤回时清表。 */
+function shareRace<R extends IAxpResponse<unknown, string | number>>(ctx: AxpContext<R>, next: AxpNext<R>, key: string, table: TShareTable<R>): Promise<R> {
   const shared = entryFor(table, key);
   shared.inflight++;
   void next().then(
-    /** 成功立即胜出；失败要等在途的都落定，最后到达的那个收尾。 */ (response) => {
+    /** 自己取消的响应不能成为其他订阅者的结果，超时仍正常参与。 */ (response) => {
       shared.inflight--;
-      return response.ok || shared.inflight === 0 ? settleEntry(table, key, shared, response) : undefined;
+      const withdrawn = failureOf(response)?.type === AXP_FAILURES.CANCEL && ctx.signal.aborted;
+      if (!withdrawn) {
+        if (response.ok) return settleEntry(table, key, shared, response);
+        shared.failure = response;
+      }
+      return shared.inflight === 0 ? settleEntry(table, key, shared, shared.failure ?? response) : undefined;
     },
   );
   return subscribe(ctx, shared);
@@ -193,7 +223,7 @@ const RUNNERS: Record<SharePolicy, TShareRunner> = {
  * @returns source 阶段内置次序 2 的插件，每个客户端各有一套独立的共享表。
  * @example `axpShare({ policy: 'start' })` 配合 `api.get('/pets')(undefined, { share: true })`
  */
-export default function axpShare<R extends IAxpResponse = AxpResponse>(options: ISharedOptions = {}): AxpPlugin<R> {
+export default function axpShare<R extends IAxpResponse<unknown, string | number> = AxpResponse>(options: ISharedOptions = {}): AxpPlugin<R> {
   const base = resolveOption<ISharedOptions, typeof DEFAULTS>(undefined, options, DEFAULTS);
   if (!isPolicy(base.policy)) base.policy = DEFAULT_POLICY;
   const methods = methodSet(base.methods);

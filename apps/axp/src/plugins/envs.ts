@@ -24,7 +24,7 @@ export type IEnvsOptions = IEnvRule[] | IEnvOptions;
  * @returns 只有 setup 的环境插件。
  * @example `axpEnvs([{ rule: () => true, config: { baseURL: '/api' } }])`
  */
-export default function axpEnvs<R extends IAxpResponse = AxpResponse>(options: IEnvsOptions = []): AxpPlugin<R> {
+export default function axpEnvs<R extends IAxpResponse<unknown, string | number> = AxpResponse>(options: IEnvsOptions = []): AxpPlugin<R> {
   const config = Array.isArray(options) ? { rules: options } : options;
   const rules = [...(config.rules ?? [])];
   return {

@@ -1,11 +1,10 @@
 import { bench, describe } from "vitest";
 import { requestKey } from "../src/key";
 import type { AxpRequestConfig } from "../src/types";
-import { requestKey as referenceRequestKey } from "../test/helpers/key-reference";
 
 /** 三轮独立测量，汇报时按每次耗时取中位数。 */
 const ROUNDS = 3;
-/** 预热和采样配置，两种实现完全一致。 */
+/** 各轮共用的预热和采样配置。 */
 const MEASURE = {
   /** 每轮正式测量时长，单位毫秒。 */
   time: 1_000,
@@ -54,11 +53,11 @@ const CASES: [string, AxpRequestConfig][] = [
             /** 送货信息。 */ shipping: {
               /** 区域。 */ region: "cn",
               /** 默认地址。 */ address: "Shanghai",
-              /** 空备注参与过滤。 */ note: null,
+              /** 空备注不贡献字段。 */ note: null,
             },
           }),
         ),
-        /** 过滤的空字段。 */ unused: { /** 深层空值。 */ nested: [] },
+        /** 嵌套空容器仍参与摘要。 */ unused: { /** 空数组。 */ nested: [] },
       },
     },
   ],
@@ -76,31 +75,17 @@ const CASES: [string, AxpRequestConfig][] = [
 ];
 
 for (const [name, request] of CASES) {
-  if (requestKey(request) !== referenceRequestKey(request)) throw new Error("基准指纹不一致：" + name);
   describe(
     name,
-    /** 为每组输入测量三轮新旧实现。 */ () => {
+    /** 为每组输入测量三轮当前实现。 */ () => {
       for (let round = 1; round <= ROUNDS; round++) {
-        // 交替测量顺序，减少预热与进程漂移偏差。
-        const implementations =
-          round % 2 === 0
-            ? ([
-                ["new", requestKey],
-                ["old", referenceRequestKey],
-              ] as const)
-            : ([
-                ["old", referenceRequestKey],
-                ["new", requestKey],
-              ] as const);
-        for (const [implementation, calculate] of implementations) {
-          bench(
-            implementation + " round " + round,
-            /** 同一输入仅计算指纹。 */ () => {
-              sink = calculate(request);
-            },
-            MEASURE,
-          );
-        }
+        bench(
+          "current round " + round,
+          /** 同一输入仅计算指纹。 */ () => {
+            sink = requestKey(request);
+          },
+          MEASURE,
+        );
       }
     },
   );

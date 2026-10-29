@@ -1,3 +1,4 @@
+import { AXP_FAILURE } from "../../src/response";
 import { AxiosError } from "axios";
 import { beforeEach, expect, it, vi } from "vitest";
 import axpLoading from "../../src/plugins/loading";
@@ -42,7 +43,7 @@ it("[loading.cb.loading][auth.cb.onRefresh] 刷新失败收敛后同样隐藏：
   const h = authClient({ onRefresh: () => false });
   h.api.use(axpLoading({ loading: loadingRecorder(h.events) }));
   h.net.on("get", REQUEST_URL, () => failure(401));
-  expect(await run(h)).toMatchObject({ kind: "auth", reason: "expired" });
+  expect(await run(h)).toMatchObject({ [AXP_FAILURE]: { type: "auth", reason: "expired" } });
   expect(h.events.loading.get(LOADING_LABEL)).toEqual([true, false]);
 });
 
@@ -62,7 +63,7 @@ it.each([
         throw new AxiosError("replay failed", code);
       },
     );
-    expect(await run(h)).toMatchObject({ ok: false, kind });
+    expect(await run(h)).toMatchObject({ ok: false, [AXP_FAILURE]: { type: kind } });
     expect(h.events.loading.get(LOADING_LABEL)).toEqual([true, false]);
     expect(h.settings.onRefresh).toHaveBeenCalledTimes(1);
   },

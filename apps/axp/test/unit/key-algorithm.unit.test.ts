@@ -1,106 +1,204 @@
-import { expect, it } from "vitest";
+import { expect, expectTypeOf, it, vi } from "vitest";
 import { requestKey, type IKeyOptions } from "../../src/key";
-import type { AxpRequestConfig } from "../../src/types";
 
-/** 使用 body 方法验证旧算法的 data 语义。 */
+/** 请求体算法的基准请求。 */
 const BASE = { method: "post", url: "/algorithm" };
-/** 只变更 data 的指纹。 */
-function data(value: unknown, ignores?: unknown[], sample = false) {
-  return requestKey({ ...BASE, data: value }, { ignores, sample });
+/** 随机性质样本数。 */
+const SAMPLE_COUNT = 160;
+/** 固定随机种子。 */
+const SEED = 0x5eed2026;
+/** 随机树最大深度。 */
+const MAX_DEPTH = 3;
+/** 数组与对象的最大宽度。 */
+const MAX_WIDTH = 4;
+/** 仅计算请求体指纹。 */
+function data(value: unknown) {
+  return requestKey({ ...BASE, data: value });
 }
 
-it("[core.opt.key.ignores] 名称和值豁免、混合豁免以及未命中无副作用", /** 名称和值豁免、混合豁免以及未命中无副作用。 */ () => {
-  expect(data({ a: null }, ["a"])).not.toBe(data({}));
-  expect(data({ a: [] }, ["a"])).not.toBe(data({}));
-  expect(data({ a: 1 }, ["a"])).toBe(data({ a: 1 }));
-  expect(data({ a: 1 }, ["missing"])).toBe(data({ a: 1 }));
-  expect(data({ a: null, b: [] }, ["a", "b"])).not.toBe(data({ a: null }, ["a", "b"]));
-  expect(data({ a: null }, [null])).not.toBe(data({ b: null }, [null]));
-  expect(data([null], [null])).not.toBe(data([]));
-  expect(data({ a: null }, ["other"])).toBe(data({}));
-  expect(data({ a: null, b: undefined, c: "" }, ["a", undefined])).not.toBe(data({ a: null }, ["a", undefined]));
-  for (const value of [false, "", undefined, null, NaN]) expect(data(value, [value])).not.toBe(data(undefined));
-  expect(data({ blob: new Blob() }, ["blob"])).toBe(data({ blob: null }, ["blob"]));
-  const opaque = new Map();
-  expect(data(opaque, [opaque])).not.toBeNull();
-});
-it("[core.method.key] 嵌套空值回滚、字段身份、顺序与分帧防碰撞", /** 嵌套空值回滚、字段身份、顺序与分帧防碰撞。 */ () => {
-  expect(data([1, null, [], {}])).toBe(data([1]));
-  expect(data({ x: 1, y: { a: [] } })).toBe(data({ x: 1 }));
-  expect(data(false)).not.toBe(data(0));
-  expect(data([1])).not.toBe(data([1, 2]));
-  expect(data({ nested: { x: 1 } })).not.toBe(data({ nested: { x: 2 } }));
-  expect(data([{ x: 1 }])).not.toBe(data([{ x: 2 }]));
-  expect(data(["ab", "c"])).not.toBe(data(["a", "bc"]));
-  expect(data({ ab: 1 })).not.toBe(data({ a: "b1" }));
-  expect(data({ a: 1, b: 2, c: 3 })).toBe(data({ c: 3, b: 2, a: 1 }));
-  expect(requestKey({ ...BASE, params: { x: 1 } })).not.toBe(data({ x: 1 }));
-  expect(requestKey({ ...BASE, params: 1, data: 2 })).not.toBe(requestKey({ ...BASE, params: 2, data: 1 }));
-  const inherited = Object.create({ inherited: 2 }) as {
-    /** own 字段。 */ own: number;
-  };
-  inherited.own = 1;
-  expect(data(inherited)).toBe(data({ own: 1 }));
-  expect(data(Object.assign(Object.create(null), { own: 1 }))).toBe(data({ own: 1 }));
-});
-it("[core.opt.key.sample] 采样首中尾、总长度与短串全量", /** 采样首中尾、总长度与短串全量。 */ () => {
-  const original = "a".repeat(128);
-  for (const index of [0, 64, 127]) {
-    const changed = original.slice(0, index) + "b" + original.slice(index + 1);
-    expect(data(original, [], true)).not.toBe(data(changed, [], true));
+/** 生成固定种子的随机树；只包含可哈希值。 */
+function samples(): unknown[] {
+  let seed = SEED;
+  /** 线性同余随机数，结果仅依赖固定种子。 */
+  function random(limit: number): number {
+    seed = (Math.imul(seed, 1_664_525) + 1_013_904_223) >>> 0;
+    return seed % limit;
   }
-  expect(data(original, [], true)).toBe(data(original, [], true));
-  expect(data(original, [], true)).not.toBe(data(original + "a", [], true));
-  expect(data("short", [], true)).toBe(data("short"));
-  expect(data("short", [], true)).not.toBe(data("shore", [], true));
-});
-it("[core.method.key] Date、URLSearchParams、二进制沿用旧算法的长度语义", /** Date、URLSearchParams、二进制沿用旧算法的长度语义。 */ () => {
-  expect(data(new Date(0))).toBe(data(new Date(0)));
-  expect(data(new Date(0))).not.toBe(data(new Date(1)));
-  expect(data({ date: new Date(0) })).not.toBe(data({ date: new Date(1) }));
-  expect(data(new URLSearchParams("a=1"))).not.toBe(data(new URLSearchParams("a=2")));
-  expect(data(Buffer.from("a"))).toBe(data(Buffer.from("b")));
-  expect(data(Buffer.from("a"))).not.toBe(data(Buffer.from("aa")));
+  /** 生成含空标量、容器和嵌套字段的随机值。 */
+  function value(depth: number): unknown {
+    const scalar = [null, undefined, "", "  text  ", 0, false, NaN, random(10_000), "v:" + random(10_000), true];
+    const kind = random(depth ? scalar.length + 2 : scalar.length);
+    if (kind < scalar.length) return scalar[kind];
+    const items = Array.from({ length: random(MAX_WIDTH) }, /** 递归生成下层样本。 */ () => value(depth - 1));
+    return kind === scalar.length ? items : Object.fromEntries(items.map(/** 赋予可分帧字段名。 */ (item, index) => ["field:" + index, item]));
+  }
+  return Array.from({ length: SAMPLE_COUNT }, /** 每个样本包成参与摘要的对象。 */ () => ({ payload: value(MAX_DEPTH), id: random(10_000) }));
+}
+
+/** 递归反转对象字段插入顺序，数组顺序保持原样。 */
+function reorder(value: any): unknown {
+  if (Array.isArray(value)) return value.map(reorder);
+  if (value !== null && typeof value === "object") {
+    return Object.fromEntries(
+      Object.entries(value)
+        .toReversed()
+        .map(/** 反转每一层对象字段。 */ ([key, item]) => [key, reorder(item)]),
+    );
+  }
+  return value;
+}
+
+/** 枚举每个参与字段或数组元素单独变化的样本，不改动原值。 */
+function changes(value: any): unknown[] {
+  if (Array.isArray(value)) {
+    if (!value.length) return [[0]];
+    return value.flatMap(/** 每次只替换一个数组元素。 */ (item, index) => changes(item).map(/** 复制数组并替换对应元素。 */ (changed) => value.with(index, changed)));
+  }
+  if (value !== null && typeof value === "object") {
+    const fields = Object.entries(value).filter(/** 仅 undefined 字段不参与摘要，null 字段参与。 */ ([, item]) => item !== undefined);
+    if (!fields.length) return [{ ...value, added: 0 }];
+    return fields.flatMap(/** 每次只变更一个参与字段。 */ ([key, item]) => changes(item).map(/** 保留其余字段。 */ (changed) => Object.assign({}, value, { [key]: changed })));
+  }
+  return [typeof value === "string" ? value + "!" : typeof value === "number" ? (Number.isNaN(value) ? 0 : value + 1) : !value];
+}
+
+it("[core.method.key] 固定种子随机请求反复计算稳定且不修改输入", /** 重复调用不能受上一个请求的递归状态影响。 */ () => {
+  for (const payload of samples()) {
+    const before = structuredClone(payload);
+    const expected = data(payload);
+    expect(expected).not.toBeNull();
+    for (let repeat = 0; repeat < MAX_WIDTH; repeat++) expect(data(payload)).toBe(expected);
+    expect(payload).toEqual(before);
+  }
 });
 
-/** 精简内部参数前的算法在固定输入上的输出，精简后必须逐位不变。 */
-const SNAPSHOTS: [name: string, request: AxpRequestConfig, options: IKeyOptions, key: string | null][] = [
-  ["get params", { method: "get", url: "/pets", params: { page: 1, size: 20 } }, {}, "1elv7z9-f8k3rl"],
-  ["get 忽略 data", { method: "get", url: "/pets", params: { a: 1 }, data: { ignored: true } }, {}, "ycb2s0-1kpwuv4"],
-  [
-    "post 嵌套与数组",
-    {
-      method: "post",
-      url: "/pets",
-      data: { name: "Rex", tags: ["x", "y"], owner: { id: 7, vip: true } },
-    },
-    {},
-    "1vfvxvy-p8xmk6",
-  ],
-  ["post 空值回滚", { method: "post", url: "/pets", data: { a: null, b: "", c: [], d: { e: [] }, f: 1 } }, {}, "4cfgsv-1qj4bo7"],
-  ["post ignores 名称", { method: "post", url: "/pets", data: { a: null, b: 1 } }, { ignores: ["a"] }, "196b2am-1uztqaa"],
-  ["post ignores 值", { method: "post", url: "/pets", data: { a: null, b: 1 } }, { ignores: [null] }, "1941pe5-1uw1i6p"],
-  ["post 长串全量", { method: "post", url: "/long", data: "x".repeat(200) }, {}, "leqbkg-33d170"],
-  ["post 长串采样", { method: "post", url: "/long", data: "x".repeat(200) }, { sample: true }, "1y282de-1l9ztra"],
-  ["post 长串采样中段不同", { method: "post", url: "/long", data: "x".repeat(96) + "y" + "x".repeat(103) }, { sample: true }, "5ugzvr-smtlt7"],
-  ["post Date", { method: "post", url: "/d", data: { at: new Date(1700000000000) } }, {}, "u4ok6d-8u218d"],
-  ["post URLSearchParams", { method: "post", url: "/u", data: new URLSearchParams("a=1&b=2") }, {}, "43opby-hgruyi"],
-  ["put 数组对象", { method: "put", url: "/arr", data: [{ a: 1 }, { b: [2, 3] }, "s", 4, true] }, {}, "1kwzv4g-5qfrk"],
-  ["patch 二进制", { method: "patch", url: "/bin", data: Buffer.from("hello") }, {}, "1s6w7f1-11i63yh"],
-  ["delete data", { method: "delete", url: "/pets/1", data: { reason: "x" } }, {}, "1a7d6ep-b8evix"],
-  ["scope 字符串", { method: "get", url: "/pets", params: { a: 1 } }, { scope: "acct" }, "ycb2s0-1kpwuv4#acct"],
-  ["scope 数字零", { method: "get", url: "/pets", params: { a: 1 } }, { scope: 0 }, "ycb2s0-1kpwuv4#0"],
-  ["scope 函数", { method: "get", url: "/pets", params: { a: 1 } }, { scope: () => "fn" }, "ycb2s0-1kpwuv4#fn"],
-  ["显式 key 去空白", { method: "get", url: "/pets", key: "  fixed " }, {}, "fixed"],
-  ["显式 key 附加 scope", { method: "get", url: "/pets", key: "fixed" }, { scope: "acct" }, "fixed#acct"],
-  ["key false 关闭", { method: "get", url: "/pets", key: false }, {}, null],
-  ["缺省方法按 get", { url: "/default" }, {}, "153xa93-dme0ln"],
-  ["方法名大写", { method: "POST", url: "/upper", data: { a: 1 } }, {}, "17jt95g-1rpmuk4"],
-  ["不可哈希的 Map", { method: "post", url: "/map", data: new Map([[1, 2]]) }, {}, null],
-];
-it.each(SNAPSHOTS)(
-  "[core.method.key] 固定输入输出逐位不变：%s",
-  /** 指纹算法在固定输入上的输出不随内部重构变化。 */ (_name, request, options, key) => {
-    expect(requestKey(request, options)).toBe(key);
-  },
-);
+it("[core.method.key] 固定种子随机对象每层字段重排后 key 相同", /** 可交换累加不依赖字段插入顺序。 */ () => {
+  for (const payload of samples()) expect(data(reorder(payload))).toBe(data(payload));
+});
+
+it("[core.method.key] 固定种子随机请求任一参与字段单独改变则 key 改变", /** 遍历参与摘要的叶子和空容器。 */ () => {
+  for (const payload of samples()) {
+    const expected = data(payload);
+    for (const changed of changes(payload)) expect(data(changed)).not.toBe(expected);
+  }
+});
+
+it("[core.method.key] 类型标签区分数字、文本、布尔和大整数", /** 相同文本表示也不能跨类型命中。 */ () => {
+  const values = [1, "1", 1n, true, "true", 0, "0", false, "false", NaN, "NaN", [], {}, ""];
+  const keys = values.map(data);
+  expect(keys).not.toContain(null);
+  expect(new Set(keys).size).toBe(values.length);
+});
+
+it("[core.method.key] 数组保留空元素、位置和嵌套边界", /** 不折叠数组中的 null、undefined 或空容器。 */ () => {
+  const values = [[], [null], [undefined], [null, undefined], [undefined, null], [""], [[]], [{}], [[1], 2], [[1, 2]], [1, [2]], [1, null], [1]];
+  expect(new Set(values.map(data)).size).toBe(values.length);
+  const sparse: unknown[] = [];
+  sparse.length = 1;
+  expect(data(sparse)).toBe(data([undefined]));
+});
+
+it("[core.method.key] 字符串、字段名和请求片段分帧防止拼接歧义", /** 分隔字符出现在内容中也不改变结构边界。 */ () => {
+  for (const [left, right] of [
+    [
+      ["ab", "c"],
+      ["a", "bc"],
+    ],
+    [["ab,c"], ["ab", "c"]],
+    [{ "a:b": "c" }, { a: "b:c" }],
+    [{ ab: 1 }, { a: "b1" }],
+    [{ a: { b: 1 } }, { a: {}, b: 1 }],
+  ])
+    expect(data(left)).not.toBe(data(right));
+  expect(requestKey({ ...BASE, params: 1, data: 2 })).not.toBe(requestKey({ ...BASE, params: 2, data: 1 }));
+  expect(requestKey({ ...BASE, params: { x: 1 } })).not.toBe(data({ x: 1 }));
+  expect(requestKey({ ...BASE, url: "/a", params: "bc" })).not.toBe(requestKey({ ...BASE, url: "/ab", params: "c" }));
+});
+
+it("[core.method.key] Unicode 字符串的每个字符和尾部都参与哈希", /** 覆盖各种长度与字符位置，保留 UTF-16 代理项。 */ () => {
+  const original = "中😀a".repeat(32);
+  for (let length = 0; length <= original.length; length++) {
+    const text = original.slice(0, length);
+    const expected = data(text);
+    expect(expected).not.toBeNull();
+    expect(data(text)).toBe(expected);
+    for (let index = 0; index < text.length; index++) expect(data(text.slice(0, index) + "!" + text.slice(index + 1))).not.toBe(expected);
+  }
+});
+
+it("[core.method.key] Date 和 URLSearchParams 按值并与其他类型区分", /** 固定时钟避免测试依赖真实时间。 */ () => {
+  vi.useFakeTimers();
+  try {
+    expect(data(new Date(0))).toBe(data(new Date(0)));
+    expect(data(new Date(0))).not.toBe(data(new Date(1)));
+    expect(data(new Date(0))).not.toBe(data(0));
+    expect(data(new Date(NaN))).toBe(data(new Date(NaN)));
+    expect(data(new Date(NaN))).not.toBe(data(NaN));
+    const text = "a=1&b=2";
+    expect(data(new URLSearchParams(text))).toBe(data(new URLSearchParams(text)));
+    expect(data(new URLSearchParams(text))).not.toBe(data(new URLSearchParams("a=2&b=2")));
+    expect(data(new URLSearchParams(text))).not.toBe(data(text));
+    expect(data(new URLSearchParams())).not.toBe(data(""));
+  } finally {
+    vi.useRealTimers();
+  }
+});
+
+it("[core.method.key] 不透明对象、函数和 Symbol 在任意参与位置返回 null", /** 有可枚举字段或 byteLength 的类实例也不能冒充普通值。 */ () => {
+  /** 带自有字段的不透明业务实例。 */
+  class Opaque {
+    /** 可枚举业务字段。 */
+    value = 1;
+    /** 不能冒充二进制缓冲区。 */
+    byteLength = 1;
+  }
+  const values = [new Opaque(), new Map([[1, 2]]), new Set([1]), new Blob(), new FormData(), /pattern/, Symbol("value"), /** 函数不能按文本生成指纹。 */ () => 1];
+  for (const value of values) {
+    expect(data(value)).toBeNull();
+    expect(data({ nested: [value] })).toBeNull();
+  }
+});
+
+it("[core.method.key] 直接和间接循环返回 null，共享子对象不算循环", /** 祖先栈只记录当前递归路径。 */ () => {
+  const cycle: any = {};
+  cycle.self = cycle;
+  const array: unknown[] = [];
+  array.push({ array });
+  expect(data(cycle)).toBeNull();
+  expect(data(array)).toBeNull();
+  const shared = { value: 1 };
+  expect(data({ left: shared, right: shared })).toBe(data({ left: { value: 1 }, right: { value: 1 } }));
+  expect(data([shared, shared])).not.toBeNull();
+});
+
+it("[core.method.key] 普通对象只读自有字段并支持无原型字典", /** Object.prototype 上的枚举字段不能进入指纹。 */ () => {
+  const field = "axpKeyInherited";
+  let actual: string | null = null;
+  let expected: string | null = null;
+  Object.defineProperty(Object.prototype, field, { /** 可被 for-in 枚举。 */ enumerable: true, /** 允许测试后清理。 */ configurable: true, /** 继承值。 */ value: 2 });
+  try {
+    actual = data({ own: 1 });
+    expected = data(Object.assign(Object.create(null), { own: 1 }));
+  } finally {
+    Reflect.deleteProperty(Object.prototype, field);
+  }
+  expect(actual).not.toBeNull();
+  expect(actual).toBe(expected);
+});
+
+it("[core.method.key] 只有请求体方法读取 data，其余方法忽略不透明请求体", /** 覆盖 axios 全部方法和大小写规整。 */ () => {
+  for (const method of ["delete", "post", "put", "patch"]) {
+    const request = { ...BASE, method };
+    expect(requestKey({ ...request, data: 1 })).not.toBe(requestKey({ ...request, data: 2 }));
+    expect(requestKey({ ...request, data: 1 })).toBe(requestKey({ ...request, method: method.toUpperCase(), data: 1 }));
+    expect(requestKey({ ...request, data: new Map() })).toBeNull();
+  }
+  for (const method of ["get", "head", "options", "purge", "link", "unlink"]) {
+    expect(requestKey({ ...BASE, method, data: new Map() })).toBe(requestKey({ ...BASE, method }));
+  }
+});
+
+it("[core.opt.key.scope] scope 回调接收原请求且公开配置只剩 scope", /** 分区函数可以按当前请求取值。 */ () => {
+  expectTypeOf<keyof IKeyOptions>().toEqualTypeOf<"scope">();
+  expect(requestKey(BASE, { scope: /** 读取当前请求方法作为分区。 */ (request) => request.method })).toBe(requestKey(BASE) + "#post");
+});

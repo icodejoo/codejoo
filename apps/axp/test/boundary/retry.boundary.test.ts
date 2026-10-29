@@ -1,8 +1,9 @@
+import { failureOf } from "../../src/response";
 /* eslint-disable no-await-in-loop -- 逐项推进假时钟以观测等待边界。 */
 import { AxiosError } from "axios";
 import { beforeEach, expect, it, vi } from "vitest";
 import axpRetry, { type IRetryOptions } from "../../src/plugins/retry";
-import { AxpResponse, type AxpKind } from "../../src/response";
+import { AxpResponse } from "../../src/response";
 import type { AxpRequestConfig } from "../../src/types";
 import { b3Client, POLLUTED_ONCE, pollutingBody, pollutingTransform, REQUEST_URL, run } from "../helpers/b3";
 
@@ -22,13 +23,13 @@ it.each(["cancel", "auth", "internal", "parse"] as const)(
   /** 合成失败也经过内核异常边界。 */ async (kind) => {
     const shouldRetry = vi.fn(/** 不应覆盖失败类别否决。 */ () => true);
     const h = b3Client([axpRetry({ shouldRetry })]);
-    const inner = vi.fn(/** 构造内核契约中的不可重试失败。 */ (ctx) => ctx.fail({ kind, error: kind === "internal" ? BUG : undefined }));
+    const inner = vi.fn(/** 构造内核契约中的不可重试失败。 */ (ctx) => ctx.fail({ failure: kind, error: kind === "internal" ? BUG : undefined }));
     h.api.use({ name: "failure-kind", stage: "source", handle: inner });
     const pending = h.send().catch(/** 原始程序异常必须保留。 */ (error) => error);
     await vi.runAllTimersAsync();
     const result = await pending;
     if (kind === "internal") expect(result).toBe(BUG);
-    else expect(result.kind).toBe(kind);
+    else expect(failureOf(result)?.type).toBe(kind);
     expect(inner).toHaveBeenCalledTimes(1);
     expect(shouldRetry).not.toHaveBeenCalled();
   },
@@ -112,16 +113,27 @@ it.each(["delay", "jitter", "shouldRetry"] as const)(
 );
 
 it.each([false, true])(
-  "[retry.opt.respectRetryAfter][retry.opt.retryAfterMax][retry.opt.afterStatusCodes][retry.business.retryAfter] 数字秒优先且独立封顶，business=%s",
+  "[retry.opt.respectRetryAfter][retry.opt.retryAfterMax][retry.opt.afterStatusCodes][retry.business.retryAfter] 数字秒优先且独立于本地上限，business=%s",
   /** Retry-After 不执行本地延迟与抖动，也不受 delayMax 影响。 */ async (business) => {
     const delay = vi.fn(/** 有合法服务端时间就不调用。 */ () => LOCAL_DELAY);
     const jitter = vi.fn(/** 服务端时间不叠加抖动。 */ () => 0);
-    const h = b3Client([axpRetry({ max: 1, delay, jitter, delayMax: 0, retryAfterMax: REMOTE_DELAY })]);
+    const h = b3Client([
+      axpRetry({
+        shouldRetry: business ? /** 使用者按业务码选择重试。 */ (r) => [408, 429, 500, 502, 503, 504].includes(Number(r.code)) : undefined,
+        max: 1,
+        delay,
+        jitter,
+        delayMax: 0,
+        respectRetryAfter: business ? /** 使用者决定业务限流是否采信服务端时间。 */ (r) => r.code === 429 : true,
+        afterStatusCodes: business ? [] : [429],
+        retryAfterMax: REMOTE_DELAY,
+      }),
+    ]);
     h.net.fallback(
       /** 逻辑 429 可来自业务信封。 */ () => ({
         status: business ? 200 : 429,
         data: { code: business ? 429 : 0, data: null },
-        headers: { "Retry-After": "4" },
+        headers: { "Retry-After": "2" },
       }),
     );
     const pending = h.send();
@@ -171,7 +183,7 @@ it.each([
   [500, {}, { afterStatusCodes: [500] }, "2", REMOTE_DELAY],
 ] as const)(
   "[retry.req.retry.respectRetryAfter][retry.req.retry.afterStatusCodes][retry.req.retry.retryAfterMax] 状态 %i / 配置 %j / 覆盖 %j / 头 %s",
-  /** 逻辑状态门控、无效头回退和零封顶。 */ async (status, base, request, header, ms) => {
+  /** 逻辑状态门控、无效头回退和零上限拒绝正等待。 */ async (status, base, request, header, ms) => {
     const delay = vi.fn(/** 合法头缺失时回退。 */ () => LOCAL_DELAY);
     const h = b3Client([axpRetry({ max: 1, delay, ...base })]);
     h.net.fallback(
@@ -188,7 +200,8 @@ it.each([
     }
     await vi.runAllTimersAsync();
     await pending;
-    expect(h.net.totalStarted).toBe(2);
+    const stopped = ("retryAfterMax" in base && base.retryAfterMax === 0) || ("retryAfterMax" in request && request.retryAfterMax === 0);
+    expect(h.net.totalStarted).toBe(stopped ? 1 : 2);
     expect(delay).toHaveBeenCalledTimes(ms === LOCAL_DELAY ? 1 : 0);
   },
 );
@@ -234,7 +247,7 @@ it("[retry.priority.raw][retry.kind.default] 无响应无 request 的网络错�
   );
   const pending = h.send();
   await vi.runAllTimersAsync();
-  expect((await pending).kind).toBe("network");
+  expect(failureOf(await pending)?.type).toBe("network");
   expect(h.net.totalStarted).toBe(2);
 });
 
@@ -246,7 +259,7 @@ it("[retry.kind.default][retry.priority.kind] 无 raw 的合成 HTTP 失败回�
     stage: "source",
     /** 构造没有 raw 的服务端失败。 */ async handle(ctx) {
       count++;
-      return new AxpResponse({ kind: "http" as AxpKind, httpStatus: 503, request: ctx.request });
+      return new AxpResponse({ status: 503, request: ctx.request });
     },
   });
   const pending = h.send({ url: REQUEST_URL } as AxpRequestConfig);
@@ -273,7 +286,7 @@ it.each(["signal", "cancelAll"] as const)(
     if (how === "signal") controller.abort();
     else expect(h.api.cancelAll()).toBe(1);
     await vi.advanceTimersByTimeAsync(0);
-    expect((await pending).kind).toBe("cancel");
+    expect(failureOf(await pending)?.type).toBe("cancel");
     expect(h.net.totalStarted).toBe(1);
     expect(attempts).toBe(1);
     expect(vi.getTimerCount()).toBe(0);
@@ -287,7 +300,7 @@ it("[retry.fn.axpRetry][retry.opt.respectRetryAfter] 服务端等待期间取消
   await vi.advanceTimersByTimeAsync(10);
   expect(h.api.cancelAll()).toBe(1);
   await vi.advanceTimersByTimeAsync(0);
-  expect((await pending).kind).toBe("cancel");
+  expect(failureOf(await pending)?.type).toBe("cancel");
   expect(h.net.totalStarted).toBe(1);
   expect(vi.getTimerCount()).toBe(0);
 });

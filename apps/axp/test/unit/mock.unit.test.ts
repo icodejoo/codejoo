@@ -1,3 +1,4 @@
+import { testContext } from "../helpers/context";
 import { expect, it } from "vitest";
 import { $rewriteUrl, $shouldFallback } from "../../src/plugins/mock";
 import { AxpResponse } from "../../src/response";
@@ -41,14 +42,14 @@ for (const url of ["http://", "//real.example/pet"]) {
 }
 
 for (const [label, response, expected] of [
-  ["404", new AxpResponse({ httpStatus: 404, data: null }), true],
-  ["网络不可达", new AxpResponse({ kind: "network" }), true],
-  ["取消", new AxpResponse({ kind: "cancel" }), false],
-  ["超时", new AxpResponse({ kind: "timeout" }), false],
-  ["403", new AxpResponse({ httpStatus: 403, data: null }), false],
-  ["500", new AxpResponse({ httpStatus: 500, data: null }), false],
-  ["HTTP 200 + 业务码 404", new AxpResponse({ httpStatus: 200, code: 404, data: null }), false],
-  ["成功", new AxpResponse({ httpStatus: 200, data: "ok" }), false],
+  ["404", new AxpResponse({ status: 404, data: null }), true],
+  ["网络不可达", testContext().fail({ failure: "network" }), true],
+  ["取消", testContext().fail({ failure: "cancel" }), false],
+  ["超时", testContext().fail({ failure: "timeout" }), false],
+  ["403", new AxpResponse({ status: 403, data: null }), false],
+  ["500", new AxpResponse({ status: 500, data: null }), false],
+  ["HTTP 200 + 业务码 404", new AxpResponse({ status: 200, code: 404, data: null }), false],
+  ["成功", new AxpResponse({ status: 200, data: "ok" }), false],
 ] as const) {
   it(`[mock.fn.$shouldFallback][mock.cb.fallbackWhen] 默认只在 404 或网络不可达时回落：${label}`, () => {
     expect($shouldFallback(response)).toBe(expected);

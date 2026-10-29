@@ -1,6 +1,7 @@
-import { describe, expect, it } from "vitest";
+import { AXP_FAILURE } from "../../src/response";
+import { describe, expect, it, vi } from "vitest";
 import { cancelIfAborted, requestContext } from "../../src/context";
-import { AXP_KINDS } from "../../src/response";
+import { AXP_FAILURES } from "../../src/response";
 import type { AxpRequestConfig } from "../../src/types";
 import { testContext } from "../helpers/context";
 
@@ -18,6 +19,33 @@ function countingRequest(data: Record<string, unknown>): AxpRequestConfig {
   return { url: "/counted", method: "post", data };
 }
 
+it.each([{ pipe: vi.fn() }, { getReader: vi.fn() }, { [Symbol.asyncIterator]: vi.fn() }])(
+  "[core.method.canReplay] 一次性请求体发送记录按对象身份跨层共享：%j",
+  /** 新对象可发送，已经发送的旧对象不能重放。 */ (data) => {
+    const root = testContext({ data });
+    expect(root.canReplay()).toBe(true);
+    const derived = requestContext(root, { data });
+    derived.markBodySent(data);
+    expect(root.canReplay()).toBe(false);
+    expect(derived.canReplay()).toBe(false);
+    expect(requestContext(root, { data: { ...data } }).canReplay()).toBe(true);
+    expect(requestContext(root, {}).canReplay()).toBe(true);
+    const other = { pipe: vi.fn() };
+    derived.markBodySent(other);
+    expect(requestContext(root, { data: other }).canReplay()).toBe(false);
+    expect(testContext({ data }).canReplay()).toBe(true);
+  },
+);
+
+it.each([undefined, null, "payload", "", 0, 1, {}, { pipe: true, getReader: 1, [Symbol.asyncIterator]: false }, new Blob(), new FormData(), new ArrayBuffer(1), new Uint8Array(1)])(
+  "[core.method.canReplay] 可重复发送的请求体记录后仍可重放：%s",
+  /** 普通值和可重复发送的容器不进入一次性记录。 */ (data) => {
+    const ctx = testContext({ data });
+    ctx.markBodySent(data);
+    expect(ctx.canReplay()).toBe(true);
+  },
+);
+
 describe("cancelIfAborted", /** 取消检查的用例集合。 */ () => {
   it("[core.fn.cancelIfAborted] 未中止返回 undefined，已中止返回 cancel 响应，且只看本层的信号", () => {
     const ctx = testContext();
@@ -26,7 +54,7 @@ describe("cancelIfAborted", /** 取消检查的用例集合。 */ () => {
     const aborted = requestContext(ctx, ctx.request, { signal: controller.signal });
     expect(cancelIfAborted(aborted)).toBeUndefined();
     controller.abort();
-    expect(cancelIfAborted(aborted)).toMatchObject({ kind: AXP_KINDS.CANCEL, ok: false });
+    expect(cancelIfAborted(aborted)).toMatchObject({ ok: false, [AXP_FAILURE]: { type: AXP_FAILURES.CANCEL } });
     expect(cancelIfAborted(ctx)).toBeUndefined();
   });
 });

@@ -1,3 +1,4 @@
+import { failureOf } from "../../src/response";
 /* eslint-disable no-await-in-loop -- 按时间边界顺序观测重试轮次。 */
 import { AxiosError } from "axios";
 import { beforeEach, expect, it, vi } from "vitest";
@@ -93,15 +94,15 @@ it.each([
 );
 
 it.each([408, 429, 500, 502, 503, 504, 400, 404, 501, 200])(
-  "[retry.opt.statusCodes] 默认状态 %i，业务状态与 HTTP 状态一致判定",
+  "[retry.opt.statusCodes][retry.cb.shouldRetry] HTTP 状态 %i 按默认表判定，业务码需显式配置 shouldRetry",
   /** 分别验证标准与业务错误。 */ async (status) => {
     for (const business of [false, true]) {
-      const h = b3Client([axpRetry({ delay: 0, max: 1 })]);
+      const h = b3Client([axpRetry({ shouldRetry: business ? /** 使用者按业务码选择重试。 */ (r) => [408, 429, 500, 502, 503, 504].includes(Number(r.code)) : undefined, delay: 0, max: 1 })]);
       h.net.fallback(/** HTTP 200 信封可承载逻辑错误。 */ () => (business ? { status: 200, data: { code: status === 200 ? 0 : status, data: null } } : { status }));
       const pending = h.send();
       await vi.runAllTimersAsync();
       const result = await pending;
-      expect(result.status).toBe(status);
+      expect(result.status).toBe(business ? 200 : status);
       expect(h.net.totalStarted).toBe([408, 429, 500, 502, 503, 504].includes(status) ? 2 : 1);
     }
   },
@@ -219,7 +220,7 @@ it("[retry.method.lifecycle][retry.opt.enable] 禁用、卸载、重名拒绝和
   );
   const noRetry = disabled.send({ retry: { enable: true, max: 3 } });
   await vi.runAllTimersAsync();
-  expect((await noRetry).kind).toBe("network");
+  expect(failureOf(await noRetry)?.type).toBe("network");
   expect(disabled.net.totalStarted).toBe(1);
   const another = b3Client([plugin]);
   another.net.fallback(/** 另一客户端正常重试。 */ () => ({ status: 500 }));

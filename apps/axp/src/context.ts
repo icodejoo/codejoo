@@ -1,4 +1,4 @@
-import { AXP_KINDS } from "./brand";
+import { AXP_FAILURES } from "./brand";
 import { requestKey, type IKeyOptions } from "./key";
 import { type AxpResponse, type AxpResponseInit, type IAxpResponse, type IAxpResponseFactory } from "./response";
 import type { AxpClient, AxpLogger, AxpRequestConfig, AxpRequestPatch } from "./types";
@@ -56,7 +56,7 @@ export function mergePatch(request: Readonly<AxpRequestConfig>, patch: AxpReques
 }
 
 /** 构建逻辑请求上下文的依赖。 */
-export interface IAxpContextInit<R extends IAxpResponse> {
+export interface IAxpContextInit<R extends IAxpResponse<unknown, string | number>> {
   /** 请求序号。 */
   id: number;
   /** 所属客户端。 */
@@ -80,6 +80,8 @@ interface IAxpContextState {
   values?: Map<symbol, unknown>;
   /** 是否需要重放保护。 */
   replayable: boolean;
+  /** 已经交给传输层的一次性请求体，派生层共享。 */
+  sentBodies?: WeakSet<object>;
   /** 补丁触及的字段，包括删除；重放时仍从当前视图取值。 */
   touched?: Set<string>;
   /** 合并 defaults 之前的原始请求级配置，传输层以它为底交给 axios。 */
@@ -89,7 +91,7 @@ interface IAxpContextState {
 /** 每层保持固定实例形状，逻辑请求状态通过同一容器共享。
  * @example `ctx.set(key, 1); return next({ headers: { Authorization: 'token' } })`
  */
-export class AxpContext<R extends IAxpResponse = AxpResponse> {
+export class AxpContext<R extends IAxpResponse<unknown, string | number> = AxpResponse> {
   /** 逻辑请求序号。 */
   readonly id: number;
   /** 所属客户端。 */
@@ -162,16 +164,37 @@ export class AxpContext<R extends IAxpResponse = AxpResponse> {
   /** 经工厂构造失败或派生响应，确保扩展字段存在。
    * @param init 分类和覆盖字段。
    * @returns 当前客户端的响应类型。
-   * @example `ctx.fail({ kind: 'auth', reason: 'expired' })`
+   * @example `ctx.fail({ failure: 'auth', reason: 'expired' })`
    */
-  fail(init: AxpResponseInit<R>): R {
-    return this.factory.fail(init, this);
+  fail(init: AxpResponseInit<R>): R;
+  /** 泛型插件仅提供基础字段时，无需证明尚未确定的扩展键。 */
+  fail(init: AxpResponseInit<IAxpResponse<unknown, string | number>>): R;
+  /** 扩展字段只在工厂边界收窄，运行期保持原样。 */
+  fail(init: AxpResponseInit<R> | AxpResponseInit<IAxpResponse<unknown, string | number>>): R {
+    return this.factory.fail(init as AxpResponseInit<R>, this);
   }
   /** 标记后续传输需保护可重放的 JSON 请求体。
    * @example `ctx.markReplayable()`
    */
   markReplayable(): void {
     this.state.replayable = true;
+  }
+  /** 判断本层请求体是否还能发送；已发送的一次性请求体不能重放。
+   * @returns 当前 data 未发送过或可重复发送时为 true。
+   * @example `const r = await next(); return ctx.canReplay() ? next() : r`
+   */
+  canReplay(): boolean {
+    return !this.state.sentBodies?.has(this.request.data);
+  }
+  /** 传输前记录一次性请求体；流和异步迭代对象只能发送一次。
+   * @internal
+   * @param data 即将交给 axios 的请求体。
+   * @example `ctx.markBodySent(request.data)`
+   */
+  markBodySent(data: unknown): void {
+    if (!data || typeof data === "string") return;
+    const body = data as { /** Node 流入口。 */ pipe?: unknown; /** Web 流入口。 */ getReader?: unknown; /** 异步迭代入口。 */ [Symbol.asyncIterator]?: unknown };
+    if (typeof body.pipe === "function" || typeof body.getReader === "function" || typeof body[Symbol.asyncIterator] === "function") (this.state.sentBodies ??= new WeakSet()).add(body);
   }
   /** 传输层读取的重放标记。 */
   get replayable(): boolean {
@@ -197,8 +220,8 @@ export class AxpContext<R extends IAxpResponse = AxpResponse> {
  * @returns cancel 响应；未中止为 undefined。
  * @example `const cancelled = cancelIfAborted(ctx); if (cancelled) return cancelled`
  */
-export function cancelIfAborted<R extends IAxpResponse>(ctx: AxpContext<R>): R | undefined {
-  return ctx.signal.aborted ? ctx.fail({ kind: AXP_KINDS.CANCEL }) : undefined;
+export function cancelIfAborted<R extends IAxpResponse<unknown, string | number>>(ctx: AxpContext<R>): R | undefined {
+  return ctx.signal.aborted ? ctx.fail({ failure: AXP_FAILURES.CANCEL }) : undefined;
 }
 
 /** 派生固定形状的内层实例，共享逻辑状态与内核服务。
@@ -208,6 +231,6 @@ export function cancelIfAborted<R extends IAxpResponse>(ctx: AxpContext<R>): R |
  * @returns request 独立、状态共享的 AxpContext 实例。
  * @example `requestContext(ctx, mergePatch(ctx.request, patch))`
  */
-export function requestContext<R extends IAxpResponse>(context: AxpContext<R>, request: Readonly<AxpRequestConfig>, patch: AxpRequestPatch = request): AxpContext<R> {
+export function requestContext<R extends IAxpResponse<unknown, string | number>>(context: AxpContext<R>, request: Readonly<AxpRequestConfig>, patch: AxpRequestPatch = request): AxpContext<R> {
   return new AxpContext(context, request, patch);
 }

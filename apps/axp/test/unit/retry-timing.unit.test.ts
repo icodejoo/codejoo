@@ -46,9 +46,10 @@ it("[retry.fn.retryAfterMs] 默认采信的逻辑状态是 413、429、503", () 
   expect(DEFAULT_AFTER_STATUS_CODES).toEqual([413, RATE_LIMIT_STATUS, 503]);
 });
 
-it("[retry.fn.retryAfterMs] 普通头与 get 访问器解析数字秒并独立封顶", () => {
+it("[retry.fn.retryAfterMs] 普通头与 get 访问器解析数字秒，超上限返回 null", () => {
   expect(retryAfterMs({ [HEADER]: "2" }, Infinity)).toBe(CAP * 2);
-  expect(retryAfterMs({ [HEADER]: 2 }, CAP)).toBe(CAP);
+  expect(retryAfterMs({ [HEADER]: 2 }, CAP)).toBeNull();
+  expect(retryAfterMs({ [HEADER]: 1 }, CAP)).toBe(CAP);
   const get = vi.fn(() => "1.5");
   expect(retryAfterMs({ get, [HEADER]: "3" }, Infinity)).toBe(CAP * 1.5);
   expect(get).toHaveBeenCalledExactlyOnceWith(HEADER);
@@ -58,11 +59,12 @@ it("[retry.fn.retryAfterMs] 普通头与 get 访问器解析数字秒并独立�
 it("[retry.fn.retryAfterMs] HTTP-date 使用注入时钟或默认 Date.now", () => {
   const timestamp = Date.parse(DATE);
   expect(retryAfterMs({ [HEADER]: DATE }, Infinity, () => timestamp - CAP)).toBe(CAP);
-  expect(retryAfterMs({ [HEADER]: DATE }, DELAY, () => timestamp - CAP)).toBe(DELAY);
-  const now = vi.spyOn(Date, "now").mockReturnValue(timestamp - CAP);
+  expect(retryAfterMs({ [HEADER]: DATE }, DELAY, () => timestamp - CAP)).toBeNull();
+  vi.useFakeTimers();
+  vi.setSystemTime(timestamp - CAP);
   try {
     expect(retryAfterMs({ [HEADER]: DATE }, Infinity)).toBe(CAP);
   } finally {
-    now.mockRestore();
+    vi.useRealTimers();
   }
 });

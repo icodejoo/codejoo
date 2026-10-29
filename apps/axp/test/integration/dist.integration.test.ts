@@ -1,3 +1,4 @@
+import { CONSUMER_SOURCE, PROBE_SOURCE, MIN_SUBPATH } from "../helpers/dist-programs";
 import { execFileSync, spawnSync } from "node:child_process";
 import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, realpathSync, rmSync, statSync, symlinkSync, writeFileSync } from "node:fs";
 import { createRequire } from "node:module";
@@ -14,10 +15,6 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
 /** 包根目录（apps/axp）。 */
 const PKG_ROOT = resolve(fileURLToPath(new URL("../../", import.meta.url)));
-/** 包名，消费方 import 时使用。 */
-const PKG_NAME = "@codejoo/axp";
-/** 单文件压缩版的子路径。 */
-const MIN_SUBPATH = "./min";
 /** package.json 本身的子路径，不是可导入模块。 */
 const PACKAGE_JSON_SUBPATH = "./package.json";
 /** 对外公开的插件子路径名，应与 package.json 的 exports 一一对应。 */
@@ -97,7 +94,9 @@ interface IProbe {
     /** 非响应值不被误认。 */
     rejectsNonResponses: [boolean, boolean, boolean];
     /** 四个响应的 kind：根成功、根失败、min 成功、min 失败。 */
-    kinds: string[];
+    failures: Array<string | null>;
+    /** 失败 Symbol 跨入口共享。 */ failureShared: boolean;
+    /** 取消读取函数跨入口识别。 */ cancels: boolean[];
   };
 }
 
@@ -158,155 +157,6 @@ function consumerTsconfig(module: string, moduleResolution: string): string {
     files: ["index.ts"],
   });
 }
-
-/** 消费方 TypeScript 程序：只经包名导入；`@ts-expect-error` 的行必须真的报错，否则 tsgo 报“未使用的指令”。 */
-const CONSUMER_SOURCE = `
-import axios from "axios";
-import { createAxp, isAxpResponse, axpAuth, axpCache, axpEnvs, axpFilter, axpLoading, axpMock, axpNotify, axpRepath, axpRetry, axpShare } from "@codejoo/axp";
-import type { AxpResponse, AxpRequestConfig, IAxpResponse, WithData } from "@codejoo/axp";
-import authSub from "@codejoo/axp/auth";
-import cacheSub from "@codejoo/axp/cache";
-import envsSub from "@codejoo/axp/envs";
-import filterSub from "@codejoo/axp/filter";
-import loadingSub from "@codejoo/axp/loading";
-import mockSub from "@codejoo/axp/mock";
-import notifySub from "@codejoo/axp/notify";
-import repathSub from "@codejoo/axp/repath";
-import retrySub from "@codejoo/axp/retry";
-import shareSub from "@codejoo/axp/share";
-import { createAxp as createMinAxp, isAxpResponse as isMinResponse } from "@codejoo/axp/min";
-
-/** 第三方插件按文档用包名扩展请求选项。 */
-declare module "@codejoo/axp" {
-  interface AxpRequestOptions {
-    /** 自定义追踪标签。 */
-    traceTag?: string;
-  }
-}
-
-/** 编译期断言两个类型完全一致。 */
-type Equal<A, B> = (<T>() => T extends A ? 1 : 2) extends <T>() => T extends B ? 1 : 2 ? true : false;
-
-const api = createAxp({ axios: axios.create(), plugins: [axpRetry({ max: 1 }), axpCache()] });
-
-// ── 插件请求选项的类型增强（发布产物曾在这里整体失效）──
-api.get("/x")({}, { retry: 2, cache: true });
-api.get("/x")({}, { retry: { max: 3, delay: 100 }, cache: 1000, share: "race", loading: true, notify: false, repath: false, filter: false, mock: false, protected: true, traceTag: "a" });
-api.post("/x")({}, { retry: false, cache: { expires: 1 }, share: { policy: "end" } });
-api.request({ url: "/x", method: "get", timeout: 100, signal: new AbortController().signal, retry: 1 });
-// @ts-expect-error retry 只接受数字、布尔或选项对象
-api.get("/x")({}, { retry: "twice" });
-// @ts-expect-error cache 不接受字符串
-api.get("/x")({}, { cache: "yes" });
-// @ts-expect-error share 策略名只有 start / end / race
-api.get("/x")({}, { share: "middle" });
-// @ts-expect-error 未声明的请求选项
-api.get("/x")({}, { nonsense: true });
-// @ts-expect-error cancelToken 已移除，统一用 signal
-api.request({ url: "/x", cancelToken: {} });
-// @ts-expect-error signal 必须是标准 AbortSignal
-api.request({ url: "/x", signal: {} });
-// @ts-expect-error 自定义扩展字段的类型同样生效
-api.get("/x")({}, { traceTag: 1 });
-const config: AxpRequestConfig = { url: "/x", baseURL: "/api", headers: { a: "b" }, timeout: 1, retry: 1 };
-
-// ── 根入口与插件子路径是同一份类型 ──
-const sameAuth: typeof axpAuth = authSub;
-const sameCache: typeof axpCache = cacheSub;
-const sameEnvs: typeof axpEnvs = envsSub;
-const sameFilter: typeof axpFilter = filterSub;
-const sameLoading: typeof axpLoading = loadingSub;
-const sameMock: typeof axpMock = mockSub;
-const sameNotify: typeof axpNotify = notifySub;
-const sameRepath: typeof axpRepath = repathSub;
-const sameRetry: typeof axpRetry = retrySub;
-const sameShare: typeof axpShare = shareSub;
-
-// ── Schema 推断与返回形态 ──
-interface ISchema {
-  get: { "/pet/{id}": readonly [response: { name: string }, request: readonly [{ id: number }]] };
-}
-const typed = createAxp<ISchema>();
-const pet = typed.get("/pet/{id}")({ id: 1 });
-const petIsTyped: Equal<typeof pet, Promise<{ name: string }>> = true;
-// @ts-expect-error 路径不在 Schema 里
-typed.get("/nope");
-const wrapped = api.get("/x")<number>(undefined, { wrap: true });
-const wrappedIsTyped: Equal<typeof wrapped, Promise<WithData<AxpResponse, number>>> = true;
-
-// ── 响应识别 ──
-declare const caught: unknown;
-if (isAxpResponse(caught)) {
-  const kind: string = caught.kind;
-  const ok: boolean = caught.ok;
-  const base: IAxpResponse = caught;
-}
-if (api.isResponse(caught)) {
-  const status: number | undefined = caught.status;
-}
-
-// ── 压缩版入口的类型与根入口一致 ──
-createMinAxp().get("/x")({}, { retry: 2, cache: true });
-const minNarrows: boolean = isMinResponse(caught);
-
-export { config, sameAuth, sameCache, sameEnvs, sameFilter, sameLoading, sameMock, sameNotify, sameRepath, sameRetry, sameShare, petIsTyped, wrappedIsTyped, minNarrows };
-`;
-
-/** 运行时探针：在消费方目录里用真正的 Node 解析 exports 并导入，把观察结果以 JSON 打印。参数 argv[2] 是 { importable, blocked }。 */
-const PROBE_SOURCE = `
-import axios from "axios";
-
-const PKG = "${PKG_NAME}";
-const config = JSON.parse(process.argv[2]);
-/** 子路径转成包说明符。 */
-const specifier = (sub) => (sub === "." ? PKG : PKG + sub.slice(1));
-
-const result = { exports: {}, rejected: {}, mismatched: {}, subpathOnly: {}, mixed: {} };
-const modules = {};
-for (const sub of config.importable) {
-  modules[sub] = await import(specifier(sub));
-  result.exports[sub] = Object.keys(modules[sub]).sort();
-}
-for (const sub of config.blocked) {
-  try {
-    await import(specifier(sub));
-    result.rejected[sub] = "imported";
-  } catch (error) {
-    result.rejected[sub] = error.code ?? String(error);
-  }
-}
-
-const root = modules["."];
-const min = modules["${MIN_SUBPATH}"];
-for (const sub of config.importable) {
-  if (sub === "." || sub === "${MIN_SUBPATH}") continue;
-  const rootName = (key) => (key === "default" ? "axp" + sub[2].toUpperCase() + sub.slice(3) : key);
-  const keys = Object.keys(modules[sub]);
-  result.subpathOnly[sub] = keys.filter((key) => !(rootName(key) in root)).sort();
-  result.mismatched[sub] = keys.filter((key) => rootName(key) in root && root[rootName(key)] !== modules[sub][key]);
-}
-
-const okAdapter = async (config) => ({ data: { value: 1 }, status: 200, statusText: "OK", headers: {}, config });
-const failAdapter = async (config) => {
-  throw new axios.AxiosError("offline", "ERR_NETWORK", config);
-};
-const make = (mod, adapter) => mod.createAxp({ axios: axios.create({ adapter }) });
-const rootApi = make(root, failAdapter);
-const minApi = make(min, failAdapter);
-const rootOk = await make(root, okAdapter).get("/x")(undefined, { wrap: true });
-const minOk = await make(min, okAdapter).get("/x")(undefined, { wrap: true });
-const rootFail = await rootApi.get("/x")(undefined, { throws: false });
-const minFail = await minApi.get("/x")(undefined, { throws: false });
-result.mixed = {
-  brandShared: root.AXP_RESPONSE === min.AXP_RESPONSE,
-  rootSeesMin: [root.isAxpResponse(minOk), root.isAxpResponse(minFail)],
-  minSeesRoot: [min.isAxpResponse(rootOk), min.isAxpResponse(rootFail)],
-  clientSeesOther: [rootApi.isResponse(minFail), minApi.isResponse(rootFail)],
-  rejectsNonResponses: [root.isAxpResponse({}), min.isAxpResponse(new Error("x")), root.isAxpResponse(null)],
-  kinds: [rootOk.kind, rootFail.kind, minOk.kind, minFail.kind],
-};
-console.log(JSON.stringify(result));
-`;
 
 /** 临时消费方目录，beforeAll 创建、afterAll 删除。 */
 let consumerDir = "";
@@ -373,7 +223,7 @@ describe("dist 产物", () => {
 
   it("[dist.const.import] 每个子路径都能被 Node 按 exports 实际导入，且导出非空", /** 根入口导出内核，插件子路径默认导出工厂函数。 */ () => {
     for (const sub of EXPECTED_SUBPATHS.filter((name) => name !== PACKAGE_JSON_SUBPATH)) expect(probe.exports[sub], sub).not.toHaveLength(0);
-    expect(probe.exports["."]).toEqual(expect.arrayContaining(["createAxp", "isAxpResponse", "axpRetry", "TokenManager"]));
+    expect(probe.exports["."]).toEqual(expect.arrayContaining(["createAxp", "isAxpResponse", "failureOf", "isAxpCancel", "AXP_FAILURE", "AXP_FAILURES", "axpRetry", "TokenManager"]));
     expect(probe.exports[MIN_SUBPATH]).toEqual(expect.arrayContaining(["createAxp", "isAxpResponse"]));
     for (const name of PLUGIN_NAMES) expect(probe.exports[`./${name}`], name).toContain("default");
   });
@@ -421,7 +271,9 @@ describe("dist 产物", () => {
     expect(mixed.minSeesRoot).toEqual([true, true]);
     expect(mixed.clientSeesOther).toEqual([true, true]);
     expect(mixed.rejectsNonResponses).toEqual([false, false, false]);
-    expect(mixed.kinds).toEqual(["ok", "network", "ok", "network"]);
+    expect(mixed.failures).toEqual([null, "network", null, "network"]);
+    expect(mixed.failureShared).toBe(true);
+    expect(mixed.cancels).toEqual([true, true, true, true]);
   });
 
   it("[dist.const.es2019] 产物不含 ES2020 及以上的 API 调用：min 版与 esm 逐文件扫描", /** 回归：toSorted（ES2023）曾混进源码，类型库是 ES2023 看不出来。 */ () => {

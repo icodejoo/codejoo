@@ -1,3 +1,4 @@
+import { failureOf } from "../../src/response";
 import { beforeEach, expect, it, vi } from "vitest";
 import axpLoading from "../../src/plugins/loading";
 import axpMock from "../../src/plugins/mock";
@@ -56,7 +57,7 @@ it("[loading.cb.loading × mock.req.mock] 探测期间取消：loading 照常成
   await vi.advanceTimersByTimeAsync(5);
   controller.abort();
   await vi.runAllTimersAsync();
-  expect((await pending).kind).toBe("cancel");
+  expect(failureOf(await pending)?.type).toBe("cancel");
   expect(h.events.loading.get(LABEL)).toEqual([true, false]);
   expect(h.net.calls("get", REAL)).toBe(0);
 });

@@ -1,3 +1,5 @@
+import { AXP_FAILURE } from "../../src/response";
+import { failureOf } from "../../src/response";
 import { AxiosHeaders } from "axios";
 import { describe, expect, it } from "vitest";
 import { AxpContext, mergePatch, requestContext, stateKey } from "../../src/context";
@@ -26,13 +28,13 @@ describe("管线与上下文", /** 管线与上下文的用例集合。 */ () =>
         },
       },
     );
-    expect(ctx.fail({ kind: "auth" })).toMatchObject({ kind: "internal", error: factoryBug });
+    expect(ctx.fail({ failure: "auth" })).toMatchObject({ error: factoryBug, [AXP_FAILURE]: { type: "internal" } });
     const layers = sort([
       {
         name: "observer",
         /** 观察内层 next 返回的必须是 internal。 */ async handle(_ctx, next) {
           const response = await next();
-          expect(response.kind).toBe("internal");
+          expect(failureOf(response)?.type).toBe("internal");
           return response;
         },
       },
@@ -100,7 +102,7 @@ describe("管线与上下文", /** 管线与上下文的用例集合。 */ () =>
   });
   it("[core.fn.composePipeline] 零插件直达传输，短路无需调用传输", /** 零插件直达传输，短路无需调用传输。 */ async () => {
     const ctx = testContext();
-    const response = ctx.fail({ httpStatus: 200, data: 1 });
+    const response = ctx.fail({ status: 200, data: 1 });
     expect(await composePipeline([], /** 传输直接返回预置响应。 */ async () => response)(ctx)).toBe(response);
     const layers = sort([{ name: "short", handle: /** 短路中间件不调用 next，直接给出响应。 */ async () => response }]);
     expect(
@@ -133,7 +135,7 @@ describe("管线与上下文", /** 管线与上下文的用例集合。 */ () =>
         expect(inner.id).toBe(ctx.id);
         expect(inner.signal).toBe(ctx.signal);
         seen.push(inner);
-        return inner.fail({ httpStatus: 200 });
+        return inner.fail({ status: 200 });
       },
     )(ctx);
     expect(seen.map(/** 取内层看到的请求视图。 */ (inner) => inner.request)).toEqual([{ url: "/patched", headers: { original: "yes", added: "yes" } }, ctx.request]);
@@ -154,7 +156,7 @@ describe("管线与上下文", /** 管线与上下文的用例集合。 */ () =>
           /** 外层中间件记录进入与最终类别。 */ async handle(_ctx, next) {
             events.push("enter");
             const result = await next();
-            events.push(result.kind);
+            events.push(failureOf(result)?.type ?? "success");
             return result;
           },
         },
@@ -196,7 +198,7 @@ describe("管线与上下文", /** 管线与上下文的用例集合。 */ () =>
           {
             stage: "outer",
             onRequest: /** 请求侧返回补丁，改写 url。 */ () => ({ url: "/tap" }),
-            onResponse: /** 响应侧用新响应替换内层结果。 */ (_r, context) => context.fail({ httpStatus: 200, data: "replaced" }),
+            onResponse: /** 响应侧用新响应替换内层结果。 */ (_r, context) => context.fail({ status: 200, data: "replaced" }),
           },
           { stage: "source", onResponse: /** 响应侧不返回值时保留内层响应。 */ () => undefined },
           { stage: "source" },
@@ -218,7 +220,7 @@ describe("管线与上下文", /** 管线与上下文的用例集合。 */ () =>
       /** 校验各 tap 的补丁已叠加后返回成功响应。 */ async (inner) => {
         expect(inner.request.url).toBe("/tap");
         expect(inner.request.timeout).toBe(5);
-        return inner.fail({ httpStatus: 200 });
+        return inner.fail({ status: 200 });
       },
     )(ctx);
     expect(response.data).toBe("replaced");
@@ -258,8 +260,9 @@ describe("管线与上下文", /** 管线与上下文的用例集合。 */ () =>
       },
     };
     const layers = sort([{ name: "self", taps: [both, onlyRequest, onlyResponse] }]);
-    const response = await composePipeline(layers, /** 传输直接成功。 */ async (inner) => inner.fail({ httpStatus: 200 }))(testContext());
-    expect(response.kind).toBe("ok");
+    const response = await composePipeline(layers, /** 传输直接成功。 */ async (inner) => inner.fail({ status: 200 }))(testContext());
+    expect(response.ok).toBe(true);
+    expect(failureOf(response)).toBeUndefined();
     expect(seen).toEqual(["both:req", "request:req", "response:res", "both:res"]);
   });
   it("[core.fn.mergePatch] 浅合并、删除字段、头多一层且不改输入", /** 浅合并、删除字段、头多一层且不改输入。 */ () => {

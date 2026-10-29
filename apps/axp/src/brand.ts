@@ -1,14 +1,13 @@
 /** 跨入口共享的响应品牌，叶子模块可由 Node 原生加载。 */
 export const AXP_RESPONSE = Symbol.for("axp.response");
 
-/** 归一化响应的固定类别。 */
-export const AXP_KINDS = {
-  /** HTTP 为 2xx 且业务成功判定通过。 */
-  OK: "ok",
-  /** 收到响应但 HTTP 状态不在 2xx。 */
-  HTTP: "http",
-  /** HTTP 为 2xx，但业务成功判定未通过。 */
-  BIZ: "biz",
+/** 跨入口共享的内核失败事实标记。 */
+export const AXP_FAILURE = Symbol.for("axp.failure");
+
+/** 内核失败事实的固定类别。
+ * @example `failureOf(response)?.type === AXP_FAILURES.NETWORK`
+ */
+export const AXP_FAILURES = {
   /** 非取消、超时、解析错误的其它 AxiosError。 */
   NETWORK: "network",
   /** AxiosError 为 ETIMEDOUT，或 ECONNABORTED 且消息指示超时。 */

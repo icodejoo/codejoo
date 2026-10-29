@@ -36,7 +36,7 @@ const NAME = {
 /** 自定义插件名；taps 的各段按 `<name>#<序号>` 参与排序。 */
 const AUDIT = "audit";
 /** 缺少业务消息时的默认提示。 */
-const FAILURE_MESSAGE = "http 500";
+const FAILURE_MESSAGE = "status 500";
 /** 测试夹具自带的观测插件名，不属于被测装配。 */
 const OBSERVER = "b3-observe";
 /** 每个组合用例使用独立假时钟。 */
@@ -206,7 +206,7 @@ it("[core.opt.plugins][notify.cb.notify][retry.opt.max] 重试耗尽：outer 段
   const seen = client(notify);
   seen.net.on("get", RESOLVED_URL, /** 一直失败。 */ () => failure(500));
   const [result] = await settleAll(seen.send({ url: TEMPLATE_URL, params: PARAMS }));
-  expect(result).toMatchObject({ ok: false, kind: "http", status: 500 });
+  expect(result).toMatchObject({ ok: false, status: 500 });
   expect(seen.net.totalStarted).toBe(3);
   expect(seen.seen.credentialBefore).toHaveLength(3);
   expect(seen.seen.outerResponses).toEqual([result]);
@@ -224,9 +224,12 @@ it("[core.opt.plugins][cache.req.cache] 缓存命中的请求仍然穿过 creden
   const options = { url: TEMPLATE_URL, params: PARAMS, cache: true } as const;
   const [first] = await settleAll(h.send(options));
   const [hit] = await settleAll(h.send(options));
-  expect(hit).toBe(first);
+  expect(hit).not.toBe(first);
+  expect(hit.data).toEqual(first.data);
   expect(h.net.totalStarted).toBe(1);
   expect(h.seen.credentialBefore).toHaveLength(2);
   expect(h.seen.credentialAfter).toHaveLength(2);
-  expect(h.seen.outerResponses).toEqual([first, first]);
+  expect(h.seen.outerResponses).toHaveLength(2);
+  expect(h.seen.outerResponses[0]).toBe(first);
+  expect(h.seen.outerResponses[1]).toBe(hit);
 });

@@ -1,7 +1,8 @@
+import { failureOf } from "../../src/response";
 import { beforeEach, expect, it, vi } from "vitest";
 import axpCache, { clearCache } from "../../src/plugins/cache";
 import axpShare from "../../src/plugins/share";
-import { AXP_KINDS, type AxpResponse } from "../../src/response";
+import { AXP_FAILURES, type AxpResponse } from "../../src/response";
 import type { AxpPlugin } from "../../src/types";
 import { signalAdapter, sourceClient, trackAbortListeners, type IWireCall } from "../helpers/source";
 
@@ -32,7 +33,7 @@ it("[core.method.cancelAll × share.opt.policy] cancelAll 让同 key 的全部�
   expect(h.api.cancelAll("route changed")).toBe(CALLERS);
   await vi.runAllTimersAsync();
   const results = await Promise.all(pending);
-  expect(results.map((r) => r.kind)).toEqual(Array(CALLERS).fill(AXP_KINDS.CANCEL));
+  expect(results.map((r) => failureOf(r)?.type)).toEqual(Array(CALLERS).fill(AXP_FAILURES.CANCEL));
   expect(h.calls).toHaveLength(1);
   expect(h.calls[0].signal!.aborted).toBe(true);
   expect(h.api.pending()).toBe(0);
@@ -94,7 +95,7 @@ it("[cancel.req.signal × share.opt.policy] share 之内的 source 插件看到�
   leader.abort();
   await vi.runAllTimersAsync();
   const [a, b] = await Promise.all([first, follower]);
-  expect(a.kind).toBe(AXP_KINDS.CANCEL);
+  expect(failureOf(a)?.type).toBe(AXP_FAILURES.CANCEL);
   expect(b.ok).toBe(true);
   expect(seen).toHaveLength(1);
   expect(seen[0].signal).toBe(calls[0].signal);
@@ -114,7 +115,7 @@ it("[cancel.req.signal × share.opt.policy] 全部订阅者都取消后，内层
   two.abort();
   await vi.runAllTimersAsync();
   const results = await Promise.all(pending);
-  expect(results.map((r) => r.kind)).toEqual([AXP_KINDS.CANCEL, AXP_KINDS.CANCEL]);
+  expect(results.map((r) => failureOf(r)?.type)).toEqual([AXP_FAILURES.CANCEL, AXP_FAILURES.CANCEL]);
   expect(seen[0].after).toBe(true);
   const [fresh] = await Promise.all([h.send({ url: URL, share: true }), vi.runAllTimersAsync()]);
   expect(fresh.ok).toBe(true);

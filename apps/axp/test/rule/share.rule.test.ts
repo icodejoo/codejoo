@@ -111,7 +111,7 @@ it("[share.opt.policy] end 各自独立的 key 如实返回，失败也不例外
   h.net.on("get", "/bad", () => ({ status: 500 }));
   const [ok, bad] = await settled(h.send({ url: URL, share: true }), h.send({ url: "/bad", share: true }));
   expect(ok.data).toBe("hit-1");
-  expect(bad.httpStatus).toBe(500);
+  expect(bad.status).toBe(500);
 });
 
 it("[share.opt.policy] race 第一个成功的胜出，较慢的成功不覆盖它", async () => {
@@ -143,7 +143,7 @@ it("[share.opt.policy] race 全部失败：所有订阅者拿到最后到达的�
   h.net.on("get", URL, (_config, hit) => ({ status: hit === 1 ? 500 : 503 }));
   const [a, b] = await settled(h.send({ url: URL, share: true, latency: SLOW } as never), h.send({ url: URL, share: true, latency: FAST } as never));
   // 第一个请求最慢，是最后一个到达的失败。
-  expect(a.httpStatus).toBe(500);
+  expect(a.status).toBe(500);
   expect(b).toBe(a);
   expect(h.net.calls("get", URL)).toBe(2);
 });
@@ -152,7 +152,7 @@ it("[share.opt.policy] race 单个请求失败直接如实返回，之后重新�
   const h = sharedClient({ policy: "race" });
   h.net.on("get", URL, (_config, hit) => (hit === 1 ? { status: 500 } : envelope("later")));
   const [bad] = await settled(h.send({ url: URL, share: true }));
-  expect(bad.httpStatus).toBe(500);
+  expect(bad.status).toBe(500);
   const [good] = await settled(h.send({ url: URL, share: true }));
   expect(good.data).toBe("later");
 });

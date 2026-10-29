@@ -1,3 +1,6 @@
+import { businessAuthFailure } from "../helpers/b3";
+import { AXP_FAILURE } from "../../src/response";
+import { failureOf } from "../../src/response";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { IAuthOptions } from "../../src/plugins/auth";
 import axpAuth, { AuthFailureAction } from "../../src/plugins/auth";
@@ -47,7 +50,7 @@ describe("请求侧：保护判定与凭证注入", () => {
     expect((await run(h, { url: PUBLIC_URL })).ok).toBe(true);
     expect((await run(h, { url: "/api/me", protected: false })).ok).toBe(true);
     const forced = await run(h, { url: PUBLIC_URL, protected: true });
-    expect(forced).toMatchObject({ ok: false, kind: "auth", reason: "unauthenticated" });
+    expect(forced).toMatchObject({ ok: false, [AXP_FAILURE]: { type: "auth", reason: "unauthenticated" } });
     expect(seen).toEqual([undefined]);
     expect(h.net.calls("GET", "/api/me")).toBe(1);
     expect(h.settings.onAccessDenied).toHaveBeenCalledTimes(1);
@@ -75,7 +78,7 @@ describe("请求侧：保护判定与凭证注入", () => {
       const h = authClient(options as Partial<IAuthOptions<AxpResponse>>);
       h.tm.clear();
       const result = await run(h, { url, method });
-      if (isProtected) expect(result).toMatchObject({ kind: "auth", reason: "unauthenticated" });
+      if (isProtected) expect(result).toMatchObject({ [AXP_FAILURE]: { type: "auth", reason: "unauthenticated" } });
       else expect(result.ok).toBe(true);
       expect(h.net.totalStarted).toBe(isProtected ? 0 : 1);
     },
@@ -85,12 +88,9 @@ describe("请求侧：保护判定与凭证注入", () => {
     const isProtected = vi.fn(/** 范围外放行，/api 之下强制公开。 */ (request: Readonly<AxpRequestConfig>) => (request.url === PUBLIC_URL ? true : request.url?.startsWith("/api/") ? false : undefined));
     const h = authClient({ urlPattern: "/me", isProtected });
     h.tm.clear();
-    expect(await run(h, { url: PUBLIC_URL })).toMatchObject({
-      kind: "auth",
-      reason: "unauthenticated",
-    });
+    expect(await run(h, { url: PUBLIC_URL })).toMatchObject({ [AXP_FAILURE]: { type: "auth", reason: "unauthenticated" } });
     expect((await run(h, { url: "/api/x" })).ok).toBe(true);
-    expect(await run(h, { url: "/me" })).toMatchObject({ kind: "auth", reason: "unauthenticated" });
+    expect(await run(h, { url: "/me" })).toMatchObject({ [AXP_FAILURE]: { type: "auth", reason: "unauthenticated" } });
     expect((await run(h, { url: "/other" })).ok).toBe(true);
     expect((await run(h, { url: PUBLIC_URL, protected: false })).ok).toBe(true);
     expect(isProtected).toHaveBeenCalledTimes(4);
@@ -152,12 +152,7 @@ describe("本地无 token", () => {
       await vi.runAllTimersAsync();
       const result = await pending;
       expect(isAxpResponse(result)).toBe(true);
-      expect(result).toMatchObject({
-        ok: false,
-        kind: "auth",
-        reason: "unauthenticated",
-        status: 0,
-      });
+      expect(result).toMatchObject({ ok: false, status: 0, [AXP_FAILURE]: { type: "auth", reason: "unauthenticated" } });
       expect(h.net.totalStarted).toBe(0);
       expect(h.settings.onAccessDenied).toHaveBeenCalledExactlyOnceWith(result, h.tm);
       expect(h.settings.onAccessExpired).not.toHaveBeenCalled();
@@ -180,10 +175,10 @@ describe("本地无 token", () => {
 
 describe.each([
   ["HTTP 状态", false],
-  ["business 风格（HTTP 200 + 业务码）", true],
+  ["business 风格（HTTP 200 + 业务码，配置 onFailure）", true],
 ])("响应侧路由：%s", (_style, business) => {
   it("[auth.cb.onRefresh][auth.const.AuthFailureAction.Refresh] 401 且携带当前 token → 刷新一次后用新 token 重放成功，刷新回调收到 (r, tm)，成功结果不带过期原因", /** 刷新成功的主路径。 */ async () => {
-    const h = authClient();
+    const h = authClient({ onFailure: business ? businessAuthFailure : undefined });
     const seen: unknown[] = [];
     const route = guarded(() => TOKEN_NEW, business);
     h.net.on(
@@ -196,43 +191,43 @@ describe.each([
     );
     const result = await run(h);
     expect(result.ok).toBe(true);
-    expect(result.reason).toBeUndefined();
+    expect(failureOf(result)?.reason).toBeUndefined();
     expect(seen).toEqual([TOKEN_OLD, TOKEN_NEW]);
-    expect(h.settings.onRefresh).toHaveBeenCalledExactlyOnceWith(expect.objectContaining({ status: 401, ok: false }), h.tm);
+    expect(h.settings.onRefresh).toHaveBeenCalledExactlyOnceWith(expect.objectContaining({ status: business ? 200 : 401, ok: false }), h.tm);
     expect(h.settings.onAccessExpired).not.toHaveBeenCalled();
     expect(h.settings.onAccessDenied).not.toHaveBeenCalled();
   });
 
-  it("[auth.cb.onRefresh][auth.cb.onAccessExpired][auth.cb.tokenManager.clear][auth.const.AuthFailureAction.Expired][auth.reason.expired] 刷新失败 → 清除会话、onAccessExpired 通知一次，落定 auth/expired 并保留原 401 的状态", /** 刷新返回 false 即过期。 */ async () => {
-    const h = authClient({ onRefresh: () => false });
+  it("[auth.cb.onRefresh][auth.cb.onAccessExpired][auth.cb.tokenManager.clear][auth.const.AuthFailureAction.Expired][auth.reason.expired] 刷新失败 → 清除会话、onAccessExpired 通知一次，落定 auth/expired 并保留原 HTTP 状态", /** 刷新返回 false 即过期。 */ async () => {
+    const h = authClient({ onFailure: business ? businessAuthFailure : undefined, onRefresh: () => false });
     h.net.on("get", REQUEST_URL, () => failure(401, business));
     const result = await run(h);
-    expect(result).toMatchObject({ ok: false, kind: "auth", reason: "expired", status: 401 });
+    expect(result).toMatchObject({ ok: false, status: business ? 200 : 401, [AXP_FAILURE]: { type: "auth", reason: "expired" } });
     expect(h.tm.accessToken).toBeUndefined();
     expect(h.tm.refreshToken).toBeUndefined();
-    expect(h.settings.onAccessExpired).toHaveBeenCalledExactlyOnceWith(expect.objectContaining({ status: 401, kind: business ? "biz" : "http" }), h.tm);
+    expect(h.settings.onAccessExpired).toHaveBeenCalledExactlyOnceWith(expect.objectContaining({ status: business ? 200 : 401 }), h.tm);
     expect(h.settings.onAccessDenied).not.toHaveBeenCalled();
     expect(h.net.totalStarted).toBe(1);
   });
 
-  it("[auth.cb.onAccessDenied][auth.const.AuthFailureAction.Deny][auth.reason.denied] 403 → onAccessDenied 通知一次，会话保留，落定 auth/denied 并保留 403 的状态，不刷新", /** 越权不是过期。 */ async () => {
-    const h = authClient();
+  it("[auth.cb.onAccessDenied][auth.const.AuthFailureAction.Deny][auth.reason.denied] 403 → onAccessDenied 通知一次，会话保留，落定 auth/denied 并保留原 HTTP 状态，不刷新", /** 越权不是过期。 */ async () => {
+    const h = authClient({ onFailure: business ? businessAuthFailure : undefined });
     h.net.on("get", REQUEST_URL, () => failure(403, business));
     const result = await run(h);
-    expect(result).toMatchObject({ ok: false, kind: "auth", reason: "denied", status: 403 });
+    expect(result).toMatchObject({ ok: false, status: business ? 200 : 403, [AXP_FAILURE]: { type: "auth", reason: "denied" } });
     expect(h.tm.accessToken).toBe(TOKEN_OLD);
-    expect(h.settings.onAccessDenied).toHaveBeenCalledExactlyOnceWith(expect.objectContaining({ status: 403 }), h.tm);
+    expect(h.settings.onAccessDenied).toHaveBeenCalledExactlyOnceWith(expect.objectContaining({ status: business ? 200 : 403 }), h.tm);
     expect(h.settings.onRefresh).not.toHaveBeenCalled();
     expect(h.settings.onAccessExpired).not.toHaveBeenCalled();
     expect(h.net.totalStarted).toBe(1);
   });
 
   it("[auth.const.AuthFailureAction.Others] 无关失败（500）原样透传：不刷新、不清会话、不通知，也不改写成 auth", /** 路由不认识的状态不拦截。 */ async () => {
-    const h = authClient();
+    const h = authClient({ onFailure: business ? businessAuthFailure : undefined });
     h.net.on("get", REQUEST_URL, () => failure(500, business));
     const result = await run(h);
-    expect(result).toMatchObject({ ok: false, status: 500, kind: business ? "biz" : "http" });
-    expect(result.reason).toBeUndefined();
+    expect(result).toMatchObject({ ok: false, status: business ? 200 : 500 });
+    expect(failureOf(result)?.reason).toBeUndefined();
     expect(h.tm.accessToken).toBe(TOKEN_OLD);
     expect(h.settings.onRefresh).not.toHaveBeenCalled();
     expect(h.settings.onAccessExpired).not.toHaveBeenCalled();
@@ -273,7 +268,7 @@ describe("响应侧路由：其它入口", () => {
     await vi.advanceTimersByTimeAsync(10);
     h.tm.clear();
     await vi.runAllTimersAsync();
-    expect(await pending).toMatchObject({ kind: "auth", reason: "expired", status: 401 });
+    expect(await pending).toMatchObject({ status: 401, [AXP_FAILURE]: { type: "auth", reason: "expired" } });
     expect(h.settings.onAccessExpired).toHaveBeenCalledTimes(1);
     expect(h.settings.onRefresh).not.toHaveBeenCalled();
   });
@@ -291,7 +286,7 @@ describe("响应侧路由：其它入口", () => {
       const h = authClient({ onFailure });
       h.net.on("get", REQUEST_URL, /** 首发失败，重放成功。 */ (_config, hit) => (hit === 1 ? failure(status) : {}));
       const result = await run(h);
-      if (reason) expect(result).toMatchObject({ kind: "auth", reason, status });
+      if (reason) expect(result).toMatchObject({ status, [AXP_FAILURE]: { type: "auth", reason: reason } });
       else if (action === AuthFailureAction.Others) expect(result).toMatchObject({ ok: false, status });
       else expect(result.ok).toBe(true);
       expect(onFailure).toHaveBeenCalledWith(expect.objectContaining({ status }), h.tm, expect.objectContaining({ signal: expect.any(AbortSignal) }));
@@ -302,7 +297,7 @@ describe("响应侧路由：其它入口", () => {
   it("[auth.cb.onAccessDenied][auth.const.AuthFailureAction.Deny] 越权但没有 onAccessDenied 时沿用 onAccessExpired 通知，会话不清除", /** Deny 回退不等于过期。 */ async () => {
     const h = authClient({ onAccessDenied: undefined });
     h.net.on("get", REQUEST_URL, () => failure(403));
-    expect(await run(h)).toMatchObject({ kind: "auth", reason: "denied" });
+    expect(await run(h)).toMatchObject({ [AXP_FAILURE]: { type: "auth", reason: "denied" } });
     expect(h.settings.onAccessExpired).toHaveBeenCalledTimes(1);
     expect(h.tm.accessToken).toBe(TOKEN_OLD);
   });
@@ -325,14 +320,14 @@ describe("刷新可用性（O4）", () => {
       REQUEST_URL,
       guarded(() => server),
     );
-    expect(await run(h)).toMatchObject({ kind: "auth", reason: "expired" });
+    expect(await run(h)).toMatchObject({ [AXP_FAILURE]: { type: "auth", reason: "expired" } });
     expect(h.settings.onAccessExpired).toHaveBeenCalledTimes(1);
     h.tm.set("login-1", REFRESH_TOKEN);
     expect((await run(h)).ok).toBe(true);
     expect(h.settings.onRefresh).toHaveBeenCalledTimes(2);
     expect(h.settings.onAccessExpired).toHaveBeenCalledTimes(1);
     server = "login-3";
-    expect(await run(h)).toMatchObject({ kind: "auth", reason: "expired" });
+    expect(await run(h)).toMatchObject({ [AXP_FAILURE]: { type: "auth", reason: "expired" } });
     expect(h.settings.onRefresh).toHaveBeenCalledTimes(3);
     expect(h.settings.onAccessExpired).toHaveBeenCalledTimes(2);
   });
@@ -360,7 +355,7 @@ describe("插件生命周期", () => {
     h.net.on("get", REQUEST_URL, () => failure(401));
     const seen: unknown[] = [];
     h.net.on("get", "/seen", /** 记录凭证头。 */ (config) => void seen.push(authHeader(config)));
-    expect(await run(h)).toMatchObject({ ok: false, status: 401, kind: "http" });
+    expect(await run(h)).toMatchObject({ status: 401, ok: false });
     await run(h, { url: "/seen" });
     expect(seen).toEqual([undefined]);
     expect(h.settings.onRefresh).not.toHaveBeenCalled();

@@ -1,9 +1,10 @@
+import { failureOf } from "../../src/response";
 /* eslint-disable no-await-in-loop -- 排空假时钟必须逐轮串行推进，并行没有意义。 */
 import { AxiosHeaders, type AxiosAdapter } from "axios";
 import { expect, vi } from "vitest";
 import type { AxpContext } from "../../src/context";
 import { AXP_STAGES } from "../../src/pipeline";
-import { AXP_KINDS, type AxpResponse, type IAxpResponse } from "../../src/response";
+import { AXP_FAILURES, type AxpResponse, type IAxpResponse } from "../../src/response";
 import type { AxpClient, AxpOptions, AxpPlugin, AxpRequestConfig, AxpStage } from "../../src/types";
 import { assertInvariants, createTestClient, recordEvents, type ITestEvents } from "./client";
 import type { makeNetwork } from "./network";
@@ -162,9 +163,9 @@ export function createChainProbe(events: ITestEvents): IChainProbe {
             response = await next();
           } catch (error) {
             events.rejectedNext++;
-            return ctx.fail({ kind: AXP_KINDS.INTERNAL, error });
+            return ctx.fail({ failure: AXP_FAILURES.INTERNAL, error });
           }
-          if (response.kind === AXP_KINDS.INTERNAL && !seen.has(response)) {
+          if (failureOf(response)?.type === AXP_FAILURES.INTERNAL && !seen.has(response)) {
             seen.add(response);
             probe.internalErrors.push(response.error);
           }
@@ -249,7 +250,8 @@ export function createNotifyRecorder<R extends IAxpResponse = AxpResponse>(event
     /** 标记身份并复刻默认的跳过规则。 */
     stringify(response, ctx) {
       current = ctx.id;
-      return response.ok || response.kind === AXP_KINDS.CANCEL || ctx.request.silent ? "" : response.message || `${response.kind} ${response.status}`;
+      if (response.ok || failureOf(response)?.type === AXP_FAILURES.CANCEL || ctx.request.silent) return "";
+      return response.message || failureOf(response)?.type || "status " + response.status + (response.code !== 0 ? " code " + response.code : "");
     },
   };
 }

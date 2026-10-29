@@ -1,7 +1,7 @@
 import { create as createAxios, type AxiosAdapter, type AxiosRequestConfig, type CreateAxiosDefaults } from "axios";
 import { expect } from "vitest";
 import { createAxp } from "../../src/client";
-import { AxpResponse, axpResponse, type IAxpResponse } from "../../src/response";
+import { AxpResponse, axpResponse, type AxpResponseInit, type IAxpResponse } from "../../src/response";
 import type { AxpClient, AxpOptions, AxpPlugin } from "../../src/types";
 import { makeNetwork } from "./network";
 
@@ -67,7 +67,7 @@ export function createTestClient<R extends IAxpResponse = AxpResponse>(
  * @param events 本次测试的事件。
  * @example `assertInvariants(api, events)`
  */
-export function assertInvariants(api: AxpClient, events: ITestEvents): void {
+export function assertInvariants(api: Pick<AxpClient, "pending">, events: ITestEvents): void {
   for (const count of events.settled.values()) expect(count).toBe(1);
   for (const values of events.loading.values()) {
     expect(values.length % 2).toBe(0);
@@ -90,10 +90,10 @@ export class TestResponse<D = unknown> extends AxpResponse<D> {
  */
 export function customResponse() {
   return axpResponse<TestResponse>({
-    /** 从响应头补充追踪标识，派生时保留来源。 */
+    /** 命中从快照输入取追踪标识，派生时保留来源，其余从响应头补充。 */
     create: (init, raw) =>
       Object.assign(new TestResponse(init), {
-        traceId: init.from?.traceId ?? String(raw?.headers["x-trace-id"] ?? ""),
+        traceId: (init as AxpResponseInit<TestResponse> & { traceId?: string }).traceId ?? init.from?.traceId ?? String(raw?.headers["x-trace-id"] ?? ""),
       }),
   });
 }

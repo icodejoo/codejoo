@@ -5,10 +5,10 @@ import type { AxpResponse, IAxpResponse } from "../../src/response";
 import type { TLoadingFunc } from "../../src/plugins/loading";
 
 /** 使用 UI 事件不变量的测试客户端。 */
-type Fixture = ReturnType<typeof createTestClient<AxpResponse>>;
+type Fixture<R extends IAxpResponse> = ReturnType<typeof createTestClient<R>>;
 /** 当前用例建立的客户端与事件记录。 */
 const fixtures: {
-  /** 待回收客户端。 */ api: AxpClient;
+  /** 待回收客户端。 */ api: Pick<AxpClient, "pending" | "dispose">;
   /** 可观测事件。 */ events: ITestEvents;
 }[] = [];
 
@@ -19,8 +19,8 @@ const fixtures: {
  * @returns 支撑对象，所有逻辑请求应通过 send 发起。
  * @example `const h = uiClient([axpLoading()]); await h.send()`
  */
-export function uiClient(plugins: readonly AxpPlugin<AxpResponse, any>[] = [], options: AxpOptions = {}, transport?: Parameters<typeof createTestClient>[2]) {
-  const fixture = createTestClient(plugins, options, transport);
+export function uiClient<R extends IAxpResponse = AxpResponse>(plugins: readonly AxpPlugin<R, any>[] = [], options: AxpOptions<R> = {} as AxpOptions<R>, transport?: Parameters<typeof createTestClient>[2]) {
+  const fixture = createTestClient<R>(plugins, options, transport);
   return observeUi(fixture);
 }
 /** 对现有客户端（包括 extend 的子客户端）登记不变量观测。
@@ -28,7 +28,7 @@ export function uiClient(plugins: readonly AxpPlugin<AxpResponse, any>[] = [], o
  * @returns 附带 send 方法的夹具。
  * @example `observeUi({ ...parent, api: parent.api.extend(), events: recordEvents() })`
  */
-export function observeUi(fixture: Fixture) {
+export function observeUi<R extends IAxpResponse>(fixture: Fixture<R>) {
   const { api, events } = fixture;
   fixtures.push({ api, events });
   let sequence = 0;
@@ -87,7 +87,7 @@ export function loadingRecorder(events: ITestEvents, key = "main"): TLoadingFunc
  */
 export function notifyRecorder(events: ITestEvents) {
   const ids = new WeakMap<AbortSignal, number>();
-  return /** 同一逻辑 signal 重复通知会触发 I4。 */ (_message: string, response: IAxpResponse) => {
+  return /** 同一逻辑 signal 重复通知会触发 I4。 */ (_message: string, response: AxpResponse) => {
     const signal = response.request.signal!;
     const id = ids.get(signal);
     // 逻辑 signal 在各次尝试间保持身份，不能按中间响应分别计数。

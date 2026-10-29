@@ -37,7 +37,8 @@ it("[mock.req.mock × cache.req.cache] mock 404 回落：真实响应被缓存�
   const again = await h.send({ url: REAL, mock: true, cache: true });
   const second = await h.send({ url: REAL, mock: true, cache: true });
   expect(again.data).toBe("real");
-  expect(second).toBe(again);
+  expect(second).not.toBe(again);
+  expect(second.data).toBe(again.data);
   expect(h.net.calls("get", PROBE)).toBe(3);
   expect(h.net.calls("get", REAL)).toBe(2);
 });

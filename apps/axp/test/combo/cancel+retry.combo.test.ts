@@ -1,3 +1,4 @@
+import { AXP_FAILURE } from "../../src/response";
 import { beforeEach, expect, it, vi } from "vitest";
 import axpRetry from "../../src/plugins/retry";
 import type { AxpRequestConfig } from "../../src/types";
@@ -20,7 +21,7 @@ it("[core.method.cancelAll][retry.opt.max] 重试等待期间 cancelAll 能中�
   expect(h.api.pending()).toBe(1);
   expect(h.api.cancelAll()).toBe(1);
   await vi.runAllTimersAsync();
-  expect(await pending).toMatchObject({ ok: false, kind: "cancel" });
+  expect(await pending).toMatchObject({ ok: false, [AXP_FAILURE]: { type: "cancel" } });
   expect(h.net.totalStarted).toBe(1);
   expect(h.api.pending()).toBe(0);
   expect(h.api.cancelAll()).toBe(0);
@@ -42,6 +43,6 @@ it("[core.method.cancelAll][retry.priority.kind] 尝试在途时被取消：得�
   await vi.advanceTimersByTimeAsync(10);
   expect(h.api.cancelAll()).toBe(1);
   await vi.runAllTimersAsync();
-  expect(await pending).toMatchObject({ kind: "cancel" });
+  expect(await pending).toMatchObject({ [AXP_FAILURE]: { type: "cancel" } });
   expect(h.net.totalStarted).toBe(1);
 });

@@ -1,7 +1,9 @@
+import { businessAuthFailure } from "../helpers/b3";
+import { failureOf } from "../../src/response";
 import { AxiosHeaders } from "axios";
 import { beforeEach, expect, it, vi } from "vitest";
 import axpShare from "../../src/plugins/share";
-import { AXP_KINDS } from "../../src/response";
+import { AXP_FAILURES } from "../../src/response";
 import { toText } from "../../src/utils";
 import { authClient, failure, guarded, REQUEST_URL, TOKEN_NEW, TOKEN_OLD } from "../helpers/b3";
 import { settleAll } from "../helpers/source";
@@ -27,7 +29,7 @@ beforeEach(() => {
 
 /** 装好 auth 与 share；服务端只认新 token。 */
 function client(business = false, overrides: Parameters<typeof authClient>[0] = {}, options: Parameters<typeof authClient>[2] = {}) {
-  const h = authClient(overrides, [axpShare()], options);
+  const h = authClient({ onFailure: business ? businessAuthFailure : undefined, ...overrides }, [axpShare()], options);
   h.net.on(
     "get",
     REQUEST_URL,
@@ -63,7 +65,7 @@ it.each([false, true])(
 it("[auth.reason.expired × share.req.share] 刷新失败：所有跟随者共享同一次 401，一次刷新，落定为 auth 过期，过期通知只一次", /** 失败路径下刷新与通知同样单飞。 */ async () => {
   const h = client(false, { onRefresh: /** 刷新失败。 */ () => false });
   const results = await settleAll(...burst(h));
-  expect(results.map(/** 取类别与原因。 */ (r) => [r.kind, r.reason])).toEqual(Array(CALLERS).fill([AXP_KINDS.AUTH, "expired"]));
+  expect(results.map(/** 取类别与原因。 */ (r) => [failureOf(r)?.type, failureOf(r)?.reason])).toEqual(Array(CALLERS).fill([AXP_FAILURES.AUTH, "expired"]));
   expect(h.net.totalStarted).toBe(1);
   expect(h.settings.onRefresh).toHaveBeenCalledTimes(1);
   expect(h.settings.onAccessExpired).toHaveBeenCalledTimes(1);
@@ -95,7 +97,7 @@ it("[auth.cb.onFailure × share.req.share] 越权 403 由所有跟随者共享�
   const h = client();
   h.net.on("get", REQUEST_URL, /** 一律越权。 */ () => failure(FORBIDDEN));
   const results = await settleAll(...burst(h));
-  expect(results.map(/** 取类别与原因。 */ (r) => [r.kind, r.reason])).toEqual(Array(CALLERS).fill([AXP_KINDS.AUTH, "denied"]));
+  expect(results.map(/** 取类别与原因。 */ (r) => [failureOf(r)?.type, failureOf(r)?.reason])).toEqual(Array(CALLERS).fill([AXP_FAILURES.AUTH, "denied"]));
   expect(h.net.totalStarted).toBe(1);
   expect(h.settings.onRefresh).not.toHaveBeenCalled();
   expect(h.settings.onAccessDenied).toHaveBeenCalledTimes(CALLERS);

@@ -1,5 +1,5 @@
 import { mergePatch, requestContext, type AxpContext } from "./context";
-import { AXP_KINDS, type IAxpResponse } from "./response";
+import { AXP_FAILURES, type IAxpResponse } from "./response";
 import { STAGE_BUILTINS } from "./stages";
 import type { AxpMiddleware, AxpNext, AxpPlugin, AxpPluginInstance, AxpStage, AxpTap, IAxpInspection } from "./types";
 
@@ -27,12 +27,12 @@ for (const [stageOrder, stage] of AXP_STAGES.entries()) {
 }
 
 /** 已 setup 的插件注册记录。 */
-export interface IAxpRegistration<R extends IAxpResponse> {
+export interface IAxpRegistration<R extends IAxpResponse<unknown, string | number>> {
   /** extend 复用的插件定义。 */ plugin: AxpPlugin<R, any>;
   /** 当前客户端的独立实例。 */ instance: AxpPluginInstance<R, any>;
 }
 /** 编译后的挂载层。 */
-export interface IAxpLayer<R extends IAxpResponse> extends IAxpInspection {
+export interface IAxpLayer<R extends IAxpResponse<unknown, string | number>> extends IAxpInspection {
   /** 已编译的中间件。 */ readonly handle: AxpMiddleware<R>;
 }
 
@@ -40,7 +40,7 @@ export interface IAxpLayer<R extends IAxpResponse> extends IAxpInspection {
 const passThrough: AxpMiddleware<any> = (_ctx, next) => next();
 
 /** 按实际写了哪些回调选择中间件变体，缺失的回调不 await；回调绑定到 tap，方法式写法里的 this 指向挂载段自身。 */
-function tapMiddleware<R extends IAxpResponse>(tap: AxpTap<R>): AxpMiddleware<R> {
+function tapMiddleware<R extends IAxpResponse<unknown, string | number>>(tap: AxpTap<R>): AxpMiddleware<R> {
   const onRequest = tap.onRequest?.bind(tap);
   const onResponse = tap.onResponse?.bind(tap);
   if (!onRequest && !onResponse) return passThrough;
@@ -71,7 +71,7 @@ function position(stage: AxpStage, enforce: AxpPlugin["enforce"]): IAxpPosition 
  * @returns 按阶段和阶段内位置稳定排序的挂载层。
  * @example `const layers = sortPipeline(registrations)`
  */
-export function sortPipeline<R extends IAxpResponse>(registrations: readonly IAxpRegistration<R>[]): IAxpLayer<R>[] {
+export function sortPipeline<R extends IAxpResponse<unknown, string | number>>(registrations: readonly IAxpRegistration<R>[]): IAxpLayer<R>[] {
   const names = new Set<string>();
   const layers: (IAxpLayer<R> & IAxpPosition)[] = [];
   for (const { plugin, instance } of registrations) {
@@ -98,7 +98,7 @@ export function sortPipeline<R extends IAxpResponse>(registrations: readonly IAx
 }
 
 /** 给一层中间件加上异常边界：同步抛错与异步拒绝都转为 internal 响应。 */
-function guardLayer<R extends IAxpResponse>(handle: AxpMiddleware<R>, inner: (ctx: AxpContext<R>) => Promise<R>): (ctx: AxpContext<R>) => Promise<R> {
+function guardLayer<R extends IAxpResponse<unknown, string | number>>(handle: AxpMiddleware<R>, inner: (ctx: AxpContext<R>) => Promise<R>): (ctx: AxpContext<R>) => Promise<R> {
   return /** 本层执行器：外层总能拿到响应，不会收到拒绝。 */ async (ctx) => {
     /** 无补丁直接复用上下文，有补丁才派生；合并补丁时的同步异常（如 getter 抛错）转 internal。 */
     const next: AxpNext<R> = (patch) => {
@@ -106,14 +106,14 @@ function guardLayer<R extends IAxpResponse>(handle: AxpMiddleware<R>, inner: (ct
       try {
         if (patch) target = requestContext(ctx, mergePatch(ctx.request, patch), patch);
       } catch (error) {
-        return Promise.resolve(ctx.fail({ kind: AXP_KINDS.INTERNAL, error }));
+        return Promise.resolve(ctx.fail({ failure: AXP_FAILURES.INTERNAL, error }));
       }
       return inner(target);
     };
     try {
       return await handle(ctx, next);
     } catch (error) {
-      return ctx.fail({ kind: AXP_KINDS.INTERNAL, error });
+      return ctx.fail({ failure: AXP_FAILURES.INTERNAL, error });
     }
   };
 }
@@ -124,7 +124,7 @@ function guardLayer<R extends IAxpResponse>(handle: AxpMiddleware<R>, inner: (ct
  * @returns 可供逻辑请求复用的执行器。
  * @example `const run = composePipeline(layers, transport)`
  */
-export function composePipeline<R extends IAxpResponse>(layers: readonly IAxpLayer<R>[], transport: (ctx: AxpContext<R>) => Promise<R>): (ctx: AxpContext<R>) => Promise<R> {
+export function composePipeline<R extends IAxpResponse<unknown, string | number>>(layers: readonly IAxpLayer<R>[], transport: (ctx: AxpContext<R>) => Promise<R>): (ctx: AxpContext<R>) => Promise<R> {
   let run = transport;
   for (let index = layers.length - 1; index >= 0; index--) {
     run = guardLayer(layers[index].handle, run);

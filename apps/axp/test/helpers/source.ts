@@ -42,13 +42,13 @@ export function customSourceClient<R extends IAxpResponse>(plugins: readonly Axp
  * @example `const { store, set } = countingCacheStore(); axpCache({ store }); expect(set).toHaveBeenCalledOnce()`
  */
 export function countingCacheStore() {
-  const entries = new Map<string, IAxpCacheEntry<AxpResponse>>();
+  const entries = new Map<string, IAxpCacheEntry>();
   const set = vi.fn(
-    /** 记录一次写入。 */ (key: string, entry: IAxpCacheEntry<AxpResponse>) => {
+    /** 记录一次写入。 */ (key: string, entry: IAxpCacheEntry) => {
       entries.set(key, entry);
     },
   );
-  const store: IAxpCacheStore<AxpResponse> = {
+  const store: IAxpCacheStore = {
     /** 读取条目。 */ get: (key) => entries.get(key),
     set,
     /** 删除条目。 */ delete: (key) => entries.delete(key),
@@ -58,6 +58,31 @@ export function countingCacheStore() {
     },
   };
   return { store, set, entries };
+}
+
+/** 用 Promise 包装 Map，模拟 JSON 往返后的持久化存储。
+ * @returns 异步仓及底层条目表。
+ * @example `const { store } = asyncCacheStore(); axpCache({ store })`
+ */
+export function asyncCacheStore() {
+  const entries = new Map<string, IAxpCacheEntry>();
+  const store: IAxpCacheStore = {
+    /** 异步读取纯数据条目。 */
+    get: async (key) => entries.get(key),
+    /** JSON 往返后保存，模拟序列化边界。 */
+    async set(key, entry) {
+      entries.set(key, JSON.parse(JSON.stringify(entry)) as IAxpCacheEntry);
+    },
+    /** 异步删除条目。 */
+    delete: async (key) => entries.delete(key),
+    /** 返回实际清掉的数量，不提供 size。 */
+    async clear() {
+      const count = entries.size;
+      entries.clear();
+      return count;
+    },
+  };
+  return { store, entries };
 }
 
 /** 推进假时钟直到全部请求落定，再按传入顺序返回结果。

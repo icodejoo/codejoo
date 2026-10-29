@@ -1,3 +1,4 @@
+import { AXP_FAILURE } from "../../src/response";
 import { beforeEach, expect, it, vi } from "vitest";
 import axpLoading from "../../src/plugins/loading";
 import axpRetry from "../../src/plugins/retry";
@@ -14,8 +15,8 @@ beforeEach(() => {
 });
 
 /** 装好 loading 与 retry 的客户端。 */
-function loadingRetryClient(max = 2) {
-  const h = b3Client([axpRetry({ max, delay: RETRY_WAIT })]);
+function loadingRetryClient(max = 2, business = false) {
+  const h = b3Client([axpRetry({ max, delay: RETRY_WAIT, shouldRetry: business ? /** 使用者显式允许业务重试。 */ (r) => r.code === 500 : undefined })]);
   const loading = vi.fn(loadingRecorder(h.events));
   h.api.use(axpLoading({ loading }));
   return { ...h, loading };
@@ -49,17 +50,13 @@ it("[loading.req.loading][retry.opt.max] loading:false 跨重试始终不参与�
 it.each(["business", "cancel"] as const)(
   "[loading.cb.loading][retry.opt.max] 重试等待期间遇到 %s 结局：loading 都正确隐藏",
   /** 业务失败耗尽与等待中取消。 */ async (ending) => {
-    const h = loadingRetryClient(1);
+    const h = loadingRetryClient(1, true);
     h.net.fallback(/** business 风格的 HTTP 200 + 500 业务码。 */ () => failure(500, true));
     const pending = h.send({ url: REQUEST_URL });
     await vi.advanceTimersByTimeAsync(RETRY_WAIT / 2);
     if (ending === "cancel") expect(h.api.cancelAll()).toBe(1);
     await vi.runAllTimersAsync();
-    expect(await pending).toMatchObject({
-      ok: false,
-      kind: ending === "cancel" ? "cancel" : "biz",
-      status: ending === "cancel" ? 0 : 500,
-    });
+    expect(await pending).toMatchObject({ ok: false, status: ending === "cancel" ? 0 : 200, ...(ending === "cancel" ? { [AXP_FAILURE]: { type: "cancel" } } : { code: 500 }) });
     expect(h.net.totalStarted).toBe(ending === "cancel" ? 1 : 2);
     expect(h.events.loading.get(LOADING_LABEL)).toEqual([true, false]);
   },

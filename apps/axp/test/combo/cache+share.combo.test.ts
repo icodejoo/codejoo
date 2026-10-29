@@ -1,7 +1,6 @@
 import { beforeEach, expect, it, vi } from "vitest";
 import axpCache, { clearCache, type IAxpCacheEntry } from "../../src/plugins/cache";
 import axpShare, { type SharePolicy } from "../../src/plugins/share";
-import type { AxpResponse } from "../../src/response";
 import { envelope, sourceClient } from "../helpers/source";
 
 /** 并发与有效期相关用例统一用假时钟。 */
@@ -21,8 +20,8 @@ const SLOW = 30;
 
 /** 装好 share 与带写入计数存储的 cache；路由按命中序号返回数据。 */
 function client(policy: SharePolicy = "start", clone?: "deep") {
-  const entries = new Map<string, IAxpCacheEntry<AxpResponse>>();
-  const set = vi.fn((key: string, entry: IAxpCacheEntry<AxpResponse>) => void entries.set(key, entry));
+  const entries = new Map<string, IAxpCacheEntry>();
+  const set = vi.fn((key: string, entry: IAxpCacheEntry) => void entries.set(key, entry));
   const store = {
     get: (key: string) => entries.get(key),
     set,
@@ -49,7 +48,8 @@ it("[share.opt.policy × cache.req.cache] 并发未命中只发一次网络，�
   expect(h.set).toHaveBeenCalledOnce();
   expect(new Set(results).size).toBe(1);
   const [hit] = await settled(h.send({ url: URL, cache: true }));
-  expect(hit).toBe(results[0]);
+  expect(hit).not.toBe(results[0]);
+  expect(hit.data).toBe(results[0].data);
   expect(h.net.calls("get", URL)).toBe(1);
 });
 
@@ -57,7 +57,7 @@ it("[share.opt.policy × cache.cb.shouldCache] 失败结果被共享但不写缓
   const h = client();
   h.net.on("get", URL, (_config, hit) => (hit === 1 ? { status: 500 } : envelope("ok")));
   const failed = await settled(h.send({ url: URL, share: true, cache: true, latency: LATENCY } as never), h.send({ url: URL, share: true, cache: true, latency: LATENCY } as never));
-  expect(failed[0].httpStatus).toBe(500);
+  expect(failed[0].status).toBe(500);
   expect(failed[1]).toBe(failed[0]);
   expect(h.set).not.toHaveBeenCalled();
   const [good] = await settled(h.send({ url: URL, share: true, cache: true }));
@@ -99,7 +99,7 @@ it("[share.opt.policy × cache.fn.clearCache] 共享期间 clear：在途结果�
   const h = client();
   const pending = [h.send({ url: URL, share: true, cache: true, latency: LATENCY } as never), h.send({ url: URL, share: true, cache: true, latency: LATENCY } as never)];
   await vi.advanceTimersByTimeAsync(1);
-  clearCache(h.api);
+  await clearCache(h.api);
   const [a, b] = await settled(...pending);
   expect([a.ok, b.ok]).toEqual([true, true]);
   expect(h.set).not.toHaveBeenCalled();

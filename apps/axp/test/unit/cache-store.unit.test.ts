@@ -3,8 +3,8 @@ import { createFreshnessBarrier, createMemoryStore } from "../../src/plugins/cac
 import type { IAxpCacheEntry } from "../../src/plugins/cache-store";
 
 /** 构造永不过期条目。 */
-function entry(response: string): IAxpCacheEntry<string> {
-  return { response, expiresAt: Infinity };
+function entry(response: string): IAxpCacheEntry {
+  return { snapshot: { status: 200, message: "", data: response }, expiresAt: Infinity };
 }
 /** 共享测试键。 */
 const KEY = "key";
@@ -12,8 +12,8 @@ const KEY = "key";
 const VALUE = "value";
 
 it("[cache.fn.createMemoryStore] 同步存取共享引用，支持删除、清空和仓隔离", () => {
-  const store = createMemoryStore<string>();
-  const other = createMemoryStore<string>();
+  const store = createMemoryStore();
+  const other = createMemoryStore();
   const cached = entry(VALUE);
   expect(store.size).toBe(0);
   expect(store.get(KEY)).toBeUndefined();
@@ -24,18 +24,18 @@ it("[cache.fn.createMemoryStore] 同步存取共享引用，支持删除、清�
   expect(store.delete(KEY)).toBe(true);
   expect(store.delete(KEY)).toBe(false);
   store.set(KEY, cached);
-  store.clear();
-  store.clear();
+  expect(store.clear()).toBe(1);
+  expect(store.clear()).toBe(0);
   expect(store.size).toBe(0);
 });
 
 it("[cache.fn.createMemoryStore] 默认容量为 500，超出淘汰最旧条目", () => {
-  const store = createMemoryStore<string>();
+  const store = createMemoryStore();
   const capacity = 500;
   for (let index = 0; index <= capacity; index++) store.set(String(index), entry(VALUE));
   expect(store.size).toBe(capacity);
   expect(store.get("0")).toBeUndefined();
-  expect(store.get(String(capacity))?.response).toBe(VALUE);
+  expect(store.get(String(capacity))?.snapshot.data).toBe(VALUE);
 });
 
 it("[cache.fn.createFreshnessBarrier] 独立屏障分配全局递增票据并登记写入下界", () => {

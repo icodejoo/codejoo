@@ -1,3 +1,5 @@
+import { failureOf } from "../../src/response";
+import { AXP_FAILURE } from "../../src/response";
 import { CanceledError, type AxiosAdapter } from "axios";
 import { expect, it, vi } from "vitest";
 import { axpResponse, type AxpResponse } from "../../src/response";
@@ -6,6 +8,26 @@ import { createTestClient, customResponse, type TestResponse } from "../helpers/
 
 /** 测试 URL。 */
 const URL = "/boundary";
+
+it("[core.method.extend] 未指定 axios 时创建新实例，复制 defaults 但不复制父拦截器", async () => {
+  const { api } = createTestClient();
+  api.axios.defaults.timeout = 23;
+  const request = vi.fn(/** 原样转交父实例请求。 */ (config) => config);
+  const response = vi.fn(/** 原样转交父实例响应。 */ (result) => result);
+  api.axios.interceptors.request.use(request);
+  api.axios.interceptors.response.use(response);
+  const child = api.extend();
+  expect(child.axios).not.toBe(api.axios);
+  expect(child.axios.defaults.timeout).toBe(23);
+  await child.get(URL)();
+  expect(request).not.toHaveBeenCalled();
+  expect(response).not.toHaveBeenCalled();
+  await api.get(URL)();
+  expect(request).toHaveBeenCalledOnce();
+  expect(response).toHaveBeenCalledOnce();
+  child.dispose();
+  api.dispose();
+});
 
 it.each(["response", "error"] as const)(
   "[core.opt.response] %s 工厂回调抛错且 fail 再抛错时仍保留首次程序异常",
@@ -48,7 +70,7 @@ it.each(["response", "error"] as const)(
         throw new Error("transport");
       };
     await expect(api.request({ url: URL, throws: false })).rejects.toBe(original);
-    expect(observed).toMatchObject({ kind: "internal", error: original });
+    expect(observed).toMatchObject({ error: original, [AXP_FAILURE]: { type: "internal" } });
     expect(api.pending()).toBe(0);
   },
 );
@@ -187,7 +209,7 @@ it.each(["transform", "interceptor", "middleware"] as const)(
         },
       );
     await expect(api.get(URL)(undefined, { throws: false })).rejects.toBe(bug);
-    expect(observed).toMatchObject({ kind: "internal", error: bug });
+    expect(observed).toMatchObject({ error: bug, [AXP_FAILURE]: { type: "internal" } });
     expect(api.pending()).toBe(0);
   },
 );
@@ -220,8 +242,8 @@ it("[core.method.cancelAll][core.req.signal] 用户取消与批量取消、重�
   controller.abort("user");
   expect(api.cancelAll("batch")).toBe(1);
   expect(api.cancelAll()).toBe(0);
-  expect((await first).kind).toBe("cancel");
-  expect((await second).kind).toBe("cancel");
+  expect(failureOf(await first)?.type).toBe("cancel");
+  expect(failureOf(await second)?.type).toBe("cancel");
   expect(api.pending()).toBe(0);
   expect(add).toHaveBeenCalledTimes(1);
   expect(remove).toHaveBeenCalledTimes(1);
@@ -233,7 +255,7 @@ it("[core.req.signal] 已中止直接落定且扩展响应字段存在，不执�
   const adapter = vi.fn();
   const { api } = createTestClient<TestResponse>([{ name: "never", handle }], { response: customResponse() }, adapter);
   const response = await api.request({ signal: controller.signal, throws: false });
-  expect(response).toMatchObject({ kind: "cancel", traceId: "" });
+  expect(response).toMatchObject({ traceId: "", [AXP_FAILURE]: { type: "cancel" } });
   expect(handle).not.toHaveBeenCalled();
   expect(adapter).not.toHaveBeenCalled();
   expect(api.pending()).toBe(0);
@@ -273,7 +295,7 @@ it("[core.method.dispose] 销毁中止在途请求并清理所有实例", /** �
   const pending = api.request({ url: URL, throws: false });
   api.dispose();
   wait.open();
-  expect((await pending).kind).toBe("cancel");
+  expect(failureOf(await pending)?.type).toBe("cancel");
   expect(dispose).toHaveBeenCalledTimes(1);
   expect(api.pending()).toBe(0);
 });

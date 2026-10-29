@@ -1,7 +1,9 @@
+import { AXP_FAILURE } from "../../src/response";
+import { failureOf } from "../../src/response";
 import { beforeEach, expect, it, vi } from "vitest";
 import axpRetry from "../../src/plugins/retry";
 import axpShare from "../../src/plugins/share";
-import { AXP_KINDS } from "../../src/response";
+import { AXP_FAILURES } from "../../src/response";
 import { failure } from "../helpers/b3";
 import { envelope, settleAll, sourceClient } from "../helpers/source";
 
@@ -33,10 +35,10 @@ beforeEach(() => {
 });
 
 /** 装好 retry 与 share；counter 站在 retry 之内，统计每个调用方进入的尝试轮数。 */
-function client(max: number) {
+function client(max: number, business = false) {
   const attempts = vi.fn();
   const h = sourceClient([
-    axpRetry({ max, delay: DELAY }),
+    axpRetry({ max, delay: DELAY, shouldRetry: business ? /** 使用者配置业务码重试。 */ (r) => r.code === HTTP_ERROR : undefined }),
     axpShare(),
     {
       name: "attempt-count",
@@ -58,7 +60,7 @@ function burst(h: ReturnType<typeof client>, count = CALLERS) {
 it.each([false, true])(
   "[retry.opt.max × share.req.share] 并发同 key：每一轮尝试只发一次网络请求，重试时各调用方重新合并到新一轮共享，最终拿到同一个结果（business=%s）",
   /** 共享以一次尝试为单位，retry 在 share 外层。 */ async (business) => {
-    const h = client(ONE_RETRY);
+    const h = client(ONE_RETRY, business);
     h.net.on("get", URL, /** 第一轮失败，第二轮成功。 */ (_config, hit) => (hit <= FAILED_SENDS ? failure(HTTP_ERROR, business) : envelope(DATA)));
     const results = await settleAll(...burst(h));
     expect(results.every(/** 全部成功。 */ (r) => r.ok)).toBe(true);
@@ -77,7 +79,7 @@ it("[retry.opt.max × share.req.share] 重试耗尽：每轮仍只发一次（�
   const results = await settleAll(...burst(h));
   expect(h.net.totalStarted).toBe(TWO_RETRIES + 1);
   expect(h.attempts).toHaveBeenCalledTimes(CALLERS * (TWO_RETRIES + 1));
-  expect(results.map(/** 取类别。 */ (r) => r.kind)).toEqual(Array(CALLERS).fill(AXP_KINDS.HTTP));
+  expect(results.map(/** 取类别。 */ (r) => failureOf(r)?.type)).toEqual(Array(CALLERS).fill(undefined));
   expect(new Set(results).size).toBe(1);
   expect(results[0]).toMatchObject({ ok: false, status: HTTP_ERROR });
 });
@@ -106,7 +108,7 @@ it.each([
     await vi.advanceTimersByTimeAsync(LATENCY + abortAfter);
     leader.abort();
     const results = await settleAll(...pending);
-    expect(results[0]).toMatchObject({ kind: AXP_KINDS.CANCEL, ok: false });
+    expect(results[0]).toMatchObject({ ok: false, [AXP_FAILURE]: { type: AXP_FAILURES.CANCEL } });
     const followers = results.slice(1);
     expect(followers.every(/** 其余全部成功。 */ (r) => r.ok)).toBe(true);
     expect(new Set(followers).size).toBe(1);

@@ -1,6 +1,8 @@
+import { businessAuthFailure } from "../helpers/b3";
+import { AXP_FAILURE } from "../../src/response";
 import { beforeEach, expect, it, vi } from "vitest";
 import axpCache, { clearCache } from "../../src/plugins/cache";
-import { authClient, failure, guarded, REFRESH_TOKEN, REQUEST_URL, run, TOKEN_NEW } from "../helpers/b3";
+import { authClient, deferred, failure, guarded, REFRESH_TOKEN, REQUEST_URL, run, TOKEN_NEW } from "../helpers/b3";
 import { countingCacheStore, settleAll } from "../helpers/source";
 
 /** 请求级显式缓存键，沿用旧用例的写法。 */
@@ -18,10 +20,34 @@ beforeEach(() => {
   vi.useFakeTimers();
 });
 
+it("[auth.cb.ready][cache.req.cache][core.req.signal] 缓存预热后，异步 ready 挂起时取消以 cancel 落定，不返回缓存命中", /** 取消在进入缓存之前生效。 */ async () => {
+  const gate = deferred<void>();
+  let waiting = false;
+  const h = client(false, {
+    ready: /** 预热后挂起凭证准备。 */ async (tm) => {
+      if (waiting) await gate.promise;
+      return { headers: { Authorization: tm.accessToken } };
+    },
+  });
+  expect((await run(h, { cache: true })).ok).toBe(true);
+  waiting = true;
+  const controller = new AbortController();
+  const pending = h.send({ url: REQUEST_URL, cache: true, signal: controller.signal });
+  await vi.advanceTimersByTimeAsync(0);
+  controller.abort();
+  expect(await pending).toMatchObject({ [AXP_FAILURE]: { type: "cancel" } });
+  expect(h.api.pending()).toBe(0);
+  expect(h.events.listeners).toBe(0);
+  gate.resolve();
+  await vi.runAllTimersAsync();
+  expect(h.net.totalStarted).toBe(SENDS_PER_REFRESH);
+  expect(h.cache.set).toHaveBeenCalledTimes(1);
+});
+
 /** 装好 auth 与带写入计数存储的 cache；服务端只认新 token。 */
 function client(business = false, overrides: Parameters<typeof authClient>[0] = {}) {
   const cache = countingCacheStore();
-  const h = authClient(overrides, [axpCache({ store: cache.store })]);
+  const h = authClient({ onFailure: business ? businessAuthFailure : undefined, ...overrides }, [axpCache({ store: cache.store })]);
   h.net.on(
     "get",
     REQUEST_URL,
@@ -41,7 +67,9 @@ it.each([false, true])(
     expect(h.cache.set).toHaveBeenCalledTimes(1);
     expect(h.cache.entries.size).toBe(1);
     const second = await run(h, { cache: true });
-    expect(second).toBe(first);
+    expect(second).not.toBe(first);
+    expect(second.data).toEqual(first.data);
+    expect(second.ok).toBe(true);
     expect(h.net.totalStarted).toBe(SENDS_PER_REFRESH);
     expect(h.settings.onRefresh).toHaveBeenCalledTimes(1);
   },
@@ -56,14 +84,15 @@ it("[auth.cb.onRefresh × cache.req.cache.key] 显式 key：刷新重放成功�
   expect(key).toBe(CACHE_KEY);
   const second = await run(h, { cache: { key: CACHE_KEY } });
   expect(second.ok).toBe(true);
-  expect(second).toBe(first);
+  expect(second).not.toBe(first);
+  expect(second.data).toEqual(first.data);
   expect(h.net.totalStarted).toBe(SENDS_PER_REFRESH);
 });
 
 it("[auth.reason.expired × cache.req.cache] 刷新失败落定为 auth 过期：失败结果不写缓存，重新登录后请求照常触网并缓存", /** 只有成功才进缓存，过期结果不会毒化缓存。 */ async () => {
   const h = client(false, { onRefresh: /** 刷新失败。 */ () => false });
   const expired = await run(h, { cache: true });
-  expect(expired).toMatchObject({ kind: "auth", reason: "expired", status: 401 });
+  expect(expired).toMatchObject({ status: 401, [AXP_FAILURE]: { type: "auth", reason: "expired" } });
   expect(h.settings.onAccessExpired).toHaveBeenCalledTimes(1);
   expect(h.net.totalStarted).toBe(EXPIRED_SENDS);
   expect(h.cache.set).not.toHaveBeenCalled();
@@ -82,10 +111,12 @@ it("[auth.cb.onRefresh × cache.req.cache] 并发 401（未开 share）：单飞
   expect(h.settings.onRefresh).toHaveBeenCalledTimes(1);
   expect(h.net.totalStarted).toBe(CALLERS * SENDS_PER_REFRESH);
   expect(h.cache.entries.size).toBe(1);
-  expect([...h.cache.entries.values()].every(/** 缓存里没有失败结果。 */ (e) => e.response.ok)).toBe(true);
+  expect([...h.cache.entries.values()].every(/** 快照全部来自成功结果。 */ (e) => e.snapshot.failure === undefined && e.snapshot.status === 200 && e.snapshot.code === 0)).toBe(true);
   const before = h.net.totalStarted;
   const [hit] = await settleAll(h.send({ url: REQUEST_URL, cache: true }));
   expect(hit.ok).toBe(true);
+  expect(results).not.toContain(hit);
+  expect(hit.data).toEqual([...h.cache.entries.values()][0].snapshot.data);
   expect(h.net.totalStarted).toBe(before);
 });
 
@@ -95,7 +126,9 @@ it("[auth.cb.onRefresh × cache.req.cache] 命中缓存不经过服务端：即�
   expect(first.ok).toBe(true);
   h.net.on("get", REQUEST_URL, /** 此后服务端一律拒绝。 */ () => failure(401));
   const second = await run(h, { cache: true });
-  expect(second).toBe(first);
+  expect(second).not.toBe(first);
+  expect(second.data).toEqual(first.data);
+  expect(second.ok).toBe(true);
   expect(h.net.totalStarted).toBe(SENDS_PER_REFRESH);
   expect(h.settings.onRefresh).toHaveBeenCalledTimes(1);
   expect(h.settings.onAccessExpired).not.toHaveBeenCalled();

@@ -100,7 +100,7 @@ it.each([403, 500])("[mock.cb.fallbackWhen] mock 返回 %i 说明 mock 存在，
   const h = mockClient();
   h.net.on("get", `${MOCK}${REAL}`, () => ({ status }));
   const r = await h.send({ url: REAL, mock: true });
-  expect(r.httpStatus).toBe(status);
+  expect(r.status).toBe(status);
   expect(h.net.calls("get", REAL)).toBe(0);
 });
 
@@ -116,14 +116,14 @@ it("[mock.req.mock.fallbackWhen][mock.cb.fallbackWhen] 请求级判定覆盖插�
   const pluginLevel = vi.fn(() => false);
   const h = mockClient({ fallbackWhen: pluginLevel });
   h.net.on("get", `${MOCK}${REAL}`, () => ({ status: 500 }));
-  const requestLevel = vi.fn((r: { httpStatus: number }) => r.httpStatus === 500);
+  const requestLevel = vi.fn((r: { status: number }) => r.status === 500);
   const r = await h.send({ url: REAL, mock: { fallbackWhen: requestLevel } });
   expect(r.data).toBe(REAL_DATA);
   expect(requestLevel).toHaveBeenCalledOnce();
-  expect(requestLevel.mock.calls[0][0]).toMatchObject({ httpStatus: 500, kind: "http" });
+  expect(requestLevel.mock.calls[0][0]).toMatchObject({ status: 500, ok: false });
   expect(pluginLevel).not.toHaveBeenCalled();
   const fallback = await h.send({ url: REAL, mock: true });
-  expect(fallback.httpStatus).toBe(500);
+  expect(fallback.status).toBe(500);
   expect(pluginLevel).toHaveBeenCalledOnce();
 });
 

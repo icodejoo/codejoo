@@ -30,8 +30,10 @@ it("[core.req.key × cache.req.cache] 不写 key 也自动计算：相同 method
   const first = await call(h, { params: { a: 1, b: 2 } });
   const reordered = await call(h, { params: { b: 2, a: 1 } });
   const different = await call(h, { params: { a: 1, b: 3 } });
-  expect(reordered).toBe(first);
-  expect(different).not.toBe(first);
+  expect(reordered).not.toBe(first);
+  expect(reordered.data).toEqual(first.data);
+  expect(reordered.request.params).toEqual({ b: 2, a: 1 });
+  expect(different.data).not.toEqual(first.data);
   expect(h.net.calls("get", URL)).toBe(2);
 });
 
@@ -43,10 +45,13 @@ it("[core.req.key × cache.opt.methods] 有请求体的方法把 data 并入 key
   const textA = await call(h, { method: "post", data: "alpha" });
   const textB = await call(h, { method: "post", data: "beta" });
   const textAgain = await call(h, { method: "post", data: "alpha" });
-  expect(reordered).toBe(a);
-  expect(other).not.toBe(a);
-  expect(textB).not.toBe(textA);
-  expect(textAgain).toBe(textA);
+  expect(reordered).not.toBe(a);
+  expect(reordered.data).toEqual(a.data);
+  expect(reordered.request.data).toEqual({ y: 2, x: 1 });
+  expect(other.data).not.toEqual(a.data);
+  expect(textB.data).not.toEqual(textA.data);
+  expect(textAgain).not.toBe(textA);
+  expect(textAgain.data).toEqual(textA.data);
   expect(h.net.calls("post", URL)).toBe(4);
 });
 
@@ -67,11 +72,16 @@ it("[core.opt.key × cache.req.cache] key 服务的 scope 并入每个缓存键�
   let account = "alice";
   const h = client({ scope: () => account });
   const alice = await call(h, {});
-  expect(await call(h, {})).toBe(alice);
+  const aliceHit = await call(h, {});
+  expect(aliceHit).not.toBe(alice);
+  expect(aliceHit.data).toEqual(alice.data);
   account = "bob";
   const bob = await call(h, {});
-  expect(bob).not.toBe(alice);
+  expect(bob.data).not.toEqual(alice.data);
   account = "alice";
-  expect(await call(h, {})).toBe(alice);
+  const aliceAgain = await call(h, {});
+  expect(aliceAgain).not.toBe(alice);
+  expect(aliceAgain).not.toBe(aliceHit);
+  expect(aliceAgain.data).toEqual(alice.data);
   expect(h.net.calls("get", URL)).toBe(2);
 });

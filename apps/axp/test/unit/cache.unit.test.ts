@@ -47,11 +47,11 @@ it("[cache.fn.$resolveCloneFn][cache.opt.clone] deep 用 structuredClone 完整�
 });
 
 for (const [label, response, expected] of [
-  ["HTTP 200 无信封", new AxpResponse({ httpStatus: 200, data: 1 }), true],
-  ["HTTP 200 业务码 0", new AxpResponse({ httpStatus: 200, code: 0, data: 1 }), true],
-  ["HTTP 200 业务失败码", new AxpResponse({ httpStatus: 200, code: 500, data: null }), false],
-  ["HTTP 500 即使业务码 0", new AxpResponse({ httpStatus: 500, code: 0, data: null }), false],
-  ["网络错误", new AxpResponse({ kind: "network" }), false],
+  ["HTTP 200 无信封", new AxpResponse({ status: 200, data: 1 }), true],
+  ["HTTP 200 业务码 0", new AxpResponse({ status: 200, code: 0, data: 1 }), true],
+  ["HTTP 200 业务失败码", new AxpResponse({ status: 200, code: 500, data: null }), false],
+  ["HTTP 500 即使业务码 0", new AxpResponse({ status: 500, code: 0, data: null }), false],
+  ["网络错误", new AxpResponse({ failure: "network" }), false],
 ] as const) {
   it(`[cache.fn.$defaultShouldCache][cache.cb.shouldCache] 默认读归一化的 r.ok：${label}`, () => {
     expect($defaultShouldCache(response)).toBe(expected);

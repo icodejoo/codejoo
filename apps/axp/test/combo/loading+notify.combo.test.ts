@@ -4,12 +4,12 @@ import axpNotify from "../../src/plugins/notify";
 import type { AxpPlugin } from "../../src/types";
 import type { AxpResponse } from "../../src/response";
 import { loadingRecorder, notifyRecorder, uiClient } from "../helpers/ui";
-import { customResponse } from "../helpers/client";
+import { customResponse, type TestResponse } from "../helpers/client";
 
 /** 默认回调的事件标签。 */
 const LOADING_LABEL = "main";
 /** 缺少业务消息时的默认提示。 */
-const FAILURE_MESSAGE = "http 500";
+const FAILURE_MESSAGE = "status 500";
 /** 内置显示插件名。 */
 const LOADING_NAME = "axp:loading";
 /** 逻辑请求外层阶段。 */
@@ -45,10 +45,10 @@ it("[loading.cb.loading][notify.cb.notify] 任意注册顺序仍是一对显示�
   ]);
 });
 it("[loading.cb.loading][notify.cb.stringify][notify.combo.taps] taps 的 outer 段和 notify 看到最终 R，inspect 顺序固定", /** 跨阶段 tap 与响应身份。 */ async () => {
-  const h = uiClient([], { response: customResponse() });
+  const h = uiClient<TestResponse>([], { response: customResponse() });
   const results: unknown[] = [];
   const notify = vi.fn(notifyRecorder(h.events));
-  const taps: AxpPlugin<AxpResponse> = {
+  const taps: AxpPlugin<TestResponse> = {
     name: "audit",
     taps: [
       {
@@ -64,7 +64,7 @@ it("[loading.cb.loading][notify.cb.stringify][notify.combo.taps] taps 的 outer 
     ],
   };
   h.api.use(taps);
-  h.api.use(axpNotify<AxpResponse>({ notify }));
+  h.api.use(axpNotify<TestResponse>({ notify }));
   h.api.use(axpLoading({ loading: loadingRecorder(h.events) }));
   h.net.fallback(/** 追踪字段来自假网络响应头。 */ () => ({ status: 500, headers: { "x-trace-id": TRACE_ID } }));
   const pending = h.send();
@@ -115,7 +115,7 @@ it("[core.req.throws][loading.cb.finally] 正常抛出最终失败 R 前，通�
   const pending = h.send({ throws: true }).catch(/** 捕获内核直接抛出的 R。 */ (response: unknown) => response);
   await vi.runAllTimersAsync();
   const response = await pending;
-  expect(response).toMatchObject({ kind: "http", status: 500 });
+  expect(response).toMatchObject({ ok: false, status: 500 });
   expect(notify).toHaveBeenCalledExactlyOnceWith(FAILURE_MESSAGE, response);
   expect(h.events.loading.get(LOADING_LABEL)).toEqual([true, false]);
 });

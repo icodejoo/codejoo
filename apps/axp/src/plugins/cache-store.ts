@@ -1,34 +1,77 @@
+import type { AxpFailureType } from "../response";
+
+/** 可能同步也可能异步的返回值。
+ * @example `const count: MaybePromise<number> = Promise.resolve(1)`
+ */
+export type MaybePromise<T> = T | Promise<T>;
+
+/** 可序列化的响应数据；业务数据与扩展字段应由调用方保证可序列化。
+ * @example `const snapshot: IAxpCacheSnapshot = { status: 200, code: 0, message: '', data: 'ok' }`
+ */
+export interface IAxpCacheSnapshot {
+  /** 原始 HTTP 状态。 */
+  status: number;
+  /** 业务码。 */
+  code?: string | number;
+  /** 响应消息。 */
+  message?: string | null;
+  /** 业务数据。 */
+  data: unknown;
+  /** 细分原因。 */
+  reason?: string;
+  /** 内核失败类别。 */
+  failure?: AxpFailureType;
+  /** 自有可枚举的扩展数据字段，无扩展时省略。 */
+  extra?: Record<string, unknown>;
+}
+
 /** 默认内存容量。 */
 const DEFAULT_MAX = 500;
 /** 有限有效期条目的最小清扫间隔；实际间隔取它与当前条目数的较大者，容量不限时也不会无界增长，且摊销后每次写入仍是常数。 */
 const SWEEP_INTERVAL = 64;
 
 /**
- * 缓存条目，响应引用由调用方管理。
- * @example const entry: IAxpCacheEntry<string> = { response: 'ok', expiresAt: Infinity };
+ * 缓存条目，只保存响应快照。
+ * @example `const entry: IAxpCacheEntry = { snapshot: { status: 200, code: 0, message: '', data: 'ok' }, expiresAt: Infinity }`
  */
-export interface IAxpCacheEntry<R> {
-  /** 缓存响应。 */
-  response: R;
+export interface IAxpCacheEntry {
+  /** 缓存快照。 */
+  snapshot: IAxpCacheSnapshot;
   /** 绝对过期时间（毫秒），等于当前时间即过期。 */
   expiresAt: number;
 }
 
 /**
- * 同步缓存仓；size 包含尚未惰性清理的过期条目。
- * @example const store: IAxpCacheStore<string> = createMemoryStore();
+ * 同步或异步缓存仓；size 可包含尚未惰性清理的过期条目。
+ * @example `const store: IAxpCacheStore = createMemoryStore()`
  */
-export interface IAxpCacheStore<R> {
-  /** 读取条目，过期返回 undefined。 */
-  get(key: string): IAxpCacheEntry<R> | undefined;
-  /** 写入条目。 */
-  set(key: string, entry: IAxpCacheEntry<R>): void;
-  /** 删除条目，返回是否存在。 */
-  delete(key: string): boolean;
-  /** 清空条目。 */
-  clear(): void;
-  /** 当前物理条目数。 */
-  readonly size: number;
+export interface IAxpCacheStore {
+  /** 读取条目。
+   * @param key 缓存键。
+   * @returns 条目或 undefined，可异步返回。
+   * @example `await store.get('pets')`
+   */
+  get(key: string): MaybePromise<IAxpCacheEntry | undefined>;
+  /** 写入条目。
+   * @param key 缓存键。
+   * @param entry 纯数据快照与过期时间。
+   * @returns 写入完成，可异步返回。
+   * @example `await store.set('pets', entry)`
+   */
+  set(key: string, entry: IAxpCacheEntry): MaybePromise<void>;
+  /** 删除条目。
+   * @param key 缓存键。
+   * @returns 是否存在，可异步返回。
+   * @example `await store.delete('pets')`
+   */
+  delete(key: string): MaybePromise<boolean>;
+  /** 清空条目。
+   * @returns 清掉的条数；不返回时插件取清空前 size，两者均无时计零。
+   * @example `await store.clear()`
+   */
+  clear(): MaybePromise<number | void>;
+  /** 当前物理条目数，异步存储可以省略。 */
+  readonly size?: number;
 }
 
 /**
@@ -47,14 +90,14 @@ export interface IAxpMemoryStoreOptions {
  * 写入超容量时按容量节流（每 max 次溢出写入最多扫一次），有限有效期的条目每写入 64 次也扫一次。
  * 写入超容量时再淘汰最久未用的条目。
  * @param options 容量和时钟配置。
- * @returns 泛型响应缓存仓，不拷贝响应。
- * @example const store = createMemoryStore<string>({ max: 2 });
+ * @returns 同步快照缓存仓，不拷贝业务数据。
+ * @example `const store = createMemoryStore({ max: 2 })`
  */
-export function createMemoryStore<R>(options: IAxpMemoryStoreOptions = {}): IAxpCacheStore<R> {
+export function createMemoryStore(options: IAxpMemoryStoreOptions = {}) {
   const requestedMax = options.max ?? DEFAULT_MAX;
   const max = requestedMax >= 1 ? requestedMax : DEFAULT_MAX;
   const now = options.now ?? Date.now;
-  const entries = new Map<string, IAxpCacheEntry<R>>();
+  const entries = new Map<string, IAxpCacheEntry>();
   /** 上次清扫后的溢出写入次数；初始即到期，首次溢出必扫。 */
   let overflowsSinceSweep = Infinity;
   /** 上次清扫后有限有效期条目的写入次数。 */
@@ -73,7 +116,7 @@ export function createMemoryStore<R>(options: IAxpMemoryStoreOptions = {}): IAxp
   }
   return {
     /** 命中提升为最近使用；到期立即删除。 */
-    get(key) {
+    get(key: string) {
       const entry = entries.get(key);
       if (!entry) return undefined;
       entries.delete(key);
@@ -82,7 +125,7 @@ export function createMemoryStore<R>(options: IAxpMemoryStoreOptions = {}): IAxp
       return entry;
     },
     /** 替换也提升顺序；按节流清扫过期项，溢出时再淘汰最久未用的条目。 */
-    set(key, entry) {
+    set(key: string, entry: IAxpCacheEntry) {
       entries.delete(key);
       entries.set(key, entry);
       if (entry.expiresAt !== Infinity && ++finiteWritesSinceSweep >= sweepThreshold) sweep();
@@ -94,12 +137,14 @@ export function createMemoryStore<R>(options: IAxpMemoryStoreOptions = {}): IAxp
       }
     },
     /** 返回实际删除结果。 */
-    delete(key) {
+    delete(key: string) {
       return entries.delete(key);
     },
     /** 清空物理条目。 */
     clear() {
+      const count = entries.size;
       entries.clear();
+      return count;
     },
     /** 获取物理条目数，不扫描过期项。 */
     get size() {

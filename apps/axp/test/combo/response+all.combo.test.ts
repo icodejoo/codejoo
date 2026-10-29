@@ -1,3 +1,4 @@
+import { failureOf } from "../../src/response";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import axpAuth, { type IAuthOptions } from "../../src/plugins/auth";
 import axpCache from "../../src/plugins/cache";
@@ -8,7 +9,7 @@ import axpNotify from "../../src/plugins/notify";
 import axpRepath from "../../src/plugins/repath";
 import axpRetry from "../../src/plugins/retry";
 import axpShare from "../../src/plugins/share";
-import { AXP_KINDS, type AxpKind } from "../../src/response";
+import { AXP_FAILURES, type AxpFailureType } from "../../src/response";
 import type { AxpLogger, AxpRequestConfig } from "../../src/types";
 import { authSettings, deferred, failure, guarded, REQUEST_URL, TOKEN_NEW } from "../helpers/b3";
 import { customResponse, recordEvents, TestResponse } from "../helpers/client";
@@ -85,9 +86,11 @@ async function finish(h: ReturnType<typeof fullClient>): Promise<TestResponse[]>
   return h.requests.map(/** 落定值。 */ (request) => request.value as TestResponse);
 }
 /** 断言响应是自定义 R：类别、原因与追踪标识。 */
-function expectCustom(r: TestResponse, kind: AxpKind, reason: string | undefined, trace: string) {
+function expectCustom(r: TestResponse, type: AxpFailureType | undefined, reason: string | undefined, trace: string, ok = type === undefined) {
   expect(r).toBeInstanceOf(TestResponse);
-  expect(r).toMatchObject({ kind, reason, traceId: trace });
+  expect(r.traceId).toBe(trace);
+  expect(failureOf(r)).toEqual(type ? { type, reason } : undefined);
+  expect(r.ok).toBe(ok);
 }
 
 describe("[core.opt.response][core.fn.createAxp] 自定义 R + 全部内置插件：各插件经 ctx.fail 合成或派生的响应也是自定义 R，扩展字段存在", () => {
@@ -96,7 +99,7 @@ describe("[core.opt.response][core.fn.createAxp] 自定义 R + 全部内置插�
     h.net.on("get", REQUEST_URL, () => traced(401, TRACE.expired));
     send(h);
     const [r] = await finish(h);
-    expectCustom(r, AXP_KINDS.AUTH, "expired", TRACE.expired);
+    expectCustom(r, AXP_FAILURES.AUTH, "expired", TRACE.expired);
     h.dispose();
   });
 
@@ -105,7 +108,7 @@ describe("[core.opt.response][core.fn.createAxp] 自定义 R + 全部内置插�
     h.net.on("get", REQUEST_URL, () => traced(403, TRACE.denied));
     send(h);
     const [r] = await finish(h);
-    expectCustom(r, AXP_KINDS.AUTH, "denied", TRACE.denied);
+    expectCustom(r, AXP_FAILURES.AUTH, "denied", TRACE.denied);
     h.dispose();
   });
 
@@ -114,7 +117,7 @@ describe("[core.opt.response][core.fn.createAxp] 自定义 R + 全部内置插�
     h.settings.tokenManager.clear();
     send(h);
     const [r] = await finish(h);
-    expectCustom(r, AXP_KINDS.AUTH, "unauthenticated", NO_TRACE);
+    expectCustom(r, AXP_FAILURES.AUTH, "unauthenticated", NO_TRACE);
     expect(h.net.totalStarted).toBe(0);
     h.dispose();
   });
@@ -125,8 +128,8 @@ describe("[core.opt.response][core.fn.createAxp] 自定义 R + 全部内置插�
     send(h, { share: true, latency: SLOW } as never);
     send(h, { share: true, latency: SLOW, timeout: FOLLOWER_TIMEOUT, retry: false } as never);
     const [leader, follower] = await finish(h);
-    expectCustom(leader, AXP_KINDS.OK, undefined, TRACE.ok);
-    expectCustom(follower, AXP_KINDS.TIMEOUT, undefined, NO_TRACE);
+    expectCustom(leader, undefined, undefined, TRACE.ok);
+    expectCustom(follower, AXP_FAILURES.TIMEOUT, undefined, NO_TRACE);
     expect(h.net.totalStarted).toBe(1);
     h.dispose();
   });
@@ -140,8 +143,8 @@ describe("[core.opt.response][core.fn.createAxp] 自定义 R + 全部内置插�
     await vi.advanceTimersByTimeAsync(CANCEL_AT);
     follower.abort();
     const [leader, cancelled] = await finish(h);
-    expectCustom(leader, AXP_KINDS.OK, undefined, TRACE.ok);
-    expectCustom(cancelled, AXP_KINDS.CANCEL, undefined, NO_TRACE);
+    expectCustom(leader, undefined, undefined, TRACE.ok);
+    expectCustom(cancelled, AXP_FAILURES.CANCEL, undefined, NO_TRACE);
     h.dispose();
   });
 
@@ -152,7 +155,7 @@ describe("[core.opt.response][core.fn.createAxp] 自定义 R + 全部内置插�
     await vi.advanceTimersByTimeAsync(CANCEL_AT);
     expect(h.api.cancelAll()).toBe(1);
     const [r] = await finish(h);
-    expectCustom(r, AXP_KINDS.CANCEL, undefined, NO_TRACE);
+    expectCustom(r, AXP_FAILURES.CANCEL, undefined, NO_TRACE);
     h.dispose();
   });
 
@@ -176,21 +179,24 @@ describe("[core.opt.response][core.fn.createAxp] 自定义 R + 全部内置插�
     expect(h.api.cancelAll()).toBe(2);
     gate.resolve(true);
     const results = await finish(h);
-    for (const r of results) expectCustom(r, AXP_KINDS.CANCEL, undefined, NO_TRACE);
+    for (const r of results) expectCustom(r, AXP_FAILURES.CANCEL, undefined, NO_TRACE);
     h.dispose();
   });
 
-  it("[cache.opt.clone][cache.req.cache] 缓存命中按 clone 派生的响应：沿用来源的追踪标识，data 是拷贝", async () => {
+  it("[cache.opt.clone][cache.req.cache] 缓存命中经工厂重建自定义 R：保留快照追踪标识，data 是拷贝", async () => {
     const h = fullClient();
     h.net.on("get", REQUEST_URL, () => traced(200, TRACE.ok, { list: [1] }));
     send(h, { cache: true });
     await h.drain();
     send(h, { cache: true });
     const [miss, hit] = await finish(h);
-    expectCustom(miss, AXP_KINDS.OK, undefined, TRACE.ok);
-    expectCustom(hit, AXP_KINDS.OK, undefined, TRACE.ok);
+    expectCustom(miss, undefined, undefined, TRACE.ok);
+    expectCustom(hit, undefined, undefined, TRACE.ok);
     expect(hit).not.toBe(miss);
     expect(hit.data).toEqual(miss.data);
+    expect(hit.data).not.toBe(miss.data);
+    expect(hit.request).not.toBe(miss.request);
+    expect(hit.raw).toBeUndefined();
     expect(h.net.totalStarted).toBe(1);
     h.dispose();
   });
@@ -204,7 +210,8 @@ describe("[core.opt.response][core.fn.createAxp] 自定义 R + 全部内置插�
     const thrown = h.requests[0];
     expect(thrown.outcome).toBe("rejected");
     const r = thrown.value as TestResponse;
-    expectCustom(r, AXP_KINDS.HTTP, undefined, TRACE.failed);
+    expectCustom(r, undefined, undefined, TRACE.failed, false);
+    expect(r.status).toBe(404);
     expect(r.stack).toBeTypeOf("string");
     h.dispose();
   });
@@ -218,6 +225,6 @@ it("[core.opt.response] 全插件在成功路径上同样产出自定义 R：服
   }));
   send(h);
   const [r] = await finish(h);
-  expectCustom(r, AXP_KINDS.OK, undefined, TRACE.ok);
+  expectCustom(r, undefined, undefined, TRACE.ok);
   h.dispose();
 });

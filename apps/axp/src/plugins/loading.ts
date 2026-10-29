@@ -43,7 +43,7 @@ function shorthand(value: unknown): Partial<ILoadingOptions> | undefined {
  * @returns 每客户端在 setup 建立独立计数的插件。
  * @example `axpLoading({ loading: visible => spinner.toggle(visible), delay: 100 })`
  */
-export default function axpLoading<R extends IAxpResponse = AxpResponse>(options: ILoadingOptions = {}): AxpPlugin<R> {
+export default function axpLoading<R extends IAxpResponse<unknown, string | number> = AxpResponse>(options: ILoadingOptions = {}): AxpPlugin<R> {
   const base = resolveOption<ILoadingOptions, typeof DEFAULTS>(undefined, options, DEFAULTS);
   return {
     name: NAME,

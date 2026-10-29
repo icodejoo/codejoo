@@ -1,6 +1,7 @@
+import { failureOf } from "../../src/response";
 import { beforeEach, expect, it, vi } from "vitest";
 import axpShare, { type ISharedOptions } from "../../src/plugins/share";
-import { AXP_KINDS, type AxpResponse } from "../../src/response";
+import { AXP_FAILURES, type AxpResponse } from "../../src/response";
 import type { AxpPlugin } from "../../src/types";
 import { customResponse, TestResponse } from "../helpers/client";
 import { customSourceClient, envelope, signalAdapter, sourceClient, trackAbortListeners, type IWireCall } from "../helpers/source";
@@ -35,7 +36,7 @@ it("[share.opt.policy][share.fn.subscribe] start 首发取消只结束自己，�
   const b = h.send({ url: URL, share: true });
   leader.abort();
   const [first, second] = await settled(a, b);
-  expect(first.kind).toBe(AXP_KINDS.CANCEL);
+  expect(failureOf(first)?.type).toBe(AXP_FAILURES.CANCEL);
   expect(second.ok).toBe(true);
   expect(second.data).toBe("done-1");
   expect(h.calls).toHaveLength(1);
@@ -54,7 +55,7 @@ it("[share.opt.policy][share.fn.subscribe] start 全部订阅者都取消才中�
   expect(h.calls[0].signal!.aborted).toBe(false);
   two.abort();
   const [first, second] = await settled(a, b);
-  expect([first.kind, second.kind]).toEqual([AXP_KINDS.CANCEL, AXP_KINDS.CANCEL]);
+  expect([failureOf(first)?.type, failureOf(second)?.type]).toEqual([AXP_FAILURES.CANCEL, AXP_FAILURES.CANCEL]);
   expect(h.calls[0].signal!.aborted).toBe(true);
   const [fresh] = await settled(h.send({ url: URL, share: true }));
   expect(fresh.data).toBe("done-2");
@@ -70,7 +71,7 @@ it("[share.opt.policy] start 首发取消后新来的订阅者仍复用同一个
   await vi.advanceTimersByTimeAsync(1);
   const late = h.send({ url: URL, share: true });
   const [first, second, third] = await settled(a, b, late);
-  expect(first.kind).toBe(AXP_KINDS.CANCEL);
+  expect(failureOf(first)?.type).toBe(AXP_FAILURES.CANCEL);
   expect(second).toBe(third);
   expect(second.data).toBe("done-1");
   expect(h.calls).toHaveLength(1);
@@ -89,7 +90,7 @@ it("[share.fn.axpShare] 到达共享层时逻辑信号已中止：直接 cancel�
     },
   });
   const r = await h.send({ url: URL, share: true, signal: controller.signal });
-  expect(r.kind).toBe(AXP_KINDS.CANCEL);
+  expect(failureOf(r)?.type).toBe(AXP_FAILURES.CANCEL);
   expect(h.calls).toHaveLength(0);
 });
 
@@ -98,7 +99,7 @@ it("[share.fn.subscribe] 跟随者按自己的 timeout 退出：它以 timeout �
   const a = h.send({ url: URL, share: true });
   const b = h.send({ url: URL, share: true, timeout: SHORT });
   const [first, follower] = await settled(a, b);
-  expect(follower.kind).toBe(AXP_KINDS.TIMEOUT);
+  expect(failureOf(follower)?.type).toBe(AXP_FAILURES.TIMEOUT);
   expect(follower.ok).toBe(false);
   expect(follower.message).toContain(`${SHORT}ms`);
   expect(first.data).toBe("done-1");
@@ -111,7 +112,7 @@ it("[share.fn.subscribe] 首发的 timeout 不连累跟随者：共享请求的 
   const a = h.send({ url: URL, share: true, timeout: SHORT });
   const b = h.send({ url: URL, share: true });
   const [leader, follower] = await settled(a, b);
-  expect(leader.kind).toBe(AXP_KINDS.TIMEOUT);
+  expect(failureOf(leader)?.type).toBe(AXP_FAILURES.TIMEOUT);
   expect(follower.data).toBe("done-1");
   expect(h.calls[0].timeout).toBe(0);
 });
@@ -125,7 +126,7 @@ it("[share.fn.subscribe] 分批超时：只在全部订阅者都离开后才中�
   await vi.advanceTimersByTimeAsync(LONG - SHORT);
   expect(h.calls[0].signal!.aborted).toBe(true);
   const [first, second] = await settled(a, b);
-  expect([first.kind, second.kind]).toEqual([AXP_KINDS.TIMEOUT, AXP_KINDS.TIMEOUT]);
+  expect([failureOf(first)?.type, failureOf(second)?.type]).toEqual([AXP_FAILURES.TIMEOUT, AXP_FAILURES.TIMEOUT]);
   const [fresh] = await settled(h.send({ url: URL, share: true }));
   expect(fresh.data).toBe("done-2");
 });
@@ -148,7 +149,8 @@ it("[share.fn.subscribe] 订阅落定后清除计时器与 abort 监听（共享
   ];
   cancel.abort();
   const results = await settled(...pending);
-  expect(results.map((r) => r.kind)).toEqual([AXP_KINDS.OK, AXP_KINDS.CANCEL, AXP_KINDS.TIMEOUT]);
+  expect(results.map((r) => failureOf(r)?.type)).toEqual([undefined, AXP_FAILURES.CANCEL, AXP_FAILURES.TIMEOUT]);
+  expect(results[0].ok).toBe(true);
   expect(listeners()).toBe(0);
   expect(vi.getTimerCount()).toBe(0);
 });
@@ -165,7 +167,7 @@ it("[share.fn.$createEntry] 旧一轮迟到的结果不会落定或删除同 key
   const second = h.send({ url: URL, share: true, latency: 30 } as never);
   const third = h.send({ url: URL, share: true, latency: 30 } as never);
   const results = await settled(first, second, third);
-  expect(results[0].kind).toBe(AXP_KINDS.CANCEL);
+  expect(failureOf(results[0])?.type).toBe(AXP_FAILURES.CANCEL);
   expect(results[1]).toBe(results[2]);
   expect(results[1].data).toBe("hit-2");
   expect(h.net.calls("get", URL)).toBe(2);
@@ -180,7 +182,7 @@ it("[share.method.lifecycle] 卸载后在途轮次的订阅者全部取消也能
   one.abort();
   h.api.cancelAll();
   const [first, second] = await settled(a, b);
-  expect([first.kind, second.kind]).toEqual([AXP_KINDS.CANCEL, AXP_KINDS.CANCEL]);
+  expect([failureOf(first)?.type, failureOf(second)?.type]).toEqual([AXP_FAILURES.CANCEL, AXP_FAILURES.CANCEL]);
   expect(h.calls[0].signal!.aborted).toBe(true);
 });
 
@@ -214,7 +216,7 @@ it("[share.opt.policy][share.fn.subscribe] end 与 race 的订阅者全部取消
     two.abort();
     // oxlint-disable-next-line no-await-in-loop -- 两种策略依次核对，避免共用假网络。
     const [first, second] = await settled(a, b);
-    expect([first.kind, second.kind]).toEqual([AXP_KINDS.CANCEL, AXP_KINDS.CANCEL]);
+    expect([failureOf(first)?.type, failureOf(second)?.type]).toEqual([AXP_FAILURES.CANCEL, AXP_FAILURES.CANCEL]);
     // oxlint-disable-next-line no-await-in-loop -- 取消后同 key 的新请求应重新开始。
     const [fresh] = await settled(h.send({ url: URL, share: true }));
     expect(fresh.ok).toBe(true);
@@ -236,7 +238,8 @@ it("[share.fn.axpShare] 自定义 R：share 合成的取消与超时响应也带
       .then(() => vi.runAllTimersAsync()),
   ]);
   expect([cancelled, timedOut, shared].every((r) => r instanceof TestResponse)).toBe(true);
-  expect([cancelled.kind, timedOut.kind, shared.kind]).toEqual([AXP_KINDS.CANCEL, AXP_KINDS.TIMEOUT, AXP_KINDS.OK]);
+  expect([failureOf(cancelled)?.type, failureOf(timedOut)?.type, failureOf(shared)?.type]).toEqual([AXP_FAILURES.CANCEL, AXP_FAILURES.TIMEOUT, undefined]);
+  expect(shared.ok).toBe(true);
 });
 
 it("[share.method.lifecycle] 重名 use 被拒绝；eject 重复调用安全，卸载后可用同一插件对象重装", async () => {
@@ -314,13 +317,13 @@ it("[share.fn.subscribe] 首发在订阅前被内层同步取消，以 cancel �
   h.net.on("get", "/shared-abort", () => envelope("ok"));
   const response = h.send({ url: "/shared-abort", share: true, signal: controller.signal });
   await vi.runAllTimersAsync();
-  expect((await response).kind).toBe(AXP_KINDS.CANCEL);
+  expect(failureOf(await response)?.type).toBe(AXP_FAILURES.CANCEL);
 });
 
 it("[share.fn.subscribe] 订阅者超时的文案沿用请求的 timeoutErrorMessage，没写时用与 axios 一致的默认文案", async () => {
   const h = signalClient();
   const [custom, plain] = await settled(h.send({ url: URL, share: true, timeout: SHORT, timeoutErrorMessage: "too slow" }), h.send({ url: URL, share: true, timeout: SHORT }));
-  expect([custom.kind, plain.kind]).toEqual([AXP_KINDS.TIMEOUT, AXP_KINDS.TIMEOUT]);
+  expect([failureOf(custom)?.type, failureOf(plain)?.type]).toEqual([AXP_FAILURES.TIMEOUT, AXP_FAILURES.TIMEOUT]);
   expect(custom.message).toBe("too slow");
   expect(plain.message).toBe(`timeout of ${SHORT}ms exceeded`);
 });
@@ -332,5 +335,5 @@ it("[share.fn.subscribe] 取消与超时同时成立时按取消告终，不会�
   await vi.advanceTimersByTimeAsync(SHORT - 1);
   cancel.abort();
   const [result] = await settled(pending);
-  expect(result.kind).toBe(AXP_KINDS.CANCEL);
+  expect(failureOf(result)?.type).toBe(AXP_FAILURES.CANCEL);
 });

@@ -1,3 +1,4 @@
+import { failureOf } from "../../src/response";
 import { beforeEach, expect, it, vi } from "vitest";
 import axpCache, { clearCache, removeCache, type ICacheOptions, type IAxpCacheEntry, type IAxpCacheStore } from "../../src/plugins/cache";
 import type { AxpResponse } from "../../src/response";
@@ -42,12 +43,13 @@ it("[cache.prop.name][cache.opt.enable] 名称为 axp:cache（不随选项变化
   expect(cachedClient().api.inspect()).toEqual([{ stage: "source", name: NAME }]);
 });
 
-it("[cache.req.cache] 首发未命中打网络，二发命中不触网并返回同一个 R（共享引用）", async () => {
+it("[cache.req.cache] 首发未命中打网络，二发命中不触网并重建 R（data 共享引用）", async () => {
   const h = cachedClient();
   const first = await call(h, { cache: true });
   const second = await call(h, { cache: true });
   expect(h.net.calls("get", URL)).toBe(1);
-  expect(second).toBe(first);
+  expect(second).not.toBe(first);
+  expect(second.data).toBe(first.data);
   expect(second.ok).toBe(true);
   expect((first.data as { hit: number }).hit).toBe(1);
 });
@@ -129,7 +131,8 @@ it("[cache.opt.methods] methods 可改为包含 POST（大小写不敏感），�
   const a1 = await call(h, { method: "post", data: { a: 1 }, cache: true });
   const a2 = await call(h, { method: "post", data: { a: 1 }, cache: true });
   const b = await call(h, { method: "post", data: { a: 2 }, cache: true });
-  expect(a2).toBe(a1);
+  expect(a2).not.toBe(a1);
+  expect(a2.data).toBe(a1.data);
   expect(b.data).toBe("post-2");
   await call(h, { cache: true });
   await call(h, { cache: true });
@@ -144,11 +147,14 @@ it("[cache.cb.shouldCache] 默认只缓存 r.ok：HTTP 失败与业务失败不�
     if (hit === 2) return { status: 200, data: { code: 500, data: null, message: "biz" } };
     return envelope(`ok-${hit}`);
   });
-  expect((await call(h, { cache: true })).httpStatus).toBe(500);
-  expect((await call(h, { cache: true })).kind).toBe("biz");
+  expect((await call(h, { cache: true })).status).toBe(500);
+  const failure = await call(h, { cache: true });
+  expect(failure.ok).toBe(false);
+  expect(failureOf(failure)).toBeUndefined();
   const good = await call(h, { cache: true });
   const again = await call(h, { cache: true });
-  expect(again).toBe(good);
+  expect(again).not.toBe(good);
+  expect(again.data).toBe(good.data);
   expect(h.net.calls("get", URL)).toBe(3);
 });
 
@@ -159,12 +165,13 @@ it("[cache.cb.shouldCache][cache.req.cache.shouldCache] 判定收到 R；请求�
   await call(h, { cache: true });
   expect(h.net.calls("get", URL)).toBe(2);
   expect(pluginLevel).toHaveBeenCalledTimes(2);
-  expect(pluginLevel.mock.calls[0][0]).toMatchObject({ ok: true, kind: "ok" });
+  expect(pluginLevel.mock.calls[0][0]).toMatchObject({ ok: true });
   h.net.on("get", URL, () => ({ status: 500 }));
-  const requestLevel = vi.fn((r: { httpStatus: number }) => r.httpStatus === 500);
+  const requestLevel = vi.fn((r: { status: number }) => r.status === 500);
   const failed = await call(h, { cache: { shouldCache: requestLevel }, key: "fail" });
   const hit = await call(h, { cache: { shouldCache: requestLevel }, key: "fail" });
-  expect(hit).toBe(failed);
+  expect(hit).not.toBe(failed);
+  expect(hit.data).toBe(failed.data);
   expect(hit.ok).toBe(false);
   expect(requestLevel).toHaveBeenCalledOnce();
 });
@@ -224,7 +231,8 @@ it("[cache.req.cache.key] 显式缓存键让不同地址共用一条缓存，不
   h.net.on("get", "/other", () => envelope("other"));
   const first = await call(h, { cache: { key: "same" } });
   const second = await call(h, { url: "/other", cache: { key: "same" } });
-  expect(second).toBe(first);
+  expect(second).not.toBe(first);
+  expect(second.data).toBe(first.data);
   expect(h.net.calls("get", "/other")).toBe(0);
 });
 
@@ -272,10 +280,10 @@ it("[cache.opt.max] 超出容量按 LRU 淘汰最久未使用的条目，命中�
   expect(h.net.calls("get", URL) - before).toBe(1);
 });
 
-it("[cache.opt.store] 注入的同步存储按 key 读写，插件不拷贝响应，卸载时不清空调用方的存储", async () => {
-  const entries = new Map<string, IAxpCacheEntry<AxpResponse>>();
-  const set = vi.fn((key: string, entry: IAxpCacheEntry<AxpResponse>) => void entries.set(key, entry));
-  const store: IAxpCacheStore<AxpResponse> = {
+it("[cache.opt.store] 注入的同步存储按 key 读写，插件存储快照，卸载时不清空调用方的存储", async () => {
+  const entries = new Map<string, IAxpCacheEntry>();
+  const set = vi.fn((key: string, entry: IAxpCacheEntry) => void entries.set(key, entry));
+  const store: IAxpCacheStore = {
     get: vi.fn((key: string) => entries.get(key)),
     set,
     delete: (key) => entries.delete(key),
@@ -288,7 +296,7 @@ it("[cache.opt.store] 注入的同步存储按 key 读写，插件不拷贝响�
   const first = await call(h, { cache: { key: "a" } });
   await call(h, { cache: { key: "b" } });
   expect(store.size).toBe(2);
-  expect(store.get("a")!.response).toBe(first);
+  expect(entries.get("a")!.snapshot.data).toBe(first.data);
   expect(set).toHaveBeenCalledTimes(2);
   expect(h.api.eject(NAME)).toBe(true);
   expect(store.size).toBe(2);

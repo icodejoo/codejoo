@@ -1,3 +1,4 @@
+import { AXP_FAILURE } from "../../src/response";
 import { beforeEach, expect, it, vi } from "vitest";
 import axpNotify from "../../src/plugins/notify";
 import axpRetry from "../../src/plugins/retry";
@@ -11,7 +12,7 @@ beforeEach(() => {
 });
 
 it.each([
-  [401, { kind: "auth", reason: "expired" }, 2],
+  [401, { [AXP_FAILURE]: { type: "auth", reason: "expired" } }, 2],
   [500, { ok: false, status: 500 }, 3],
 ] as const)(
   "[auth.cb.onAccessExpired][retry.opt.max][core.method.cancelAll][notify.cb.notify] 重放返回 %i：只通知一次、重试预算至多用一次，之后逻辑请求全部释放",

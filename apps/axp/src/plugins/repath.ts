@@ -58,7 +58,7 @@ function readData(data: unknown, key: string, used: IConsumedFields): unknown {
  * @returns 经 next(patch) 传递新请求视图的 prepare 插件。
  * @example `axpRepath({ removeKey: false })`
  */
-export default function axpRepath<R extends IAxpResponse = AxpResponse>(options: IRepathOptions = {}): AxpPlugin<R> {
+export default function axpRepath<R extends IAxpResponse<unknown, string | number> = AxpResponse>(options: IRepathOptions = {}): AxpPlugin<R> {
   const base = resolveOption<IRepathOptions, typeof DEFAULTS>(undefined, options, DEFAULTS);
   const basePattern = new RegExp(base.pattern.source, base.pattern.flags);
   return {

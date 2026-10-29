@@ -3,8 +3,8 @@ export type * from "./types";
 /* ── 内核：客户端、响应、上下文、key ───────────────────────────────────────── */
 export { createAxp } from "./client";
 
-export { AXP_KINDS, AXP_RESPONSE, AxpResponse, axpResponse, isAxpResponse } from "./response";
-export type { AxpKind, AxpResponseInit, IAxpEnvelope, IAxpResponse, IAxpResponseFactory, IAxpResponseOptions } from "./response";
+export { AXP_FAILURE, AXP_FAILURES, AXP_RESPONSE, AxpResponse, axpResponse, failureOf, isAxpCancel, isAxpResponse } from "./response";
+export type { AxpFailureType, IAxpFailure, AxpResponseInit, IAxpResponse, IAxpResponseFactory, IAxpResponseOptions } from "./response";
 
 export { stateKey } from "./context";
 export type { AxpContext, AxpStateKey } from "./context";
@@ -48,4 +48,4 @@ export { default as axpShare } from "./plugins/share";
 export type { ISharedOptions, ISharedRequestOptions, SharePolicy } from "./plugins/share";
 
 export { default as axpCache, clearCache, removeCache } from "./plugins/cache";
-export type { IAxpCacheEntry, IAxpCacheStore, ICacheApi, ICacheOptions, ICacheRequestOptions, TCloneStrategy } from "./plugins/cache";
+export type { IAxpCacheEntry, IAxpCacheSnapshot, IAxpCacheStore, MaybePromise, ICacheApi, ICacheOptions, ICacheRequestOptions, TCloneStrategy } from "./plugins/cache";

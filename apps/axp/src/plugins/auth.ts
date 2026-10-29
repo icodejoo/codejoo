@@ -3,7 +3,7 @@ import { cancelIfAborted, stateKey, type AxpContext } from "../context";
 import { normalizeMethod } from "../methods";
 import type { ITokenManager } from "../objects/TokenManager";
 import { resolveOption, type IPluginSwitch } from "../options";
-import { AXP_KINDS, type AxpResponse, type IAxpResponse } from "../response";
+import { failureOf, AXP_FAILURES, type AxpResponse, type IAxpResponse } from "../response";
 import type { AxpPlugin, AxpRequestConfig, AxpRequestPatch } from "../types";
 import { fireNotice, waitAbortable } from "../utils";
 import { compileMethods, compileUrlPatterns, pathnameOf, WILDCARD } from "./auth-match";
@@ -16,9 +16,13 @@ const INJECTED_TOKEN = stateKey<string | undefined>("auth:injected-token");
 const CALLBACK_ERROR = `[${NAME}] 鉴权通知回调失败`;
 /** 刷新实现抛错时的调试日志，仅 debug 开启才输出。 */
 const REFRESH_ERROR = `[${NAME}] onRefresh 抛错，按刷新失败处理`;
-/** 标准鉴权失败的逻辑状态。 */
+/** 刷新挂起时的调试日志，仅 debug 开启才输出。 */
+const REFRESH_TIMEOUT = `[${NAME}] onRefresh 超时，按刷新失败处理`;
+/** 默认刷新等待上限，避免刷新请求重入导致永久挂起。 */
+const DEFAULT_REFRESH_TIMEOUT = 30_000;
+/** 标准鉴权失败的 HTTP 状态。 */
 const UNAUTHORIZED = 401;
-/** 越权的逻辑状态。 */
+/** 越权的 HTTP 状态。 */
 const FORBIDDEN = 403;
 /** 异步 ready 期间 token 被替换时，最多准备凭证的次数；超过就以最后一次为准，避免无限追赶。 */
 const READY_STABLE_ATTEMPTS = 3;
@@ -37,13 +41,18 @@ export type AuthFailureAction = (typeof AuthFailureAction)[keyof typeof AuthFail
 /** 响应通知与刷新函数的统一参数顺序。
  * @example `const expired: TAuthFunc<void> = (r, tm) => showLogin(r.message)`
  */
-export type TAuthFunc<T, R extends IAxpResponse = IAxpResponse> = (response: R, tm: ITokenManager) => T | Promise<T>;
+export type TAuthFunc<T, R extends IAxpResponse<unknown, string | number> = IAxpResponse> = (response: R, tm: ITokenManager) => T | Promise<T>;
 /** 凭证注入与鉴权恢复选项。 */
-export interface IAuthOptions<R extends IAxpResponse = IAxpResponse> extends IPluginSwitch {
+export interface IAuthOptions<R extends IAxpResponse<unknown, string | number> = IAxpResponse> extends IPluginSwitch {
   /** 持有当前会话的管理器。 */
   tokenManager: ITokenManager;
-  /** 必填刷新实现，只有 false 和抛错算失败。 */
+  /** 必填刷新实现，返回 false、抛错或超时算失败。 */
   onRefresh: TAuthFunc<unknown, R>;
+  /** 刷新等待上限（毫秒），默认 30_000；0 或 Infinity 表示不限时。
+   * 超时按刷新失败处理，迟到的回调结果不再参与鉴权；回调自身的会话写入由调用方负责。
+   * @example `refreshTimeout: 5_000`
+   */
+  refreshTimeout?: number;
   /** 必填过期通知，每轮会话最多一次。 */
   onAccessExpired: TAuthFunc<unknown, R>;
   /** 拒绝访问通知，缺省沿用过期通知。 */
@@ -64,15 +73,15 @@ function defaultReady(tm: ITokenManager): AxpRequestPatch {
   return { headers: { Authorization: tm.accessToken } };
 }
 /** 装配期补齐默认路由和凭证注入。 */
-const DEFAULTS = { methods: WILDCARD, urlPattern: WILDCARD, ready: defaultReady };
-/** 按逻辑状态和本次注入快照判断是否需要刷新。
+const DEFAULTS = { methods: WILDCARD, urlPattern: WILDCARD, ready: defaultReady, refreshTimeout: DEFAULT_REFRESH_TIMEOUT };
+/** 按 HTTP 状态和本次注入快照判断是否需要刷新。
  * @param response 本次内层失败响应。
  * @param tm 当前会话管理器。
  * @param ctx 同一逻辑请求的状态。
  * @returns 五动作之一，与请求头的形态和名字无关。
  * @example `onFailure: defaultAuthFailure`
  */
-export function defaultAuthFailure<R extends IAxpResponse>(response: R, tm: ITokenManager, ctx: AxpContext<R>): AuthFailureAction {
+export function defaultAuthFailure<R extends IAxpResponse<unknown, string | number>>(response: R, tm: ITokenManager, ctx: AxpContext<R>): AuthFailureAction {
   if (response.status === UNAUTHORIZED) {
     const current = tm.accessToken;
     if (!current) return AuthFailureAction.Expired;
@@ -81,15 +90,15 @@ export function defaultAuthFailure<R extends IAxpResponse>(response: R, tm: ITok
   return response.status === FORBIDDEN ? AuthFailureAction.Deny : AuthFailureAction.Others;
 }
 /** 构造过期失败；from 为触发它的原响应，没有原响应时省略。 */
-function expiredFailure<R extends IAxpResponse>(ctx: AxpContext<R>, from?: R): R {
-  return ctx.fail({ kind: AXP_KINDS.AUTH, reason: AuthFailureAction.Expired, from });
+function expiredFailure<R extends IAxpResponse<unknown, string | number>>(ctx: AxpContext<R>, from?: R): R {
+  return ctx.fail({ failure: AXP_FAILURES.AUTH, reason: AuthFailureAction.Expired, from });
 }
 /** 在每个客户端维护单飞刷新，凭证层至多重放一次。
  * @param options 会话管理器、刷新实现和通知回调。
  * @returns credential 阶段鉴权插件。
  * @example `axpAuth({ tokenManager, onRefresh, onAccessExpired })`
  */
-export default function axpAuth<R extends IAxpResponse = AxpResponse>(options: IAuthOptions<R>): AxpPlugin<R> {
+export default function axpAuth<R extends IAxpResponse<unknown, string | number> = AxpResponse>(options: IAuthOptions<R>): AxpPlugin<R> {
   if (!options?.tokenManager) throw new Error(`[${NAME}] options.tokenManager is required`);
   if (typeof options.onRefresh !== "function") throw new Error(`[${NAME}] options.onRefresh is required`);
   if (typeof options.onAccessExpired !== "function") throw new Error(`[${NAME}] options.onAccessExpired is required`);
@@ -124,13 +133,19 @@ export default function axpAuth<R extends IAxpResponse = AxpResponse>(options: I
         refreshing = Promise.resolve()
           .then(
             /** 先挂好单飞承诺，再运行用户刷新代码。 */ async () => {
+              const token = tm.accessToken;
               let success: boolean;
               try {
-                success = (await base.onRefresh(response, tm)) !== false;
+                const pending = Promise.resolve(base.onRefresh(response, tm)).then(/** 先归一为布尔值，让 undefined 专门表示超时。 */ (value) => value !== false);
+                const timeout = base.refreshTimeout === 0 || base.refreshTimeout === Infinity ? undefined : base.refreshTimeout;
+                const result = await waitAbortable(pending, undefined, timeout);
+                if (result === undefined) ctx.log.warn(REFRESH_TIMEOUT);
+                success = result === true;
               } catch (error) {
                 ctx.log.warn(REFRESH_ERROR, error);
                 success = false;
               }
+              if (!success && tm.accessToken !== token) return true;
               if (!success) expire(response);
               return success;
             },
@@ -143,13 +158,20 @@ export default function axpAuth<R extends IAxpResponse = AxpResponse>(options: I
         return refreshing;
       }
       /** 准备凭证并记下实际使用的 token：异步 ready 期间 token 若被替换，就用新 token 重做，保证快照与注入一致。 */
-      async function prepare(request: Readonly<AxpRequestConfig>) {
+      async function prepare(ctx: AxpContext<R>) {
         let token: string | undefined;
         let patch: AxpRequestPatch | void;
         let attempt = 0;
         do {
           token = tm.accessToken;
-          patch = await base.ready(tm, request);
+          const result = base.ready(tm, ctx.request);
+          if (result && "then" in result) {
+            const pending = Promise.resolve(result);
+            // 回调可能同步取消后才交出拒绝承诺；waitAbortable 的已取消快路径不观察它。
+            void pending.catch(/** 被放弃的拒绝也必须已观察；等待期间的异常仍由 waitAbortable 原样传出。 */ () => undefined);
+            patch = await waitAbortable(pending, ctx.signal);
+          } else patch = result;
+          if (cancelIfAborted(ctx)) break;
         } while (token !== tm.accessToken && ++attempt < READY_STABLE_ATTEMPTS);
         return { token, patch };
       }
@@ -165,7 +187,7 @@ export default function axpAuth<R extends IAxpResponse = AxpResponse>(options: I
           const forced = request.protected;
           const decision = typeof forced === "boolean" ? forced : base.isProtected?.(request);
           const protectedRequest = typeof decision === "boolean" ? decision : matchMethod(normalizeMethod(request.method)) && matchUrl(pathnameOf(request.url ?? ""));
-          if (!protectedRequest) return next();
+          if (!protectedRequest) return cancelIfAborted(ctx) ?? next();
           ctx.markReplayable();
           if (refreshing) {
             const failure = await joinRefresh(refreshing, ctx);
@@ -173,23 +195,34 @@ export default function axpAuth<R extends IAxpResponse = AxpResponse>(options: I
           }
           let replayed = false;
           while (true) {
+            const cancelledBeforePrepare = cancelIfAborted(ctx);
+            if (cancelledBeforePrepare) return cancelledBeforePrepare;
             // 首发与每次重放前都确认本地仍有凭证：刷新期间登出时，在本地拒绝而不是发出无凭证的受保护请求
             if (!tm.accessToken) {
-              const response = ctx.fail({ kind: AXP_KINDS.AUTH, reason: "unauthenticated" });
+              const response = ctx.fail({ failure: AXP_FAILURES.AUTH, reason: "unauthenticated" });
               fireNotice(denied, CALLBACK_ERROR, response, tm);
               return response;
             }
-            const { token, patch } = await prepare(request);
+            const { token, patch } = await prepare(ctx);
+            const cancelledBeforeSend = cancelIfAborted(ctx);
+            if (cancelledBeforeSend) return cancelledBeforeSend;
             ctx.set(INJECTED_TOKEN, token);
             const response = await next(patch ?? undefined);
-            if (response.ok || response.kind === AXP_KINDS.INTERNAL || response.kind === AXP_KINDS.CANCEL) return response;
-            const action = base.onFailure ? await base.onFailure(response, tm, ctx) : defaultAuthFailure(response, tm, ctx);
+            if (response.ok || failureOf(response)?.type === AXP_FAILURES.INTERNAL || failureOf(response)?.type === AXP_FAILURES.CANCEL) return response;
+            const route = base.onFailure ? base.onFailure(response, tm, ctx) : defaultAuthFailure(response, tm, ctx);
+            let action: AuthFailureAction | null | undefined | void;
+            if (route && typeof route === "object") {
+              const pending = Promise.resolve(route);
+              void pending.catch(/** 同步取消时同样观察回调迟到的拒绝。 */ () => undefined);
+              action = await waitAbortable(pending, ctx.signal);
+            } else action = route;
             // 异步路由期间调用方已取消：以取消落定，不再按鉴权失败处理（避免为取消的请求弹提示）
             const cancelled = cancelIfAborted(ctx);
             if (cancelled) return cancelled;
             switch (action) {
               case AuthFailureAction.Refresh:
               case AuthFailureAction.Replay: {
+                if (!ctx.canReplay()) return response;
                 if (replayed || isExpired()) {
                   expire(response);
                   return expiredFailure(ctx, response);
@@ -203,7 +236,7 @@ export default function axpAuth<R extends IAxpResponse = AxpResponse>(options: I
               }
               case AuthFailureAction.Deny:
                 fireNotice(denied, CALLBACK_ERROR, response, tm);
-                return ctx.fail({ kind: AXP_KINDS.AUTH, reason: "denied", from: response });
+                return ctx.fail({ failure: AXP_FAILURES.AUTH, reason: "denied", from: response });
               case AuthFailureAction.Expired:
                 expire(response);
                 return expiredFailure(ctx, response);

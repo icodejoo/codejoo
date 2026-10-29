@@ -1,7 +1,8 @@
-import type { AxiosInstance, AxiosResponse } from "axios";
+import { isAxiosError, isCancel, type AxiosInstance, type AxiosResponse } from "axios";
 import { normalizeMethod } from "./methods";
 import type { AxpContext } from "./context";
-import { AXP_KINDS, type IAxpResponse, type IAxpResponseFactory } from "./response";
+import { AXP_FAILURES } from "./brand";
+import type { AxpFailureType, IAxpResponse, IAxpResponseFactory } from "./response";
 import { effectiveHeaders, hasOwn, HEADER_GROUPS, isPlainObject } from "./utils";
 import type { AxpRequestConfig } from "./types";
 
@@ -11,8 +12,21 @@ const CLONE_WARNING = "[axp] 请求体无法克隆，回退原引用";
 /** 所有 HTTP 状态均交给归一化响应判定。 */
 const ACCEPT_HTTP_STATUS = () => true;
 
+/** 按传输事实分类，工厂无法改写规则。
+ * @internal
+ * @param error 原始传输异常。
+ * @returns 内核失败类别。
+ * @example `classifyError(new AxiosError('offline'))`
+ */
+export function classifyError(error: unknown): AxpFailureType {
+  if (isCancel(error) || (error instanceof Error && error.name === "AbortError")) return AXP_FAILURES.CANCEL;
+  if (!isAxiosError(error)) return AXP_FAILURES.INTERNAL;
+  if (error.code === "ETIMEDOUT" || (error.code === "ECONNABORTED" && /timeout/i.test(error.message))) return AXP_FAILURES.TIMEOUT;
+  return error.code === "ERR_BAD_RESPONSE" ? AXP_FAILURES.PARSE : AXP_FAILURES.NETWORK;
+}
+
 /** 按需复制请求体；环境没有 structuredClone（调用抛 ReferenceError）或克隆失败都回退原引用。 */
-function cloneData<R extends IAxpResponse>(data: unknown, ctx: AxpContext<R>): unknown {
+function cloneData<R extends IAxpResponse<unknown, string | number>>(data: unknown, ctx: AxpContext<R>): unknown {
   try {
     return structuredClone(data);
   } catch (error) {
@@ -48,19 +62,22 @@ function maskHeaders(request: Readonly<AxpRequestConfig>, defaults: AxiosInstanc
 }
 /**
  * 组装交给 axios 的差量配置：以用户原始的请求级配置为底，只叠加各层改动过的字段。
- * axios 还会自行合并一次 defaults，交出完整视图会让那次合并按全部字段计费，交差量则回到原始成本，结果等价。
- * 层改动过的 params / headers 带上掩码，防止被二次合并带回已删除的默认值。
+ * 参与 key 的 method、baseURL、纯对象 params 固定为入口视图，其余默认字段仍以发送时为准。
+ * params / 改动过的 headers 带上掩码，防止被二次合并带回已删除的默认值。
  */
-function toWire<R extends IAxpResponse>(ctx: AxpContext<R>, axios: AxiosInstance): AxpRequestConfig {
+function toWire<R extends IAxpResponse<unknown, string | number>>(ctx: AxpContext<R>, axios: AxiosInstance): AxpRequestConfig {
   const current = ctx.request as Record<string, unknown>;
   const wire: Record<string, unknown> = { ...ctx.originRequest };
   const touched = ctx.touchedFields;
-  if (!touched?.size) return wire as AxpRequestConfig;
-  for (const key of touched) {
-    wire[key] = key in current ? current[key] : undefined;
+  if (touched?.size) {
+    for (const key of touched) {
+      wire[key] = key in current ? current[key] : undefined;
+    }
+    if (touched.has("headers")) wire.headers = maskHeaders(ctx.request, axios.defaults);
   }
-  if (touched.has("params")) wire.params = maskParams(current.params, axios.defaults.params);
-  if (touched.has("headers")) wire.headers = maskHeaders(ctx.request, axios.defaults);
+  wire.method = current.method;
+  wire.baseURL = current.baseURL ?? "";
+  if (isPlainObject(axios.defaults.params) || touched?.has("params")) wire.params = maskParams(current.params, axios.defaults.params);
   return wire as AxpRequestConfig;
 }
 
@@ -70,14 +87,16 @@ function toWire<R extends IAxpResponse>(ctx: AxpContext<R>, axios: AxiosInstance
  * @returns 产出统一响应的传输函数。
  * @example `const send = createTransport(axios, axpResponse())`
  */
-export function createTransport<R extends IAxpResponse>(axios: AxiosInstance, factory: IAxpResponseFactory<R>): (ctx: AxpContext<R>) => Promise<R> {
+export function createTransport<R extends IAxpResponse<unknown, string | number>>(axios: AxiosInstance, factory: IAxpResponseFactory<R>): (ctx: AxpContext<R>) => Promise<R> {
   return /** 网络与请求准备异常统一交给已保护的工厂分类。 */ async (ctx) => {
     let response: AxiosResponse;
     try {
       const signal = ctx.request.signal ?? ctx.signal;
-      if (signal.aborted) return ctx.fail({ kind: AXP_KINDS.CANCEL });
+      if (signal.aborted) return ctx.fail({ failure: AXP_FAILURES.CANCEL });
+      if (!ctx.canReplay()) return ctx.fail({ failure: AXP_FAILURES.INTERNAL, error: new Error("一次性请求体已发送，不能重放；重放前请先检查 ctx.canReplay()") });
       const request = toWire(ctx, axios);
       request.signal = signal;
+      ctx.markBodySent(request.data);
       if (ctx.replayable && (Array.isArray(request.data) || isPlainObject(request.data))) request.data = cloneData(request.data, ctx);
       request.validateStatus = ACCEPT_HTTP_STATUS;
       response = await axios.request(request);

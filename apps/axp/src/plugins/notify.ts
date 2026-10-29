@@ -1,6 +1,6 @@
 import type { AxpContext } from "../context";
 import { isEnabled, type AxpOption, type IPluginSwitch } from "../options";
-import { AXP_KINDS, type AxpResponse, type IAxpResponse } from "../response";
+import { failureOf, AXP_FAILURES, type AxpResponse, type IAxpResponse } from "../response";
 import type { AxpPlugin } from "../types";
 import { fireNotice } from "../utils";
 
@@ -9,22 +9,23 @@ const NAME = "axp:notify";
 /** 通知故障始终输出。 */
 const CALLBACK_ERROR = `[${NAME}] stringify/notify 回调失败`;
 /** 消息回调接收客户端原始响应类型。 */
-export interface INotifyOptions<R extends IAxpResponse = IAxpResponse> extends IPluginSwitch {
+export interface INotifyOptions<R extends IAxpResponse<unknown, string | number> = IAxpResponse> extends IPluginSwitch {
   /** 非空消息通知，异步拒绝同样隔离。 */
   notify: (message: string, response: R) => unknown;
   /** 空串跳过通知，默认忽略成功、取消和 silent。 */
   stringify?: (response: R, ctx: AxpContext<R>) => string;
 }
 /** 从最终逻辑结果生成默认消息。 */
-function defaultStringify<R extends IAxpResponse>(response: R, ctx: AxpContext<R>): string {
-  return response.ok || response.kind === AXP_KINDS.CANCEL || ctx.request.silent ? "" : response.message || `${response.kind} ${response.status}`;
+function defaultStringify<R extends IAxpResponse<unknown, string | number>>(response: R, ctx: AxpContext<R>): string {
+  if (response.ok || failureOf(response)?.type === AXP_FAILURES.CANCEL || ctx.request.silent) return "";
+  return response.message || failureOf(response)?.type || `status ${response.status}${response.code !== 0 ? ` code ${response.code}` : ""}`;
 }
 /** 在 outer 阶段最多通知一次，原样透传最终响应。
  * @param options 必填通知回调和可选消息格式化规则。
  * @returns 不构造响应的消息插件。
  * @example `axpNotify({ notify: message => toast(message) })`
  */
-export default function axpNotify<R extends IAxpResponse = AxpResponse>(options: INotifyOptions<R>): AxpPlugin<R> {
+export default function axpNotify<R extends IAxpResponse<unknown, string | number> = AxpResponse>(options: INotifyOptions<R>): AxpPlugin<R> {
   const stringify = options.stringify ?? defaultStringify<R>;
   const notify = options.notify;
   return {

@@ -142,8 +142,17 @@ it("[cache.opt.expires] 有效期 Infinity 永不过期", async () => {
 });
 
 it("[cache.opt.store] 第三方存储不处理过期（如 new Map）：过期条目由插件读取时再检查并删除，不会被返回", async () => {
-  const map = new Map<string, IAxpCacheEntry<AxpResponse>>();
-  const h = cachedClient({ store: map });
+  const map = new Map<string, IAxpCacheEntry>();
+  const h = cachedClient({
+    store: {
+      get: (key) => map.get(key),
+      set: (key, entry) => {
+        map.set(key, entry);
+      },
+      delete: (key) => map.delete(key),
+      clear: () => map.clear(),
+    },
+  });
   await call(h, { cache: { expires: 100, key: "k" } });
   expect(map.size).toBe(1);
   vi.advanceTimersByTime(99);
@@ -152,7 +161,7 @@ it("[cache.opt.store] 第三方存储不处理过期（如 new Map）：过期�
   vi.advanceTimersByTime(1);
   h.net.on("get", URL, () => ({ status: 500 }));
   const miss = await call(h, { cache: { expires: 100, key: "k" } });
-  expect(miss.httpStatus).toBe(500);
+  expect(miss.status).toBe(500);
   expect(map.size).toBe(0);
 });
 
@@ -218,7 +227,7 @@ it("[cache.cb.clone] 失败响应不经过 clone，原样返回", async () => {
   const h = cachedClient();
   h.net.on("get", URL, () => ({ status: 500 }));
   const failed = await call(h, { cache: { clone } });
-  expect(failed.httpStatus).toBe(500);
+  expect(failed.status).toBe(500);
   expect(clone).not.toHaveBeenCalled();
 });
 

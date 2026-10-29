@@ -1,3 +1,4 @@
+import { failureOf } from "../../src/response";
 import { beforeEach, expect, it, vi } from "vitest";
 import axpLoading from "../../src/plugins/loading";
 import axpNotify from "../../src/plugins/notify";
@@ -33,8 +34,8 @@ it.each([true, false])(
     await vi.advanceTimersByTimeAsync(0);
     expect(h.api.cancelAll()).toBe(2);
     await vi.runAllTimersAsync();
-    expect((await waiting).kind).toBe("cancel");
-    expect((await queued).kind).toBe("cancel");
+    expect(failureOf(await waiting)?.type).toBe("cancel");
+    expect(failureOf(await queued)?.type).toBe("cancel");
     expect(h.events.loading.get(LOADING_LABEL)).toEqual([true, false]);
     expect(notify).not.toHaveBeenCalled();
     gate.resolve(success);

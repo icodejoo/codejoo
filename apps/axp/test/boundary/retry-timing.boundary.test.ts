@@ -86,10 +86,10 @@ it.each(["0", "-1", "", "   "])("[retry.fn.retryAfterMs] 数字头 %j 返回零�
   expect(retryAfterMs({ [HEADER]: value }, Infinity)).toBe(0);
 });
 
-it("[retry.fn.retryAfterMs] 过去日期和零上限返回零，get 缺值不回退普通字段", () => {
+it("[retry.fn.retryAfterMs] 过去日期返回零，正等待超过零上限返回 null，get 缺值不回退普通字段", () => {
   const date = new Date(0).toUTCString();
   expect(retryAfterMs({ [HEADER]: date }, Infinity, () => DELAY)).toBe(0);
-  expect(retryAfterMs({ [HEADER]: ONE_SECOND_HEADER }, 0)).toBe(0);
+  expect(retryAfterMs({ [HEADER]: ONE_SECOND_HEADER }, 0)).toBeNull();
   expect(retryAfterMs({ get: () => undefined, [HEADER]: ONE_SECOND_HEADER }, Infinity)).toBeUndefined();
 });
 

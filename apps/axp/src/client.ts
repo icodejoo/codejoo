@@ -1,14 +1,14 @@
-import { create as createAxios, mergeConfig, type AxiosRequestConfig } from "axios";
+import { create as createAxios, mergeConfig, type AxiosInstance, type AxiosRequestConfig } from "axios";
 import { AxpContext, cancelIfAborted, NO_LOG } from "./context";
 import { BODY_METHODS, NO_BODY_METHODS, normalizeMethod } from "./methods";
 import { composePipeline, sortPipeline, type IAxpRegistration, type IAxpLayer } from "./pipeline";
-import { AXP_KINDS, AxpResponse, DEFAULT_RESPONSE_FACTORY, guardFactory, isAxpResponse, type IAxpResponse, type IAxpResponseFactory } from "./response";
+import { failureOf, AXP_FAILURES, AxpResponse, DEFAULT_RESPONSE_FACTORY, guardFactory, isAxpCancel, isAxpResponse, type IAxpResponse, type IAxpResponseFactory } from "./response";
 import { createTransport } from "./transport";
 import type { AxpClient, AxpOptions, AxpPlugin, AxpRequestConfig, HttpMethodLower, TAxpArgs } from "./types";
 import { ABORT_EVENT, assignAxiosDefaults, cloneAxiosDefaults, effectiveHeaders } from "./utils";
 
 /** 落定时使用的客户端开关。 */
-export interface IAxpSettleOptions<R extends IAxpResponse> {
+export interface IAxpSettleOptions<R extends IAxpResponse<unknown, string | number>> {
   /** 可预期失败的转换器。 */
   reject?: (response: R) => unknown;
 }
@@ -21,13 +21,13 @@ export interface IAxpSettleOptions<R extends IAxpResponse> {
  * @returns 业务数据或响应，失败时抛出约定对象。
  * @example `settle(response, ctx, {})`
  */
-export function settle<R extends IAxpResponse>(response: R, ctx: AxpContext<R>, options: IAxpSettleOptions<R>, callsite?: Error): unknown {
-  if (response.kind === AXP_KINDS.INTERNAL) throw response.error;
+export function settle<R extends IAxpResponse<unknown, string | number>>(response: R, ctx: AxpContext<R>, options: IAxpSettleOptions<R>, callsite?: Error): unknown {
+  if (failureOf(response)?.type === AXP_FAILURES.INTERNAL) throw response.error;
   const throws = ctx.request.throws ?? true;
   if (!response.ok && throws) {
     const stack = callsite?.stack;
     const failure = stack === undefined ? response : ctx.fail({ from: response, stack });
-    if (failure.kind === AXP_KINDS.INTERNAL) throw failure.error;
+    if (failureOf(failure)?.type === AXP_FAILURES.INTERNAL) throw failure.error;
     throw options.reject ? options.reject(failure) : failure;
   }
   return ctx.request.wrap || !throws ? response : response.data;
@@ -38,7 +38,7 @@ export function settle<R extends IAxpResponse>(response: R, ctx: AxpContext<R>, 
  * @returns 具有十个柯里化动词的独立客户端。
  * @example `const api = createAxp(); await api.get('/pets')()`
  */
-export function createAxp<S = unknown, R extends IAxpResponse = AxpResponse>(...args: TAxpArgs<R, AxpOptions<R>>): AxpClient<S, R> {
+export function createAxp<S = unknown, R extends IAxpResponse<unknown, string | number> = AxpResponse>(...args: TAxpArgs<R, AxpOptions<R>>): AxpClient<S, R> {
   const options = (args[0] ?? {}) as AxpOptions<R>;
   const axios = options.axios ?? createAxios();
   const factory = guardFactory((options.response ?? DEFAULT_RESPONSE_FACTORY) as IAxpResponseFactory<R>);
@@ -126,15 +126,16 @@ export function createAxp<S = unknown, R extends IAxpResponse = AxpResponse>(...
   const client = {
     axios,
     request: dispatch,
-    /** 克隆 defaults 并重新 setup 默认继承的插件。 */
+    /** 使用指定实例，或克隆父 defaults；重新 setup 默认继承的插件。 */
     extend(
       overrides: AxiosRequestConfig = {},
       opts: {
         /** 子客户端插件列表。 */ plugins?: "inherit" | readonly AxpPlugin<R, any>[];
+        /** 原样使用的子客户端实例，不复制父 defaults 或拦截器。 */ axios?: AxiosInstance;
       } = {},
     ) {
       assertActive();
-      const childAxios = createAxios(cloneAxiosDefaults(axios.defaults as AxiosRequestConfig));
+      const childAxios = opts.axios ?? createAxios(cloneAxiosDefaults(axios.defaults as AxiosRequestConfig));
       const plugins = opts.plugins === undefined || opts.plugins === "inherit" ? registrations.map(/** 提取已登记插件定义，供子客户端重新 setup。 */ (entry) => entry.plugin) : opts.plugins;
       const child = createAxp<S, R>({ ...options, axios: childAxios, plugins } as AxpOptions<R>);
       try {
@@ -177,6 +178,8 @@ export function createAxp<S = unknown, R extends IAxpResponse = AxpResponse>(...
     inspect: () => inspection.map(/** 仅暴露插件名字与阶段，隔离内部排序字段。 */ ({ name, stage }) => ({ name, stage })),
     /** 按共享品牌收窄为当前 R。 */
     isResponse: isAxpResponse<R>,
+    /** 判断是否为内核取消。 */
+    isCancel: isAxpCancel,
     /** 中止在途请求并卸载所有实例；重复调用无副作用。 */
     dispose(): void {
       if (disposed) return;

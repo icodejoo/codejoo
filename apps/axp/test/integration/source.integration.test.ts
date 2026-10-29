@@ -2,14 +2,24 @@ import { create as createAxios, type AxiosRequestConfig } from "axios";
 import { expect, expectTypeOf, it, vi } from "vitest";
 import { createAxp } from "../../src/client";
 import * as entry from "../../src/index";
-import type { ICacheOptions, IMockOptions, ISharedOptions, SharePolicy } from "../../src/index";
+import type { MaybePromise, ICacheOptions, IMockOptions, ISharedOptions, SharePolicy } from "../../src/index";
 import axpCache, { clearCache, removeCache, type ICacheApi } from "../../src/plugins/cache";
+import { axpResponse, type AxpResponseInit } from "../../src/response";
+import { createMemoryStore } from "../../src/plugins/cache-store";
 import axpMock from "../../src/plugins/mock";
 import axpShare from "../../src/plugins/share";
 import type { AxpPlugin, AxpRequestOptions } from "../../src/types";
-import { createTestClient, customResponse, TestResponse } from "../helpers/client";
+import { createTestClient, TestResponse } from "../helpers/client";
 import { makeNetwork } from "../helpers/network";
 import { envelope, requestRecorder, sourceClient } from "../helpers/source";
+
+/** 从 init 或传输头重建自定义响应。 */
+function customResponse() {
+  return axpResponse<TestResponse>({
+    /** 命中时没有 raw，使用快照扩展字段。 */
+    create: (init, raw) => Object.assign(new TestResponse(init), { traceId: (init as AxpResponseInit<TestResponse> & { traceId?: string }).traceId ?? init.from?.traceId ?? String(raw?.headers["x-trace-id"] ?? "") }),
+  });
+}
 
 /** 被缓存和共享的接口。 */
 const URL = "/pets";
@@ -25,7 +35,7 @@ it("[mock.type.options][share.type.options][cache.type.options] 旧入口类型�
         expectTypeOf(r).toEqualTypeOf<TestResponse>();
         return r.ok;
       },
-      store: new Map(),
+      store: createMemoryStore(),
     });
     const api = createAxp<unknown, TestResponse>({
       response: customResponse(),
@@ -47,7 +57,7 @@ it("[mock.type.options][share.type.options][cache.type.options] 旧入口类型�
     void api.request({
       cache: { expires: null, key: "k", clone: "shallow", shouldCache: (r) => r.ok },
       share: { policy: "end", enable: undefined },
-      mock: { fallbackWhen: (r) => r.httpStatus === 404 },
+      mock: { fallbackWhen: (r) => r.status === 404 },
     });
     void api.request({ cache: false, share: null, mock: false });
     // @ts-expect-error cache 不接受字符串。
@@ -68,7 +78,7 @@ it("[mock.type.options][share.type.options][cache.type.options] 旧入口类型�
     axpCache({ storage: { getItem: () => null } });
     // @ts-expect-error 旧的 memory 预留选项已删除。
     axpCache({ memory: true });
-    // @ts-expect-error 缓存仓必须是同步接口，不接受 Promise。
+    // @ts-expect-error 缓存仓仍必须提供全部存储方法。
     axpCache<TestResponse>({ store: { get: async () => undefined } });
     // @ts-expect-error axios 原生配置不再扩展 mock。
     const axiosMock: AxiosRequestConfig = { mock: true };
@@ -77,10 +87,10 @@ it("[mock.type.options][share.type.options][cache.type.options] 旧入口类型�
     void options;
     expectTypeOf(cache).toEqualTypeOf<AxpPlugin<TestResponse, ICacheApi>>();
     expectTypeOf(api.plugin(cache)).toEqualTypeOf<ICacheApi | undefined>();
-    expectTypeOf(removeCache).returns.toEqualTypeOf<boolean>();
-    expectTypeOf(clearCache).returns.toEqualTypeOf<number>();
-    expectTypeOf(removeCache(api, "k")).toEqualTypeOf<boolean>();
-    expectTypeOf(clearCache(api)).toEqualTypeOf<number>();
+    expectTypeOf(removeCache).returns.toEqualTypeOf<MaybePromise<boolean>>();
+    expectTypeOf(clearCache).returns.toEqualTypeOf<MaybePromise<number>>();
+    expectTypeOf(removeCache(api, "k")).toEqualTypeOf<MaybePromise<boolean>>();
+    expectTypeOf(clearCache(api)).toEqualTypeOf<MaybePromise<number>>();
     expectTypeOf<ICacheOptions>().toExtend<{ /** 容量。 */ max?: number }>();
     expectTypeOf<IMockOptions>().toExtend<{ /** 基址。 */ mockUrl?: string }>();
     expectTypeOf<ISharedOptions>().toExtend<{ /** 策略。 */ policy?: SharePolicy }>();
@@ -147,7 +157,8 @@ it("[cache.opt.clone][cache.fn.axpCache] 自定义 R：clone 命中派生的响�
   expect((hit as TestResponse).traceId).toBe("trace-1");
   expect(hit).not.toBe(miss);
   expect(hit.data).toEqual({ list: [1] });
-  expect(hit.request).toBe(miss.request);
+  expect(hit.request).not.toBe(miss.request);
+  expect(hit.request.url).toBe(URL);
   expect(h.net.calls("get", URL)).toBe(1);
   h.api.dispose();
 });

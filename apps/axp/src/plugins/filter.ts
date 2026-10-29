@@ -79,7 +79,7 @@ export function $filter(source: Record<string, any>, options: IFilterOptions & t
  * @returns 在 repath 之后以 patch 传递新对象的 prepare 插件。
  * @example `axpFilter({ ignoreKeys: ['nullable'] })`
  */
-export default function axpFilter<R extends IAxpResponse = AxpResponse>(options: IFilterOptions = {}): AxpPlugin<R> {
+export default function axpFilter<R extends IAxpResponse<unknown, string | number> = AxpResponse>(options: IFilterOptions = {}): AxpPlugin<R> {
   const base = resolveOption<IFilterOptions, typeof DEFAULTS>(undefined, options, DEFAULTS);
   base.ignoreKeys = base.ignoreKeys?.slice();
   base.ignoreValues = base.ignoreValues?.slice();

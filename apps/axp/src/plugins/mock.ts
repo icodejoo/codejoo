@@ -1,5 +1,5 @@
 import { resolveOption, resolveRequestOption, type AxpOption, type IPluginSwitch } from "../options";
-import { AXP_KINDS, type AxpResponse, type IAxpResponse } from "../response";
+import { failureOf, AXP_FAILURES, type AxpResponse, type IAxpResponse } from "../response";
 import type { AxpPlugin, AxpRequestPatch } from "../types";
 import { ORIGIN_PREFIX } from "../utils";
 
@@ -13,10 +13,10 @@ const SKIPPED_MESSAGE = `[${NAME}] 已跳过：没有 mockUrl，直接请求真�
 const FALLBACK_MESSAGE = `[${NAME}] 回落真实接口：`;
 
 /** 判断 mock 探测结果是否应回落真实接口，返回真值即回落；抛错按程序 bug 处理。 */
-export type TMockFallback<R extends IAxpResponse = IAxpResponse> = (response: R) => boolean;
+export type TMockFallback<R extends IAxpResponse<unknown, string | number> = IAxpResponse> = (response: R) => boolean;
 
 /** mock 插件的装配配置。 */
-export interface IMockOptions<R extends IAxpResponse = IAxpResponse> extends IPluginSwitch {
+export interface IMockOptions<R extends IAxpResponse<unknown, string | number> = IAxpResponse> extends IPluginSwitch {
   /** 插件总开关；默认 false，通常写 import.meta.env.DEV。 */
   enable?: boolean;
   /** 是否让全部请求走 mock；请求级 false 可退出，默认 false。 */
@@ -45,10 +45,10 @@ const DEFAULTS = {
  * @internal
  * @param response 探测请求的归一化响应。
  * @returns 是否应改打真实接口；取消、其它状态一律不回落。
- * @example `$shouldFallback(r) // r.httpStatus === 404 时为 true`
+ * @example `$shouldFallback(r) // r.status === 404 时为 true`
  */
-export function $shouldFallback(response: IAxpResponse): boolean {
-  return response.httpStatus === NOT_FOUND || response.kind === AXP_KINDS.NETWORK;
+export function $shouldFallback(response: IAxpResponse<unknown, string | number>): boolean {
+  return response.status === NOT_FOUND || failureOf(response)?.type === AXP_FAILURES.NETWORK;
 }
 
 /** 拼接基址与非空的相对路径，保证中间只有一个斜杠。 */
@@ -80,7 +80,7 @@ export function $rewriteUrl(url: string | undefined, mockUrl: string): AxpReques
  * @returns source 阶段内置次序 1 的插件；enable 默认 false。
  * @example `axpMock({ enable: import.meta.env.DEV, mockUrl: 'http://localhost:4523' })`
  */
-export default function axpMock<R extends IAxpResponse = AxpResponse>(options: IMockOptions<R> = {}): AxpPlugin<R> {
+export default function axpMock<R extends IAxpResponse<unknown, string | number> = AxpResponse>(options: IMockOptions<R> = {}): AxpPlugin<R> {
   const base = resolveOption<IMockOptions<R>, typeof DEFAULTS>(undefined, options, DEFAULTS);
   // 请求省略或写了不认得的值时只看插件级 mock：未全局开启则不走 mock。
   const optIn = !base.mock;
@@ -105,7 +105,8 @@ export default function axpMock<R extends IAxpResponse = AxpResponse>(options: I
         share: false,
       });
       if (!resolved.fallbackWhen(probe)) return probe;
-      ctx.log.log(`${FALLBACK_MESSAGE}${probe.kind} ${probe.httpStatus}`);
+      if (!ctx.canReplay()) return probe;
+      ctx.log.log(`${FALLBACK_MESSAGE}${failureOf(probe)?.type} ${probe.status}`);
       return next();
     },
   };

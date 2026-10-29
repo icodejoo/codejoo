@@ -1,3 +1,4 @@
+import { failureOf } from "../../src/response";
 import { create as createAxios } from "axios";
 import { afterEach, expect, it, vi } from "vitest";
 import { createAxp } from "../../src/client";
@@ -65,7 +66,7 @@ it("[core.method.verbs][core.method.pending] 同一 dispatch 并发乱序成功�
       else
         expect(result).toMatchObject({
           status: "rejected",
-          reason: { kind: "http", data: id, status: 400 },
+          reason: { ok: false, data: id, status: 400 },
         });
     },
   );
@@ -151,13 +152,13 @@ it.each([undefined, "", "reason"])(
                 once: true,
               }),
           );
-          return ctx.fail({ kind: "cancel" });
+          return ctx.fail({ failure: "cancel" });
         },
       },
     ]);
     const result = api.request({ throws: false });
     expect(api.cancelAll(reason)).toBe(1);
-    expect((await result).kind).toBe("cancel");
+    expect(failureOf(await result)?.type).toBe("cancel");
     if (reason === undefined) expect(signal.reason).toMatchObject({ name: "AbortError" });
     else expect(signal.reason).toBe(reason);
   },

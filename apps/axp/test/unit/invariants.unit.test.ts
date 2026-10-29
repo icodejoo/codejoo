@@ -1,7 +1,9 @@
+import { testContext } from "../helpers/context";
+import { failureOf } from "../../src/response";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { AxpContext } from "../../src/context";
 import axpNotify from "../../src/plugins/notify";
-import { AXP_KINDS, AxpResponse } from "../../src/response";
+import { AXP_FAILURES, AxpResponse } from "../../src/response";
 import { AXP_STAGES } from "../../src/pipeline";
 import type { AxpPlugin, AxpRequestConfig } from "../../src/types";
 import { assertInvariants, createTestClient, recordEvents } from "../helpers/client";
@@ -173,7 +175,7 @@ describe("[invariants.fn.trackSignalListeners] I3", () => {
 
 describe("[invariants.fn.createNotifyRecorder] I4", () => {
   /** 真实的失败响应：HTTP 500、无消息。 */
-  const failure = new AxpResponse({ httpStatus: 500 });
+  const failure = new AxpResponse({ status: 500 });
 
   it("按逻辑请求分别计数：同一个响应对象被两个请求各通知一次不算重复", /** share 跟随者的场景。 */ () => {
     const events = recordEvents();
@@ -195,11 +197,11 @@ describe("[invariants.fn.createNotifyRecorder] I4", () => {
   });
   it("成功、取消、silent 不通知，其余用 message 或 kind+status", /** 与 notify 默认规则一致。 */ () => {
     const recorder = createNotifyRecorder(recordEvents());
-    expect(recorder.stringify(new AxpResponse({ httpStatus: 200 }), ctxOf(1))).toBe("");
-    expect(recorder.stringify(new AxpResponse({ kind: AXP_KINDS.CANCEL }), ctxOf(1))).toBe("");
+    expect(recorder.stringify(new AxpResponse({ status: 200 }), ctxOf(1))).toBe("");
+    expect(recorder.stringify(testContext().fail({ failure: AXP_FAILURES.CANCEL }), ctxOf(1))).toBe("");
     expect(recorder.stringify(failure, ctxOf(1, true))).toBe("");
-    expect(recorder.stringify(failure, ctxOf(1))).toBe("http 500");
-    expect(recorder.stringify(new AxpResponse({ httpStatus: 500, message: "boom" }), ctxOf(1))).toBe("boom");
+    expect(recorder.stringify(failure, ctxOf(1))).toBe("status 500");
+    expect(recorder.stringify(new AxpResponse({ status: 500, message: "boom" }), ctxOf(1))).toBe("boom");
   });
   it("接入真实 notify 插件：一个失败请求恰好记一次", /** 记录器与插件的调用顺序吻合。 */ async () => {
     const events = recordEvents();
@@ -254,7 +256,7 @@ describe("[invariants.fn.createChainProbe] I6", () => {
   const stubCtx = {
     id: 1,
     signal: new AbortController().signal,
-    fail: /** 按初始化对象造响应。 */ (init: object) => ({ ...init }),
+    fail: /** 通过内核工厂合成失败事实。 */ (init: object) => testContext().fail(init),
   } as unknown as AxpContext<AxpResponse>;
 
   it("next 拒绝时累加 rejectedNext，并以 internal 收口", /** 内核保证不会发生，这里直接给探针一个会拒绝的 next。 */ async () => {
@@ -262,7 +264,7 @@ describe("[invariants.fn.createChainProbe] I6", () => {
     const chain = createChainProbe(events);
     const outermost = chain.plugins.find(/** 找最外层探针。 */ (plugin) => plugin.name === OUTERMOST_PROBE)!;
     const result = await outermost.handle!(stubCtx, () => Promise.reject(new Error("boom")));
-    expect(result.kind).toBe(AXP_KINDS.INTERNAL);
+    expect(failureOf(result)?.type).toBe(AXP_FAILURES.INTERNAL);
     expect(events.rejectedNext).toBe(1);
     expect(() => assertNextNeverRejects(chain, events)).toThrow(/reject/);
   });

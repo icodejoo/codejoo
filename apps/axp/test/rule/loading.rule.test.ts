@@ -34,7 +34,7 @@ it.each([200, 500])(
     expect(events.loading.get(LOADING_LABEL)).toEqual([true]);
     await vi.runAllTimersAsync();
     const result = await pending;
-    expect(result.httpStatus).toBe(status);
+    expect(result.status).toBe(status);
     expect(result.request.loading).toBe(true);
     expect(config).toEqual({ loading: true });
     expect(events.loading.get(LOADING_LABEL)).toEqual([true, false]);

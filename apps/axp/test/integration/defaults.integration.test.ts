@@ -1,7 +1,10 @@
-import { AxiosHeaders, mergeConfig, type InternalAxiosRequestConfig } from "axios";
+import { failureOf } from "../../src/response";
+import { AxiosHeaders, mergeConfig, type AxiosAdapter, type InternalAxiosRequestConfig } from "axios";
 import { expect, it, vi } from "vitest";
 import axpFilter from "../../src/plugins/filter";
 import axpRepath from "../../src/plugins/repath";
+import axpRetry from "../../src/plugins/retry";
+import axpCache from "../../src/plugins/cache";
 import type { AxpResponse } from "../../src/response";
 import { AXP_STAGES } from "../../src/pipeline";
 import type { AxpPlugin } from "../../src/types";
@@ -11,6 +14,10 @@ import { wireClient } from "../helpers/wire";
 const REQUEST_URL = "/effective";
 /** 默认环境服务地址。 */
 const BASE_URL = "https://example.test";
+/** 在途修改后的默认基址。 */
+const CHANGED_BASE_URL = "https://changed.test";
+/** 等待期间修改默认值的重试窗口。 */
+const RETRY_DELAY = 100;
 /** 默认查询值，删除后不允许二次合并恢复。 */
 const OLD_QUERY = "old";
 /** 用于验证请求头大小写合并的默认凭证。 */
@@ -29,6 +36,42 @@ const METHOD_HEADER = "X-Method";
 const TENANTS = ["tenant-a", "tenant-b"];
 /** 参数被全部删除后的传输墓碑。 */
 const EMPTY_PARAMS = { q: null, keep: null };
+
+it("[core.req.defaults][core.method.key] 重试等待期间修改 defaults 后，发送仍匹配入口 key，缓存不混淆", /** 同时验证 params、基址和方法的在途一致性。 */ async () => {
+  vi.useFakeTimers();
+  const h = wireClient({ method: "get", baseURL: BASE_URL, params: { page: 1 } }, [axpRetry({ max: 1, delay: RETRY_DELAY })]);
+  h.api.use(axpCache());
+  const adapter = h.axios.defaults.adapter as AxiosAdapter;
+  h.axios.defaults.adapter = /** 服务端回显实际地址与方法，第一次返回 503。 */ async (config) => {
+    const response = await adapter(config);
+    return { ...response, status: h.calls.length === 1 ? 503 : 200, data: { code: 0, data: `${config.method} ${h.axios.getUri(config)}` } };
+  };
+  try {
+    const pending = h.api.request({ url: REQUEST_URL, cache: true });
+    await vi.advanceTimersByTimeAsync(0);
+    expect(h.calls).toHaveLength(1);
+    h.axios.defaults.params.page = 2;
+    h.axios.defaults.baseURL = CHANGED_BASE_URL;
+    h.axios.defaults.method = "put";
+    h.axios.defaults.timeout = RETRY_DELAY;
+    await vi.advanceTimersByTimeAsync(RETRY_DELAY);
+    const original = `get ${BASE_URL}${REQUEST_URL}?page=1`;
+    expect(await pending).toBe(original);
+    expect(h.calls[1].config.method).toBe("get");
+    expect(h.calls[1].config.timeout).toBe(RETRY_DELAY);
+    expect(h.calls[1].url).toBe(`${BASE_URL}${REQUEST_URL}?page=1`);
+    expect(await h.api.request({ url: REQUEST_URL, cache: true })).toBe(`put ${CHANGED_BASE_URL}${REQUEST_URL}?page=2`);
+    expect(h.calls).toHaveLength(3);
+    h.axios.defaults.params.page = 1;
+    h.axios.defaults.baseURL = BASE_URL;
+    h.axios.defaults.method = "get";
+    expect(await h.api.request({ url: REQUEST_URL, cache: true })).toBe(original);
+    expect(h.calls).toHaveLength(3);
+  } finally {
+    h.api.dispose();
+    vi.useRealTimers();
+  }
+});
 
 it("[core.req.defaults] 使用公开 mergeConfig，所有阶段看到有效 defaults 且请求值优先", /** 默认值在 outer 之前完成合并。 */ async () => {
   expect(typeof mergeConfig).toBe("function");
@@ -274,7 +317,7 @@ it("[core.req.defaults][core.req.signal] defaults.signal 参与逻辑取消并�
   controller.abort("default abort");
   const h = wireClient({ signal: controller.signal });
   const response = await h.api.request({ url: REQUEST_URL, throws: false });
-  expect(response.kind).toBe("cancel");
+  expect(failureOf(response)?.type).toBe("cancel");
   expect(h.calls).toHaveLength(0);
   expect(add).not.toHaveBeenCalled();
   expect(remove).toHaveBeenCalledTimes(1);

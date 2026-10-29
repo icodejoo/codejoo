@@ -1,6 +1,7 @@
+import { failureOf } from "../../src/response";
 import { beforeEach, expect, it, vi } from "vitest";
 import axpCache from "../../src/plugins/cache";
-import { AXP_KINDS } from "../../src/response";
+import { AXP_FAILURES } from "../../src/response";
 import { signalAdapter, sourceClient, type IWireCall } from "../helpers/source";
 
 /** 取消时序统一用假时钟。 */
@@ -36,7 +37,7 @@ it("[core.method.cancelAll × cache.req.cache] 取消在途的未命中请求：
   await vi.advanceTimersByTimeAsync(1);
   expect(h.api.cancelAll()).toBe(1);
   await vi.runAllTimersAsync();
-  expect((await pending).kind).toBe(AXP_KINDS.CANCEL);
+  expect(failureOf(await pending)?.type).toBe(AXP_FAILURES.CANCEL);
   const again = h.send({ url: URL, cache: true });
   await vi.runAllTimersAsync();
   expect((await again).ok).toBe(true);

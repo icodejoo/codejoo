@@ -10,7 +10,7 @@ const MS_PER_SECOND = 1000;
 const RETRY_AFTER = "retry-after";
 /** 默认计算延迟上限（毫秒）。 */
 export const DEFAULT_DELAY_MAX = 10_000;
-/** 默认采信 Retry-After 的逻辑状态。 */
+/** 默认采信 Retry-After 的 HTTP 状态。 */
 export const DEFAULT_AFTER_STATUS_CODES: readonly number[] = [413, 429, 503];
 
 /**
@@ -82,19 +82,23 @@ export function applyJitter(ms: number, jitter?: TRetryJitter, delayMax = DEFAUL
 /**
  * 解析数字秒或 HTTP-date，沿用旧版 Number/Date.parse 兼容行为。
  * @param headers 普通头对象或提供 get 的头对象；缺省表示无头。
- * @param cap 服务端延迟上限，与 delayMax 独立。
+ * @param cap 服务端延迟上限，与 delayMax 独立；Infinity 表示永远照办。
  * @param now 当前毫秒时钟，默认 Date.now。
- * @returns 非负封顶延迟，缺失或无法解析返回 undefined。
+ * @returns 非负延迟，缺失或无法解析返回 undefined，超过上限返回 null（旧版为封顶后照样等待）。
  * @example retryAfterMs({ 'retry-after': '2' }, Infinity); // 2000
  */
-export function retryAfterMs(headers: IRetryAfterHeaders | null | undefined, cap: number, now = Date.now): number | undefined {
+export function retryAfterMs(headers: IRetryAfterHeaders | null | undefined, cap: number, now = Date.now): number | null | undefined {
   const raw = typeof headers?.get === "function" ? headers.get(RETRY_AFTER) : headers?.[RETRY_AFTER];
   if (typeof raw !== "string" && typeof raw !== "number") return undefined;
   const seconds = Number(raw);
-  if (Number.isFinite(seconds)) return Math.min(cap, Math.max(0, seconds * MS_PER_SECOND));
-  const timestamp = Date.parse(String(raw));
-  if (Number.isNaN(timestamp)) return undefined;
-  return Math.min(cap, Math.max(0, timestamp - now()));
+  let ms: number;
+  if (Number.isFinite(seconds)) ms = Math.max(0, seconds * MS_PER_SECOND);
+  else {
+    const timestamp = Date.parse(String(raw));
+    if (Number.isNaN(timestamp)) return undefined;
+    ms = Math.max(0, timestamp - now());
+  }
+  return ms > cap ? null : ms;
 }
 
 /**

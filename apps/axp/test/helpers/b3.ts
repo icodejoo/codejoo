@@ -1,6 +1,7 @@
 import { vi } from "vitest";
 import type { ITokenManager } from "../../src/objects/TokenManager";
-import axpAuth, { type IAuthOptions } from "../../src/plugins/auth";
+import axpAuth, { defaultAuthFailure, type IAuthOptions } from "../../src/plugins/auth";
+import type { AxpContext } from "../../src/context";
 import type { AxpResponse, IAxpResponse } from "../../src/response";
 import type { AxpOptions, AxpPlugin, AxpRequestConfig } from "../../src/types";
 import { authHeader } from "./auth";
@@ -15,6 +16,16 @@ export const REFRESH_TOKEN = "refresh-token";
 export const REQUEST_URL = "/protected";
 export const AUTH_NAME = "axp:auth";
 export const RETRY_NAME = "axp:retry";
+/** 使用者显式配置业务码路由，响应本身仍保留 HTTP 状态。
+ * @param response 业务响应。
+ * @param tm 会话管理器。
+ * @param ctx 当前上下文。
+ * @returns 默认鉴权动作，业务码仅在本回调内参与路由。
+ * @example `axpAuth({ ...settings, onFailure: businessAuthFailure })`
+ */
+export function businessAuthFailure<R extends IAxpResponse>(response: R, tm: ITokenManager, ctx: AxpContext<R>) {
+  return defaultAuthFailure({ ...response, status: response.status === 200 ? Number(response.code) : response.status }, tm, ctx);
+}
 /** 无存储副作用的会话管理器。
  * @param access 初始 access token。
  * @param refresh 初始 refresh token。
@@ -55,6 +66,8 @@ export function authSettings<R extends IAxpResponse = AxpResponse>(overrides: Pa
   let active = 0;
   return {
     tokenManager: memoryTokens(),
+    // 旧用例用 runAllTimersAsync 暂停在手动刷新门上；显式不限时避免把刷新窗口提前耗尽。
+    refreshTimeout: 0,
     onAccessExpired: vi.fn(),
     onAccessDenied: vi.fn(),
     ...overrides,

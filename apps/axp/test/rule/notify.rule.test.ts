@@ -1,3 +1,4 @@
+import { failureOf } from "../../src/response";
 /* eslint-disable no-await-in-loop -- 同一客户端依次核对请求选项和生命周期，避免引入额外并发语义。 */
 import type { AxpResponse } from "../../src/response";
 import { AxiosError } from "axios";
@@ -17,7 +18,7 @@ const MESSAGE = "业务失败";
 /** 通知插件名称。 */
 const NAME = "axp:notify";
 
-it("[notify.cb.defaultStringify] 成功不提示，业务失败读逻辑状态，缺消息回退类别和状态", /** 默认消息规则。 */ async () => {
+it("[notify.cb.defaultStringify] 成功不提示，业务消息优先，缺消息回退失败类型或 HTTP 状态", /** 默认消息规则。 */ async () => {
   const h = uiClient();
   const record = notifyRecorder(h.events);
   const notify = vi.fn(record);
@@ -25,7 +26,7 @@ it("[notify.cb.defaultStringify] 成功不提示，业务失败读逻辑状态�
   for (const [status, data, expected] of [
     [200, { code: 0, data: 1 }, undefined],
     [200, { code: 403, data: null, message: MESSAGE }, MESSAGE],
-    [500, {}, "http 500"],
+    [500, {}, "status 500"],
   ] as const) {
     h.net.fallback(/** 当前场景的信封。 */ () => ({ status, data }));
     const before = notify.mock.calls.length;
@@ -83,10 +84,10 @@ it("[notify.cb.stringify] 自定义收到 r 和 ctx，可为成功生成消息�
 it("[notify.cb.network] 无 HTTP 响应时 r.status 为零且仍传给 stringify", /** 网络异常归一化。 */ async () => {
   const h = uiClient([], {}, /** 标准网络错误。 */ () => Promise.reject(new AxiosError("offline", "ERR_NETWORK")));
   const notify = vi.fn(notifyRecorder(h.events));
-  const stringify = vi.fn(/** 从统一响应生成网络消息。 */ (r) => `${r.kind} ${r.status}`);
+  const stringify = vi.fn(/** 从统一响应生成网络消息。 */ (r) => `${failureOf(r)?.type} ${r.status}`);
   h.api.use(axpNotify<AxpResponse>({ notify, stringify }));
   const response = await h.send();
-  expect(response.kind).toBe("network");
+  expect(failureOf(response)?.type).toBe("network");
   expect(notify).toHaveBeenCalledWith("network 0", response);
   expect(stringify.mock.calls[0]?.[0]).toBe(response);
 });

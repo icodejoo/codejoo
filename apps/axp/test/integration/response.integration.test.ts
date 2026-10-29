@@ -23,7 +23,7 @@ it("[core.method.toJSON] 真实 HTTP 响应排除传输循环引用并保留判�
         response: axpResponse<TestResponse>({
           /** 补充可序列化的诊断与扩展字段。 */
           create: (init) =>
-            Object.assign(new TestResponse({ ...init, reason: "test", stack: "callsite" }), {
+            Object.assign(new TestResponse({ ...init, stack: "callsite" }), {
               traceId: "trace",
             }),
         }),
@@ -36,13 +36,11 @@ it("[core.method.toJSON] 真实 HTTP 响应排除传输循环引用并保留判�
     const text = JSON.stringify(response);
     expect(JSON.parse(text)).toEqual({
       ok: true,
-      kind: "ok",
+
       status: 200,
-      httpStatus: 200,
       code: 0,
       message: "done",
       data: { value: 1 },
-      reason: "test",
       stack: "callsite",
       request: { method: "get", url },
       traceId: "trace",

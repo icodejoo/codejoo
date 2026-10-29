@@ -13,7 +13,7 @@ it.each([false, true])(
       async (config) => ({ config, status: 200, statusText: "", data: "text" }) as AxiosResponse,
     );
     expect(await api.get("/no-headers")(undefined, { wrap: true })).toMatchObject({
-      kind: "ok",
+      ok: true,
       data: "text",
     });
   },
@@ -21,7 +21,7 @@ it.each([false, true])(
 
 /** 模拟独立工厂产出尚未带品牌的普通对象。 */
 function plain(response: IAxpResponse): IAxpResponse {
-  return { ...response, ok: response.ok, kind: response.kind, status: response.status };
+  return { ...response, ok: response.ok, status: response.status };
 }
 it("[core.fn.isAxpResponse][core.opt.response] 自定义完整工厂的普通对象在各入口补品牌", /** 自定义完整工厂的普通对象在各入口补品牌。 */ async () => {
   const base = axpResponse<IAxpResponse>({

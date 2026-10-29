@@ -1,4 +1,7 @@
 import { readFileSync } from "node:fs";
+import { create as createAxios } from "axios";
+import type { IAxpCacheStore, ICacheApi, MaybePromise } from "../../src/index";
+import { asyncCacheStore } from "../helpers/source";
 import { expect, expectTypeOf, it } from "vitest";
 import { createAxp } from "../../src/client";
 import { stateKey, type AxpContext } from "../../src/context";
@@ -7,9 +10,23 @@ import axpAuth from "../../src/plugins/auth";
 import axpCache, { type ICacheRequestOptions } from "../../src/plugins/cache";
 import axpRetry, { type IRetryOptions } from "../../src/plugins/retry";
 import type { AxpOption } from "../../src/options";
-import { AxpResponse, axpResponse, isAxpResponse, type AxpKind, type IAxpResponse, type IAxpResponseFactory } from "../../src/response";
+import { AxpResponse, axpResponse, isAxpResponse, type IAxpResponse, type IAxpResponseFactory } from "../../src/response";
 import type { AxpPlugin, AxpRequestOptions, WithData } from "../../src/types";
 import { customResponse, TestResponse } from "../helpers/client";
+
+it("[core.method.extend][cache.type.options] 指定 axios、异步仓与管理 API 的类型契约", () => {
+  const api = createAxp<unknown, TestResponse>({ response: customResponse() });
+  const axios = createAxios();
+  const child = api.extend({ timeout: 1 }, { axios });
+  expectTypeOf(child).toEqualTypeOf<typeof api>();
+  const { store } = asyncCacheStore();
+  expectTypeOf(store).toEqualTypeOf<IAxpCacheStore>();
+  expectTypeOf<ICacheApi["remove"]>().returns.toEqualTypeOf<MaybePromise<boolean>>();
+  expectTypeOf<ICacheApi["clear"]>().returns.toEqualTypeOf<MaybePromise<number>>();
+  expect(child.axios).toBe(axios);
+  child.dispose();
+  api.dispose();
+});
 
 /** 方法优先 Schema；接口无需索引签名。 */
 interface ISchema {
@@ -25,15 +42,11 @@ interface ISchema {
     /** 创建接口。 */ "/pet": readonly [boolean, readonly [string]];
   };
 }
-/** 覆盖 ok、status getter 的响应子类：成功码是 200，令牌过期码按 401 处理。 */
+/** 覆盖 ok getter 的响应子类，保留 HTTP 状态，业务成功码为 200。 */
 class CodeResponse<D = unknown> extends AxpResponse<D> {
   /** 业务成功码是 200。 */
   get ok(): boolean {
-    return this.httpStatus < 300 && this.code === 200;
-  }
-  /** 令牌过期码映射为 401，其余沿用默认规则。 */
-  get status(): number {
-    return this.code === "TOKEN_EXPIRED" ? 401 : super.status;
+    return this.status < 300 && this.code === 200;
   }
 }
 /** 假泛型插件验证工厂调用时的上下文推断。 */
@@ -277,13 +290,13 @@ it("[core.opt.plugins][core.method.use] 不写泛型的自定义插件按默认�
   expect(contracts).toBeTypeOf("function");
 });
 
-it("[core.fn.axpResponse][core.prop.ok][core.prop.status] 子类覆盖 ok / status getter 后仍满足 IAxpResponse，工厂与客户端按子类推断", /** 编译期契约：判定的开放点是 getter 本身。 */ () => {
+it("[core.fn.axpResponse][core.prop.ok][core.prop.status] 子类覆盖 ok getter 后仍满足 IAxpResponse，工厂与客户端按子类推断", /** 编译期契约：判定的开放点是 getter 本身。 */ () => {
   /** 只编译类型调用。 */
   function contracts() {
     expectTypeOf<CodeResponse>().toExtend<IAxpResponse>();
     expectTypeOf<CodeResponse["ok"]>().toEqualTypeOf<boolean>();
     expectTypeOf<CodeResponse["status"]>().toEqualTypeOf<number>();
-    expectTypeOf<CodeResponse["kind"]>().toEqualTypeOf<AxpKind>();
+    expectTypeOf<CodeResponse["code"]>().toEqualTypeOf<number>();
     expectTypeOf<CodeResponse<string>["data"]>().toEqualTypeOf<string>();
     const factory = axpResponse<CodeResponse>({
       create: /** 由初始化字段构造子类。 */ (init) => new CodeResponse(init),

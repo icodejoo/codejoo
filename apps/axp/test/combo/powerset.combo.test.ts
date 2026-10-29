@@ -1,3 +1,4 @@
+import { failureOf } from "../../src/response";
 import { AxiosError, type InternalAxiosRequestConfig } from "axios";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import axpAuth from "../../src/plugins/auth";
@@ -10,7 +11,7 @@ import axpRepath from "../../src/plugins/repath";
 import axpRetry from "../../src/plugins/retry";
 import axpShare from "../../src/plugins/share";
 import type { ITokenManager } from "../../src/objects/TokenManager";
-import { isAxpResponse, type AxpKind, type AxpResponse } from "../../src/response";
+import { isAxpResponse, type AxpResponse } from "../../src/response";
 import type { AxpPlugin, AxpRequestConfig } from "../../src/types";
 import { guarded, memoryTokens, REFRESH_TOKEN, TOKEN_NEW } from "../helpers/b3";
 import type { ITestEvents } from "../helpers/client";
@@ -40,7 +41,7 @@ interface IFlow {
   /** 流程名，出现在用例标题里。 */
   name: string;
   /** 无插件时每个逻辑请求应得到的 kind，只用来确认脚本没有空转，不参与 powerset 断言。 */
-  baseline: AxpKind[];
+  baseline: string[];
   /** 只发请求、推进假时钟，不断言结果；收尾由用例统一排空并检查不变量。 */
   run(h: IInvariantHarness): Promise<void>;
 }
@@ -169,7 +170,7 @@ function route(config: InternalAxiosRequestConfig, hit: number): RouteResult {
 const FLOWS: IFlow[] = [
   {
     name: "成功",
-    baseline: ["ok", "ok"],
+    baseline: ["success", "success"],
     /** 带空查询字段的 GET，延迟跨过 loading 的显示窗口；排空后再发一次相同请求，装了 cache 时第二次命中。 */
     async run(h) {
       const request = { url: PATH.ok, params: { page: 1, q: "" }, ...SOURCE_OPTIONS };
@@ -180,7 +181,7 @@ const FLOWS: IFlow[] = [
   },
   {
     name: "HTTP 500",
-    baseline: ["http"],
+    baseline: ["status 500 code 500"],
     /** 默认 throws 的失败路径：调用方拿到的是被抛出的 R；装了 retry 时三次都失败。 */
     async run(h) {
       h.launch(withLatency({ url: PATH.http500, ...SOURCE_OPTIONS }, LATENCY_SHORT));
@@ -188,7 +189,7 @@ const FLOWS: IFlow[] = [
   },
   {
     name: "HTTP 500 两次后成功",
-    baseline: ["http"],
+    baseline: ["status 500 code 500"],
     /** 前两次发送 500、第三次成功：装了 retry 时在预算内恢复，没装则停在第一次的失败。 */
     async run(h) {
       h.launch(withLatency({ url: PATH.flaky, throws: false, ...SOURCE_OPTIONS }, LATENCY_SHORT));
@@ -196,7 +197,7 @@ const FLOWS: IFlow[] = [
   },
   {
     name: "business 401 刷新",
-    baseline: ["biz", "biz", "biz"],
+    baseline: ["status 200 code 401", "status 200 code 401", "status 200 code 401"],
     /** HTTP 200 + 业务码 401：装了 auth 时单飞刷新后重放；三个请求里两个同 key、一个不同，覆盖共享与单飞。 */
     async run(h) {
       for (const params of AUTH_PARAMS) h.launch(withLatency({ url: PATH.auth, params, throws: false, ...SOURCE_OPTIONS }, LATENCY_SHORT));
@@ -212,7 +213,7 @@ const FLOWS: IFlow[] = [
   },
   {
     name: "并发同 key",
-    baseline: ["ok", "ok"],
+    baseline: ["success", "success"],
     /** 两个请求参数完全相同、返回时间错开；装了 share、cache 时在此合并。 */
     async run(h) {
       for (const latency of SAME_KEY_LATENCIES) h.launch(withLatency({ url: PATH.same, params: { id: 1 }, throws: false, ...SOURCE_OPTIONS }, latency));
@@ -231,7 +232,7 @@ const FLOWS: IFlow[] = [
   },
   {
     name: "单个取消",
-    baseline: ["cancel", "ok"],
+    baseline: ["cancel", "success"],
     /** 同 key 的两个请求，首发在半途用自己的 signal 取消；装了 share 时跟随者不受连累。 */
     async run(h) {
       const leader = new AbortController();
@@ -243,7 +244,7 @@ const FLOWS: IFlow[] = [
   },
   {
     name: "路径变量与空字段",
-    baseline: ["ok"],
+    baseline: ["success"],
     /** POST 同时带路径变量、空查询字段和空请求体字段；cache、share 默认不处理 POST。 */
     async run(h) {
       h.launch(
@@ -286,7 +287,10 @@ async function runFlow(entries: readonly IPluginEntry[], flow: IFlow): Promise<s
     await flow.run(h);
     await h.drain();
     h.assertAll();
-    return h.requests.map(/** 落定值不是响应时标成 raw，说明有 bug 被抛了出来。 */ (request) => (isAxpResponse(request.value) ? request.value.kind : "raw"));
+    return h.requests.map(
+      /** 落定值不是响应时标成 raw，说明有 bug 被抛了出来。 */ (request) =>
+        isAxpResponse(request.value) ? (failureOf(request.value)?.type ?? (request.value.ok ? "success" : "status " + request.value.status + " code " + request.value.code)) : "raw",
+    );
   } finally {
     h.dispose();
   }

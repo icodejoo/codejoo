@@ -1,3 +1,5 @@
+import { failureOf } from "../../src/response";
+import { AXP_FAILURE } from "../../src/response";
 /* eslint-disable no-await-in-loop -- 同一客户端依次核对请求选项和生命周期，避免引入额外并发语义。 */
 import type { AxpResponse } from "../../src/response";
 import { beforeEach, expect, it, vi } from "vitest";
@@ -46,7 +48,7 @@ it.each([STRINGIFY_FAILURE, "notify", ASYNC_FAILURE])(
       const before = error.mock.calls.length;
       const pending = h.send();
       await vi.runAllTimersAsync();
-      expect((await pending).httpStatus).toBe(status);
+      expect((await pending).status).toBe(status);
       expect(error.mock.calls.length - before).toBe(1);
       expect(error.mock.calls[before]?.[1]).toBe(BUG);
     }
@@ -78,7 +80,7 @@ it("[notify.cb.cancel] 在途取消默认不通知且监听释放", /** cancel �
   const pending = h.send();
   expect(h.api.cancelAll()).toBe(1);
   await vi.runAllTimersAsync();
-  expect((await pending).kind).toBe("cancel");
+  expect(failureOf(await pending)?.type).toBe("cancel");
   expect(notify).not.toHaveBeenCalled();
 });
 
@@ -116,8 +118,8 @@ it("[notify.cb.missing] 无 config、message、response 的网络错误使用默
   const notify = vi.fn(notifyRecorder(h.events));
   h.api.use(axpNotify<AxpResponse>({ notify }));
   const response = await h.send();
-  expect(response).toMatchObject({ kind: "network", status: 0, message: EMPTY_TEXT });
-  expect(notify).toHaveBeenCalledExactlyOnceWith("network 0", response);
+  expect(response).toMatchObject({ status: 0, message: EMPTY_TEXT, [AXP_FAILURE]: { type: "network" } });
+  expect(notify).toHaveBeenCalledExactlyOnceWith("network", response);
 });
 it("[notify.method.lifecycle] 同一插件定义复用时，卸载一个客户端不影响另一个", /** 客户端注册和副作用隔离。 */ async () => {
   const first = uiClient();

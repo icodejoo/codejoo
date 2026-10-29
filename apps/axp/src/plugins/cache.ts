@@ -1,16 +1,20 @@
-import type { AxpContext } from "../context";
+import { cancelIfAborted, type AxpContext } from "../context";
 import { methodSet, normalizeMethod, SAFE_METHODS } from "../methods";
 import { resolveOption, resolveRequestOption, type AxpOption, type IPluginSwitch } from "../options";
-import type { AxpResponse, IAxpResponse } from "../response";
-import type { AxpClient, AxpPlugin } from "../types";
-import { createFreshnessBarrier, createMemoryStore, type IAxpCacheStore } from "./cache-store";
+import { failureOf, type AxpResponse, type AxpResponseInit, type IAxpResponse } from "../response";
+import type { AxpClient, AxpNext, AxpPlugin } from "../types";
+import { createFreshnessBarrier, createMemoryStore, type IAxpCacheEntry, type IAxpCacheSnapshot, type IAxpCacheStore, type MaybePromise } from "./cache-store";
 
-export type { IAxpCacheEntry, IAxpCacheStore } from "./cache-store";
+export type { IAxpCacheEntry, IAxpCacheSnapshot, IAxpCacheStore, MaybePromise } from "./cache-store";
 
 /** 内置缓存插件名称。 */
 const NAME = "axp:cache";
 /** 默认有效期：一分钟。 */
 const DEFAULT_EXPIRES = 60_000;
+/** 存储删除操作的日志标签。 */
+const DELETE_OPERATION = "delete";
+/** 不进入扩展快照的基础字段和传输引用。 */
+const BASE_FIELDS = new Set(["ok", "status", "code", "message", "data", "request", "stack", "raw", "error"]);
 /** 环境缺少 structuredClone 时，deep 拷贝宁可报错也不悄悄共享数据。 */
 const DEEP_UNSUPPORTED = `[${NAME}] clone:"deep" 需要 structuredClone（当前环境不可用）；请改用 clone: (data) => ... 自定义深拷贝`;
 
@@ -21,7 +25,7 @@ export type TCloneStrategy = "shallow" | "deep" | ((data: any) => any);
 type TCloneFn = (data: any) => any;
 
 /** 缓存插件的装配配置。 */
-export interface ICacheOptions<R extends IAxpResponse = IAxpResponse> extends IPluginSwitch {
+export interface ICacheOptions<R extends IAxpResponse<unknown, string | number> = IAxpResponse> extends IPluginSwitch {
   /** 默认有效期（毫秒），默认 60_000；Infinity 永不过期。 */
   expires?: number;
   /** 内存缓存容量，超出按 LRU 淘汰；小于 1 回退 500，Infinity 不限。注入 store 后不再生效。 */
@@ -32,8 +36,8 @@ export interface ICacheOptions<R extends IAxpResponse = IAxpResponse> extends IP
   clone?: TCloneStrategy;
   /** 是否写入缓存，默认只缓存 `r.ok`；抛错按程序 bug 处理。 */
   shouldCache?: (response: R) => boolean;
-  /** 自定义同步存储，默认内存 LRU；过期条目由插件读取时再检查一次。 */
-  store?: IAxpCacheStore<R>;
+  /** 自定义同步或异步快照存储，默认内存 LRU；读取时再检查过期。 */
+  store?: IAxpCacheStore;
 }
 
 /** 请求级 cache 对象写法。 */
@@ -45,19 +49,26 @@ export interface ICacheRequestOptions extends IPluginSwitch {
   /** 本次请求的拷贝策略。 */
   clone?: TCloneStrategy;
   /** 本次请求的写入判定。 */
-  shouldCache?: (response: IAxpResponse) => boolean;
+  shouldCache?: (response: IAxpResponse<unknown, string | number>) => boolean;
 }
 
 /** `client.plugin(cache)` 暴露的缓存管理能力。 */
 export interface ICacheApi {
-  /** 删除一条缓存。 */
-  remove(key: string): boolean;
-  /** 清空缓存并使在途请求不再回写。 */
-  clear(): number;
+  /** 删除一条缓存。
+   * @param key 缓存键。
+   * @returns 是否存在；异步仓返回 Promise，故障时为 false。
+   * @example `await api.remove('pets')`
+   */
+  remove(key: string): MaybePromise<boolean>;
+  /** 清空缓存并使在途请求不再回写。
+   * @returns 清掉的条目数；异步仓返回 Promise。
+   * @example `await api.clear()`
+   */
+  clear(): MaybePromise<number>;
 }
 
 /** 合并默认之后的缓存配置，含请求级显式键。 */
-type TCacheConfig<R extends IAxpResponse> = ICacheOptions<R> & Pick<ICacheRequestOptions, "key"> & Required<Pick<ICacheOptions<R>, "expires" | "methods" | "shouldCache">>;
+type TCacheConfig<R extends IAxpResponse<unknown, string | number>> = ICacheOptions<R> & Pick<ICacheRequestOptions, "key"> & Required<Pick<ICacheOptions<R>, "expires" | "methods" | "shouldCache">>;
 
 /** 默认写入判定：只缓存成功响应。
  * @internal
@@ -65,7 +76,7 @@ type TCacheConfig<R extends IAxpResponse> = ICacheOptions<R> & Pick<ICacheReques
  * @returns 是否写入缓存。
  * @example `$defaultShouldCache(r) // r.ok`
  */
-export function $defaultShouldCache(response: IAxpResponse): boolean {
+export function $defaultShouldCache(response: IAxpResponse<unknown, string | number>): boolean {
   return response.ok;
 }
 
@@ -110,8 +121,36 @@ function expiresShorthand(value: unknown): { /** 有效期（毫秒）。 */ exp
 }
 
 /** 按拷贝策略派生响应，data 为拷贝，其余字段沿用来源。 */
-function cloneResponse<R extends IAxpResponse>(ctx: AxpContext<R>, response: R, cloneFn: TCloneFn): R {
+function cloneResponse<R extends IAxpResponse<unknown, string | number>>(ctx: AxpContext<R>, response: R, cloneFn: TCloneFn): R {
   return ctx.fail({ from: response, data: cloneFn(response.data) });
+}
+
+/** 只在存储实际返回 thenable 时进入异步路径。 */
+function isPending<T>(value: MaybePromise<T>): value is Promise<T> {
+  return value != null && typeof (value as Promise<T>).then === "function";
+}
+
+/** 提取基础判定字段与自有可枚举扩展数据，不保存传输引用和函数。 */
+function snapshotResponse(response: IAxpResponse<unknown, string | number>): IAxpCacheSnapshot {
+  let extra: Record<string, unknown> | undefined;
+  for (const key of Object.keys(response)) {
+    if (BASE_FIELDS.has(key)) continue;
+    const value: unknown = Reflect.get(response, key);
+    if (typeof value !== "function") {
+      extra ??= {};
+      Object.defineProperty(extra, key, { value, enumerable: true, configurable: true, writable: true });
+    }
+  }
+  const snapshot: IAxpCacheSnapshot = {
+    code: response.code,
+    message: response.message,
+    data: response.data,
+    reason: failureOf(response)?.reason,
+    failure: failureOf(response)?.type,
+    status: response.status,
+  };
+  if (extra) snapshot.extra = extra;
+  return snapshot;
 }
 
 /** 缓存成功响应，命中时不触网；较旧的响应不覆盖较新的结果。
@@ -120,7 +159,7 @@ function cloneResponse<R extends IAxpResponse>(ctx: AxpContext<R>, response: R, 
  * @returns source 阶段内置次序 3 的插件；`client.plugin(plugin)` 得到 `{ remove, clear }`。
  * @example `axpCache({ expires: 30_000 })` 配合 `api.get('/pets')(undefined, { cache: true })`
  */
-export default function axpCache<R extends IAxpResponse = AxpResponse>(options: ICacheOptions<R> = {}): AxpPlugin<R, ICacheApi> {
+export default function axpCache<R extends IAxpResponse<unknown, string | number> = AxpResponse>(options: ICacheOptions<R> = {}): AxpPlugin<R, ICacheApi> {
   const base = resolveOption<TCacheConfig<R>, typeof DEFAULTS>(undefined, options, DEFAULTS);
   const methods = methodSet(base.methods);
   return {
@@ -130,51 +169,124 @@ export default function axpCache<R extends IAxpResponse = AxpResponse>(options: 
     /** 每个客户端各自持有存储与新旧顺序屏障。 */
     setup() {
       const owned = options.store === undefined;
-      const store = options.store ?? createMemoryStore<R>({ max: options.max });
+      const store = options.store ?? createMemoryStore({ max: options.max });
       const barrier = createFreshnessBarrier();
+      const writes = new Map<string, Promise<void>>();
+      /** 存储故障只记录，不改变本次请求结果；同步仓不增加微任务。 */
+      function operate<T>(method: string, action: () => MaybePromise<T>, fallback: T): MaybePromise<T> {
+        /** 同步抛错与异步拒绝共用故障输出和回退值。 */
+        function recover(error: unknown): T {
+          console.error(`[${NAME}] ${method} failed`, error);
+          return fallback;
+        }
+        try {
+          const result = action();
+          return isPending(result) ? Promise.resolve(result).catch(recover) : result;
+        } catch (error) {
+          return recover(error);
+        }
+      }
+      /** 读取失败时回落网络，同步读取不分配闭包。 */
+      function lookupFailed(error: unknown): undefined {
+        console.error(`[${NAME}] get failed`, error);
+        return undefined;
+      }
+      /** 同 key 的异步写入按到达顺序串行，真正写入前再检查屏障。 */
+      function write(key: string, entry: IAxpCacheEntry, ticket: number): MaybePromise<void> {
+        /** 在队列头提交；成功写入后才登记新鲜度。 */
+        function commit(): MaybePromise<void> {
+          if (!barrier.canWrite(key, ticket)) return;
+          return operate(
+            "set",
+            () => {
+              const result = store.set(key, entry);
+              if (isPending(result)) return Promise.resolve(result).then(/** 异步提交成功后抬高下界。 */ () => barrier.markWritten(key, ticket));
+              barrier.markWritten(key, ticket);
+            },
+            undefined,
+          );
+        }
+        const previous = writes.get(key);
+        const result = previous ? previous.then(commit) : commit();
+        if (!isPending(result)) return;
+        const tail = result.then(
+          /** 只移除本次队尾，不能误删后续排队项。 */ () => {
+            if (writes.get(key) === tail) writes.delete(key);
+          },
+        );
+        writes.set(key, tail);
+        return tail;
+      }
+      /** 只有未命中才进入异步填充，保持过期删除和写入屏障的顺序。 */
+      async function fill(hit: IAxpCacheEntry | undefined, ctx: AxpContext<R>, next: AxpNext<R>, key: string, config: TCacheConfig<R>, cloneFn: TCloneFn | null): Promise<R> {
+        if (hit) {
+          const removed = operate(DELETE_OPERATION, () => store.delete(key), false);
+          if (isPending(removed)) await removed;
+        }
+        const ticket = barrier.begin(key);
+        let response!: R;
+        try {
+          response = await next();
+          if (barrier.canWrite(key, ticket) && config.shouldCache(response)) {
+            const written = write(key, { snapshot: snapshotResponse(response), expiresAt: Date.now() + config.expires }, ticket);
+            if (isPending(written)) await written;
+          }
+        } finally {
+          // 该 key 没有在途请求时，屏障记录随之回收。
+          barrier.end(key);
+        }
+        return cloneFn && response.ok ? cloneResponse(ctx, response, cloneFn) : response;
+      }
+      /** 同步命中不创建 async 包装，异步存储复用同一重建逻辑。 */
+      function resolveHit(hit: IAxpCacheEntry | undefined, ctx: AxpContext<R>, next: AxpNext<R>, key: string, config: TCacheConfig<R>, cloneFn: TCloneFn | null): Promise<R> {
+        // 第三方存储可能不处理过期，读取时再确认一次。
+        if (!hit || !(hit.expiresAt > Date.now())) return fill(hit, ctx, next, key, config, cloneFn);
+        const cancelled = cancelIfAborted(ctx);
+        if (cancelled) return Promise.resolve(cancelled);
+        const snapshot = hit.snapshot;
+        const fields = {
+          code: snapshot.code,
+          message: snapshot.message,
+          data: cloneFn ? cloneFn(snapshot.data) : snapshot.data,
+          reason: snapshot.reason,
+          failure: snapshot.failure,
+          status: snapshot.status,
+          request: ctx.request,
+        } as AxpResponseInit<R>;
+        return Promise.resolve(ctx.fail(snapshot.extra ? { ...snapshot.extra, ...fields } : fields));
+      }
       return {
-        /** 命中直接返回；未命中放行并按发起顺序决定是否写回。 */
-        async handle(ctx, next) {
+        /** 同步读取不分配闭包，只有异步仓才建立后续处理。 */
+        handle(ctx, next) {
           const config = resolveRequestOption(ctx.request.cache, base, DEFAULTS, expiresShorthand, true);
           if (!config || !methods.has(normalizeMethod(ctx.request.method))) return next();
           const key = (typeof config.key === "string" && config.key) || ctx.key();
           if (key === null) return next();
           const cloneFn = $resolveCloneFn(config.clone);
-          const hit = store.get(key);
-          if (hit) {
-            // 第三方存储可能不处理过期，读取时再确认一次。
-            if (hit.expiresAt > Date.now()) return cloneFn ? cloneResponse(ctx, hit.response, cloneFn) : hit.response;
-            store.delete(key);
-          }
-          const ticket = barrier.begin(key);
-          let response!: R;
+          let lookup: MaybePromise<IAxpCacheEntry | undefined>;
           try {
-            response = await next();
-            if (barrier.canWrite(key, ticket) && config.shouldCache(response)) {
-              store.set(key, { response, expiresAt: Date.now() + config.expires });
-              barrier.markWritten(key, ticket);
-            }
-          } finally {
-            // 该 key 没有在途请求时，屏障记录随之回收。
-            barrier.end(key);
+            const result = store.get(key);
+            lookup = isPending(result) ? Promise.resolve(result).catch(lookupFailed) : result;
+          } catch (error) {
+            lookup = lookupFailed(error);
           }
-          return cloneFn && response.ok ? cloneResponse(ctx, response, cloneFn) : response;
+          return isPending(lookup) ? lookup.then(/** 异步读取完成后再检查取消与有效期。 */ (hit) => resolveHit(hit, ctx, next, key, config, cloneFn)) : resolveHit(lookup, ctx, next, key, config, cloneFn);
         },
         api: {
           /** 删除一条缓存，返回是否存在。 */
-          remove: (key) => store.delete(key),
+          remove: (key) => operate(DELETE_OPERATION, () => store.delete(key), false),
           /** 清空并作废在途写入，返回清掉的条目数。 */
           clear() {
-            const count = store.size;
-            store.clear();
             barrier.clear();
-            return count;
+            const count = store.size ?? 0;
+            const cleared = operate("clear", () => store.clear(), undefined);
+            return isPending(cleared) ? cleared.then(/** 优先使用仓返回的清理数。 */ (value) => value ?? count) : (cleared ?? count);
           },
         },
         /** 卸载后在途响应不再回写；只清空自己创建的存储，注入的由调用方管理。 */
         dispose() {
           barrier.clear();
-          if (owned) store.clear();
+          if (owned) void store.clear();
         },
       };
     },
@@ -187,19 +299,19 @@ const CACHE_PROBE = { name: NAME } as AxpPlugin<any, ICacheApi>;
 /** 删除客户端上的一条缓存。
  * @param client 安装了 axpCache 的客户端。
  * @param key 缓存键。
- * @returns 是否真的删除了条目；客户端没有安装 cache 时为 false。
+ * @returns 是否真的删除了条目；异步仓返回 Promise，未安装 cache 时为 false。
  * @example `removeCache(api, 'pets')`
  */
-export function removeCache(client: Pick<AxpClient<any, any>, "plugin">, key: string): boolean {
+export function removeCache(client: Pick<AxpClient<any, any>, "plugin">, key: string): MaybePromise<boolean> {
   return client.plugin(CACHE_PROBE)?.remove(key) ?? false;
 }
 
 /** 清空客户端的全部缓存，清空前已发出的在途请求落定后不再回写（适合切换账号）。
  * @param client 安装了 axpCache 的客户端。
- * @returns 被清掉的条目数；客户端没有安装 cache 时为 0。
+ * @returns 被清掉的条目数；异步仓返回 Promise，未安装 cache 时为 0。
  * @example `clearCache(api)`
  */
-export function clearCache(client: Pick<AxpClient<any, any>, "plugin">): number {
+export function clearCache(client: Pick<AxpClient<any, any>, "plugin">): MaybePromise<number> {
   return client.plugin(CACHE_PROBE)?.clear() ?? 0;
 }
 
