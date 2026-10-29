@@ -1,0 +1,299 @@
+{
+  "order": "old,new,old,new,old,new",
+  "units": "microseconds",
+  "runs": [
+    {
+      "round": 1,
+      "version": "old",
+      "scenarios": [
+        {
+          "name": "B1 裸 axios",
+          "meanUs": 13.51167672154694,
+          "minUs": 9.799999999813735,
+          "overheadUs": 0,
+          "overheadRatio": 0
+        },
+        {
+          "name": "B2 createAxp 无插件",
+          "meanUs": 24.421171715691916,
+          "minUs": 16.80000000033033,
+          "overheadUs": 10.909494994144977,
+          "overheadRatio": 0.8074123751604945
+        },
+        {
+          "name": "B3 全插件缓存未命中",
+          "meanUs": 49.406024899956314,
+          "minUs": 29.999999998835847,
+          "overheadUs": 35.89434817840938,
+          "overheadRatio": 2.6565428494280807
+        },
+        {
+          "name": "B4 缓存命中",
+          "meanUs": 11.738909105850873,
+          "minUs": 8.19999999657739,
+          "overheadUs": -1.7727676156960686,
+          "overheadRatio": -0.13120263696577739
+        },
+        {
+          "name": "B5 share start 并发100",
+          "meanUs": 1230.990215384623,
+          "minUs": 905.0999999999476,
+          "overheadUs": 1217.4785386630763,
+          "overheadRatio": 90.10565925704653
+        },
+        {
+          "name": "B6 JSON POST + retry",
+          "meanUs": 28.21324747140029,
+          "minUs": 19.00000000023283,
+          "overheadUs": 14.70157074985335,
+          "overheadRatio": 1.0880641280004055
+        }
+      ]
+    },
+    {
+      "round": 1,
+      "version": "new",
+      "scenarios": [
+        {
+          "name": "B1 裸 axios",
+          "meanUs": 15.440756438762378,
+          "minUs": 9.999999999763531,
+          "overheadUs": 0,
+          "overheadRatio": 0
+        },
+        {
+          "name": "B2 createAxp 无插件",
+          "meanUs": 25.129119601955523,
+          "minUs": 15.199999999822467,
+          "overheadUs": 9.688363163193145,
+          "overheadRatio": 0.627453920513346
+        },
+        {
+          "name": "B3 全插件缓存未命中",
+          "meanUs": 47.23592971351511,
+          "minUs": 27.599999999438296,
+          "overheadUs": 31.79517327475273,
+          "overheadRatio": 2.059171997230287
+        },
+        {
+          "name": "B4 缓存命中",
+          "meanUs": 9.872769994766378,
+          "minUs": 6.499999999505235,
+          "overheadUs": -5.567986443996,
+          "overheadRatio": -0.3606032169523873
+        },
+        {
+          "name": "B5 share start 并发100",
+          "meanUs": 1171.1834406084567,
+          "minUs": 727.6999999994587,
+          "overheadUs": 1155.7426841696943,
+          "overheadRatio": 74.85013371937694
+        },
+        {
+          "name": "B6 JSON POST + retry",
+          "meanUs": 29.25883316753533,
+          "minUs": 17.700000000331784,
+          "overheadUs": 13.818076728772951,
+          "overheadRatio": 0.8949093124792862
+        }
+      ]
+    },
+    {
+      "round": 2,
+      "version": "old",
+      "scenarios": [
+        {
+          "name": "B1 裸 axios",
+          "meanUs": 15.791484019706648,
+          "minUs": 10.299999999915599,
+          "overheadUs": 0,
+          "overheadRatio": 0
+        },
+        {
+          "name": "B2 createAxp 无插件",
+          "meanUs": 24.07418900537888,
+          "minUs": 16.699999999218562,
+          "overheadUs": 8.282704985672233,
+          "overheadRatio": 0.5245045351871938
+        },
+        {
+          "name": "B3 全插件缓存未命中",
+          "meanUs": 59.099583382579134,
+          "minUs": 32.90000000015425,
+          "overheadUs": 43.30809936287248,
+          "overheadRatio": 2.7424971148263877
+        },
+        {
+          "name": "B4 缓存命中",
+          "meanUs": 15.341697094289815,
+          "minUs": 9.399999999004649,
+          "overheadUs": -0.44978692541683235,
+          "overheadRatio": -0.028482878800721312
+        },
+        {
+          "name": "B5 share start 并发100",
+          "meanUs": 1341.1057640750366,
+          "minUs": 891.2000000018452,
+          "overheadUs": 1325.3142800553298,
+          "overheadRatio": 83.9258855216794
+        },
+        {
+          "name": "B6 JSON POST + retry",
+          "meanUs": 27.066237667982666,
+          "minUs": 19.199999998818384,
+          "overheadUs": 11.274753648276018,
+          "overheadRatio": 0.7139768266368081
+        }
+      ]
+    },
+    {
+      "round": 2,
+      "version": "new",
+      "scenarios": [
+        {
+          "name": "B1 裸 axios",
+          "meanUs": 15.57283578603118,
+          "minUs": 9.900000000016007,
+          "overheadUs": 0,
+          "overheadRatio": 0
+        },
+        {
+          "name": "B2 createAxp 无插件",
+          "meanUs": 23.15296180961467,
+          "minUs": 15.299999999115244,
+          "overheadUs": 7.580126023583491,
+          "overheadRatio": 0.4867530954370467
+        },
+        {
+          "name": "B3 全插件缓存未命中",
+          "meanUs": 42.786302278313876,
+          "minUs": 28.599999999642023,
+          "overheadUs": 27.2134664922827,
+          "overheadRatio": 1.7474958874666329
+        },
+        {
+          "name": "B4 缓存命中",
+          "meanUs": 10.525346546117568,
+          "minUs": 6.499999999505235,
+          "overheadUs": -5.047489239913612,
+          "overheadRatio": -0.32412139376960525
+        },
+        {
+          "name": "B5 share start 并发100",
+          "meanUs": 1135.8759795570604,
+          "minUs": 720.1999999997497,
+          "overheadUs": 1120.3031437710292,
+          "overheadRatio": 71.93957216038585
+        },
+        {
+          "name": "B6 JSON POST + retry",
+          "meanUs": 26.351161289462297,
+          "minUs": 17.400000000634464,
+          "overheadUs": 10.778325503431116,
+          "overheadRatio": 0.6921234932111251
+        }
+      ]
+    },
+    {
+      "round": 3,
+      "version": "old",
+      "scenarios": [
+        {
+          "name": "B1 裸 axios",
+          "meanUs": 16.08185246534345,
+          "minUs": 9.900000000016007,
+          "overheadUs": 0,
+          "overheadRatio": 0
+        },
+        {
+          "name": "B2 createAxp 无插件",
+          "meanUs": 32.25083608804181,
+          "minUs": 20.300000000133878,
+          "overheadUs": 16.16898362269836,
+          "overheadRatio": 1.005417980145178
+        },
+        {
+          "name": "B3 全插件缓存未命中",
+          "meanUs": 61.284538072615995,
+          "minUs": 34.600000000864384,
+          "overheadUs": 45.20268560727254,
+          "overheadRatio": 2.8107884775516245
+        },
+        {
+          "name": "B4 缓存命中",
+          "meanUs": 12.869267545640472,
+          "minUs": 8.699999998498242,
+          "overheadUs": -3.212584919702976,
+          "overheadRatio": -0.19976460588891287
+        },
+        {
+          "name": "B5 share start 并发100",
+          "meanUs": 1579.357774269939,
+          "minUs": 965.1000000012573,
+          "overheadUs": 1563.2759218045956,
+          "overheadRatio": 97.20745325661149
+        },
+        {
+          "name": "B6 JSON POST + retry",
+          "meanUs": 38.72119528392546,
+          "minUs": 22.39999999801512,
+          "overheadUs": 22.639342818582012,
+          "overheadRatio": 1.4077571515700704
+        }
+      ]
+    },
+    {
+      "round": 3,
+      "version": "new",
+      "scenarios": [
+        {
+          "name": "B1 裸 axios",
+          "meanUs": 20.053716422848858,
+          "minUs": 11.899999999968713,
+          "overheadUs": 0,
+          "overheadRatio": 0
+        },
+        {
+          "name": "B2 createAxp 无插件",
+          "meanUs": 28.46614668583208,
+          "minUs": 16.499999999723514,
+          "overheadUs": 8.41243026298322,
+          "overheadRatio": 0.41949482507881886
+        },
+        {
+          "name": "B3 全插件缓存未命中",
+          "meanUs": 77.27159525557924,
+          "minUs": 33.59999999884167,
+          "overheadUs": 57.21787883273038,
+          "overheadRatio": 2.8532306743670373
+        },
+        {
+          "name": "B4 缓存命中",
+          "meanUs": 10.141086513398548,
+          "minUs": 6.799999999202555,
+          "overheadUs": -9.912629909450311,
+          "overheadRatio": -0.49430388365101396
+        },
+        {
+          "name": "B5 share start 并发100",
+          "meanUs": 1160.4976798144507,
+          "minUs": 790.0999999983469,
+          "overheadUs": 1140.443963391602,
+          "overheadRatio": 56.86945697966487
+        },
+        {
+          "name": "B6 JSON POST + retry",
+          "meanUs": 31.951094319125282,
+          "minUs": 19.700000000739237,
+          "overheadUs": 11.897377896276423,
+          "overheadRatio": 0.5932754630319172
+        }
+      ]
+    }
+  ],
+  "decision": "reverted",
+  "reason": "三轮 min 改善中位数：B2 1.6us、B6 1.8us，未达 2us 保留条件。",
+  "candidate": "dispatch 跳过 defaults.headers 深合并；无显式请求头直接展开 defaults，显式请求头沿用 axios 合并规则以保持禁用值和大小写语义。",
+  "baseline": "git archive HEAD apps/axp/src",
+  "command": "npx vp test bench --run <bench> --configLoader=native --pool=threads --outputJson=<output>"
+}

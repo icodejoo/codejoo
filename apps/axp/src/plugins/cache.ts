@@ -60,6 +60,7 @@ export interface ICacheApi {
 type TCacheConfig<R extends IAxpResponse> = ICacheOptions<R> & Pick<ICacheRequestOptions, "key"> & Required<Pick<ICacheOptions<R>, "expires" | "methods" | "shouldCache">>;
 
 /** 默认写入判定：只缓存成功响应。
+ * @internal
  * @param response 归一化响应。
  * @returns 是否写入缓存。
  * @example `$defaultShouldCache(r) // r.ok`
@@ -76,6 +77,7 @@ const DEFAULTS = {
 };
 
 /** 浅拷贝：数组和对象复制顶层，原始值原样返回。
+ * @internal
  * @param data 响应数据。
  * @returns 顶层独立的数据，嵌套仍共享。
  * @example `$shallowClone({ a: { b: 1 } }) // 新对象，a 仍共享`
@@ -87,6 +89,7 @@ export function $shallowClone(data: any): any {
 }
 
 /** 把拷贝策略解析为函数；null 表示共享引用。
+ * @internal
  * @param clone 拷贝策略。
  * @returns 拷贝函数，或 null。
  * @throws deep 在没有 structuredClone 的环境里抛错，绝不退化为浅拷贝。
