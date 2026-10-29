@@ -173,3 +173,49 @@ it("[cache.opt.store][core.req.signal] 异步 get 挂起期间取消，返回命
   expect(await pending).toMatchObject({ [AXP_FAILURE]: { type: "cancel" } });
   expect(h.net.totalStarted).toBe(0);
 });
+
+it("[cache.opt.store] 异步 get 挂起时取消：立即以 cancel 落定，pending 归零，迟到命中不回写", async () => {
+  const lateGet = gate();
+  const { store, entries } = asyncCacheStore();
+  const h = sourceClient([axpCache({ store: { ...store, get: vi.fn(() => lateGet.pending.then(() => undefined)) } })]);
+  h.net.on("get", URL, (_config, hit) => envelope(hit));
+  const pending = h.send(REQUEST);
+  await vi.advanceTimersByTimeAsync(0);
+  expect(h.api.pending()).toBe(1);
+  h.api.cancelAll();
+  expect(await pending).toMatchObject({ [AXP_FAILURE]: { type: "cancel" } });
+  expect(h.api.pending()).toBe(0);
+  lateGet.release();
+  await vi.runAllTimersAsync();
+  expect(h.net.totalStarted).toBe(0);
+  expect(entries.size).toBe(0);
+});
+
+it("[cache.opt.store] 异步写入挂起时取消：立即以 cancel 落定，写入迟到完成不报错", async () => {
+  const h = queuedClient();
+  const pending = h.send(REQUEST);
+  await vi.advanceTimersByTimeAsync(0);
+  await h.started.pending;
+  h.api.cancelAll();
+  expect(await pending).toMatchObject({ [AXP_FAILURE]: { type: "cancel" } });
+  expect(h.api.pending()).toBe(0);
+  h.blocked.release();
+  await vi.runAllTimersAsync();
+});
+
+it("[cache.opt.store] 过期条目的异步删除挂起时取消：立即以 cancel 落定，不再发网络请求", async () => {
+  const blocked = gate();
+  const { store, entries } = asyncCacheStore();
+  entries.set(KEY, { snapshot: { status: 200, data: "old" }, expiresAt: 0 } as IAxpCacheEntry);
+  const h = sourceClient([axpCache({ store: { ...store, delete: vi.fn(() => blocked.pending.then(() => true)) } })]);
+  h.net.on("get", URL, (_config, hit) => envelope(hit));
+  vi.setSystemTime(10);
+  const pending = h.send(REQUEST);
+  await vi.advanceTimersByTimeAsync(0);
+  h.api.cancelAll();
+  expect(await pending).toMatchObject({ [AXP_FAILURE]: { type: "cancel" } });
+  expect(h.api.pending()).toBe(0);
+  blocked.release();
+  await vi.runAllTimersAsync();
+  expect(h.net.totalStarted).toBe(0);
+});

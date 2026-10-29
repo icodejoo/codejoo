@@ -176,7 +176,7 @@ ctx.markReplayable()
 正在刷新 → 等刷新结果；失败 → onAccessExpired（每轮一次），返回 ctx.fail({ failure: 'auth', reason: 'expired' })
 循环（首发与每次重放前都走一遍）：
 本地无 token → onAccessDenied，返回 ctx.fail({ failure: 'auth', reason: 'unauthenticated' })
-patch = ready(tm, request)；ready 期间 token 被替换就用新 token 重做（最多 3 次），记下实际注入的 token（状态键）
+patch = ready(tm, request)；ready 期间 token 被替换就用新 token 重做（最多 3 次），记下实际注入的 token（状态键）；ready 返回后本地已无 token（期间登出）→ 同上 unauthenticated 本地拒绝
 r = await next(patch)
 r.ok / failureOf(r)?.type 为 internal 或 cancel → return r（不进 onFailure）
 action = await onFailure(r, tm, ctx)；等待期间调用方已取消 → 返回 fail({ failure: 'cancel' })，不再通知
@@ -294,7 +294,7 @@ interface IAxpCacheSnapshot {
 
 - 快照含基础业务字段、内核失败事实和自有可枚举扩展数据（函数不存）；不保存 ok，由重建后的 R 判定。自定义工厂从 init 恢复扩展字段，命中时没有 raw。
 - store 的 get 异常按未命中；set/delete/clear 异常隔离并 console.error。clear 优先取仓返回的数量，否则取清空前 size，两者均无则 0。
-- 同 key 的异步写入串行，真正写入前再过新鲜度屏障；clear/dispose 使旧票据失效。内存仓走同步快路径。业务数据、扩展数据和 Infinity 的持久化编码由使用者的 store 负责。
+- 同 key 的异步写入串行，真正写入前再过新鲜度屏障；clear/dispose 使旧票据失效。内存仓走同步快路径。异步 get、过期删除与写入的等待都可被调用方取消：取消立即以 cancel 落定，迟到结果被隔离、不回写（存储操作本身不取消）。业务数据、扩展数据和 Infinity 的持久化编码由使用者的 store 负责。
 - 默认共享 data 引用；clone 只作用于 data，不克隆整个响应原型。未命中的成功结果同样按 clone 返回，失败原样返回。deep 缺 structuredClone 时在发送前抛错。内存仓的有限有效期写入也会节流清扫，不只在超容量时清扫。
 
 - 变化：`clearCache(ax)` 参数从 axios 实例改为客户端；默认不缓存 POST；`shouldCache` 参数改为 `r`。

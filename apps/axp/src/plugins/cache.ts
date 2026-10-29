@@ -3,6 +3,7 @@ import { methodSet, normalizeMethod, SAFE_METHODS } from "../methods";
 import { resolveOption, resolveRequestOption, type AxpOption, type IPluginSwitch } from "../options";
 import { failureOf, type AxpResponse, type AxpResponseInit, type IAxpResponse } from "../response";
 import type { AxpClient, AxpNext, AxpPlugin } from "../types";
+import { waitAbortable } from "../utils";
 import { createFreshnessBarrier, createMemoryStore, type IAxpCacheEntry, type IAxpCacheSnapshot, type IAxpCacheStore, type MaybePromise } from "./cache-store";
 
 export type { IAxpCacheEntry, IAxpCacheSnapshot, IAxpCacheStore, MaybePromise } from "./cache-store";
@@ -221,7 +222,12 @@ export default function axpCache<R extends IAxpResponse<unknown, string | number
       async function fill(hit: IAxpCacheEntry | undefined, ctx: AxpContext<R>, next: AxpNext<R>, key: string, config: TCacheConfig<R>, cloneFn: TCloneFn | null): Promise<R> {
         if (hit) {
           const removed = operate(DELETE_OPERATION, () => store.delete(key), false);
-          if (isPending(removed)) await removed;
+          if (isPending(removed)) {
+            // 异步删除可被取消；存储操作本身不取消，迟到结果已被 operate 观察。
+            await waitAbortable(removed, ctx.signal);
+            const cancelled = cancelIfAborted(ctx);
+            if (cancelled) return cancelled;
+          }
         }
         const ticket = barrier.begin(key);
         let response!: R;
@@ -229,7 +235,11 @@ export default function axpCache<R extends IAxpResponse<unknown, string | number
           response = await next();
           if (barrier.canWrite(key, ticket) && config.shouldCache(response)) {
             const written = write(key, { snapshot: snapshotResponse(response), expiresAt: Date.now() + config.expires }, ticket);
-            if (isPending(written)) await written;
+            if (isPending(written)) {
+              await waitAbortable(written, ctx.signal);
+              const cancelled = cancelIfAborted(ctx);
+              if (cancelled) return cancelled;
+            }
           }
         } finally {
           // 该 key 没有在途请求时，屏障记录随之回收。
@@ -270,7 +280,10 @@ export default function axpCache<R extends IAxpResponse<unknown, string | number
           } catch (error) {
             lookup = lookupFailed(error);
           }
-          return isPending(lookup) ? lookup.then(/** 异步读取完成后再检查取消与有效期。 */ (hit) => resolveHit(hit, ctx, next, key, config, cloneFn)) : resolveHit(lookup, ctx, next, key, config, cloneFn);
+          // 异步读取可被取消：lookup 已挂好失败处理，迟到结果被隔离，不再参与后续流程。
+          return isPending(lookup)
+            ? waitAbortable(lookup, ctx.signal).then(/** 取消优先于命中判定，否则按读取结果继续。 */ (hit) => cancelIfAborted(ctx) ?? resolveHit(hit, ctx, next, key, config, cloneFn))
+            : resolveHit(lookup, ctx, next, key, config, cloneFn);
         },
         api: {
           /** 删除一条缓存，返回是否存在。 */

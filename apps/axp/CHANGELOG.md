@@ -70,6 +70,8 @@
 
 ### 修复
 
+- **Codex 复审三项**：auth 在异步 ready 期间登出时改为本地 unauthenticated 拒绝（不再发出无凭证请求），并新增 dispose，销毁后在途刷新迟到失败不再清会话或触发 onAccessExpired；cache 异步 get、过期删除、写入挂起时可被取消，立即以 cancel 落定，迟到结果不回写。
+
 - **auth**：旧刷新失败不清掉刷新期间重新登录或登出的会话；ready/onFailure 挂起可取消，每次等待后重查取消；已取消请求不返回缓存命中。
 - **share**：end/race 中调用方自己取消视为撤回，不成为别人的结果；end 回退在途或最近完成调用，race 回退最后一个未撤回失败；超时不算撤回。
 - **来源与请求体**：key 按 axios buildFullPath 包含 baseURL；二进制不超过 64KiB 按内容哈希，超出不生成 key。传输固定参与 key 的 method/baseURL/纯对象 params 入口视图，其余未覆盖 defaults 以发送时为准。

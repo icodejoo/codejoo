@@ -1,0 +1,436 @@
+
+<!doctype html>
+<html lang="en">
+
+<head>
+    <title>Code coverage report for src/plugins/filter.ts</title>
+    <meta charset="utf-8" />
+    <link rel="stylesheet" href="../../prettify.css" />
+    <link rel="stylesheet" href="../../base.css" />
+    <link rel="shortcut icon" type="image/x-icon" href="../../favicon.png" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <style type='text/css'>
+        .coverage-summary .sorter {
+            background-image: url(../../sort-arrow-sprite.png);
+        }
+    </style>
+</head>
+    
+<body>
+<div class='wrapper'>
+    <div class='pad1'>
+        <h1><a href="../../index.html">All files</a> / <a href="index.html">src/plugins</a> filter.ts</h1>
+        <div class='clearfix'>
+            
+            <div class='fl pad1y space-right2'>
+                <span class="strong">100% </span>
+                <span class="quiet">Statements</span>
+                <span class='fraction'>41/41</span>
+            </div>
+        
+            
+            <div class='fl pad1y space-right2'>
+                <span class="strong">100% </span>
+                <span class="quiet">Branches</span>
+                <span class='fraction'>41/41</span>
+            </div>
+        
+            
+            <div class='fl pad1y space-right2'>
+                <span class="strong">100% </span>
+                <span class="quiet">Functions</span>
+                <span class='fraction'>8/8</span>
+            </div>
+        
+            
+            <div class='fl pad1y space-right2'>
+                <span class="strong">100% </span>
+                <span class="quiet">Lines</span>
+                <span class='fraction'>35/35</span>
+            </div>
+        
+            
+        </div>
+        <p class="quiet">
+            Press <em>n</em> or <em>j</em> to go to the next uncovered block, <em>b</em>, <em>p</em> or <em>k</em> for the previous block.
+        </p>
+        <template id="filterTemplate">
+            <div class="quiet">
+                Filter:
+                <input type="search" id="fileSearch">
+            </div>
+        </template>
+    </div>
+    <div class='status-line high'></div>
+    <pre><table class="coverage">
+<tr><td class="line-count quiet"><a name='L1'></a><a href='#L1'>1</a>
+<a name='L2'></a><a href='#L2'>2</a>
+<a name='L3'></a><a href='#L3'>3</a>
+<a name='L4'></a><a href='#L4'>4</a>
+<a name='L5'></a><a href='#L5'>5</a>
+<a name='L6'></a><a href='#L6'>6</a>
+<a name='L7'></a><a href='#L7'>7</a>
+<a name='L8'></a><a href='#L8'>8</a>
+<a name='L9'></a><a href='#L9'>9</a>
+<a name='L10'></a><a href='#L10'>10</a>
+<a name='L11'></a><a href='#L11'>11</a>
+<a name='L12'></a><a href='#L12'>12</a>
+<a name='L13'></a><a href='#L13'>13</a>
+<a name='L14'></a><a href='#L14'>14</a>
+<a name='L15'></a><a href='#L15'>15</a>
+<a name='L16'></a><a href='#L16'>16</a>
+<a name='L17'></a><a href='#L17'>17</a>
+<a name='L18'></a><a href='#L18'>18</a>
+<a name='L19'></a><a href='#L19'>19</a>
+<a name='L20'></a><a href='#L20'>20</a>
+<a name='L21'></a><a href='#L21'>21</a>
+<a name='L22'></a><a href='#L22'>22</a>
+<a name='L23'></a><a href='#L23'>23</a>
+<a name='L24'></a><a href='#L24'>24</a>
+<a name='L25'></a><a href='#L25'>25</a>
+<a name='L26'></a><a href='#L26'>26</a>
+<a name='L27'></a><a href='#L27'>27</a>
+<a name='L28'></a><a href='#L28'>28</a>
+<a name='L29'></a><a href='#L29'>29</a>
+<a name='L30'></a><a href='#L30'>30</a>
+<a name='L31'></a><a href='#L31'>31</a>
+<a name='L32'></a><a href='#L32'>32</a>
+<a name='L33'></a><a href='#L33'>33</a>
+<a name='L34'></a><a href='#L34'>34</a>
+<a name='L35'></a><a href='#L35'>35</a>
+<a name='L36'></a><a href='#L36'>36</a>
+<a name='L37'></a><a href='#L37'>37</a>
+<a name='L38'></a><a href='#L38'>38</a>
+<a name='L39'></a><a href='#L39'>39</a>
+<a name='L40'></a><a href='#L40'>40</a>
+<a name='L41'></a><a href='#L41'>41</a>
+<a name='L42'></a><a href='#L42'>42</a>
+<a name='L43'></a><a href='#L43'>43</a>
+<a name='L44'></a><a href='#L44'>44</a>
+<a name='L45'></a><a href='#L45'>45</a>
+<a name='L46'></a><a href='#L46'>46</a>
+<a name='L47'></a><a href='#L47'>47</a>
+<a name='L48'></a><a href='#L48'>48</a>
+<a name='L49'></a><a href='#L49'>49</a>
+<a name='L50'></a><a href='#L50'>50</a>
+<a name='L51'></a><a href='#L51'>51</a>
+<a name='L52'></a><a href='#L52'>52</a>
+<a name='L53'></a><a href='#L53'>53</a>
+<a name='L54'></a><a href='#L54'>54</a>
+<a name='L55'></a><a href='#L55'>55</a>
+<a name='L56'></a><a href='#L56'>56</a>
+<a name='L57'></a><a href='#L57'>57</a>
+<a name='L58'></a><a href='#L58'>58</a>
+<a name='L59'></a><a href='#L59'>59</a>
+<a name='L60'></a><a href='#L60'>60</a>
+<a name='L61'></a><a href='#L61'>61</a>
+<a name='L62'></a><a href='#L62'>62</a>
+<a name='L63'></a><a href='#L63'>63</a>
+<a name='L64'></a><a href='#L64'>64</a>
+<a name='L65'></a><a href='#L65'>65</a>
+<a name='L66'></a><a href='#L66'>66</a>
+<a name='L67'></a><a href='#L67'>67</a>
+<a name='L68'></a><a href='#L68'>68</a>
+<a name='L69'></a><a href='#L69'>69</a>
+<a name='L70'></a><a href='#L70'>70</a>
+<a name='L71'></a><a href='#L71'>71</a>
+<a name='L72'></a><a href='#L72'>72</a>
+<a name='L73'></a><a href='#L73'>73</a>
+<a name='L74'></a><a href='#L74'>74</a>
+<a name='L75'></a><a href='#L75'>75</a>
+<a name='L76'></a><a href='#L76'>76</a>
+<a name='L77'></a><a href='#L77'>77</a>
+<a name='L78'></a><a href='#L78'>78</a>
+<a name='L79'></a><a href='#L79'>79</a>
+<a name='L80'></a><a href='#L80'>80</a>
+<a name='L81'></a><a href='#L81'>81</a>
+<a name='L82'></a><a href='#L82'>82</a>
+<a name='L83'></a><a href='#L83'>83</a>
+<a name='L84'></a><a href='#L84'>84</a>
+<a name='L85'></a><a href='#L85'>85</a>
+<a name='L86'></a><a href='#L86'>86</a>
+<a name='L87'></a><a href='#L87'>87</a>
+<a name='L88'></a><a href='#L88'>88</a>
+<a name='L89'></a><a href='#L89'>89</a>
+<a name='L90'></a><a href='#L90'>90</a>
+<a name='L91'></a><a href='#L91'>91</a>
+<a name='L92'></a><a href='#L92'>92</a>
+<a name='L93'></a><a href='#L93'>93</a>
+<a name='L94'></a><a href='#L94'>94</a>
+<a name='L95'></a><a href='#L95'>95</a>
+<a name='L96'></a><a href='#L96'>96</a>
+<a name='L97'></a><a href='#L97'>97</a>
+<a name='L98'></a><a href='#L98'>98</a>
+<a name='L99'></a><a href='#L99'>99</a>
+<a name='L100'></a><a href='#L100'>100</a>
+<a name='L101'></a><a href='#L101'>101</a>
+<a name='L102'></a><a href='#L102'>102</a>
+<a name='L103'></a><a href='#L103'>103</a>
+<a name='L104'></a><a href='#L104'>104</a>
+<a name='L105'></a><a href='#L105'>105</a>
+<a name='L106'></a><a href='#L106'>106</a>
+<a name='L107'></a><a href='#L107'>107</a>
+<a name='L108'></a><a href='#L108'>108</a>
+<a name='L109'></a><a href='#L109'>109</a>
+<a name='L110'></a><a href='#L110'>110</a>
+<a name='L111'></a><a href='#L111'>111</a>
+<a name='L112'></a><a href='#L112'>112</a>
+<a name='L113'></a><a href='#L113'>113</a>
+<a name='L114'></a><a href='#L114'>114</a>
+<a name='L115'></a><a href='#L115'>115</a>
+<a name='L116'></a><a href='#L116'>116</a>
+<a name='L117'></a><a href='#L117'>117</a>
+<a name='L118'></a><a href='#L118'>118</a></td><td class="line-coverage quiet"><span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-yes">13x</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-yes">13x</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-yes">21x</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-yes">13x</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-yes">2353x</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-yes">1069x</span>
+<span class="cline-any cline-yes">1069x</span>
+<span class="cline-any cline-yes">2821x</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-yes">2821x</span>
+<span class="cline-any cline-yes">2821x</span>
+<span class="cline-any cline-yes">1604x</span>
+<span class="cline-any cline-yes">1216x</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-yes">1068x</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-yes">2348x</span>
+<span class="cline-any cline-yes">2340x</span>
+<span class="cline-any cline-yes">3256x</span>
+<span class="cline-any cline-yes">3256x</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-yes">1288x</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-yes">9x</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-yes">2337x</span>
+<span class="cline-any cline-yes">2337x</span>
+<span class="cline-any cline-yes">2337x</span>
+<span class="cline-any cline-yes">2337x</span>
+<span class="cline-any cline-yes">2337x</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-yes">3905x</span>
+<span class="cline-any cline-yes">3905x</span>
+<span class="cline-any cline-yes">3905x</span>
+<span class="cline-any cline-yes">3905x</span>
+<span class="cline-any cline-yes">2088x</span>
+<span class="cline-any cline-yes">2088x</span>
+<span class="cline-any cline-yes">2085x</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-yes">3905x</span>
+<span class="cline-any cline-yes">3905x</span>
+<span class="cline-any cline-yes">3905x</span>
+<span class="cline-any cline-yes">800x</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span></td><td class="text"><pre class="prettyprint lang-js">import { resolveOption, resolveRequestOption, type AxpOption, type IPluginSwitch } from "../options";
+import type { AxpResponse, IAxpResponse } from "../response";
+import type { AxpPlugin } from "../types";
+import { isEmptyScalar, isPlainObject } from "../utils";
+&nbsp;
+/** 内置空字段过滤插件名称。 */
+const NAME = "axp:filter";
+/** 返回严格的 true 时丢弃顶层字段。 */
+export type TPredicate = (entry: [key: string, value: any]) =&gt; boolean;
+/** 被剥离的键值对，可用于诊断。 */
+export type TDroppedKV = [key: string, value: any];
+/** 顶层空字段过滤选项。 */
+export interface IFilterOptions extends IPluginSwitch {
+  /** 判断是否丢弃，默认剥离空值和空白字符串。 */
+  predicate?: TPredicate;
+  /** 命中键名的字段直接保留。 */
+  ignoreKeys?: string[];
+  /** 命中值的字段直接保留，支持 NaN。 */
+  ignoreValues?: any[];
+}
+/** 默认空字段规则，保留零、false、对象和数组。
+ * @internal
+ * @param entry 顶层键值对。
+ * @returns 是否应丢弃。
+ * @example `defaultPredicate(['name', '  ']) // true`
+ */
+export function defaultPredicate([, value]: TDroppedKV): boolean {
+  return isEmptyScalar(value);
+}
+/** 自定义谓词只认严格 true，JS 调用方返回的其他真值不丢弃。 */
+function isStrictTrue(verdict: unknown): boolean {
+  return verdict === true;
+}
+/** 过滤器内置谓词。 */
+const DEFAULTS = { /** 默认空字段规则。 */ predicate: defaultPredicate };
+/** 将豁免列表一次性准备为集合。 */
+function prepareOptions(options: IFilterOptions &amp; typeof DEFAULTS) {
+  return {
+    /** 字段过滤规则。 */ predicate: options.predicate,
+    /** 直接保留的字段名。 */ ignoreKeys: new Set(options.ignoreKeys),
+    /** 直接保留的值，保留 NaN 的匹配语义。 */ ignoreValues: new Set(options.ignoreValues),
+  };
+}
+/** 用已准备的集合过滤，每个字段至多分配一个共享元组。 */
+function filterFields(source: Record&lt;string, any&gt;, options: ReturnType&lt;typeof prepareOptions&gt;, dropped?: TDroppedKV[]): Record&lt;string, any&gt; {
+  const entries: TDroppedKV[] = [];
+  for (const key of Object.keys(source)) {
+    const value = source[key];
+    let entry: TDroppedKV | undefined;
+    const drop = !options.ignoreKeys.has(key) &amp;&amp; !options.ignoreValues.has(value) &amp;&amp; (options.predicate === defaultPredicate ? isEmptyScalar(value) : isStrictTrue(options.predicate((entry = [key, value]))));
+    if (drop) {
+      if (dropped) dropped.push(entry ?? [key, value]);
+    } else entries.push(entry ?? [key, value]);
+  }
+  return Object.fromEntries(entries);
+}
+/** 默认规则下是否有字段会被丢弃，找到第一个就停；自定义谓词可能有副作用，不预扫，一律视为可能丢弃。 */
+function mayDrop(source: Record&lt;string, any&gt;, options: ReturnType&lt;typeof prepareOptions&gt;): boolean {
+  if (options.predicate !== defaultPredicate) return true;
+  for (const key of Object.keys(source)) {
+    const value = source[key];
+    if (!options.ignoreKeys.has(key) &amp;&amp; !options.ignoreValues.has(value) &amp;&amp; isEmptyScalar(value)) return true;
+  }
+  return false;
+}
+/** 过滤自有可枚举字段，不修改来源对象或嵌套数据。
+ * @internal
+ * @param source 字段字典。
+ * @param options 过滤谓词和豁免列表。
+ * @param dropped 可选的被剥离字段记录。
+ * @returns 新的顶层字典。
+ * @example `$filter({ id: 0, name: '' }, { predicate: defaultPredicate }) // { id: 0 }`
+ */
+export function $filter(source: Record&lt;string, any&gt;, options: IFilterOptions &amp; typeof DEFAULTS, dropped?: TDroppedKV[]): Record&lt;string, any&gt; {
+  return filterFields(source, prepareOptions(options), dropped);
+}
+/** 装上即过滤纯对象的顶层字段，特殊请求体保持原引用。
+ * @param options 过滤谓词、豁免集合和插件总开关。
+ * @returns 在 repath 之后以 patch 传递新对象的 prepare 插件。
+ * @example `axpFilter({ ignoreKeys: ['nullable'] })`
+ */
+export default function axpFilter&lt;R extends IAxpResponse&lt;unknown, string | number&gt; = AxpResponse&gt;(options: IFilterOptions = {}): AxpPlugin&lt;R&gt; {
+  const base = resolveOption&lt;IFilterOptions, typeof DEFAULTS&gt;(undefined, options, DEFAULTS);
+  base.ignoreKeys = base.ignoreKeys?.slice();
+  base.ignoreValues = base.ignoreValues?.slice();
+  const prepared = prepareOptions(base);
+  return {
+    name: NAME,
+    enable: options.enable,
+    stage: "prepare",
+    /** 判定异常交给内核保留原始错误。 */
+    async handle(ctx, next) {
+      const { params, data } = ctx.request;
+      const filterParams = isPlainObject(params);
+      const filterData = isPlainObject(data);
+      if (!filterParams &amp;&amp; !filterData) return next();
+      const resolved = resolveRequestOption(ctx.request.filter, base, DEFAULTS);
+      if (!resolved) return next();
+      const config = resolved === base ? prepared : prepareOptions(resolved);
+      // 没有字段要丢就不打补丁，省掉一次合并、一个新上下文和传输层的掩码。
+      const dropParams = filterParams &amp;&amp; mayDrop(params, config);
+      const dropData = filterData &amp;&amp; mayDrop(data, config);
+      if (!dropParams &amp;&amp; !dropData) return next();
+      return next({
+        params: dropParams ? filterFields(params, config) : params,
+        data: dropData ? filterFields(data, config) : data,
+      });
+    },
+  };
+}
+&nbsp;
+declare module "../types" {
+  interface AxpRequestOptions {
+    /** 布尔开关或字段覆盖，不再调用请求级函数。 */
+    filter?: AxpOption&lt;IFilterOptions&gt;;
+  }
+}
+&nbsp;</pre></td></tr></table></pre>
+
+                <div class='push'></div><!-- for sticky footer -->
+            </div><!-- /wrapper -->
+            <div class='footer quiet pad2 space-top1 center small'>
+                Code coverage generated by
+                <a href="https://istanbul.js.org/" target="_blank" rel="noopener noreferrer">istanbul</a>
+                at 2026-10-29T06:56:27.660Z
+            </div>
+        <script src="../../prettify.js"></script>
+        <script>
+            window.onload = function () {
+                prettyPrint();
+            };
+        </script>
+        <script src="../../sorter.js"></script>
+        <script src="../../block-navigation.js"></script>
+    </body>
+</html>
+    

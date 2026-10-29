@@ -26,6 +26,8 @@ const UNAUTHORIZED = 401;
 const FORBIDDEN = 403;
 /** 异步 ready 期间 token 被替换时，最多准备凭证的次数；超过就以最后一次为准，避免无限追赶。 */
 const READY_STABLE_ATTEMPTS = 3;
+/** 本地无 token 时的拒绝原因。 */
+const UNAUTHENTICATED = "unauthenticated";
 /** 鉴权失败的五种路由动作。
  * @example `const action: AuthFailureAction = AuthFailureAction.Refresh`
  */
@@ -114,6 +116,8 @@ export default function axpAuth<R extends IAxpResponse<unknown, string | number>
     /** 单飞与过期状态均归当前客户端所有。 */
     setup() {
       let refreshing: Promise<boolean> | undefined;
+      /** 销毁标记：卸载后在途刷新结束不再执行过期清理与通知。 */
+      let disposed = false;
       let expired: { /** 清理后的会话快照，新 token 自动解除过期。 */ token: string | undefined } | undefined;
       /** 登录写入新 token 后解除上一轮过期状态。 */
       function isExpired(): boolean {
@@ -122,7 +126,7 @@ export default function axpAuth<R extends IAxpResponse<unknown, string | number>
       }
       /** 标记终态并隔离通知异常，清理后的快照阻止旧会话复活。 */
       function expire(response: R): void {
-        if (isExpired()) return;
+        if (disposed || isExpired()) return;
         tm.clear();
         expired = { token: tm.accessToken };
         fireNotice(base.onAccessExpired, CALLBACK_ERROR, response, tm);
@@ -175,6 +179,12 @@ export default function axpAuth<R extends IAxpResponse<unknown, string | number>
         } while (token !== tm.accessToken && ++attempt < READY_STABLE_ATTEMPTS);
         return { token, patch };
       }
+      /** 本地无凭证即拒绝发送：构造未登录失败并通知一次。 */
+      function rejectUnauthenticated(ctx: AxpContext<R>): R {
+        const response = ctx.fail({ failure: AXP_FAILURES.AUTH, reason: UNAUTHENTICATED });
+        fireNotice(denied, CALLBACK_ERROR, response, tm);
+        return response;
+      }
       /** 等待刷新结束：调用方取消返回 cancel 响应（只取消自己这一路，不中断别人的刷新），刷新失败返回过期失败，成功返回 undefined。 */
       async function joinRefresh(pending: Promise<boolean>, ctx: AxpContext<R>, from?: R): Promise<R | undefined> {
         const success = await waitAbortable(pending, ctx.signal);
@@ -198,14 +208,12 @@ export default function axpAuth<R extends IAxpResponse<unknown, string | number>
             const cancelledBeforePrepare = cancelIfAborted(ctx);
             if (cancelledBeforePrepare) return cancelledBeforePrepare;
             // 首发与每次重放前都确认本地仍有凭证：刷新期间登出时，在本地拒绝而不是发出无凭证的受保护请求
-            if (!tm.accessToken) {
-              const response = ctx.fail({ failure: AXP_FAILURES.AUTH, reason: "unauthenticated" });
-              fireNotice(denied, CALLBACK_ERROR, response, tm);
-              return response;
-            }
+            if (!tm.accessToken) return rejectUnauthenticated(ctx);
             const { token, patch } = await prepare(ctx);
             const cancelledBeforeSend = cancelIfAborted(ctx);
             if (cancelledBeforeSend) return cancelledBeforeSend;
+            // 异步 ready 期间登出：prepare 返回后本地 token 已空，同样在本地拒绝
+            if (!tm.accessToken) return rejectUnauthenticated(ctx);
             ctx.set(INJECTED_TOKEN, token);
             const response = await next(patch ?? undefined);
             if (response.ok || failureOf(response)?.type === AXP_FAILURES.INTERNAL || failureOf(response)?.type === AXP_FAILURES.CANCEL) return response;
@@ -244,6 +252,10 @@ export default function axpAuth<R extends IAxpResponse<unknown, string | number>
                 return response;
             }
           }
+        },
+        /** 卸载后在途刷新迟到失败，不再清会话或触发过期通知。 */
+        dispose() {
+          disposed = true;
         },
       };
     },
