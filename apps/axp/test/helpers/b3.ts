@@ -1,7 +1,7 @@
 import { vi } from "vitest";
 import type { ITokenManager } from "../../src/objects/TokenManager";
 import axpAuth, { type IAuthOptions } from "../../src/plugins/auth";
-import type { AxpResponse } from "../../src/response";
+import type { AxpResponse, IAxpResponse } from "../../src/response";
 import type { AxpOptions, AxpPlugin, AxpRequestConfig } from "../../src/types";
 import { authHeader } from "./auth";
 import type { ITestEvents } from "./client";
@@ -40,7 +40,7 @@ export function memoryTokens(access: string | undefined = TOKEN_OLD, refresh: st
   };
 }
 /** 默认刷新实现：同步换上新 token。 */
-function defaultRefresh(_r: AxpResponse, tm: ITokenManager): void {
+function defaultRefresh(_r: IAxpResponse, tm: ITokenManager): void {
   tm.set(TOKEN_NEW, REFRESH_TOKEN);
 }
 /** 生成有可观测通知的鉴权配置；传入 events 时同步登记刷新轮次与通知，供 I5 等不变量核对。
@@ -49,7 +49,7 @@ function defaultRefresh(_r: AxpResponse, tm: ITokenManager): void {
  * @returns 配置和可直接断言的回调。
  * @example `authSettings({ onRefresh: () => false }, h.events)`
  */
-export function authSettings(overrides: Partial<IAuthOptions<AxpResponse>> = {}, events?: ITestEvents) {
+export function authSettings<R extends IAxpResponse = AxpResponse>(overrides: Partial<IAuthOptions<R>> = {}, events?: ITestEvents) {
   const refresh = overrides.onRefresh ?? defaultRefresh;
   let round = 0;
   let active = 0;
@@ -59,7 +59,7 @@ export function authSettings(overrides: Partial<IAuthOptions<AxpResponse>> = {},
     onAccessDenied: vi.fn(),
     ...overrides,
     onRefresh: vi.fn(
-      /** 记录刷新轮次：同一轮重叠调用累加，轮次间各自为一。 */ async (r: AxpResponse, tm: ITokenManager) => {
+      /** 记录刷新轮次：同一轮重叠调用累加，轮次间各自为一。 */ async (r: R, tm: ITokenManager) => {
         if (events) {
           if (active === 0) round++;
           active++;

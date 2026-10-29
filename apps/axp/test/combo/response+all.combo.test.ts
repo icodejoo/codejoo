@@ -57,7 +57,7 @@ const SILENT_LOGGER: AxpLogger = {
  */
 function fullClient(overrides: Partial<IAuthOptions<TestResponse>> = {}, debug = false) {
   const events = recordEvents();
-  const settings = authSettings(overrides as never, events);
+  const settings = authSettings(overrides, events);
   const h = createInvariantHarness<TestResponse>(
     [
       axpLoading<TestResponse>({ loading: loadingRecorder(events) }),
@@ -65,7 +65,7 @@ function fullClient(overrides: Partial<IAuthOptions<TestResponse>> = {}, debug =
       axpRepath<TestResponse>(),
       axpFilter<TestResponse>(),
       axpRetry<TestResponse>({ max: 1, delay: RETRY_WAIT }),
-      axpAuth<TestResponse>(settings as never),
+      axpAuth<TestResponse>(settings),
       axpMock<TestResponse>({ enable: true }),
       axpShare<TestResponse>(),
       axpCache<TestResponse>({ clone: "shallow" }),

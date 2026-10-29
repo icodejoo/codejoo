@@ -26,12 +26,6 @@ const PLUGIN_NAMES = ["auth", "cache", "envs", "filter", "loading", "mock", "not
 const EXPECTED_SUBPATHS = [".", MIN_SUBPATH, ...PLUGIN_NAMES.map((name) => `./${name}`), PACKAGE_JSON_SUBPATH];
 /** 没有请求级选项（不写 declare module 扩展）的插件。 */
 const PLUGINS_WITHOUT_REQUEST_OPTIONS = ["envs"];
-/** 只在插件子路径导出、根入口没有的名字（内部算法的测试挂钩，文档未承诺）；新增泄漏会让测试失败，需要显式决定。 */
-const SUBPATH_ONLY_EXPORTS: Record<string, string[]> = {
-  "./cache": ["$defaultShouldCache", "$resolveCloneFn", "$shallowClone"],
-  "./filter": ["$filter", "defaultPredicate"],
-  "./mock": ["$rewriteUrl", "$shouldFallback"],
-};
 /** 已删除的旧子路径，不允许再出现。 */
 const REMOVED_SUBPATHS = ["./cancel", "./key", "./logger", "./normalize"];
 /** 插件目录下只作内部依赖、不对外暴露的算法模块（不带扩展名）。 */
@@ -400,11 +394,24 @@ describe("dist 产物", () => {
     for (const sub of INTERNAL_SUBPATHS) expect(probe.rejected[sub], sub).toBe(NOT_EXPORTED);
   });
 
-  it("[dist.const.instance] 子路径与根入口共有的导出是同一引用（没有两份模块实例），子路径独有的只有已登记的内部挂钩", /** default 对应根入口的 axpXxx。 */ () => {
+  it("[dist.const.instance] 子路径与根入口共有的导出是同一引用（没有两份模块实例）", /** default 对应根入口的 axpXxx；运行时仍保留测试挂钩。 */ () => {
     for (const name of PLUGIN_NAMES) {
       expect(probe.mismatched[`./${name}`], `${name} 与根入口不是同一引用`).toEqual([]);
-      expect(probe.subpathOnly[`./${name}`], `${name} 出现未登记的子路径独有导出`).toEqual(SUBPATH_ONLY_EXPORTS[`./${name}`] ?? []);
     }
+  });
+
+  it("[dist.type.internal] 声明产物不出现 $ 前缀导出，filter 默认谓词也不公开", /** 扫描全部声明，避免间接重导出内部挂钩。 */ () => {
+    /** 发布声明所在目录。 */
+    const root = join(PKG_ROOT, "dist", "esm");
+    /** 全部声明文件，包括非入口的内部模块。 */
+    const files = readdirSync(root, { recursive: true, encoding: "utf8" }).filter(/** 只检查声明产物。 */ (file) => file.endsWith(".d.mts"));
+    expect(files.length).toBeGreaterThan(PLUGIN_NAMES.length);
+    for (const file of files) {
+      /** 排除注释后检查真实声明。 */
+      const code = stripComments(readFileSync(join(root, file), "utf8"));
+      expect(code, file).not.toMatch(/\$[a-zA-Z_]/);
+    }
+    expect(readFileSync(join(root, "plugins", "filter.d.mts"), "utf8")).not.toContain("defaultPredicate");
   });
 
   it("[dist.fn.isAxpResponse] ./min 与根入口混用：互相识别对方产出的成功与失败响应，不误认非响应", /** 品牌是 Symbol.for，跨模块副本可识别。 */ () => {

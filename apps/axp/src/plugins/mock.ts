@@ -42,6 +42,7 @@ const DEFAULTS = {
 };
 
 /** 默认回落判定：mock 服务器没有这条接口（404）或根本连不上（network）。
+ * @internal
  * @param response 探测请求的归一化响应。
  * @returns 是否应改打真实接口；取消、其它状态一律不回落。
  * @example `$shouldFallback(r) // r.httpStatus === 404 时为 true`
@@ -56,6 +57,7 @@ function joinUrl(base: string, relative: string): string {
 }
 
 /** 把请求地址改写到 mock 服务器，保留 query 与 hash。
+ * @internal
  * @param url 原请求地址，可为相对、绝对或缺省。
  * @param mockUrl mock 服务器基址。
  * @returns 只含被改写字段的请求补丁；缺省地址改写 baseURL，其余改写 url。

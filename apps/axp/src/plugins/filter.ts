@@ -19,6 +19,7 @@ export interface IFilterOptions extends IPluginSwitch {
   ignoreValues?: any[];
 }
 /** 默认空字段规则，保留零、false、对象和数组。
+ * @internal
  * @param entry 顶层键值对。
  * @returns 是否应丢弃。
  * @example `defaultPredicate(['name', '  ']) // true`
@@ -63,6 +64,7 @@ function mayDrop(source: Record<string, any>, options: ReturnType<typeof prepare
   return false;
 }
 /** 过滤自有可枚举字段，不修改来源对象或嵌套数据。
+ * @internal
  * @param source 字段字典。
  * @param options 过滤谓词和豁免列表。
  * @param dropped 可选的被剥离字段记录。

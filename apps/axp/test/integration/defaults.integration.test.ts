@@ -19,6 +19,12 @@ const OLD_AUTH = "default-token";
 const NEW_AUTH = "request-token";
 /** 请求头的公开名称。 */
 const AUTH_HEADER = "Authorization";
+/** 默认禁止发送的布尔头。 */
+const FALSE_HEADER = "X-False";
+/** 默认禁止发送的空值头。 */
+const NULL_HEADER = "X-Null";
+/** 用于检查方法优先级的默认头。 */
+const METHOD_HEADER = "X-Method";
 /** 默认值和显式参数中的不同租户。 */
 const TENANTS = ["tenant-a", "tenant-b"];
 /** 参数被全部删除后的传输墓碑。 */
@@ -216,6 +222,49 @@ it.each([false, null])(
     expect(h.calls[0].config.headers.get(AUTH_HEADER)).toBe(value);
     expect(h.calls[0].config.headers.toJSON()).not.toHaveProperty(AUTH_HEADER);
     h.api.dispose();
+  },
+);
+
+it.each(["get", "post"])(
+  "[core.req.headers] %s 分组和 AxiosHeaders 默认头的禁用值、大小写与删除掩码保持一致",
+  /** 在逻辑视图和真实 adapter 两端同时验证默认头，默认容器不被修改。 */ async (method) => {
+    for (const flat of [false, true]) {
+      /** 验证当前分组及禁用值后再删除默认凭证。 */
+      const patch: AxpPlugin<AxpResponse> = {
+        /** 本次验证插件名。 */ name: "disabled-default-headers",
+        /** 用 patch 删除凭证，保留两个禁止发送的默认头。 */ handle(ctx, next) {
+          /** 管线实际收到的平面头。 */
+          const headers = ctx.request.headers as AxiosHeaders;
+          expect(headers.get(AUTH_HEADER)).toBe(NEW_AUTH);
+          expect(headers.get(FALSE_HEADER)).toBe(false);
+          expect(headers.get(NULL_HEADER)).toBeNull();
+          expect(headers.get(METHOD_HEADER)).toBe(flat ? undefined : method);
+          return next({ headers: { authorization: undefined } });
+        },
+      };
+      /** 真实传输边界夹具。 */
+      const h = wireClient({}, [patch]);
+      /** 禁用值须从对象字段保留，不能经过会丢标记的 toJSON。 */
+      const common = { [AUTH_HEADER]: OLD_AUTH, [FALSE_HEADER]: false, [NULL_HEADER]: null };
+      Object.assign(h.axios.defaults, {
+        /** 两种实例默认头容器遵循相同的请求覆盖和删除语义。 */
+        headers: flat ? new AxiosHeaders(common) : { common, get: { [METHOD_HEADER]: "get" }, post: { [METHOD_HEADER]: "post" } },
+      });
+      /** 请求前的默认值快照。 */
+      const before = JSON.stringify(h.axios.defaults.headers);
+      // oxlint-disable-next-line no-await-in-loop -- 每个容器必须独立核对实际发送结果。
+      await h.api.request({ url: REQUEST_URL, method, headers: { authorization: NEW_AUTH } });
+      /** axios 二次合并后的发送头。 */
+      const headers = h.calls[0].config.headers;
+      expect(headers.get(AUTH_HEADER)).toBe(false);
+      expect(headers.get(FALSE_HEADER)).toBe(false);
+      expect(headers.get(NULL_HEADER)).toBeNull();
+      expect(headers.toJSON()).not.toHaveProperty(AUTH_HEADER);
+      expect(headers.toJSON()).not.toHaveProperty(FALSE_HEADER);
+      expect(headers.toJSON()).not.toHaveProperty(NULL_HEADER);
+      expect(JSON.stringify(h.axios.defaults.headers)).toBe(before);
+      h.api.dispose();
+    }
   },
 );
 it("[core.req.defaults][core.req.signal] defaults.signal 参与逻辑取消并在落定后注销监听", /** 有效取消信号不能留到 transport 才读取。 */ async () => {
