@@ -6,13 +6,19 @@
 
 ### 破坏性变化
 
+- **终审响应契约（2026-10-29）**：删除 kind、AXP_KINDS、httpStatus 和顶层 reason；status 只表示 HTTP。内核失败标记强制 ok 为 false，用 failureOf/api.isCancel 读取。取消逻辑状态与业务风格自动适配，显式配置 onFailure、shouldRetry、respectRetryAfter，见 [ADR 0002](docs/decisions/0002-response-contract.md)。
+- **解析与缺省值**：删除 envelope 选项，字段转换改为覆盖 parse；code 缺省 0、data 缺省 null，默认类 message 为空串且允许 null；接口只要求 ok/status/code/data。
+- **key 精简**：删除 ignores、sample，仅保留 scope；对象只跳过 undefined 字段，null 字段、空串、0、false、NaN、空数组/对象均参与。值带类型标签、字符串不 trim、显式 key 原样使用（空串关闭）。旧持久化 key 应清理。
+- **缓存仓**：条目改为可序列化 `{ snapshot, expiresAt }`；方法可异步、size 可选；命中工厂重建新 R，不保存 raw/error/stack。remove/clear/removeCache/clearCache 返回 MaybePromise，统一 await。
+- **Retry-After**：retryAfterMax 默认由 Infinity 改为 60_000；超过上限返回本次响应，不再封顶后重试。显式 Infinity 表示永远照办。
+
 - **入口**：`Axp.create`、`Axp.install`、`Core` 删除，改用 `createAxp({ axios, plugins, ... })`，返回 `AxpClient`。插件只对 axp 客户端生效，裸 `axios` 实例不再带插件。类型参数 `T` 换成 `S`（`createAxp<S>()`）；要自定义响应类时 `S`、`R` 都要写出来。
-- **错误**：可预期的失败（HTTP、业务、网络、超时、取消、解析、鉴权）抛出的是归一化响应 `R`（默认 `IAxpResponse`），不是 `Error`，默认没有 `stack`。用 `isAxpResponse(e)` 或 `api.isResponse(e)` 判断，类别看 `e.kind`、`e.reason`；原来的 `e.response` 不再存在。程序 bug（中间件、用户回调里抛出的非 axp 异常）仍然原样抛出。需要 `Error` 的上报库或状态库，用 `createAxp({ reject })` 适配。
-- **成功判定**：`AxpResponse.isSuccessful` 静态钩子改为子类覆盖 `ok`、`status` getter，通过 `createAxp({ response: axpResponse({ create }) })` 每个客户端一份，不再全局可变。`successful` 字段改名为 `ok`。
+- **错误**：可预期的失败（HTTP、业务、网络、超时、取消、解析、鉴权）抛出的是归一化响应 `R`（默认 `IAxpResponse`），不是 `Error`，默认没有 `stack`。用 `isAxpResponse(e)` 或 `api.isResponse(e)` 判断，内核失败用 failureOf(e)，HTTP/业务失败看 ok/status/code；原来的 `e.response` 不再存在。程序 bug（中间件、用户回调里抛出的非 axp 异常）仍然原样抛出。需要 `Error` 的上报库或状态库，用 `createAxp({ reject })` 适配。
+- **成功判定**：`AxpResponse.isSuccessful` 静态钩子改为子类覆盖 ok，字段转换覆盖 parse，通过 `createAxp({ response: axpResponse({ create }) })` 每个客户端一份，不再全局可变。`successful` 字段改名为 `ok`。
 - **返回形态**：`raw: true` 删除，改用 `wrap: true` 后读 `r.raw`；`wrap: true` 成功时返回 `WithData<R, D>`，失败照常抛出。`normalize: false` 改为请求级 `throws: false`：成功判定仍然生效，失败时 resolve 出 `ok` 为 `false` 的响应而不是抛出（没有客户端级默认值）。
 - **请求选项不再接受函数**：`key`、`cache.key`、`share`、`retry` 等请求级选项传函数不再支持，改成在调用处判断，再传字符串或布尔。`share: 'none'` 改为 `share: false`；`key` 的数字形式不再支持（字符串、`true`、省略可用）；`cancelToken` 删除，用 `signal`。本身就是回调的选项（如 `axpLoading` 的请求级回调）不受影响。
-- **回调签名统一读 `R`**：auth 的 `onRefresh`、`onAccessExpired`、`onAccessDenied`、`onFailure` 为 `(r, tm)`，`ready` 返回补丁 `AxpRequestPatch` 而不是直接改 `config`；`shouldRetry(r, attempt, ctx)`（成功响应也会传入）；`shouldCache(r)`；`stringify(r, ctx)`；`fallbackWhen(r)`。retry 的 `statusCodes`、`afterStatusCodes` 对照逻辑状态 `r.status`，业务失败也算。
-- **auth**：`config.authExpired` 标记改为看 `r.reason === 'expired'`；没有 token 时不再合成 `data.code === 'ACCESS_DENIED'` 的响应，改判 `r.kind === 'auth' && r.reason === 'unauthenticated'`。
+- **回调签名统一读 `R`**：auth 的 `onRefresh`、`onAccessExpired`、`onAccessDenied`、`onFailure` 为 `(r, tm)`，`ready` 返回补丁 `AxpRequestPatch` 而不是直接改 `config`；`shouldRetry(r, attempt, ctx)`（成功响应也会传入）；`shouldCache(r)`；`stringify(r, ctx)`；`fallbackWhen(r)`。retry 的 `statusCodes`、`afterStatusCodes` 对照 HTTP 状态 r.status；业务码判定需使用者配置。
+- **auth**：`config.authExpired` 标记改为看 `failureOf(r)?.reason === 'expired'`；没有 token 时不再合成 `data.code === 'ACCESS_DENIED'` 的响应，改判 `failureOf(r)?.type === 'auth' && failureOf(r)?.reason === 'unauthenticated'`。
 - **mock、notify 的请求级选项**：mock 请求级对象里的 `mock` 字段删除，关闭写 `mock: false` 或 `{ enable: false }`；notify 请求级只是开关（`false` 或 `{ enable: false }`）。
 - **清缓存**：`removeCache(ax, key)`、`clearCache(ax)` 的参数改为客户端：`removeCache(client, key)`、`clearCache(client)`；没装 cache 时分别返回 `false` 和 `0`。
 - **派生**：`extends` 改名为 `extend`，默认继承插件，每个插件各自重新 `setup`，缓存、token 刷新等状态不共享。旧版派生实例不带插件。
@@ -21,10 +27,17 @@
 
 ### 新增
 
+- `axpResponse({ type: MyResponse })` 与受保护的 parse(body, raw)；接口路径保留 create，扩展字段支持从快照恢复。
+- `AXP_FAILURE`、`AXP_FAILURES`、`failureOf`、`isAxpCancel`、`api.isCancel`；插件通过 ctx.fail({ failure, reason, from }) 合成失败。
+- `ctx.canReplay()`：自定义插件重放前检查一次性体是否已消耗。
+- auth 的 refreshTimeout 默认 30_000，0/Infinity 不限时，超时按刷新失败处理；README 补同客户端刷新必须 protected: false 的约束。
+- `extend(overrides, { axios })` 原样使用指定实例；默认派生新实例只复制 defaults、不复制拦截器。
+- retry 的 respectRetryAfter 支持独立判定函数，便于业务码风格采信服务端等待。
+
 - **`createAxp`**：选项 `{ axios, plugins, response, key, reject, debug }`。内置 10 个插件（loading、notify、repath、filter、retry、auth、mock、share、cache、envs）的位置固定，插件数组的顺序不用排；自定义插件用 `stage` 和 `enforce` 指定位置。
 - **客户端方法**：`api.use(p)`、`api.eject(name)`、`api.plugin(p)`、`api.inspect()`、`api.cancelAll(reason)`、`api.isResponse(e)`、`api.extend(config, { plugins })`。
-- **归一化响应**：`IAxpResponse`、`AxpResponse`、`axpResponse` 工厂、`isAxpResponse`。成功、失败、被抛出的都是它，字段有 `kind`、`reason`、`status`（逻辑状态）、`httpStatus`、`code`、`message`、`data`、`raw`。
-- **key 配置**：`createAxp({ key: { scope, ignores, sample } })`。`scope` 可以是函数，每次算 key 时求值，切换账号不用重建客户端。
+- **归一化响应**：IAxpResponse 的必需字段为 ok、status（HTTP）、code、data，可选 message/raw/error；AxpResponse 是默认实现。
+- **key 配置**：`createAxp({ key: { scope } })`。`scope` 可以是函数，每次算 key 时求值，切换账号不用重建客户端。
 - **debug**：`createAxp({ debug })`，`true` 或自定义 logger；开启后失败响应会附上调用点 `stack`。
 - **auth**：`AuthFailureAction` 新增第五个动作 `Others`（与鉴权无关的失败，原样返回）；根入口导出 `defaultAuthFailure`，自定义 `onFailure` 只想改个别情况时可以调用它沿用默认判定。
 - **share**：新增 `methods`，默认 `get`、`head`。
@@ -46,7 +59,7 @@
 - **retry 默认值**：`max` 默认 2（旧版 0），`delay` 默认指数退避 `300 * 2 ** (attempt - 1)`（旧版固定 3000），`delayMax` 默认 `10_000`（旧版 `Infinity`）。依赖旧默认值的地方要显式写回去。
 - **filter 默认值**：装上即生效，要关闭才写请求级 `filter: false`；旧版要请求级 `filter: true` 才过滤。
 - **cache**：只缓存 `get` 和 `head`，POST 要缓存只能在插件级改 `methods`；命中缓存时不再重跑 `transformResponse`。
-- **判定统一读 `R`**：auth、retry、notify、cache、share、mock 的判定都读归一化响应，`status` 是逻辑状态，业务失败也算失败。
+- **判定统一读 `R`**：auth、retry、notify、cache、share、mock 的判定都读归一化响应，status 是 HTTP 状态，业务码由使用者配置判定。
 - **回调抛错**：判定类回调（`shouldRetry`、retry 的 `delay` / `jitter` 函数、`onFailure`、`isProtected`、`fallbackWhen`、`shouldCache`、`ready`）抛错不再被吞，作为程序 bug 原样抛出。通知类回调（`loading`、`notify`、`stringify`、`onAccessExpired`、`onAccessDenied`）仍然隔离，错误用 `console.error` 输出，不受 `debug` 开关控制。
 - **时序**：loading 的显示从逻辑请求开始算，覆盖等待 token 刷新的时间；HTTP 4xx、5xx 不再进入 axios 实例的错误拦截器（传输层放行所有状态码，由 axp 统一判定）。
 - **auth 过期通知**：401、刷新失败这条路径上，`onAccessExpired` 每一轮只通知一次，并发请求一起失败也只通知一次；过期后在 token 没变之前不再刷新。本地没有 token 时，每个受保护请求仍会调用一次 `onAccessDenied`（没配则回退 `onAccessExpired`），不去重。
@@ -56,6 +69,13 @@
 - **性能**：全插件、缓存未命中的单请求额外开销比旧版降低约 41%；缓存命中与 100 并发 share 不低于旧版。无插件时每次请求比旧版多约 7–10µs，这是入口合并实例 `defaults` 的固定成本。详见 [B6 报告](docs/reports/2026-10-28-pipeline-b6.md)。
 
 ### 修复
+
+- **auth**：旧刷新失败不清掉刷新期间重新登录或登出的会话；ready/onFailure 挂起可取消，每次等待后重查取消；已取消请求不返回缓存命中。
+- **share**：end/race 中调用方自己取消视为撤回，不成为别人的结果；end 回退在途或最近完成调用，race 回退最后一个未撤回失败；超时不算撤回。
+- **来源与请求体**：key 按 axios buildFullPath 包含 baseURL；二进制不超过 64KiB 按内容哈希，超出不生成 key。传输固定参与 key 的 method/baseURL/纯对象 params 入口视图，其余未覆盖 defaults 以发送时为准。
+- **一次性体重放**：retry/auth/mock 在流已发送时交回原响应；强行重放由传输层标记 internal，落定抛原始 Error。
+- **缓存持久化**：命中绑定当前请求；store get 失败按未命中，写删清理异常隔离并 console.error；同 key 异步写入串行，提交前重查新鲜度，clear/eject 后旧请求不回写。
+- **执行器与 e2e**：迁移到 failureOf/api.isCancel；业务风格显式配置回调；不声明 raw-business-code/timeout-total，删除 D21、blackhole 特判。验收数字由整轮验收报告记录。
 
 - **key**：请求级 `key: true` 现在包含 params，有请求体的方法还包含 data。旧版 `key: true` 只哈希 method 和 url，同一路径不同参数会串缓存。
 - **notify**：`silent: true` 真正生效（只作用于默认的 `stringify`，自定义的自己读 `ctx.request.silent`）。

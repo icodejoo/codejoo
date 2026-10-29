@@ -1,11 +1,13 @@
 ---
 title: axp 核心重构的六条决策
 status: active
-updated: 2026-10-28
+updated: 2026-10-29
 summary: 为什么把 axios 拦截器底座换成自有洋葱管线，插件怎么排序，归一化响应与错误模型怎么定
 ---
 
 ## TL;DR
+
+> 2026-10-29 更新：D3、D5 中关于 `kind`、逻辑状态的部分已被 [0002 响应契约](0002-response-contract.md) 取代；D4、D6 中对应字段的写法也属历史表述。本文保持 active，其余核心决策继续有效。
 
 - 执行模型：axp 自己管一次请求的生命周期，插件是 `(ctx, next)` 中间件，最内层调 `axios.request`。
 - 排序：具名阶段 + 同阶段内数组顺序；不对称需求用 `taps` 分段挂载。不用 `before/after`。
@@ -49,6 +51,8 @@ summary: 为什么把 axios 拦截器底座换成自有洋葱管线，插件怎�
 
 ## D3 归一化进内核，拆判定与落定
 
+> 本节关于逻辑状态的理由为历史记录，现行规则见 [0002](0002-response-contract.md)。
+
 **决定**：归一化不是插件，是内核在传输边界上的固定步骤，有默认实现，只配置不安装。
 
 | 步骤                                               | 位置       | 次数             |
@@ -67,6 +71,8 @@ retry 只看 HTTP 码，导致验收执行器要替 axp 补"逻辑状态"适配�
 **理由**：现在每个插件都写成功/失败两条路径（`auth.ts:377-395`、`retry.ts:186-199`、notify、cancel、loading），合并成一条。
 
 ## D5 `IAxpResponse` 契约 + `AxpResponse` 默认实现
+
+> 本节关于 kind、逻辑状态及 getter 的描述已被 [0002](0002-response-contract.md) 取代。
 
 **决定**：
 

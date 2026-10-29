@@ -1,7 +1,7 @@
 ---
 title: axp 核心架构方案（洋葱管线 + 归一化响应）
 status: active
-updated: 2026-10-28
+updated: 2026-10-29
 summary: 新内核的结构、数据流、阶段排序、上下文、归一化响应与错误模型、插件接口、客户端 API 和性能设计
 ---
 
@@ -51,7 +51,7 @@ api.get('/pet/{id}')(payload, opts)
 | `transport.ts`            | 调 `axios.request`、按需克隆请求体、交给响应工厂判定                                                                |
 | `response.ts`             | `IAxpResponse`、`AxpResponse`、`IAxpResponseFactory`、`axpResponse()`、`isAxpResponse`                              |
 | `key.ts`                  | key 服务（由 `plugins/key.ts` 的哈希算法迁来）                                                                      |
-| `brand.ts`                | 响应品牌 `Symbol.for('axp.response')` 与 `AXP_KINDS`，`./min` 与根入口共用                                          |
+| `brand.ts`                | 响应品牌 `Symbol.for('axp.response')` 与 `AXP_FAILURE`、`AXP_FAILURES`，`./min` 与根入口共用                        |
 | `stages.ts`               | 阶段顺序与内置插件位置表                                                                                            |
 | `methods.ts`              | HTTP 方法名归一                                                                                                     |
 | `utils.ts`                | 内部工具：对象判断、axios defaults 克隆、通知隔离 `fireNotice` 等                                                   |
@@ -92,9 +92,11 @@ api.get('/pet/{id}')(payload, opts)
 
 ## 5. 上下文
 
+传输固定 method、baseURL 与纯对象 defaults.params 的入口视图（含插件补丁），其余未显式覆盖的 defaults 以发送时为准，见 [README 警告](../../README.zh-CN.md#使用警告与业务风格)。
+
 ```ts
 /** 中间件拿到的上下文；逻辑请求级字段在各层共享，request 是本层视图 */
-interface AxpContext<R extends IAxpResponse = IAxpResponse> {
+interface AxpContext<R extends IAxpResponse<unknown, string | number> = AxpResponse> {
   readonly id: number; // 逻辑请求序号
   readonly client: AxpClient<unknown, R>;
   readonly request: Readonly<AxpRequestConfig>; // 本层看到的请求，只读
@@ -104,6 +106,7 @@ interface AxpContext<R extends IAxpResponse = IAxpResponse> {
   get<T>(k: AxpStateKey<T>): T | undefined; // 逻辑请求级状态，替代字符串键
   set<T>(k: AxpStateKey<T>, v: T): void;
   fail(init: AxpResponseInit<R>): R; // 凭空造结果，必须经响应工厂
+  canReplay(): boolean; // 已发送的一次性请求体不可重放
   markReplayable(): void; // 声明本请求可能被重发，传输层据此克隆请求体
 }
 type AxpNext<R> = (patch?: AxpRequestPatch) => Promise<R>;
@@ -118,98 +121,71 @@ function stateKey<T>(description: string): AxpStateKey<T>; // 基于 Symbol 的�
 ## 6. 归一化响应
 
 ```ts
-/** 响应类别 */
-type AxpKind = "ok" | "http" | "biz" | "network" | "timeout" | "cancel" | "parse" | "auth" | "internal";
-
-/** 归一化响应契约：只有数据字段，插件只读这些；成功、失败、被抛出的都是它 */
-interface IAxpResponse<D = unknown> {
-  readonly ok: boolean; // 成功判定，唯一的开放点
-  readonly kind: AxpKind;
-  readonly status: number; // 逻辑状态：插件判断 401/403/5xx 一律读它
-  readonly httpStatus: number; // 原始 HTTP 状态，无响应为 0
-  readonly code?: string | number; // 业务码，非信封响应为 undefined
-  readonly message: string;
-  readonly data: D;
-  readonly reason?: string; // 细分原因，如 auth 的 expired / denied / unauthenticated
-  readonly request: Readonly<AxpRequestConfig>; // 实际发出的请求；share/cache 时是发出那一次的
-  readonly stack?: string; // 仅 debug 模式：失败落定时附上发起请求那一刻的调用点
-  readonly raw?: AxiosResponse; // 逃生口
-  readonly error?: unknown; // 原始异常（网络错误的 stack 在这里）
+interface IAxpResponse<D = unknown, C extends string | number = number> {
+  readonly ok: boolean;
+  readonly status: number; // HTTP 状态，无响应为 0
+  readonly code: C; // 缺省为 0
+  readonly data: D; // 缺省为 null
+  readonly message?: string | null;
+  readonly raw?: AxiosResponse;
+  readonly error?: unknown;
 }
-
-/** 响应工厂：每个客户端一份，只负责解析和构造，不负责判定 */
-interface IAxpResponseFactory<R extends IAxpResponse> {
+interface IAxpResponseFactory<R extends IAxpResponse<unknown, string | number>> {
   fromResponse(res: AxiosResponse, ctx: AxpContext<R>): R;
-  fromError(err: unknown, ctx: AxpContext<R>): R;
-  fail(init: AxpResponseInit<R>, ctx: AxpContext<R>): R; // init.from 可带上原响应，未覆盖的字段沿用
+  fromError(error: unknown, ctx: AxpContext<R>): R;
+  fail(init: AxpResponseInit<R>, ctx: AxpContext<R>): R;
 }
-
-/** 默认实现 */
-class AxpResponse<D = unknown> implements IAxpResponse<D> {
-  constructor(init: AxpResponseInit);
-  get ok(): boolean; // 默认：2xx 且（无业务码，或业务码 ∈ [0, '0000']）
-  get status(): number; // 默认：失败且 2xx 且业务码是 400–599 的数字 → 业务码；否则 httpStatus
-  get kind(): AxpKind; // ok → 'ok'；否则 2xx → 'biz'，非 2xx → 'http'
-  toJSON(): object; // getter 不进 JSON.stringify，这里补齐全部字段
-}
-function isAxpResponse<R extends IAxpResponse = AxpResponse>(e: unknown): e is R; // Symbol.for('axp.response') 品牌
 ```
 
-**判定的开放点就是 `ok` 和 `status` 本身**：子类覆盖 getter 即可，`kind` 自动跟着走，不另设 `isSuccessful` 之类的方法。
-内核保证这两个 getter **只在收到响应时求值**：其余情况由工厂在构造时把 `ok: false`、`kind`、`status` 写成实例自有属性，遮住原型 getter，所以覆盖时只需判断响应本身。
+`AxpResponse<D, C>` 是默认实现，另有 `request`、`stack`、`toJSON()` 与受保护的 `parse(body, raw)`。这些不是接口要求。默认 message 为空串，允许 null；request 通常是实际发出的请求，缓存命中则是当前调用方的请求。
 
-```ts
-class MyResponse<D = unknown> extends AxpResponse<D> {
-  traceId = "";
-  get ok() {
-    return this.httpStatus < 300 && this.code === 200;
-  } // 我们的成功码是 200
-  get status() {
-    return this.code === "TOKEN_EXPIRED" ? 401 : super.status;
-  }
-}
-const response = axpResponse<MyResponse>({
-  create: (init, raw) => Object.assign(new MyResponse(init), { traceId: raw?.headers["x-trace-id"] ?? "" }),
-});
-const api = createAxp<Schema, MyResponse>({ response, plugins: [axpRetry({ shouldRetry: (r) => r.traceId !== "" })] });
-```
+### 业务转换与成功判定
 
-**默认工厂 `axpResponse(options?)` 的分类规则**（顺序即优先级；前六行在构造时写死为实例自有属性，最后一行交给 getter）：
+默认 parse 在 body 含 code 且含 data 或 message 时读取这些字段，否则 data 是整个 body、code 为 0。缺 data 为 null，缺 message 为空串。默认 ok 为 HTTP 2xx 且 code 为 0 或 `'0000'`。
 
-| 输入                                                                 | kind                                    | status     |
-| -------------------------------------------------------------------- | --------------------------------------- | ---------- |
-| 取消（`axios.isCancel`、`AbortError`，或发送前 signal 已中止）       | `cancel`                                | 0          |
-| AxiosError 且超时（`ETIMEDOUT`，或 `ECONNABORTED` 且消息含 timeout） | `timeout`                               | 0          |
-| AxiosError 且 `ERR_BAD_RESPONSE`                                     | `parse`                                 | 0          |
-| 其它 AxiosError                                                      | `network`                               | 0          |
-| **非 AxiosError 的异常**（用户拦截器、`transformResponse` 里的 bug） | `internal`                              | 0          |
-| `expectJson` 为真，2xx，声明 json/html 但 body 仍是非空字符串        | `parse`                                 | httpStatus |
-| 收到响应                                                             | 由 `ok` / `status` / `kind` getter 决定 | 同左       |
+字段名不同就覆盖 parse，成功规则不同就覆盖 ok；status 始终保留 HTTP 语义。用 `axpResponse({ type: MyResponse })` 接入子类。基类构造时会调用 parse，不能依赖子类尚未初始化的字段，也不要用子类字段初始化器重新声明基础字段。完整代码见 [README 自定义响应](../../README.zh-CN.md#自定义响应)。
 
-| 选项                 | 默认                                                 | 说明                               |
-| -------------------- | ---------------------------------------------------- | ---------------------------------- |
-| `envelope`           | `{ code: 'code', data: 'data', message: 'message' }` | 信封字段名；`false` 关闭信封识别   |
-| `expectJson`         | `false`                                              | 声明 JSON 却解析失败时判为 `parse` |
-| `create(init, raw?)` | `new AxpResponse(init)`                              | 扩展点：返回子类或带额外字段的对象 |
+| 工厂选项             | 默认          | 含义                                                   |
+| -------------------- | ------------- | ------------------------------------------------------ |
+| `type`               | `AxpResponse` | 响应子类构造器                                         |
+| `create(init, raw?)` | —             | 实现接口的构造路径；优先于 type                        |
+| `expectJson`         | false         | 2xx、声明 JSON/HTML 且 body 仍为非空字符串时判解析失败 |
 
-**品牌**：`AxpResponse` 原型上自带品牌；`create` 返回普通对象时，内核在拿到产出时补一个不可枚举的品牌属性。
+create 可返回普通对象，内核补不可枚举品牌及缺失的 code/data/message 默认值。`AxpResponseInit<R>` 支持扩展数据字段；`from` 用于派生，未覆盖的字段与失败事实继承，原对象不变。缓存重建没有 raw，自定义工厂必须从 init 恢复扩展字段。`isAxpResponse` 认 `Symbol.for('axp.response')` 品牌，不依赖 instanceof。
+
+### 内核失败事实
+
+内核在工厂返回之后挂不可枚举的 `AXP_FAILURE` 标记，同时强制 ok 为 false。`failureOf(r)` 返回只读 `{ type, reason? } | undefined`，类别常量为 `AXP_FAILURES`。使用者只转换业务数据，不填写内核分类。取消判断用 `isAxpCancel(e)` 或 `api.isCancel(e)`。
+
+| 输入                                                           | 失败标记 type                                          | status                       |
+| -------------------------------------------------------------- | ------------------------------------------------------ | ---------------------------- |
+| axios 取消、AbortError 或发送前已取消                          | cancel                                                 | 0                            |
+| AxiosError 超时（ETIMEDOUT，或 ECONNABORTED 且消息含 timeout） | timeout                                                | 0                            |
+| AxiosError 的 ERR_BAD_RESPONSE                                 | parse                                                  | 0                            |
+| 其它 AxiosError                                                | network                                                | 0                            |
+| 非 AxiosError 的异常                                           | internal                                               | 0                            |
+| expectJson 命中的未解析文本                                    | parse                                                  | 原 HTTP 状态                 |
+| 插件 `ctx.fail({ failure, reason, from })`                     | 指定类别；auth 的原因如 expired/denied/unauthenticated | 继承 from 或显式字段，否则 0 |
+| 收到普通 HTTP 或业务响应                                       | 无；看 ok/status/code                                  | 原 HTTP 状态                 |
+
+业务风格不自动触发刷新或重试；配置与完整示例见 [README 警告](../../README.zh-CN.md#使用警告与业务风格)。本次取舍见 [ADR 0002](../decisions/0002-response-contract.md)。
 
 ## 7. 落定与错误
 
 axp 没有错误类。落定规则：
 
-| 情况                           | 默认       | `wrap: true`     | `throws: false`                         |
-| ------------------------------ | ---------- | ---------------- | --------------------------------------- |
-| 成功                           | `data`     | `WithData<R, D>` | `WithData<R, D>`                        |
-| 可预期的失败                   | `throw r`  | `throw r`        | resolve `WithData<R, D>`（`ok: false`） |
-| 程序 bug（`kind: 'internal'`） | 抛原始异常 | 抛原始异常       | 抛原始异常                              |
+| 情况                                            | 默认       | `wrap: true`     | `throws: false`                         |
+| ----------------------------------------------- | ---------- | ---------------- | --------------------------------------- |
+| 成功                                            | `data`     | `WithData<R, D>` | `WithData<R, D>`                        |
+| 可预期的失败                                    | `throw r`  | `throw r`        | resolve `WithData<R, D>`（`ok: false`） |
+| 程序 bug（`failureOf(r)?.type === 'internal'`） | 抛原始异常 | 抛原始异常       | 抛原始异常                              |
 
 - `throws` **只有请求级**，默认 true。客户端级默认值已取消：`createAxp<S, R>` 显式写泛型时 TS 不会再推断第三个泛型，返回类型无法如实反映客户端级开关（B1 终审裁决）。
 - 返回类型按"调用级 ?? 方法级"的有效 `wrap` / `throws` 推断。
-- `throws: false` 失败时 `data` 的取值：收到响应时是信封 data 或原始 body；没收到响应（network/timeout/cancel/auth 等）时是 `undefined`。
+- `throws: false` 失败时 `data` 的取值：收到响应时是信封 data 或原始 body；没收到响应（network/timeout/cancel/auth 等）时是 `null`。
 - **bug 不伪装成请求失败**：中间件、判定类用户回调（见 N13）、用户拦截器或 `transformResponse` 抛出的非 AxiosError，链内临时包成 `internal` 交给外层，保证 `next()` 不 reject、外层的计数和注销照常完成；
   落定时抛出 `r.error` 本身，stack 完整，`throws: false` 也不吞。
-- **调用点**：`debug` 开启时，内核在发起请求那一刻 `new Error()` 记下调用点；失败落定时用 `factory.fail({ from: r, stack })` 派生一个带 `stack` 的副本抛出，不改被 share/cache 共享的原对象。派生出的结果若变成 internal（自定义工厂抛错），按 bug 抛原始异常。生产环境不记录，零开销。
+- **调用点**：`debug` 开启时，内核在发起请求那一刻 `new Error()` 记下调用点；失败落定时用 `factory.fail({ from: r, stack })` 派生一个带 `stack` 的副本抛出，不改被 share/cache 共享的原对象。派生出的结果若变成 internal（自定义工厂抛错），按 bug 抛原始异常。关闭 debug 时不记录调用点。
 - **工厂兜底**：自定义响应工厂自身抛错时，内核用内置工厂构造 internal 并保留首次异常，保证外层收尾；此时无法带上自定义 R 的扩展字段，落定照样抛原始异常。
 - **适配需要 `Error` 的生态**：`createAxp({ reject: (r) => unknown })`，默认原样返回 `r`；接 Sentry、TanStack Query 时可以在这里包成 `Error`。只作用于可预期的失败。
 - **区分**：`catch (e) { if (api.isResponse(e)) … else throw e }`；`api.isResponse` 与 `isAxpResponse` 同一判断，类型收窄到该客户端的 `R`。
@@ -234,8 +210,9 @@ interface AxpPluginInstance<R, A = void> {
   dispose?(): void;
 }
 
-interface AxpPlugin<R extends IAxpResponse = IAxpResponse, A = void> {
+interface AxpPlugin<R extends IAxpResponse<unknown, string | number> = AxpResponse, A = void> {
   readonly name: string;
+  readonly enable?: boolean;
   readonly stage?: AxpStage; // 自定义插件默认 'attempt'；只有 taps 时忽略
   readonly enforce?: "pre" | "post"; // 默认 'post'
   setup?(client: AxpClient<unknown, R>): AxpPluginInstance<R, A> | void; // 每个客户端调用一次，状态建在这里
@@ -249,8 +226,10 @@ interface AxpPlugin<R extends IAxpResponse = IAxpResponse, A = void> {
 - `handle` / `taps` 可以写在插件对象上（无状态插件），也可以由 `setup` 返回（有状态插件）；两处都写时以 `setup` 返回的为准。`handle` 与 `taps` 同时存在时各自参与排序，taps 的段名从 `<name>#0` 起编号。
 - 插件名 `axp:` 前缀保留给内置插件，内核按名字把内置插件放到固定位置。
 - **状态必须建在 `setup` 里**，不能放在工厂闭包。这样同一个插件对象可以装到多个客户端（`extend` 默认继承插件就靠这个），各自一份状态。
-- 内置插件工厂写成泛型 `axpRetry<R extends IAxpResponse = AxpResponse>(opts?: IRetryOptions<R>)`，只透传 `R`、不构造 `R`，所以对任意 `R` 都成立；默认值与客户端一致，单独定义的插件不写泛型也能装进默认客户端。
+- 内置插件工厂写成泛型 `axpRetry<R extends IAxpResponse<unknown, string | number> = AxpResponse>(opts?: IRetryOptions<R>)`，只透传 `R`、不构造 `R`，所以对任意 `R` 都成立；默认值与客户端一致，单独定义的插件不写泛型也能装进默认客户端。
 - 插件只有 `setup` 没有中间件（如 envs）时不进链，只在装卸时执行。
+
+合成失败用 `ctx.fail({ failure: AXP_FAILURES.AUTH, reason: "denied", from: r })`，不直接构造 R。重放前先 `ctx.canReplay()`；false 时交回原响应。首发前 `markReplayable()` 只声明按需克隆，不保证流可重放。一次性体被强行重发时，传输层生成 internal，落定抛原始 Error。
 
 自定义插件示例：
 
@@ -272,7 +251,7 @@ const audit: AxpPlugin = {
   name: "audit",
   taps: [
     { stage: "credential", enforce: "post", onRequest: (ctx) => report("send", ctx.request) },
-    { stage: "outer", onResponse: (r) => report("done", r.kind) },
+    { stage: "outer", onResponse: (r) => report("done", { ok: r.ok, status: r.status, code: r.code }) },
   ],
 };
 ```
@@ -280,13 +259,13 @@ const audit: AxpPlugin = {
 ## 9. 客户端 API
 
 ```ts
-function createAxp<S = unknown, R extends IAxpResponse = AxpResponse>(options?: AxpOptions<R>): AxpClient<S, R>;
+function createAxp<S = unknown, R extends IAxpResponse<unknown, string | number> = AxpResponse>(options?: AxpOptions<R>): AxpClient<S, R>;
 
 interface AxpOptions<R> {
   axios?: AxiosInstance; // 默认 axios.create()
   plugins?: readonly AxpPlugin<R, any>[];
   response?: IAxpResponseFactory<R>; // R 不是 AxpResponse 时类型上必填
-  key?: IKeyOptions; // key 服务配置：scope、ignores、sample
+  key?: IKeyOptions; // key 服务配置：只有 scope
   reject?: (r: R) => unknown; // 可预期失败抛出前的转换，默认原样抛 r
   debug?: boolean | AxpLogger; // 取代 axpLogger 插件；true 用 console；AxpLogger = { log, warn, error }；开启时还记录调用点 stack
 }
@@ -295,19 +274,20 @@ interface AxpClient<S, R> extends HttpVerbs<S, R> {
   // axios 全部 10 个小写动词（含 purge/link/unlink），柯里化形态与 data/params 分派不变
   readonly axios: AxiosInstance;
   request<D = unknown>(config: AxpRequestConfig): Promise<D>; // 无类型逃生口，同样支持 wrap/throws 重载
-  extend(overrides?: AxiosRequestConfig, opts?: { plugins?: "inherit" | readonly AxpPlugin<R, any>[] }): AxpClient<S, R>;
+  extend(overrides?: AxiosRequestConfig, opts?: { plugins?: "inherit" | readonly AxpPlugin<R, any>[]; axios?: AxiosInstance }): AxpClient<S, R>;
   use(plugin: AxpPlugin<R, any>): void;
   eject(name: string): boolean;
   plugin<A>(p: AxpPlugin<R, A>): A | undefined; // 取插件实例 API
   cancelAll(reason?: string): number;
   pending(): number; // 在途逻辑请求数
   inspect(): ReadonlyArray<{ stage: AxpStage; name: string }>;
+  isCancel(e: unknown): boolean; // 按内核失败标记判断取消
   isResponse(e: unknown): e is R; // 区分可预期的失败与程序 bug
   dispose(): void;
 }
 ```
 
-`extend()` 克隆 axios defaults（沿用 `cloneAxiosDefaults`），默认继承插件列表并各自重新 `setup`，状态不共享。
+`extend()` 默认新建 axios 并克隆父 defaults，不复制拦截器；指定 `{ axios }` 时原样使用，不复制父 defaults。插件默认继承并重新 setup，各自独立；overrides 在 setup 之后写入。完整警告见 [README](../../README.zh-CN.md#使用警告与业务风格)。
 `dispose()` 先 `cancelAll()`，再按注册的逆序调用各插件实例的 `dispose`（尽力执行，最后抛第一个异常）；之后拒绝新的 `request` / `use` / `extend`，在途请求沿原链收到取消后落定。
 使用方式示例：
 
@@ -346,23 +326,23 @@ const res = await api.post("/pet")(body, { throws: false }); // 不写 try/catch
 | P5  | 传输强制 `validateStatus` 全放行，HTTP 错误不构造 AxiosError（省掉调用栈捕获）                                                                        | —        |
 | P6  | 失败直接抛 `R`，不另建错误对象；调用点 stack 只在 debug 模式记录                                                                                      | D6       |
 | P7  | 不再包装 `transformResponse`，不再拷贝尝试钩子数组                                                                                                    | O6、R2-3 |
-| P8  | 缓存过期惰性删除，写入时按容量节流清扫                                                                                                                | O6       |
+| P8  | 缓存过期惰性删除，超容量及有限有效期写入时节流清扫；同步仓保留快路径                                                                                  | O6       |
 
 性能门槛和测法见 [测试方案](test-plan.md) §8。
 
 ## 12. 与现状的对照
 
-| 现状问题                                     | 新方案                                                                       |
-| -------------------------------------------- | ---------------------------------------------------------------------------- |
-| O1 重放要快照 share/cache/data               | 请求不可变 + `next(patch)`，无快照                                           |
-| O2 三处手动给错误挂 config                   | `R` 自带 `request`，由传输层或 `ctx.fail` 统一填写                           |
-| O3 cache 四张表                              | 见插件规格 cache 节                                                          |
-| O4 `canRefresh` 写在用户的 TokenManager 上   | 收进 auth 内部状态，见插件规格 auth 节                                       |
-| O5 business 风格只看 HTTP 码                 | `IAxpResponse.status` 为逻辑状态，全插件统一读                               |
-| O6 效率小项                                  | §11 P4、P7、P8                                                               |
-| 错误类型 4 种                                | 没有错误类：可预期的失败抛 `R`，类别看 `r.kind` / `r.reason`；bug 抛原始异常 |
-| 14 个写死槽位，自定义插件只能靠 4 个插入方法 | 阶段 + `use/eject`                                                           |
-| notify 关于 auth 重放双触发的过时警告        | 机制不存在了，随旧代码删除                                                   |
+| 现状问题                                     | 新方案                                                          |
+| -------------------------------------------- | --------------------------------------------------------------- |
+| O1 重放要快照 share/cache/data               | 请求不可变 + `next(patch)`，无快照                              |
+| O2 三处手动给错误挂 config                   | 默认类的 request 由传输或工厂填写，不要求接口实现者提供         |
+| O3 cache 四张表                              | 见插件规格 cache 节                                             |
+| O4 `canRefresh` 写在用户的 TokenManager 上   | 收进 auth 内部状态，见插件规格 auth 节                          |
+| O5 business 风格适配                         | 插件默认按 HTTP 判定；业务码由使用者配置，见 ADR 0002           |
+| O6 效率小项                                  | §11 P4、P7、P8                                                  |
+| 错误类型 4 种                                | 可预期失败抛 R；内核类别与原因用 failureOf 读取；bug 抛原始异常 |
+| 14 个写死槽位，自定义插件只能靠 4 个插入方法 | 阶段 + `use/eject`                                              |
+| notify 关于 auth 重放双触发的过时警告        | 机制不存在了，随旧代码删除                                      |
 
 ## 13. 新增设计选择（已确认）
 

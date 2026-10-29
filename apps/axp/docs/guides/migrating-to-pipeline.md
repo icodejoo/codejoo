@@ -1,7 +1,7 @@
 ---
 title: 从旧版迁移到洋葱管线
 status: active
-updated: 2026-10-28
+updated: 2026-10-29
 summary: 旧写法到新写法的逐项对照：入口、错误、返回形态、删除的插件、默认值与回调签名的变化
 ---
 
@@ -12,6 +12,26 @@ summary: 旧写法到新写法的逐项对照：入口、错误、返回形态�
 - `raw: true` 改为 `wrap: true` 后读 `r.raw`；`normalize: false` 改为 `throws: false`。
 - `axpCancel`、`axpKey`、`axpLogger`、`axpNormalize` 删除，能力并入内核。retry、filter、cache 的默认值变了，升级后要复查这几个插件的行为。
 - 下面按"旧代码 → 新代码"逐项对照。删除的子路径在第 11 节，删除的类型在第 13 节。
+
+## 0.2.0 终审后的变化
+
+下面的“旧”指 2026-10-29 终审前的 0.2.0 工作区；后面的各节已按终审后的 API 更新。决策理由见 [ADR 0002](../decisions/0002-response-contract.md)。
+
+| 旧写法或假设                                       | 新写法                                                                                                                                                             |
+| -------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `r.kind`、`r.reason`、`AXP_KINDS`                  | `failureOf(r)?.type` / `.reason`、`AXP_FAILURES`；取消用 `api.isCancel(e)` / `isAxpCancel(e)`。HTTP/业务失败本身没有标记，看 ok/status/code                        |
+| `r.httpStatus`                                     | `r.status`，只表示 HTTP 状态，无响应为 0                                                                                                                           |
+| 逻辑状态自动把 HTTP 200 加业务码当 401/403/5xx/429 | 自己配置 onFailure、shouldRetry、respectRetryAfter；[完整示例及警告](../../README.zh-CN.md#使用警告与业务风格)                                                     |
+| `axpResponse({ envelope })`                        | 覆盖 AxpResponse.parse(body, raw)，用 axpResponse({ type: MyResponse })；接口实现走 create                                                                         |
+| `key.ignores`、`key.sample`                        | 删除，只留 scope；对象只跳过 undefined，null 字段及其它值参与，字符串不 trim；旧持久化 key 需要清理                                                                |
+| store 保存 `{ response: R, expiresAt }`            | 保存 `{ snapshot, expiresAt }`，方法可返回 Promise、size 可选；命中经工厂重建，request 是当前调用方；[快照接口](../design/plugin-spec.md#63-cachesource内置次序-3) |
+| 同步使用 remove/clear/removeCache/clearCache       | 统一 await，返回 MaybePromise；get 失败按未命中，写删异常隔离并 console.error                                                                                      |
+| retryAfterMax 默认 Infinity，超限封顶后仍重试      | 默认 60_000，服务端要求超过上限就不重试；Infinity 表示永远照办                                                                                                     |
+| onRefresh 可以一直挂起                             | refreshTimeout 默认 30_000，0/Infinity 不限时；同客户端刷新必须 protected: false，超时只是兜底                                                                     |
+| extend() 会保留拦截器                              | 默认只复制 defaults 并新建 axios；保留拦截器传 extend(overrides, { axios })，显式实例不复制父 defaults                                                             |
+| 已发送的流能自动重放                               | retry/auth/mock 返回原响应；自定义插件在重放前查 ctx.canReplay()，强行重放会抛原始 Error                                                                           |
+
+默认 code 为 0、data 为 null、message 为空串（允许 null），message/raw/error 是可选接口字段。request/stack 仅默认类提供。自定义 create 在缓存重建时没有 raw，应从 init 恢复扩展字段。
 
 ## 1. 入口
 
@@ -39,7 +59,7 @@ const api = createAxp<Schema>({
 
 要点：
 
-- `key` 不再是插件。它是内核服务，需要改配置时写在 `createAxp({ key: { scope, ignores, sample } })` 里。
+- `key` 不再是插件。它是内核服务，需要改配置时写在 `createAxp({ key: { scope } })` 里。
 - 插件数组的顺序不影响内置插件的执行顺序。只有自定义插件才需要关心 `stage` 和 `enforce`。
 - 类型参数 `T` 换成 `S`（接口类型），仍然是 `createAxp<S>()`。要自定义响应类时，`S` 和 `R` 都要写出来。
 
@@ -63,11 +83,13 @@ try {
 新：
 
 ```ts
+import { failureOf } from "@codejoo/axp";
+
 try {
   await api.post("/pet")(body);
 } catch (e) {
   if (api.isResponse(e)) {
-    if (e.kind === "auth")
+    if (failureOf(e)?.type === "auth")
       relogin(); // 或者判断 e.status === 401
     else toast(e.message, e.code);
   } else {
@@ -79,13 +101,13 @@ try {
 要点：
 
 - 可预期的失败（HTTP、业务、网络、超时、取消、解析、鉴权）全部抛出 `IAxpResponse`。它不是 `Error`，默认没有 `stack`。
-- 类别看 `e.kind`，细分原因看 `e.reason`，逻辑状态看 `e.status`，原始 HTTP 状态看 `e.httpStatus`。原来的 `e.response` 不再存在，要的东西都在 `e` 上。
+- 内核失败读 failureOf(e)?.type / reason；HTTP 状态读 e.status，业务码读 e.code。取消用 api.isCancel(e)。先从包根导入 failureOf；原来的 e.response 不再存在。
 - 程序 bug 仍然抛原始异常。`api.isResponse(e)` 用来区分两者。
 - 需要 `Error` 的生态（Sentry、TanStack Query 等）在客户端配置 `reject`：
 
   ```ts
   const api = createAxp<Schema>({
-    reject: (r) => Object.assign(new Error(r.message), { response: r }),
+    reject: (r) => Object.assign(new Error(r.message ?? ""), { response: r }),
   });
   ```
 
@@ -99,25 +121,25 @@ try {
 AxpResponse.isSuccessful = (status, code) => code === 200;
 ```
 
-新，每个客户端一份，子类覆盖 `ok` 和 `status` getter：
+新，每个客户端一份，子类覆盖 `ok`，字段转换覆盖 `parse`：
 
 ```ts
 import { AxpResponse, axpResponse, createAxp } from "@codejoo/axp";
 
 class MyResponse<D = unknown> extends AxpResponse<D> {
   get ok() {
-    return this.httpStatus < 300 && this.code === 200;
+    return this.status >= 200 && this.status < 300 && this.code === 200;
   }
 }
 
 const api = createAxp<Schema, MyResponse>({
-  response: axpResponse<MyResponse>({ create: (init) => new MyResponse(init) }),
+  response: axpResponse<MyResponse>({ type: MyResponse }),
 });
 ```
 
 要点：
 
-- `kind` 跟着 `ok` 自动推导，不需要另外设置。
+- status 保持 HTTP 状态；内核失败标记强制 ok 为 false。
 - `AxpResponse.fromResponse` 删除。响应由工厂构造，不需要手动调用。
 - 旧的 `successful` 字段改为 `ok`。
 
@@ -148,12 +170,12 @@ const res = await api.get("/pet")(undefined, { throws: false }); // 失败不抛
 
 ## 5. 删除的插件及替代
 
-| 旧                                                                           | 新                                                                                                                                                       |
-| ---------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `axpCancel()` 加 `cancelAll(ax, reason)`                                     | 内核自带。用 `api.cancelAll(reason)`。`signal` 照常可用                                                                                                  |
-| `axpKey({ fastMode, before, after, ignores, sample, scope })` 加 `key: true` | 内核服务。`createAxp({ key: { scope, ignores, sample } })`。`fastMode`、`before`、`after` 删除。请求级 `key` 省略即自动计算；`true` 与省略等价，保留兼容 |
-| `axpLogger({ debug, logger })`                                               | `createAxp({ debug })`，`debug` 可以是 `true` 或自定义 logger                                                                                            |
-| `axpNormalize({ nullable })`                                                 | 内核落定，不需要安装。`nullable` 删除，`data` 为 `null` 或 `undefined` 时照常原样返回                                                                    |
+| 旧                                                                           | 新                                                                                                                                      |
+| ---------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------- |
+| `axpCancel()` 加 `cancelAll(ax, reason)`                                     | 内核自带。用 `api.cancelAll(reason)`。`signal` 照常可用                                                                                 |
+| `axpKey({ fastMode, before, after, ignores, sample, scope })` 加 `key: true` | 内核服务。`createAxp({ key: { scope } })`。`fastMode`、`before`、`after` 删除。请求级 `key` 省略即自动计算；`true` 与省略等价，保留兼容 |
+| `axpLogger({ debug, logger })`                                               | `createAxp({ debug })`，`debug` 可以是 `true` 或自定义 logger                                                                           |
+| `axpNormalize({ nullable })`                                                 | 内核落定，不需要安装。`nullable` 删除，`data` 为 `null` 或 `undefined` 时照常原样返回                                                   |
 
 key 的例子：
 
@@ -171,18 +193,18 @@ api.get("/list")(undefined, { cache: true });
 
 ## 6. 各插件的选项与默认值变化
 
-| 插件         | 变化                                                                                                                                                                                                                                           |
-| ------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `axpRetry`   | `max` 默认 0 改为 2。`delay` 默认 3000 改为指数退避 `attempt => 300 * 2 ** (attempt - 1)`。`delayMax` 默认 `Infinity` 改为 `10_000`。`shouldRetry` 签名改为 `(r, attempt, ctx)`。`statusCodes`、`afterStatusCodes` 改为对照逻辑状态 `r.status` |
-| `axpFilter`  | 装上即生效。旧版要请求级写 `filter: true` 才过滤，现在要关闭才写 `filter: false`。请求级只接受 `false`、`true` 和对象，不再调用函数                                                                                                            |
-| `axpCache`   | 默认只缓存 GET 和 HEAD。`shouldCache` 参数改为 `r`。`storage`、`memory` 选项删除，持久化走 `store`。命中时不再重跑 `transformResponse`                                                                                                         |
-| `axpShare`   | 策略 `'none'` 删除，改用 `share: false`。`share: (config) => …` 删除。race 的胜负改看 `r.ok`。新增 `methods`，默认 GET 和 HEAD。跟随者拿到同一个只读的 `R`                                                                                     |
-| `axpMock`    | `fallbackWhen` 参数改为 `r`。请求级对象里的 `mock` 字段删除，关闭用 `false` 或 `{ enable: false }`。`mock: true` 仍然可以为单次请求开启                                                                                                        |
-| `axpNotify`  | `stringify` 签名改为 `(r, ctx)`，并且有默认值，可以不写。`silent: true` 真正生效（只作用于默认的 `stringify`，自定义的自己读 `ctx.request.silent`）。请求级 `notify` 只是开关：`false` 或 `{ enable: false }`                                  |
-| `axpLoading` | 显示从逻辑请求开始算，包括等待 token 刷新的时间。`guardTransform` 和 `logical` 参数删除。请求级回调（函数形式）保留                                                                                                                            |
-| `axpRepath`  | 行为不变。占位符值按路径段编码，只替换 pathname。请求级除了 `false`，还可以写对象 `{ pattern, removeKey }` 覆盖                                                                                                                                |
-| `key`        | 包含 params，有请求体的方法还包含 data。旧版 `key: true` 只哈希 method 和 url，同一路径不同参数会串缓存                                                                                                                                        |
-| `axpEnvs`    | 卸载（`eject`、`dispose`）不再还原写入 `defaults` 的配置，旧版的 cleanup 会还原。另可写成 `{ enable, rules }`，数组写法仍然可用                                                                                                                |
+| 插件         | 变化                                                                                                                                                                                                                                                                 |
+| ------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `axpRetry`   | `max` 默认 0 改为 2。`delay` 默认 3000 改为指数退避 `attempt => 300 * 2 ** (attempt - 1)`。`delayMax` 默认 `Infinity` 改为 `10_000`。`shouldRetry` 签名改为 `(r, attempt, ctx)`。`statusCodes`、`afterStatusCodes` 改为对照 HTTP 状态 r.status，业务码判定需显式配置 |
+| `axpFilter`  | 装上即生效。旧版要请求级写 `filter: true` 才过滤，现在要关闭才写 `filter: false`。请求级只接受 `false`、`true` 和对象，不再调用函数                                                                                                                                  |
+| `axpCache`   | 默认只缓存 GET 和 HEAD。`shouldCache` 参数改为 `r`。`storage`、`memory` 选项删除，持久化走 `store`。命中时不再重跑 `transformResponse`                                                                                                                               |
+| `axpShare`   | 策略 `'none'` 删除，改用 `share: false`。`share: (config) => …` 删除。race 的胜负改看 `r.ok`。新增 `methods`，默认 GET 和 HEAD。跟随者拿到同一个只读的 `R`                                                                                                           |
+| `axpMock`    | `fallbackWhen` 参数改为 `r`。请求级对象里的 `mock` 字段删除，关闭用 `false` 或 `{ enable: false }`。`mock: true` 仍然可以为单次请求开启                                                                                                                              |
+| `axpNotify`  | `stringify` 签名改为 `(r, ctx)`，并且有默认值，可以不写。`silent: true` 真正生效（只作用于默认的 `stringify`，自定义的自己读 `ctx.request.silent`）。请求级 `notify` 只是开关：`false` 或 `{ enable: false }`                                                        |
+| `axpLoading` | 显示从逻辑请求开始算，包括等待 token 刷新的时间。`guardTransform` 和 `logical` 参数删除。请求级回调（函数形式）保留                                                                                                                                                  |
+| `axpRepath`  | 行为不变。占位符值按路径段编码，只替换 pathname。请求级除了 `false`，还可以写对象 `{ pattern, removeKey }` 覆盖                                                                                                                                                      |
+| `key`        | 包含 params，有请求体的方法还包含 data。旧版 `key: true` 只哈希 method 和 url，同一路径不同参数会串缓存                                                                                                                                                              |
+| `axpEnvs`    | 卸载（`eject`、`dispose`）不再还原写入 `defaults` 的配置，旧版的 cleanup 会还原。另可写成 `{ enable, rules }`，数组写法仍然可用                                                                                                                                      |
 
 retry 的例子：
 
@@ -238,8 +260,8 @@ axpAuth({
 
 - 回调参数统一为 `(r, tm)`。`onFailure` 收到的是 `R`，不再是 `AxiosResponse`。
 - `canRefresh` 删除。`tokenManager.canRefresh` 不存在了，`TokenManager` 上也没有这个属性。判定过期后，插件会清空 token 并记下清空后的状态，这个状态没变之前不再刷新、不再重复通知过期。登录写入新 token 后自动恢复，登录流程不需要再手动改标记。
-- `config.authExpired` 标记删除，改为看 `r.reason === 'expired'`。
-- 没有 token 时，不再合成 `data.code === 'ACCESS_DENIED'` 的响应。改为判断 `r.kind === 'auth' && r.reason === 'unauthenticated'`。`accessDeniedCode` 选项和 `ACCESS_DENIED_CODE` 常量删除。
+- `config.authExpired` 标记删除，改为看 `failureOf(r)?.reason === 'expired'`。
+- 没有 token 时，不再合成 `data.code === 'ACCESS_DENIED'` 的响应。改为判断 `failureOf(r)?.type === 'auth' && failureOf(r)?.reason === 'unauthenticated'`。`accessDeniedCode` 选项和 `ACCESS_DENIED_CODE` 常量删除。
 - `ready` 返回一个 `AxpRequestPatch`，不再直接修改 `config`。
 - `authFailureFactory` 删除，默认路由改为 `defaultAuthFailure`，按状态键识别携带的 token，不再解析请求头。原来的 `DEFAULT_ON_AUTH_FAILURE` 由它取代。
 - 尝试钩子 `registerAttemptHook` 删除。retry 的每次尝试本来就会经过 auth。
@@ -379,7 +401,7 @@ const other = api.extend({ baseURL: "/v2" }, { plugins: [axpCache()] }); // 或�
 ## 迁移检查清单
 
 - [ ] 所有 `Axp.install`、`Axp.create`、`Core` 换成 `createAxp`。
-- [ ] `catch` 里的 `ApiError`、`AxiosError` 判断换成 `api.isResponse(e)` 加 `e.kind`、`e.reason`。
+- [ ] `catch` 里的 `ApiError`、`AxiosError` 判断换成 `api.isResponse(e)` 加 failureOf(e)，取消用 api.isCancel(e)。
 - [ ] 搜索 `raw: true`、`normalize`、`successful`、`canRefresh`、`accessDeniedCode`、`authExpired`，逐个替换；`key` 的数字、函数写法改成字符串或省略。
 - [ ] 检查 retry：默认次数和间隔变了，依赖旧默认值的地方要显式写回去。
 - [ ] 检查 filter：之前没写 `filter: true` 的请求，现在会被过滤。

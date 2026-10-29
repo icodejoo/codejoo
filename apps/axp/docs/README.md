@@ -1,10 +1,12 @@
 # axp 文档索引
 
-使用说明见根目录的 [README](../README.md)，代码导读见 [ARCHITECTURE](../ARCHITECTURE.md)。两者已按新架构重写并对照实现定稿（B6）；规格细节以下面的「设计」为准。
+使用说明见根目录的 [README](../README.md)，代码导读见 [ARCHITECTURE](../ARCHITECTURE.md)。两者已按 2026-10-29 终审后的实现对齐；规格细节以下面的「设计」为准。
 
 ## 决策（已拍板）
 
 - [0001 核心重构的六条决策](decisions/0001-core-redesign.md) — 洋葱管线、具名阶段、归一化响应 `IAxpResponse`、不设错误类的取舍与理由。active。
+
+- [0002 响应契约精简](decisions/0002-response-contract.md) — HTTP 状态、内核失败标记、parse/type 扩展与业务码配置；取代 0001 的相关条款。active。
 
 ## 设计（洋葱管线重构）
 
@@ -15,6 +17,7 @@
 
 ## 报告（带日期的结果）
 
+- [2026-10-29 重构后终审](reports/2026-10-29-final-review.md) — 9 项必修与拍板结论、Codex 初审裁决、8 批修复进度、修复后最终门槛（验收 2250/0/442、体积待定）。active。
 - [2026-10-28 洋葱管线 B7 验收矩阵](reports/2026-10-28-acceptance-pipeline.md) — testkit 整轮验收：合计通过 2254、失败 0、跳过 438，§9.3 逐条核对与给 testkit 的反馈。active。
 - [2026-10-28 洋葱管线 B6 文档与产物](reports/2026-10-28-pipeline-b6.md) — 产物类型增强、产物测试、e2e 迁移、质量收尾、与 B0 交错 A/B 的性能和体积结论。active。
 - [2026-10-28 洋葱管线 B5 测试收尾](reports/2026-10-28-pipeline-b5.md) — 跨批组合、powerset 512 子集、删旧实现、新入口、覆盖率 100%、映射改标与终审修复。active。

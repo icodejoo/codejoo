@@ -1,7 +1,7 @@
 ---
 title: axp 新架构测试方案（单测、覆盖率、组合、验收矩阵、性能门槛）
 status: active
-updated: 2026-10-28
+updated: 2026-10-29
 summary: 新架构按六层怎么测、覆盖率和 API 台账口径、组合不变量、验收矩阵怎么跑、性能与体积门槛、旧用例怎么迁
 ---
 
@@ -33,42 +33,42 @@ summary: 新架构按六层怎么测、覆盖率和 API 台账口径、组合不
 
 ## 3. 单元层（`test/unit/`）
 
-| 模块                      | 要点                                                                                                                                                                    |
-| ------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| 排序 `pipeline.sort`      | 阶段顺序；内置次序；`enforce` pre/post；数组顺序；重名抛错；taps 拆段命名 `<name>#n`；未知阶段抛错                                                                      |
-| 链组合 `pipeline.compose` | 零插件直达传输；`next` 调用两次拿到同一基准请求；中间件抛错转 `internal`；中间件不调 `next` 可直接返回 `R`                                                              |
-| 请求补丁 `mergePatch`     | 浅合并；`headers` 合并一层；`undefined` 值表示删除；不改原对象                                                                                                          |
-| 状态键 `stateKey`         | 类型隔离；同描述两个键互不覆盖；逻辑请求级共享                                                                                                                          |
-| 响应工厂 `axpResponse`    | 架构 §6 分类表逐行一条（含"非 AxiosError → internal"），外加 `envelope` 自定义字段名、`envelope: false`、`expectJson`、`create` 返回子类、`create` 返回普通对象后补品牌 |
-| `AxpResponse`             | 默认 `ok` / `status` / `kind` getter 的判定；子类覆盖 `ok`、`status` 后 `kind` 跟随；未收到响应时写入的自有属性遮住 getter（子类 getter 不被调用）；`toJSON` 字段齐全   |
-| `isAxpResponse`           | 品牌识别；跨模块副本（手动构造同品牌对象）识别；普通 `Error`、普通对象返回 false                                                                                        |
-| 落定 `settle`             | 成功 / 可预期失败 / bug 三类 × 默认、`wrap`、`throws: false` 九格；`reject` 只作用于可预期失败；debug 模式失败时抛出带调用点 `stack` 的派生副本，共享原对象不变         |
-| key 服务                  | 迁移现有 `key.unit.*` 的算法用例；新增"不同 params 不同 key"、body 方法含 data、`scope`、不可哈希返回 null                                                              |
-| retry 算法                | `$computeDelay`、jitter、`Retry-After` 解析（数字秒 / HTTP-date / 封顶）沿用现有用例                                                                                    |
-| auth 匹配                 | `$compileMethods`、`$compileUrlPatterns`、`$pathnameOf` 沿用                                                                                                            |
-| cache 存储                | LRU；惰性过期；容量清扫；`{ latestSeq, pending }` 表的写入屏障与回收                                                                                                    |
-| `TokenManager`            | 沿用，删 `canRefresh` 相关                                                                                                                                              |
+| 模块                      | 要点                                                                                                                                                            |
+| ------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 排序 `pipeline.sort`      | 阶段顺序；内置次序；`enforce` pre/post；数组顺序；重名抛错；taps 拆段命名 `<name>#n`；未知阶段抛错                                                              |
+| 链组合 `pipeline.compose` | 零插件直达传输；`next` 调用两次拿到同一基准请求；中间件抛错转 `internal`；中间件不调 `next` 可直接返回 `R`                                                      |
+| 请求补丁 `mergePatch`     | 浅合并；`headers` 合并一层；`undefined` 值表示删除；不改原对象                                                                                                  |
+| 状态键 `stateKey`         | 类型隔离；同描述两个键互不覆盖；逻辑请求级共享                                                                                                                  |
+| 响应工厂 `axpResponse`    | §6 分类表逐行；失败标记只由内核写入且强制 ok=false；parse/type、expectJson、create 普通对象的品牌与 code/data/message 缺省值；字符串 code                       |
+| `AxpResponse`             | 默认 ok（2xx 且 code=0/0000）；status 保留 HTTP；parse 可覆盖；data 缺省 null、message 空串或 null；内核失败遮住 ok；toJSON 业务字段与失败事实                  |
+| `isAxpResponse`           | 品牌识别；跨模块副本（手动构造同品牌对象）识别；普通 `Error`、普通对象返回 false                                                                                |
+| 落定 `settle`             | 成功 / 可预期失败 / bug 三类 × 默认、`wrap`、`throws: false` 九格；`reject` 只作用于可预期失败；debug 模式失败时抛出带调用点 `stack` 的派生副本，共享原对象不变 |
+| key 服务                  | baseURL/allowAbsoluteUrls；对象仅跳 undefined、null 字段与假值均参与；类型标签、字符串不 trim；二进制 64KiB 边界；scope；不可哈希返回 null                      |
+| retry 算法                | `$computeDelay`、jitter、`Retry-After` 解析（数字秒 / HTTP-date / 超限不重试）沿用现有用例                                                                      |
+| auth 匹配                 | `$compileMethods`、`$compileUrlPatterns`、`$pathnameOf` 沿用                                                                                                    |
+| cache 存储                | LRU、惰性过期、节流清扫；可序列化快照、同步/异步方法与可选 size；每 key 串行写、新鲜度屏障与回收                                                                |
+| `TokenManager`            | 沿用，删 `canRefresh` 相关                                                                                                                                      |
 
 ## 4. 规则层与边界层（`test/rule/`、`test/boundary/`）
 
 每个插件一组文件。规则层测**文档写明的行为**，边界层测**极端输入和时序**。下表是必须覆盖的要点，不是全部用例。
 
-| 对象                 | rule 要点                                                                                                                                                | boundary 要点                                                                                                                                            |
-| -------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| 客户端               | 七个动词的 data/params 分派；`request`；`extend` 继承插件且状态独立；`use`/`eject` 后链生效；`inspect` 顺序；`cancelAll` 返回数；`pending`；`isResponse` | 在途时 `eject`/`dispose`；`extend` 覆盖 headers 不污染父实例；同一插件对象装两个客户端；用户 `transformResponse` 抛 TypeError 时调用方拿到原始 TypeError |
-| 用户回调抛错（N13）  | 判定类回调抛错 → 调用方拿到原始异常；通知类回调抛错 → 请求结果不变、`console.error` 被调用一次                                                           | `onRefresh` 抛错 → 按刷新失败处理，不当 bug                                                                                                              |
-| 取消                 | 用户 signal 联动；`cancelAll` 后 `kind: 'cancel'`                                                                                                        | 已中止的 signal 直接落定；取消发生在 retry 等待、auth 排队、share 跟随中                                                                                 |
-| loading              | 一对显示/隐藏；`delay`/`delayClose`；请求级四种写法                                                                                                      | 回调抛错隔离；卸载取消定时器；并发交错的 0↔1 边界                                                                                                        |
-| notify               | 默认 stringify；`silent`；`notify: false`；每逻辑请求 ≤ 1 次                                                                                             | stringify 抛错隔离；取消不通知                                                                                                                           |
-| repath               | 三种占位符；params 优先 data；编码；`removeKey`                                                                                                          | 缺值保留占位；同名占位多次；不碰 query/hash/host                                                                                                         |
-| filter               | 默认生效；`filter: false`；predicate、ignoreKeys、ignoreValues                                                                                           | 非纯对象 data（FormData、Blob）原样；不改调用方对象                                                                                                      |
-| retry                | 每个选项一条；判定顺序 6 级各一条；请求级写法                                                                                                            | `max: 0`；delay 返回非数字；等待中取消；`Retry-After` 超封顶；business 风格 429                                                                          |
-| auth                 | 五动作；单飞刷新；排队请求等刷新；`protected`；`ready` patch；过期每轮一次通知                                                                           | `onRefresh` 同步抛错；刷新中取消；重放后仍 401 判 expired；token 变化后恢复刷新（O4）；本地无 token                                                      |
-| mock                 | 探测命中；404 回落；不可达回落；`fallbackWhen`                                                                                                           | 探测不写缓存、不占共享；`mockUrl` 缺失跳过                                                                                                               |
-| share                | 三种策略；`methods`；key 为 null 绕过                                                                                                                    | 首发取消不连累跟随者；跟随者各自超时；全部离开中止底层；race 全败用最后一个                                                                              |
-| cache                | 命中不触网；TTL；`methods`；`shouldCache`；`clone` 三种；`remove`/`clear`                                                                                | 慢的旧响应不覆盖新结果；`clear` 后在途不回写；淘汰后屏障仍有效（R2-2）；`max: 1`                                                                         |
-| envs                 | 第一个命中规则生效                                                                                                                                       | 无规则；规则抛错                                                                                                                                         |
-| 响应工厂（经客户端） | business 风格 401/403/500 分别得到逻辑状态                                                                                                               | 非 JSON、空 body、HTML 拦截页（`expectJson`）                                                                                                            |
+| 对象                 | rule 要点                                                                                                                                                | boundary 要点                                                                                                                                                     |
+| -------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 客户端               | 十个动词的 data/params 分派；`request`；`extend` 继承插件且状态独立；`use`/`eject` 后链生效；`inspect` 顺序；`cancelAll` 返回数；`pending`；`isResponse` | 在途时 `eject`/`dispose`；`extend` 覆盖 headers 不污染父实例；同一插件对象装两个客户端；用户 `transformResponse` 抛 TypeError 时调用方拿到原始 TypeError          |
+| 用户回调抛错（N13）  | 判定类回调抛错 → 调用方拿到原始异常；通知类回调抛错 → 请求结果不变、`console.error` 被调用一次                                                           | `onRefresh` 抛错 → 按刷新失败处理，不当 bug                                                                                                                       |
+| 取消                 | 用户 signal 联动；`cancelAll` 后 `api.isCancel(r)` 且 ok=false、status=0、code=0                                                                         | 已中止的 signal 直接落定；取消发生在 retry 等待、auth 排队、share 跟随中                                                                                          |
+| loading              | 一对显示/隐藏；`delay`/`delayClose`；请求级四种写法                                                                                                      | 回调抛错隔离；卸载取消定时器；并发交错的 0↔1 边界                                                                                                                 |
+| notify               | 默认 stringify；`silent`；`notify: false`；每逻辑请求 ≤ 1 次                                                                                             | stringify 抛错隔离；取消不通知                                                                                                                                    |
+| repath               | 三种占位符；params 优先 data；编码；`removeKey`                                                                                                          | 缺值保留占位；同名占位多次；不碰 query/hash/host                                                                                                                  |
+| filter               | 默认生效；`filter: false`；predicate、ignoreKeys、ignoreValues                                                                                           | 非纯对象 data（FormData、Blob）原样；不改调用方对象                                                                                                               |
+| retry                | 每个选项一条；判定顺序 6 级各一条；请求级写法                                                                                                            | `max: 0`；delay 返回非数字；等待中取消；Retry-After 超上限不重试；business 429 配判定函数                                                                         |
+| auth                 | 五动作；单飞刷新；排队请求等刷新；`protected`；`ready` patch；过期每轮一次通知                                                                           | `onRefresh` 同步抛错；刷新中取消；重放后仍 401 判 expired；token 变化后恢复刷新（O4）；本地无 token；refreshTimeout；旧刷新失败不清新会话；ready/onFailure 可取消 |
+| mock                 | 探测命中；404 回落；不可达回落；`fallbackWhen`                                                                                                           | 探测不写缓存、不占共享；mockUrl 缺失跳过；一次性体不重放                                                                                                          |
+| share                | 三种策略；`methods`；key 为 null 绕过                                                                                                                    | 首发取消不连累跟随者；跟随者各自超时；全部离开中止底层；end/race 撤回不影响别人；race 全败用最后一个未撤回失败                                                    |
+| cache                | 命中不触网；TTL；`methods`；`shouldCache`；`clone` 三种；`remove`/`clear`                                                                                | 慢的旧响应不覆盖新结果；`clear` 后在途不回写；淘汰后屏障仍有效（R2-2）；max: 1；异步 store 故障隔离；命中重建与当前 request；取消不命中                           |
+| envs                 | 第一个命中规则生效                                                                                                                                       | 无规则；规则抛错                                                                                                                                                  |
+| 响应工厂（经客户端） | business 风格 401/403/500 保持 HTTP status=200、code 保留业务码，ok=false；业务路由显式配置                                                              | 非 JSON、空 body、HTML 拦截页（`expectJson`）                                                                                                                     |
 
 ## 5. 组合层（`test/combo/`）
 
@@ -210,7 +210,7 @@ breaker、offline、timeout 三类场景继续因缺能力跳过。
 | 文件                        | 改动                                                                                                                                                                                                                                  |
 | --------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `client-factory.ts`         | 改用 `createAxp`。删除 `logicalStatus`、`makeShouldRetry`、`notifyText`、`makeShouldCache`、`makeOnFailure` 里的业务码适配（O5 做完后的约定）；`parseGuard` 改为 `axpResponse({ expectJson: true })`；`expiredMarked` 改读 `r.reason` |
-| `classify.ts`               | 抛出的就是 `R`：`isAxpResponse(e)` 后直接读 `e.kind` / `e.reason` / `e.status` 归类，不再识别 `ApiError`、`CanceledError` 等多种形态；非 `R` 一律记为 `unknown:`（意味着 axp 有 bug）                                                 |
+| `classify.ts`               | 抛出的就是 `R`：`isAxpResponse(e)` 后直接读 failureOf(e) / e.ok / e.status / e.code 归类，不再识别 `ApiError`、`CanceledError` 等多种形态；非 `R` 一律记为 `unknown:`（意味着 axp 有 bug）                                            |
 | `mapping.ts` / `mapping.md` | 中立 `key: true` 直接映射为 axp 的 `key` 默认行为，不再翻译成 `'deep'`；`cache.methods` 映射到插件选项；能力清单里 cancel、key、normalize、log 改为"内核具备"                                                                         |
 | `unit/*`                    | 执行器自测随上面同步更新，仍不计入六层                                                                                                                                                                                                |
 
