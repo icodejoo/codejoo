@@ -17,7 +17,7 @@ export type TShouldRetry<R extends IAxpResponse<unknown, string | number> = IAxp
 /** 重试延迟策略，异常由内核按程序错误落定。
  * @example `const delay: TRetryDelay = attempt => attempt * 300`
  */
-export type TRetryDelay<R extends IAxpResponse<unknown, string | number> = IAxpResponse> = TimingDelay<R>;
+export type TRetryDelay<R extends IAxpResponse<unknown, string | number> = IAxpResponse> = TimingDelay<R, AxpContext<R>>;
 /** 每次尝试的重试策略。 */
 export interface IRetryOptions<R extends IAxpResponse<unknown, string | number> = IAxpResponse> extends IPluginSwitch {
   /** 最大重试次数，默认两次。 */
@@ -34,8 +34,10 @@ export interface IRetryOptions<R extends IAxpResponse<unknown, string | number> 
   jitter?: TRetryJitter;
   /** 本地延迟上限，默认一万毫秒。 */
   delayMax?: number;
-  /** 默认开启；传函数时仅由函数决定是否采信 Retry-After，忽略 afterStatusCodes。 */
-  respectRetryAfter?: boolean | ((response: R) => boolean);
+  /** 默认开启；传函数时仅由函数决定是否采信 Retry-After，忽略 afterStatusCodes；函数末位 ctx 为当前请求上下文，可省略。
+   * @example `respectRetryAfter: (r, ctx) => ctx.request.url !== '/slow'`
+   */
+  respectRetryAfter?: boolean | ((response: R, ctx: AxpContext<R>) => boolean);
   /** respectRetryAfter 为布尔值时允许采信服务端等待时间的 HTTP 状态码。 */
   afterStatusCodes?: readonly number[];
   /** 服务端等待时间上限（毫秒），默认 60_000；超过就不重试，Infinity 表示永远照办。
@@ -89,10 +91,10 @@ export default function axpRetry<R extends IAxpResponse<unknown, string | number
         const retry = typeof decision === "boolean" ? decision : failureOf(response)?.type === AXP_FAILURES.NETWORK || failureOf(response)?.type === AXP_FAILURES.TIMEOUT || config.statusCodes.includes(response.status);
         if (!retry) return response;
         if (!ctx.canReplay()) return response;
-        const respect = typeof config.respectRetryAfter === "function" ? config.respectRetryAfter(response) : config.respectRetryAfter && config.afterStatusCodes.includes(response.status);
+        const respect = typeof config.respectRetryAfter === "function" ? config.respectRetryAfter(response, ctx) : config.respectRetryAfter && config.afterStatusCodes.includes(response.status);
         const after = respect ? parseRetryAfter(retryAfterOf(response), config.retryAfterMax) : undefined;
         if (after === null) return response;
-        const ms = after ?? applyJitter(computeDelay(config.delay, attempt, config.max, response), config.jitter, config.delayMax);
+        const ms = after ?? applyJitter(computeDelay(config.delay, attempt, config.max, response, ctx), config.jitter, config.delayMax);
         await waitFor(ms, ctx.signal);
         const cancelled = cancelIfAborted(ctx);
         if (cancelled) return cancelled;

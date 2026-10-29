@@ -8,6 +8,7 @@ import { stateKey, type AxpContext } from "../../src/context";
 import type { ITokenManager } from "../../src/objects/TokenManager";
 import axpAuth from "../../src/plugins/auth";
 import axpCache, { type ICacheRequestOptions } from "../../src/plugins/cache";
+import axpMock from "../../src/plugins/mock";
 import axpRetry, { type IRetryOptions } from "../../src/plugins/retry";
 import type { AxpOption } from "../../src/options";
 import { AxpResponse, axpResponse, isAxpResponse, type IAxpResponse, type IAxpResponseFactory } from "../../src/response";
@@ -198,20 +199,28 @@ it("[retry.cb.shouldRetry][retry.opt.delay][auth.cb.onRefresh][auth.cb.onFailure
             expectTypeOf(ctx).toEqualTypeOf<AxpContext<TestResponse>>();
             return r.traceId === "";
           },
-          delay: /** 延迟函数的第三个参数同样是自定义响应。 */ (attempt, max, r) => {
+          delay: /** 延迟函数的第三个参数同样是自定义响应，末位是上下文。 */ (attempt, max, r, ctx) => {
             expectTypeOf(r).toEqualTypeOf<TestResponse>();
+            expectTypeOf(ctx).toEqualTypeOf<AxpContext<TestResponse>>();
             return r.traceId ? attempt : max;
+          },
+          respectRetryAfter: /** 函数形态的末位同样是上下文。 */ (r, ctx) => {
+            expectTypeOf(r).toEqualTypeOf<TestResponse>();
+            expectTypeOf(ctx).toEqualTypeOf<AxpContext<TestResponse>>();
+            return true;
           },
         }),
         axpAuth({
           tokenManager: tokens,
-          onRefresh: /** 刷新回调收到自定义响应与会话管理器。 */ (r, tm) => {
+          onRefresh: /** 刷新回调收到自定义响应、会话管理器与上下文。 */ (r, tm, ctx) => {
             expectTypeOf(r).toEqualTypeOf<TestResponse>();
             expectTypeOf(tm).toEqualTypeOf<ITokenManager>();
+            expectTypeOf(ctx).toEqualTypeOf<AxpContext<TestResponse>>();
             return r.traceId;
           },
-          onAccessExpired: /** 过期通知收到自定义响应。 */ (r) => {
+          onAccessExpired: /** 过期通知收到自定义响应与上下文。 */ (r, _tm, ctx) => {
             expectTypeOf(r).toEqualTypeOf<TestResponse>();
+            expectTypeOf(ctx).toEqualTypeOf<AxpContext<TestResponse>>();
           },
           onAccessDenied: /** 拒绝通知收到自定义响应。 */ (r) => {
             expectTypeOf(r).toEqualTypeOf<TestResponse>();
@@ -223,12 +232,24 @@ it("[retry.cb.shouldRetry][retry.opt.delay][auth.cb.onRefresh][auth.cb.onFailure
           },
         }),
         axpCache({
-          shouldCache: /** 写入判定收到自定义响应。 */ (r) => {
+          shouldCache: /** 写入判定收到自定义响应与上下文。 */ (r, ctx) => {
             expectTypeOf(r).toEqualTypeOf<TestResponse>();
+            expectTypeOf(ctx).toEqualTypeOf<AxpContext<TestResponse>>();
             return r.traceId !== "";
           },
         }),
       ],
+    });
+    // 旧写法（少一个参数的回调）仍可赋值。
+    axpRetry<TestResponse>({ delay: /** 只收 attempt。 */ (attempt) => attempt, respectRetryAfter: /** 只收响应。 */ (r) => r.ok });
+    axpAuth<TestResponse>({ tokenManager: tokens, onRefresh: /** 只收响应。 */ (r) => r.ok, onAccessExpired: /** 不收参数。 */ () => undefined });
+    axpCache<TestResponse>({ shouldCache: /** 只收响应。 */ (r) => r.ok });
+    axpMock<TestResponse>({ fallbackWhen: /** 只收响应。 */ (r) => r.ok });
+    axpMock<TestResponse>({
+      fallbackWhen: /** 回落判定末位是上下文。 */ (r, ctx) => {
+        expectTypeOf(ctx).toEqualTypeOf<AxpContext<TestResponse>>();
+        return r.ok;
+      },
     });
     // 单独定义成变量时手写泛型，回调参数就是自定义响应。
     const retry = axpRetry<TestResponse>({

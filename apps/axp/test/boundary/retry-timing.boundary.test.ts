@@ -9,6 +9,8 @@ const DELAY = 300;
 const MAX = 2;
 /** 响应占位。 */
 const RESPONSE = { status: 503 };
+/** 计算延迟时透传的上下文替身。 */
+const CTX = {};
 /** 头名。 */
 const HEADER = "retry-after";
 /** 取消事件名。 */
@@ -21,12 +23,12 @@ afterEach(() => {
 });
 
 it.each([undefined, null, false, "300", {}])("[retry.fn.computeDelay] 非数字回调返回 %s 视为零", (value) => {
-  expect(computeDelay(() => value, 1, MAX, RESPONSE)).toBe(0);
+  expect(computeDelay(() => value, 1, MAX, RESPONSE, CTX)).toBe(0);
 });
 
 it.each([0, -1, NaN, Infinity])("[retry.fn.computeDelay] 数字 %s 沿用旧计算语义不归一化", (value) => {
-  expect(computeDelay(value, 1, MAX, RESPONSE)).toBe(value);
-  expect(computeDelay(() => value, 1, MAX, RESPONSE)).toBe(value);
+  expect(computeDelay(value, 1, MAX, RESPONSE, CTX)).toBe(value);
+  expect(computeDelay(() => value, 1, MAX, RESPONSE, CTX)).toBe(value);
 });
 
 it.each([NaN, Infinity, -1])("[retry.fn.applyJitter] 非有限或负抖动 %s 回退原始延迟", (value) => {
@@ -60,10 +62,10 @@ it("[retry.fn.computeDelay][retry.fn.applyJitter] 回调 bug 原样抛出且无�
   const fail = () => {
     throw error;
   };
-  expect(() => computeDelay(fail, 1, MAX, RESPONSE)).toThrow(error);
+  expect(() => computeDelay(fail, 1, MAX, RESPONSE, CTX)).toThrow(error);
   expect(() => applyJitter(DELAY, fail)).toThrow(error);
   try {
-    computeDelay(fail, 1, MAX, RESPONSE);
+    computeDelay(fail, 1, MAX, RESPONSE, CTX);
   } catch (caught) {
     expect(caught).toBe(error);
   }

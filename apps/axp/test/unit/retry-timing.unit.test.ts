@@ -9,6 +9,8 @@ const DELAY = 300;
 const CAP = 1000;
 /** 逻辑响应。 */
 const RESPONSE = { status: RATE_LIMIT_STATUS };
+/** 计算延迟时透传的上下文替身。 */
+const CTX = {};
 /** 头名。 */
 const HEADER = "retry-after";
 /** HTTP 日期样例。 */
@@ -21,10 +23,10 @@ it("[retry.fn.defaultDelay] 新默认指数退避与 10000ms 上限", () => {
 });
 
 it("[retry.fn.computeDelay] 常量原样返回，回调收到 attempt/max/泛型响应", () => {
-  expect(computeDelay(DELAY, 1, 2, RESPONSE)).toBe(DELAY);
+  expect(computeDelay(DELAY, 1, 2, RESPONSE, CTX)).toBe(DELAY);
   const callback = vi.fn(() => DELAY);
-  expect(computeDelay(callback, 1, 2, RESPONSE)).toBe(DELAY);
-  expect(callback).toHaveBeenCalledExactlyOnceWith(1, 2, RESPONSE);
+  expect(computeDelay(callback, 1, 2, RESPONSE, CTX)).toBe(DELAY);
+  expect(callback).toHaveBeenCalledExactlyOnceWith(1, 2, RESPONSE, CTX);
 });
 
 it("[retry.fn.applyJitter] 缺省不抖动，true 使用注入或默认随机源，自定义回调收到原始延迟", () => {

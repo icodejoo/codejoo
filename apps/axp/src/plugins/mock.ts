@@ -1,3 +1,4 @@
+import type { AxpContext } from "../context";
 import { resolveOption, resolveRequestOption, type AxpOption, type IPluginSwitch } from "../options";
 import { failureOf, AXP_FAILURES, type AxpResponse, type IAxpResponse } from "../response";
 import type { AxpPlugin, AxpRequestPatch } from "../types";
@@ -12,8 +13,10 @@ const SKIPPED_MESSAGE = `[${NAME}] 已跳过：没有 mockUrl，直接请求真�
 /** 探测结果需要回落时的调试提示前缀。 */
 const FALLBACK_MESSAGE = `[${NAME}] 回落真实接口：`;
 
-/** 判断 mock 探测结果是否应回落真实接口，返回真值即回落；抛错按程序 bug 处理。 */
-export type TMockFallback<R extends IAxpResponse<unknown, string | number> = IAxpResponse> = (response: R) => boolean;
+/** 判断 mock 探测结果是否应回落真实接口，返回真值即回落；抛错按程序 bug 处理；末位 ctx 为当前请求上下文，可省略。
+ * @example `const fallback: TMockFallback = (r, ctx) => r.status === 404 && ctx.request.method === 'get'`
+ */
+export type TMockFallback<R extends IAxpResponse<unknown, string | number> = IAxpResponse> = (response: R, ctx: AxpContext<R>) => boolean;
 
 /** mock 插件的装配配置。 */
 export interface IMockOptions<R extends IAxpResponse<unknown, string | number> = IAxpResponse> extends IPluginSwitch {
@@ -104,7 +107,7 @@ export default function axpMock<R extends IAxpResponse<unknown, string | number>
         cache: false,
         share: false,
       });
-      if (!resolved.fallbackWhen(probe)) return probe;
+      if (!resolved.fallbackWhen(probe, ctx)) return probe;
       if (!ctx.canReplay()) return probe;
       ctx.log.log(`${FALLBACK_MESSAGE}${failureOf(probe)?.type} ${probe.status}`);
       return next();

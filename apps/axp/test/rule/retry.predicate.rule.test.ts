@@ -5,6 +5,8 @@ import { AXP_FAILURE, failureOf } from "../../src/response";
 import { b3Client, REQUEST_URL } from "../helpers/b3";
 
 /** 服务端要求等待的毫秒数。 */
+/** 断言回调末位收到当前请求的上下文。 */
+const ctxOf = (url: string) => expect.objectContaining({ request: expect.objectContaining({ url }) });
 const REMOTE_DELAY = 2000;
 /** 十秒头对应的实际等待毫秒数。 */
 const TEN_SECONDS = 10_000;
@@ -25,7 +27,7 @@ it.each([true, false])(
     await vi.advanceTimersByTimeAsync(REMOTE_DELAY - 10);
     await vi.runAllTimersAsync();
     expect((await pending).ok).toBe(true);
-    expect(predicate).toHaveBeenCalledExactlyOnceWith(expect.objectContaining({ status: 200, code: 429 }));
+    expect(predicate).toHaveBeenCalledExactlyOnceWith(expect.objectContaining({ status: 200, code: 429 }), ctxOf(REQUEST_URL));
   },
 );
 
@@ -93,7 +95,7 @@ it.each([
     const pending = h.send({ url: REQUEST_URL });
     await vi.advanceTimersByTimeAsync(0);
     expect(h.net.totalStarted).toBe(1);
-    expect(respect).toHaveBeenCalledExactlyOnceWith(expect.objectContaining({ [AXP_FAILURE]: { type: "network" } }));
+    expect(respect).toHaveBeenCalledExactlyOnceWith(expect.objectContaining({ [AXP_FAILURE]: { type: "network" } }), ctxOf(REQUEST_URL));
     if (wait) {
       await vi.advanceTimersByTimeAsync(TEN_SECONDS - 1);
       expect(h.net.totalStarted).toBe(1);

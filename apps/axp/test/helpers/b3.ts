@@ -72,14 +72,14 @@ export function authSettings<R extends IAxpResponse = AxpResponse>(overrides: Pa
     onAccessDenied: vi.fn(),
     ...overrides,
     onRefresh: vi.fn(
-      /** 记录刷新轮次：同一轮重叠调用累加，轮次间各自为一。 */ async (r: R, tm: ITokenManager) => {
+      /** 记录刷新轮次：同一轮重叠调用累加，轮次间各自为一。 */ async (r: R, tm: ITokenManager, ctx: AxpContext<R>) => {
         if (events) {
           if (active === 0) round++;
           active++;
           events.refresh.set(round, (events.refresh.get(round) ?? 0) + 1);
         }
         try {
-          return await refresh(r, tm);
+          return await refresh(r, tm, ctx);
         } finally {
           active--;
         }

@@ -1,7 +1,7 @@
 import { cancelIfAborted, type AxpContext } from "../context";
 import { methodSet, normalizeMethod, SAFE_METHODS } from "../methods";
 import { resolveOption, resolveRequestOption, type AxpOption, type IPluginSwitch } from "../options";
-import { failureOf, messageOf, type AxpResponse, type AxpResponseInit, type IAxpResponse } from "../response";
+import { failureOf, messageOf, AXP_FAILURES, type AxpFailureType, type AxpResponse, type AxpResponseInit, type IAxpResponse } from "../response";
 import type { AxpClient, AxpNext, AxpPlugin } from "../types";
 import { waitAbortable } from "../utils";
 import { createFreshnessBarrier, createMemoryStore, type IAxpCacheEntry, type IAxpCacheSnapshot, type IAxpCacheStore, type MaybePromise } from "./cache-store";
@@ -35,8 +35,11 @@ export interface ICacheOptions<R extends IAxpResponse<unknown, string | number> 
   methods?: string[];
   /** 命中与返回时对 `r.data` 的拷贝策略，默认共享引用。 */
   clone?: TCloneStrategy;
-  /** 是否写入缓存，默认只缓存 `r.ok`；抛错按程序 bug 处理。 */
-  shouldCache?: (response: R) => boolean;
+  /** 是否写入缓存，默认只缓存 `r.ok`；抛错按程序 bug 处理；末位 ctx 为当前请求上下文，可省略。
+   * 无论返回什么，internal 与 cancel 失败都不会写入。
+   * @example `shouldCache: (r, ctx) => r.ok && ctx.request.url !== '/live'`
+   */
+  shouldCache?: (response: R, ctx: AxpContext<R>) => boolean;
   /** 自定义同步或异步快照存储，默认内存 LRU；读取时再检查过期。 */
   store?: IAxpCacheStore;
 }
@@ -50,7 +53,7 @@ export interface ICacheRequestOptions extends IPluginSwitch {
   /** 本次请求的拷贝策略。 */
   clone?: TCloneStrategy;
   /** 本次请求的写入判定。 */
-  shouldCache?: (response: IAxpResponse<unknown, string | number>) => boolean;
+  shouldCache?: (response: IAxpResponse<unknown, string | number>, ctx: AxpContext<any>) => boolean;
 }
 
 /** `client.plugin(cache)` 暴露的缓存管理能力。 */
@@ -67,6 +70,9 @@ export interface ICacheApi {
    */
   clear(): MaybePromise<number>;
 }
+
+/** 内核强制不缓存的失败类别：internal 缓存后命中会丢失异常，cancel 属于调用方意图。 */
+const NEVER_CACHED = new Set<AxpFailureType>([AXP_FAILURES.INTERNAL, AXP_FAILURES.CANCEL]);
 
 /** 合并默认之后的缓存配置，含请求级显式键。 */
 type TCacheConfig<R extends IAxpResponse<unknown, string | number>> = ICacheOptions<R> & Pick<ICacheRequestOptions, "key"> & Required<Pick<ICacheOptions<R>, "expires" | "methods" | "shouldCache">>;
@@ -234,7 +240,8 @@ export default function axpCache<R extends IAxpResponse<unknown, string | number
         let response!: R;
         try {
           response = await next();
-          if (barrier.canWrite(key, ticket) && config.shouldCache(response)) {
+          const failedType = failureOf(response)?.type;
+          if (barrier.canWrite(key, ticket) && !(failedType && NEVER_CACHED.has(failedType)) && config.shouldCache(response, ctx)) {
             const written = write(key, { snapshot: snapshotResponse(response), expiresAt: Date.now() + config.expires }, ticket);
             if (isPending(written)) {
               await waitAbortable(written, ctx.signal);

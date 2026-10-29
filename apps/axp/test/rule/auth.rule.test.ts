@@ -10,6 +10,8 @@ import { authHeader } from "../helpers/auth";
 import { AUTH_NAME, authClient, failure, guarded, memoryTokens, REFRESH_TOKEN, REQUEST_URL, run, TOKEN_NEW, TOKEN_OLD } from "../helpers/b3";
 
 /** 公开路由，不在受保护范围内。 */
+/** 断言回调末位收到当前请求的上下文。 */
+const ctxOf = (url: string) => expect.objectContaining({ request: expect.objectContaining({ url }) });
 const PUBLIC_URL = "/public";
 /** 受保护范围收窄到的前缀模式。 */
 const API_PATTERN = "/api/*";
@@ -154,7 +156,7 @@ describe("本地无 token", () => {
       expect(isAxpResponse(result)).toBe(true);
       expect(result).toMatchObject({ ok: false, status: 0, [AXP_FAILURE]: { type: "auth", reason: "unauthenticated" } });
       expect(h.net.totalStarted).toBe(0);
-      expect(h.settings.onAccessDenied).toHaveBeenCalledExactlyOnceWith(result, h.tm);
+      expect(h.settings.onAccessDenied).toHaveBeenCalledExactlyOnceWith(result, h.tm, ctxOf(REQUEST_URL));
       expect(h.settings.onAccessExpired).not.toHaveBeenCalled();
       expect(h.settings.onRefresh).not.toHaveBeenCalled();
     },
@@ -193,7 +195,7 @@ describe.each([
     expect(result.ok).toBe(true);
     expect(failureOf(result)?.reason).toBeUndefined();
     expect(seen).toEqual([TOKEN_OLD, TOKEN_NEW]);
-    expect(h.settings.onRefresh).toHaveBeenCalledExactlyOnceWith(expect.objectContaining({ status: business ? 200 : 401, ok: false }), h.tm);
+    expect(h.settings.onRefresh).toHaveBeenCalledExactlyOnceWith(expect.objectContaining({ status: business ? 200 : 401, ok: false }), h.tm, ctxOf(REQUEST_URL));
     expect(h.settings.onAccessExpired).not.toHaveBeenCalled();
     expect(h.settings.onAccessDenied).not.toHaveBeenCalled();
   });
@@ -205,7 +207,7 @@ describe.each([
     expect(result).toMatchObject({ ok: false, status: business ? 200 : 401, [AXP_FAILURE]: { type: "auth", reason: "expired" } });
     expect(h.tm.accessToken).toBeUndefined();
     expect(h.tm.refreshToken).toBeUndefined();
-    expect(h.settings.onAccessExpired).toHaveBeenCalledExactlyOnceWith(expect.objectContaining({ status: business ? 200 : 401 }), h.tm);
+    expect(h.settings.onAccessExpired).toHaveBeenCalledExactlyOnceWith(expect.objectContaining({ status: business ? 200 : 401 }), h.tm, ctxOf(REQUEST_URL));
     expect(h.settings.onAccessDenied).not.toHaveBeenCalled();
     expect(h.net.totalStarted).toBe(1);
   });
@@ -216,7 +218,7 @@ describe.each([
     const result = await run(h);
     expect(result).toMatchObject({ ok: false, status: business ? 200 : 403, [AXP_FAILURE]: { type: "auth", reason: "denied" } });
     expect(h.tm.accessToken).toBe(TOKEN_OLD);
-    expect(h.settings.onAccessDenied).toHaveBeenCalledExactlyOnceWith(expect.objectContaining({ status: business ? 200 : 403 }), h.tm);
+    expect(h.settings.onAccessDenied).toHaveBeenCalledExactlyOnceWith(expect.objectContaining({ status: business ? 200 : 403 }), h.tm, ctxOf(REQUEST_URL));
     expect(h.settings.onRefresh).not.toHaveBeenCalled();
     expect(h.settings.onAccessExpired).not.toHaveBeenCalled();
     expect(h.net.totalStarted).toBe(1);

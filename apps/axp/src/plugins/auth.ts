@@ -40,10 +40,10 @@ export const AuthFailureAction = {
 } as const;
 /** 路由动作的值类型。 */
 export type AuthFailureAction = (typeof AuthFailureAction)[keyof typeof AuthFailureAction];
-/** 响应通知与刷新函数的统一参数顺序。
- * @example `const expired: TAuthFunc<void> = (r, tm) => showLogin(r.message)`
+/** 响应通知与刷新函数的统一参数顺序；末位 ctx 可读完整请求（ctx.request、ctx.originRequest），旧的少参数回调照常可用。
+ * @example `const expired: TAuthFunc<void> = (r, tm, ctx) => showLogin(r.message, ctx.request.url)`
  */
-export type TAuthFunc<T, R extends IAxpResponse<unknown, string | number> = IAxpResponse> = (response: R, tm: ITokenManager) => T | Promise<T>;
+export type TAuthFunc<T, R extends IAxpResponse<unknown, string | number> = IAxpResponse> = (response: R, tm: ITokenManager, ctx: AxpContext<R>) => T | Promise<T>;
 /** 凭证注入与鉴权恢复选项。 */
 export interface IAuthOptions<R extends IAxpResponse<unknown, string | number> = IAxpResponse> extends IPluginSwitch {
   /** 持有当前会话的管理器。 */
@@ -125,11 +125,11 @@ export default function axpAuth<R extends IAxpResponse<unknown, string | number>
         return expired !== undefined;
       }
       /** 标记终态并隔离通知异常，清理后的快照阻止旧会话复活。 */
-      function expire(response: R): void {
+      function expire(response: R, ctx: AxpContext<R>): void {
         if (disposed || isExpired()) return;
         tm.clear();
         expired = { token: tm.accessToken };
-        fireNotice(base.onAccessExpired, CALLBACK_ERROR, response, tm);
+        fireNotice(base.onAccessExpired, CALLBACK_ERROR, response, tm, ctx);
       }
       /** 发起或加入共享刷新，同步抛错同样释放单飞状态；刷新抛错按失败处理，不算程序 bug。 */
       function refresh(response: R, ctx: AxpContext<R>): Promise<boolean> {
@@ -140,7 +140,7 @@ export default function axpAuth<R extends IAxpResponse<unknown, string | number>
               const token = tm.accessToken;
               let success: boolean;
               try {
-                const pending = Promise.resolve(base.onRefresh(response, tm)).then(/** 先归一为布尔值，让 undefined 专门表示超时。 */ (value) => value !== false);
+                const pending = Promise.resolve(base.onRefresh(response, tm, ctx)).then(/** 先归一为布尔值，让 undefined 专门表示超时。 */ (value) => value !== false);
                 const timeout = base.refreshTimeout === 0 || base.refreshTimeout === Infinity ? undefined : base.refreshTimeout;
                 const result = await waitAbortable(pending, undefined, timeout);
                 if (result === undefined) ctx.log.warn(REFRESH_TIMEOUT);
@@ -150,7 +150,7 @@ export default function axpAuth<R extends IAxpResponse<unknown, string | number>
                 success = false;
               }
               if (!success && tm.accessToken !== token) return true;
-              if (!success) expire(response);
+              if (!success) expire(response, ctx);
               return success;
             },
           )
@@ -182,7 +182,7 @@ export default function axpAuth<R extends IAxpResponse<unknown, string | number>
       /** 本地无凭证即拒绝发送：构造未登录失败并通知一次。 */
       function rejectUnauthenticated(ctx: AxpContext<R>): R {
         const response = ctx.fail({ failure: AXP_FAILURES.AUTH, reason: UNAUTHENTICATED });
-        fireNotice(denied, CALLBACK_ERROR, response, tm);
+        fireNotice(denied, CALLBACK_ERROR, response, tm, ctx);
         return response;
       }
       /** 等待刷新结束：调用方取消返回 cancel 响应（只取消自己这一路，不中断别人的刷新），刷新失败返回过期失败，成功返回 undefined。 */
@@ -232,7 +232,7 @@ export default function axpAuth<R extends IAxpResponse<unknown, string | number>
               case AuthFailureAction.Replay: {
                 if (!ctx.canReplay()) return response;
                 if (replayed || isExpired()) {
-                  expire(response);
+                  expire(response, ctx);
                   return expiredFailure(ctx, response);
                 }
                 if (action === AuthFailureAction.Refresh) {
@@ -243,10 +243,10 @@ export default function axpAuth<R extends IAxpResponse<unknown, string | number>
                 break;
               }
               case AuthFailureAction.Deny:
-                fireNotice(denied, CALLBACK_ERROR, response, tm);
+                fireNotice(denied, CALLBACK_ERROR, response, tm, ctx);
                 return ctx.fail({ failure: AXP_FAILURES.AUTH, reason: "denied", from: response });
               case AuthFailureAction.Expired:
-                expire(response);
+                expire(response, ctx);
                 return expiredFailure(ctx, response);
               default:
                 return response;

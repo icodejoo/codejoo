@@ -8,6 +8,8 @@ import type { AxpRequestConfig } from "../../src/types";
 import { b3Client, POLLUTED_ONCE, pollutingBody, pollutingTransform, REQUEST_URL, run } from "../helpers/b3";
 
 /** 延迟与封顶的观测窗口。 */
+/** 断言回调末位收到当前请求的上下文。 */
+const ctxOf = (url: string) => expect.objectContaining({ request: expect.objectContaining({ url }) });
 const LOCAL_DELAY = 40;
 const REMOTE_DELAY = 2000;
 const CAP = 20;
@@ -49,14 +51,14 @@ it.each([false, true])(
       }),
     ]);
     h.net.fallback(/** 每次相同失败。 */ () => ({ status: 500 }));
-    const pending = h.send({ retry: requestLevel ? { delay, jitter } : true });
+    const pending = h.send({ url: REQUEST_URL, retry: requestLevel ? { delay, jitter } : true });
     await vi.advanceTimersByTimeAsync(CAP - 1);
     expect(h.net.totalStarted).toBe(1);
     await vi.advanceTimersByTimeAsync(1);
     await vi.runAllTimersAsync();
     await pending;
     expect(h.net.totalStarted).toBe(2);
-    expect(delay).toHaveBeenCalledWith(1, 1, expect.objectContaining({ status: 500 }));
+    expect(delay).toHaveBeenCalledWith(1, 1, expect.objectContaining({ status: 500 }), ctxOf(REQUEST_URL));
     expect(jitter).toHaveBeenCalledExactlyOnceWith(LOCAL_DELAY);
     if (requestLevel) expect(fallback).not.toHaveBeenCalled();
   },

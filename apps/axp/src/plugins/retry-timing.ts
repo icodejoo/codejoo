@@ -1,4 +1,5 @@
 import type { AxiosResponse } from "axios";
+import type { AxpContext } from "../context";
 import { waitAbortable } from "../utils";
 
 /** 默认首轮退避毫秒数。 */
@@ -15,10 +16,10 @@ export const DEFAULT_DELAY_MAX = 10_000;
 export const DEFAULT_AFTER_STATUS_CODES: readonly number[] = [413, 429, 503];
 
 /**
- * 延迟策略；非数字返回值按零处理，异常原样抛出。
- * @example const delay: TRetryDelay<string> = (attempt) => attempt * 300;
+ * 延迟策略；非数字返回值按零处理，异常原样抛出；末位 ctx 为当前请求上下文，旧的少参数回调照常可用。
+ * @example const delay: TRetryDelay<string> = (attempt, max, r, ctx) => attempt * 300;
  */
-export type TRetryDelay<R> = number | ((attempt: number, max: number, response: R) => unknown);
+export type TRetryDelay<R, C = AxpContext<any>> = number | ((attempt: number, max: number, response: R, ctx: C) => unknown);
 /**
  * 抖动策略；非法返回值回退输入延迟，异常原样抛出。
  * @example const jitter: TRetryJitter = (ms) => ms / 2;
@@ -51,12 +52,14 @@ export function defaultDelay(attempt: number): number {
  * @param attempt 当前重试次数。
  * @param max 最大重试次数。
  * @param response 本次逻辑响应。
+ * @param ctx 当前请求上下文，原样传给回调。
+ * @typeParam C 上下文类型，默认任意响应类型的上下文。
  * @returns 数字结果，非数字为零；回调异常原样抛出。
- * @example computeDelay(defaultDelay, 1, 2, { status: 503 });
+ * @example computeDelay(defaultDelay, 1, 2, { status: 503 }, ctx);
  */
-export function computeDelay<R>(delay: TRetryDelay<R>, attempt: number, max: number, response: R): number {
+export function computeDelay<R, C = AxpContext<any>>(delay: TRetryDelay<R, C>, attempt: number, max: number, response: R, ctx: C): number {
   if (typeof delay === "number") return delay;
-  const result = delay(attempt, max, response);
+  const result = delay(attempt, max, response, ctx);
   return typeof result === "number" ? result : 0;
 }
 
