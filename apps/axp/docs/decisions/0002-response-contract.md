@@ -7,7 +7,9 @@ summary: 记录终审时用户拍板的四字段响应契约、内核失败标�
 
 ## TL;DR
 
-- 必需字段只留 `ok`、`status`（HTTP）、`code<C>`、`data`；消息和原始诊断字段可选。
+> 2026-10-29 更新：接口可选字段、原生诊断数据、完整 request 与失败标记 error 的相关条款已被 [0003 原生诊断数据移入上下文](0003-native-data-on-ctx.md) 取代。本文保持 active，其余决定继续有效。
+
+- 必需字段只留 `ok`、`status`（HTTP）、`code<C>`、`data`；message 留在默认类，原生诊断数据按 [0003](0003-native-data-on-ctx.md) 管理。
 - `kind` 改为内核私有的失败事实，使用者不能填写；读取用 `failureOf`，取消用 `api.isCancel`。
 - 不再把业务码转换为逻辑状态。业务风格由使用者配置判定回调，撤回 0001/O5 的“业务风格零适配”。
 - 默认类通过 `parse(body, raw)` 适配响应体，工厂通过 `type` 接受子类，也保留接口实现的 `create` 路径。
@@ -22,9 +24,11 @@ summary: 记录终审时用户拍板的四字段响应契约、内核失败标�
 
 ### 使用者只负责业务转换
 
-`IAxpResponse<D, C extends string | number = number>` 的必需字段为 `ok: boolean`、`status: number`、`code: C`、`data: D`。`status` 是 HTTP 状态，无响应时为 0；缺业务码为 0，缺数据为 null。可选字段是 `message?: string | null`、`raw?`、`error?`。
+`IAxpResponse<D, C extends string | number = number>` 的必需字段为 `ok: boolean`、`status: number`、`code: C`、`data: D`。`status` 是 HTTP 状态，无响应时为 0；缺业务码为 0，缺数据为 null。原“可选字段为 message?/raw?/error?”条款已被 [0003](0003-native-data-on-ctx.md) 取代：接口只声明这四个字段，message 留在默认类；原生对象默认由 ctx 持有，仅请求级 raw 开启时附到响应副本。
 
 `request`、`stack`、`toJSON`、`parse` 只属于默认类 `AxpResponse`，不要求接口实现者提供。默认 message 为空串，也允许 null。
+
+request 的完整配置语义已被 [0003](0003-native-data-on-ctx.md) 取代：默认仅保留 method、url，开启 raw 后才在副本上附完整配置，raw 开启时由内核把 raw/error/request 附到任意 R 的副本上；brandResponse 不再为接口实现补 message。
 
 HTTP 失败、业务失败通过 `ok`、`status`、`code` 表达，不再由使用者填写 `kind`，也不再提供 `AXP_KINDS`、`httpStatus` 或响应顶层的 reason。
 
@@ -32,7 +36,7 @@ HTTP 失败、业务失败通过 `ok`、`status`、`code` 表达，不再由使�
 
 内核在传输边界及 `ctx.fail({ failure, reason, from })` 判定取消、超时、网络、解析、鉴权和程序异常。在响应工厂返回后，通过不可枚举的 `AXP_FAILURE` 写入事实，并强制 `ok === false`，用户的 getter 不能把内核失败改成成功。
 
-`failureOf(r)` 只读返回 `{ type, reason? } | undefined`，类别常量是 `AXP_FAILURES`；取消判断用 `isAxpCancel(e)` 或 `api.isCancel(e)`。工厂负责转换和构造，不负责重新解释这些内核事实。程序异常仍以 internal 标记穿过管线收尾，在落定时抛原始异常。
+原“`failureOf(r)` 只读返回 `{ type, reason? } | undefined`”条款已被 [0003](0003-native-data-on-ctx.md) 扩展取代：公开导出的 `IAxpFailure` 增加仅供 internal 保留原始异常的 error 字段，以 `failureOf(r)?.error` 读取；`toJSON` 中 failure 仍只投影 `{ type, reason }`。类别常量是 `AXP_FAILURES`；取消判断用 `isAxpCancel(e)` 或 `api.isCancel(e)`。工厂负责转换和构造，不负责重新解释这些内核事实。程序异常仍以 internal 标记穿过管线收尾，在落定时抛原始异常。
 
 ### 取消逻辑状态，显式配置业务风格
 

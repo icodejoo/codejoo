@@ -8,6 +8,8 @@
 
 - [0002 响应契约精简](decisions/0002-response-contract.md) — HTTP 状态、内核失败标记、parse/type 扩展与业务码配置；取代 0001 的相关条款。active。
 
+- [0003 原生诊断数据移入上下文](decisions/0003-native-data-on-ctx.md) — ctx 持有原生对象、请求级 raw、通知与回调契约；取代 N11 与 0002 的相关条款。active。
+
 ## 设计（洋葱管线重构）
 
 - [核心架构方案](design/core-architecture.md) — 新内核结构、数据流、阶段排序、上下文、归一化响应与错误、插件接口、客户端 API、性能设计。active。
