@@ -11,6 +11,7 @@ summary: 新内核的结构、数据流、阶段排序、上下文、归一化�
 - 传输边界把原始响应/错误判定成 `R extends IAxpResponse`；链路里只流转 `R`，`next()` 不抛错；最外层落定：成功返回 data，失败直接抛 `R`，程序 bug 抛原始异常。
 - 插件 = 具名对象 `{ name, stage, setup | handle | taps }`；内置插件位置固定，自定义插件选阶段即可。
 - 请求在链上不可变，内层改请求用 `next(patch)`；重试、重放就是再调一次 `next()`。
+- 响应只有 `ok`、`status`、`code`、`data` 四个必填字段；原生响应和异常默认由 `ctx.native` 短期持有，落定即释放，只有请求级 `raw: true` 才附到返回或抛出的副本上（[ADR 0003](../decisions/0003-native-data-on-ctx.md)）。
 - cancel、key、日志开关、归一化从插件降为内核能力；剩 10 个插件。决策依据见 [0001](../decisions/0001-core-redesign.md)，插件细则见 [插件规格](plugin-spec.md)。
 
 ## 1. 目标与手段
@@ -18,7 +19,7 @@ summary: 新内核的结构、数据流、阶段排序、上下文、归一化�
 | 目标           | 手段                                                                                                                     |
 | -------------- | ------------------------------------------------------------------------------------------------------------------------ |
 | 扩展性强       | 中间件 + 阶段 + taps；`R` 可扩展；响应工厂、缓存存储、令牌管理都是接口                                                   |
-| API 易用且灵活 | 内置插件免排序；请求级选项统一四种写法；`wrap` / `throws` 两个开关覆盖三种返回形态                                       |
+| API 易用且灵活 | 内置插件免排序；请求级选项统一四种写法；`wrap` / `throws` 两个开关覆盖三种返回形态，`raw` 再按需附原生数据               |
 | 性能好         | 链只在增删插件时编译；key 惰性；按需克隆；HTTP 错误不构造 AxiosError；失败不额外分配错误对象                             |
 | 心智负担低     | 一个对象（`R`，成功失败都是它，抛出的也是它）、一条路径（`next()` 不抛）；装上即生效，只有改变数据新鲜度的插件按请求开启 |
 
@@ -69,8 +70,8 @@ api.get('/pet/{id}')(payload, opts)
 2. 内核（`client.ts` 的 `request`）建逻辑请求级上下文：分配 `id`，建 `AbortController` 并与用户 `signal` 联动，登记到在途集合（`cancelAll` / `pending()` 用）。
 3. 按编译好的链从外到内执行中间件。每层拿到的 `ctx.request` 是外层交给它的版本。
 4. 到达传输层：若有层调用过 `markReplayable()` 且 `data` 是纯对象/数组，先克隆一份再发；调用**用户的 axios 实例** `axios.request`（保留实例拦截器），强制 `validateStatus: () => true`。axios 会再合并一次 defaults：凡是 `defaults.params` 里有、但已被层删除的键，传输层显式写成 `null`（axios 拼 URL 时跳过），防止被带回；被层删除的默认 header 的处理以 B2 报告结论为准。
-5. 响应工厂把响应（或异常）判定成 `R`，内核给它打上品牌，原路返回；每层可读、可替换、可再次调用 `next()`。
-6. 最外层落定：从在途集合注销，解除 signal 监听，再按 §7 决定返回 data、返回 `R`、抛 `R` 或抛原始异常。
+5. 响应工厂把响应（或异常）判定成 `R`，内核给它打上品牌，原路返回；每层可读、可替换、可再次调用 `next()`。传输层每次尝试同时把最新的 AxiosResponse 和原始异常记进逻辑请求的原生槽（§5 `ctx.native`），并把 `Retry-After` 头原样作为私有小事实挂在 `R` 上（§6）。
+6. 最外层先结束 dispatch：它的 finally 里从在途集合注销、解除 signal 监听；随后进入落定（settle）：先取原生数据，需要时生成 raw 副本（§7），按 §7 决定返回 data、返回 `R`、抛 `R` 或抛原始异常，并在 settle 的 finally 里清空、封闭原生槽。
 
 ## 4. 阶段与排序
 
@@ -105,9 +106,14 @@ interface AxpContext<R extends IAxpResponse<unknown, string | number> = AxpRespo
   key(): string | null; // 惰性计算，按 request 对象缓存；不可哈希时为 null
   get<T>(k: AxpStateKey<T>): T | undefined; // 逻辑请求级状态，替代字符串键
   set<T>(k: AxpStateKey<T>, v: T): void;
+  readonly native: IAxpNative; // 最近一次传输尝试的原生数据，只读；落定后为空
   fail(init: AxpResponseInit<R>): R; // 凭空造结果，必须经响应工厂
   canReplay(): boolean; // 已发送的一次性请求体不可重放
   markReplayable(): void; // 声明本请求可能被重发，传输层据此克隆请求体
+}
+interface IAxpNative {
+  response?: AxiosResponse; // 最近一次传输尝试拿到的原始响应（HTTP 错误取 error.response）
+  error?: unknown; // 最近一次传输尝试的原始异常，成功时为空
 }
 type AxpNext<R> = (patch?: AxpRequestPatch) => Promise<R>;
 function stateKey<T>(description: string): AxpStateKey<T>; // 基于 Symbol 的类型化键
@@ -115,6 +121,13 @@ function stateKey<T>(description: string): AxpStateKey<T>; // 基于 Symbol 的�
 
 **请求不可变**：中间件不改 `ctx.request`，而是 `next(patch)`。内核把 patch 浅合并成新请求交给内层，`headers` 多合并一层。
 同一层两次调用 `next()` 拿到的是同一个基准请求，所以重发天然"干净"，不再需要原始请求体快照和 `axp:share`、`axp:cache` 这类保活键（O1）。
+
+**原生数据槽**：原始 AxiosResponse 与异常不挂在 `R` 上，而是放在逻辑请求共享状态里的单槽（`{ for: R, raw, error }` 加 `settled` 标记）。放共享状态而不是上下文实例字段，是因为 `next(patch)` 会派生新的上下文，构造时共享的只有 state。
+
+- 插件读 `ctx.native`，不要指望 `R` 上有可选字段。它是只读视图，内容是**最近一次传输尝试**的结果：传输之前就提前返回的尝试（缓存命中、auth 本地拒绝、share 跟随者）不会刷新它，所以不保证与当前响应配对；内核代码要严格配对时走 `nativeFor(r)`，只在 `r` 就是槽的归属响应时才给数据。
+- `ctx.fail({ from })` 派生时，若 `from` 正是槽的归属响应，归属改绑到新对象，副本不丢数据。
+- 落定时先取数据、再生成副本，最后在覆盖 return、throw、reject 三条路径的 finally 里清空槽并封闭；封闭后拒绝写入，防止 share 迟到的传输让原生对象重新驻留。清空放在 settle 的 finally，而不是 dispatch 的 finally：后者在落定之前，那时还要读槽。
+- mock 探测走真实传输，有真实响应，不算"没有原生数据"。
 
 **signal**：传输层用 `request.signal ?? ctx.signal`。share 用 patch 换成共享 controller 的 signal，实现"首发取消不连累跟随者"；内核派生内层上下文时 `ctx.signal` 同样取 patch 里的 signal（没有则沿用外层），内层插件与传输层看到的是同一个 signal。
 
@@ -126,9 +139,6 @@ interface IAxpResponse<D = unknown, C extends string | number = number> {
   readonly status: number; // HTTP 状态，无响应为 0
   readonly code: C; // 缺省为 0
   readonly data: D; // 缺省为 null
-  readonly message?: string | null;
-  readonly raw?: AxiosResponse;
-  readonly error?: unknown;
 }
 interface IAxpResponseFactory<R extends IAxpResponse<unknown, string | number>> {
   fromResponse(res: AxiosResponse, ctx: AxpContext<R>): R;
@@ -137,7 +147,9 @@ interface IAxpResponseFactory<R extends IAxpResponse<unknown, string | number>> 
 }
 ```
 
-`AxpResponse<D, C>` 是默认实现，另有 `request`、`stack`、`toJSON()` 与受保护的 `parse(body, raw)`。这些不是接口要求。默认 message 为空串，允许 null；request 通常是实际发出的请求，缓存命中则是当前调用方的请求。
+`AxpResponse<D, C>` 是默认实现，另有 `message`、`request`、`stack`、`toJSON()` 与受保护的 `parse(body, raw)`。这些不是接口要求：`message` 是默认类的业务概念，接口不声明它，`brandResponse` 也不再给接口实现者补 `message`；默认 message 为空串，允许 null。`request` 只是轻量视图 `{ method, url }`，缓存命中时是当前调用方的；需要完整请求配置的插件读 `ctx.request` / `ctx.originRequest`，调用方需要时开 `raw`（§7）。
+
+接口不声明 `raw`、`error`，是因为失败的 `R` 会被抛出，并被 Sentry、TanStack Query 等长期引用；挂着 AxiosError 或完整请求（含请求体）会拖住内存，不可枚举也解除不了引用。
 
 ### 业务转换与成功判定
 
@@ -151,11 +163,11 @@ interface IAxpResponseFactory<R extends IAxpResponse<unknown, string | number>> 
 | `create(init, raw?)` | —             | 实现接口的构造路径；优先于 type                        |
 | `expectJson`         | false         | 2xx、声明 JSON/HTML 且 body 仍为非空字符串时判解析失败 |
 
-create 可返回普通对象，内核补不可枚举品牌及缺失的 code/data/message 默认值。`AxpResponseInit<R>` 支持扩展数据字段；`from` 用于派生，未覆盖的字段与失败事实继承，原对象不变。缓存重建没有 raw，自定义工厂必须从 init 恢复扩展字段。`isAxpResponse` 认 `Symbol.for('axp.response')` 品牌，不依赖 instanceof。
+create 可返回普通对象，内核补不可枚举品牌及缺失的 code/data 默认值（默认类另有 message 空串）。`AxpResponseInit<R>` 支持扩展数据字段；`from` 用于派生，未覆盖的字段与失败事实继承，原对象不变。缓存重建没有 raw，自定义工厂必须从 init 恢复扩展字段。`isAxpResponse` 认 `Symbol.for('axp.response')` 品牌，不依赖 instanceof。
 
 ### 内核失败事实
 
-内核在工厂返回之后挂不可枚举的 `AXP_FAILURE` 标记，同时强制 ok 为 false。`failureOf(r)` 返回只读 `{ type, reason? } | undefined`，类别常量为 `AXP_FAILURES`。使用者只转换业务数据，不填写内核分类。取消判断用 `isAxpCancel(e)` 或 `api.isCancel(e)`。
+内核在工厂返回之后挂不可枚举的 `AXP_FAILURE` 标记，同时强制 ok 为 false。`failureOf(r)` 返回只读 `{ type, reason?, error? } | undefined`，类别常量为 `AXP_FAILURES`。`error` 只有 `internal` 有，是原始异常，经 `failureOf(r)?.error` 读取；网络、超时、取消不再带 error，需要时开 `raw`。`toJSON` 里 failure 只投影 `{ type, reason }`，不序列化 raw/error。使用者只转换业务数据，不填写内核分类。取消判断用 `isAxpCancel(e)` 或 `api.isCancel(e)`。
 
 | 输入                                                           | 失败标记 type                                          | status                       |
 | -------------------------------------------------------------- | ------------------------------------------------------ | ---------------------------- |
@@ -167,6 +179,8 @@ create 可返回普通对象，内核补不可枚举品牌及缺失的 code/data
 | expectJson 命中的未解析文本                                    | parse                                                  | 原 HTTP 状态                 |
 | 插件 `ctx.fail({ failure, reason, from })`                     | 指定类别；auth 的原因如 expired/denied/unauthenticated | 继承 from 或显式字段，否则 0 |
 | 收到普通 HTTP 或业务响应                                       | 无；看 ok/status/code                                  | 原 HTTP 状态                 |
+
+**Retry-After**：传输层把响应里的 Retry-After 头原样（字符串）以私有 symbol 挂在 `R` 上，retry 需要时才解析；收到的 HTTP 429/503 这类响应没有失败标记，也带这个事实。retry 读它，不再回头看 AxiosResponse。share 跟随者拿到的就是领导者的同一个 `R`，所以同样遵守等待时长，超过 `retryAfterMax` 不重试的规则（D1）不变。`fromError` 路径（如响应拦截器抛出带 response 的 AxiosError，归为 network，`R.status` 为 0）也带着 `error.response` 的 Retry-After，但只有 `respectRetryAfter` 为函数、由它独立判定时才会被采信；布尔形态要查 `afterStatusCodes.includes(r.status)`，status 为 0 所以默认配置下不采信。`ctx.fail({ from })` 派生会继承这个事实。
 
 业务风格不自动触发刷新或重试；配置与完整示例见 [README 警告](../../README.zh-CN.md#使用警告与业务风格)。本次取舍见 [ADR 0002](../decisions/0002-response-contract.md)。
 
@@ -180,13 +194,16 @@ axp 没有错误类。落定规则：
 | 可预期的失败                                    | `throw r`  | `throw r`        | resolve `WithData<R, D>`（`ok: false`） |
 | 程序 bug（`failureOf(r)?.type === 'internal'`） | 抛原始异常 | 抛原始异常       | 抛原始异常                              |
 
+请求级 `raw: true` 隐含 `wrap: true`，优先于 `wrap` / `throws`：成功、可预期失败都落成（或抛出）带原生数据的 `WithNative<WithData<R, D>>`，见下方"raw 开关"。internal 仍按上表抛原始异常。
+
 - `throws` **只有请求级**，默认 true。客户端级默认值已取消：`createAxp<S, R>` 显式写泛型时 TS 不会再推断第三个泛型，返回类型无法如实反映客户端级开关（B1 终审裁决）。
 - 返回类型按"调用级 ?? 方法级"的有效 `wrap` / `throws` 推断。
 - `throws: false` 失败时 `data` 的取值：收到响应时是信封 data 或原始 body；没收到响应（network/timeout/cancel/auth 等）时是 `null`。
 - **bug 不伪装成请求失败**：中间件、判定类用户回调（见 N13）、用户拦截器或 `transformResponse` 抛出的非 AxiosError，链内临时包成 `internal` 交给外层，保证 `next()` 不 reject、外层的计数和注销照常完成；
-  落定时抛出 `r.error` 本身，stack 完整，`throws: false` 也不吞。
+  落定时抛出 `failureOf(r)?.error` 本身（只有 internal 有），stack 完整，`throws: false` 也不吞。
 - **调用点**：`debug` 开启时，内核在发起请求那一刻 `new Error()` 记下调用点；失败落定时用 `factory.fail({ from: r, stack })` 派生一个带 `stack` 的副本抛出，不改被 share/cache 共享的原对象。派生出的结果若变成 internal（自定义工厂抛错），按 bug 抛原始异常。关闭 debug 时不记录调用点。
 - **工厂兜底**：自定义响应工厂自身抛错时，内核用内置工厂构造 internal 并保留首次异常，保证外层收尾；此时无法带上自定义 R 的扩展字段，落定照样抛原始异常。
+- **raw 开关**（取代 N11 的旧做法）：请求级 `raw: true`，隐含 `wrap: true`，只做请求级，运行时读 `ctx.originRequest.raw`，`axios.defaults.raw` 不生效。落定时内核经一次 `ctx.fail({ from, stack? })` 派生副本，再以**不可枚举自有属性**附上 `raw`（完整 AxiosResponse，可能为 undefined：缓存命中、share 跟随者、网络错误等没有响应）、`error`（原始异常）、`request`（完整请求配置，取 `raw.config ?? error.config ?? ctx.request`）。这三项不走 `ctx.fail` 的 init，避免经使用者工厂再解析或与业务字段重名。`throws: true` 抛出的失败对象在开关打开时同样带上；读取抛出对象上的这三项用 `nativeOf(e)`（catch 里是 unknown）。0.1.0 的 `raw: true` 含义不同（返回原始信封 body），升级者要留意，见迁移指南。
 - **适配需要 `Error` 的生态**：`createAxp({ reject: (r) => unknown })`，默认原样返回 `r`；接 Sentry、TanStack Query 时可以在这里包成 `Error`。只作用于可预期的失败。
 - **区分**：`catch (e) { if (api.isResponse(e)) … else throw e }`；`api.isResponse` 与 `isAxpResponse` 同一判断，类型收窄到该客户端的 `R`。
 
@@ -273,7 +290,7 @@ interface AxpOptions<R> {
 interface AxpClient<S, R> extends HttpVerbs<S, R> {
   // axios 全部 10 个小写动词（含 purge/link/unlink），柯里化形态与 data/params 分派不变
   readonly axios: AxiosInstance;
-  request<D = unknown>(config: AxpRequestConfig): Promise<D>; // 无类型逃生口，同样支持 wrap/throws 重载
+  request<D = unknown>(config: AxpRequestConfig): Promise<D>; // 无类型逃生口，同样按 raw/wrap/throws 重载选返回形态
   extend(overrides?: AxiosRequestConfig, opts?: { plugins?: "inherit" | readonly AxpPlugin<R, any>[]; axios?: AxiosInstance }): AxpClient<S, R>;
   use(plugin: AxpPlugin<R, any>): void;
   eject(name: string): boolean;
@@ -305,6 +322,8 @@ try {
   else throw e;
 }
 const res = await api.post("/pet")(body, { throws: false }); // 不写 try/catch：res.ok 判断
+const full = await api.get("/pet/{id}")({ id: 1 }, { raw: true }); // WithNative<WithData<AxpResponse, Pet>>
+full.raw?.headers; // 完整 AxiosResponse，可能为 undefined
 ```
 
 ## 10. 类型
@@ -313,6 +332,7 @@ const res = await api.post("/pet")(body, { throws: false }); // 不写 try/catch
 - **两个泛型都要显式写**：TS 不支持部分推断，写了 `S` 就推不出 `R`。`AxpOptions` 用条件类型约束：`R` 不是 `AxpResponse` 时 `response` 必填，且其产出必须是 `R`。
 - **`WithData<R, D>`** = `Omit<R, 'data'> & { readonly data: D }`：TS 没有高阶类型，`R` 里的 `data` 是 `unknown`，每个接口的具体类型靠它替换。
 - **插件工厂推断**：`R` 只由显式泛型或 `response` 工厂决定，`plugins` 与 `reject` 用 `NoInfer` 不参与推断。内联写在 `createAxp<S, MyResponse>` 的 `plugins` 里时从上下文推出 `R`；单独定义成变量时手写 `axpRetry<MyResponse>()`，不写则是默认的 `AxpResponse`。用 `expectTypeOf` 守住。
+- **`WithNative<R>`** = `Omit<R, 'raw' | 'error' | 'request'> & { raw: AxiosResponse | undefined; error: unknown; request: Readonly<AxpRequestConfig> }`，先 Omit 再交叉，避免与自定义 `R` 的同名业务字段冲突。动词重载与 `request()` 按有效 `raw` / `wrap` / `throws` 选返回形态，`raw` 优先；宽 boolean（非字面量）返回联合。**已知限制**：方法级传入 `AxpRequestConfig` 类型的变量时，`raw`、`wrap`、`throws` 都是可选属性，与缺省无法区分，仍按数据推断。`nativeOf(value)` 读取抛出对象上的三项，不是归一化响应或没有 raw 副本时为 undefined。
 - **请求选项**：插件通过 `declare module '@codejoo/axp' { interface AxpRequestOptions { retry?: … } }` 扩展，不再污染 `axios` 模块的 `AxiosRequestConfig`。内置插件在源码里写的是相对说明符 `declare module "../types"`，产物里的这类说明符由构建插件改写为 `.mjs`（`vite.config.ts` 的 `dtsAugmentationSpecifier`），否则 nodenext 与 bundler 的使用者解析不到，增强会整体失效。
 
 ## 11. 性能设计
@@ -332,34 +352,36 @@ const res = await api.post("/pet")(body, { throws: false }); // 不写 try/catch
 
 ## 12. 与现状的对照
 
-| 现状问题                                     | 新方案                                                          |
-| -------------------------------------------- | --------------------------------------------------------------- |
-| O1 重放要快照 share/cache/data               | 请求不可变 + `next(patch)`，无快照                              |
-| O2 三处手动给错误挂 config                   | 默认类的 request 由传输或工厂填写，不要求接口实现者提供         |
-| O3 cache 四张表                              | 见插件规格 cache 节                                             |
-| O4 `canRefresh` 写在用户的 TokenManager 上   | 收进 auth 内部状态，见插件规格 auth 节                          |
-| O5 business 风格适配                         | 插件默认按 HTTP 判定；业务码由使用者配置，见 ADR 0002           |
-| O6 效率小项                                  | §11 P4、P7、P8                                                  |
-| 错误类型 4 种                                | 可预期失败抛 R；内核类别与原因用 failureOf 读取；bug 抛原始异常 |
-| 14 个写死槽位，自定义插件只能靠 4 个插入方法 | 阶段 + `use/eject`                                              |
-| notify 关于 auth 重放双触发的过时警告        | 机制不存在了，随旧代码删除                                      |
+| 现状问题                                     | 新方案                                                                  |
+| -------------------------------------------- | ----------------------------------------------------------------------- |
+| O1 重放要快照 share/cache/data               | 请求不可变 + `next(patch)`，无快照                                      |
+| O2 三处手动给错误挂 config                   | 默认类的 request 只留 `{ method, url }`，完整配置经 raw 开关或 ctx 读取 |
+| O3 cache 四张表                              | 见插件规格 cache 节                                                     |
+| O4 `canRefresh` 写在用户的 TokenManager 上   | 收进 auth 内部状态，见插件规格 auth 节                                  |
+| O5 business 风格适配                         | 插件默认按 HTTP 判定；业务码由使用者配置，见 ADR 0002                   |
+| O6 效率小项                                  | §11 P4、P7、P8                                                          |
+| 错误类型 4 种                                | 可预期失败抛 R；内核类别与原因用 failureOf 读取；bug 抛原始异常         |
+| 14 个写死槽位，自定义插件只能靠 4 个插入方法 | 阶段 + `use/eject`                                                      |
+| notify 关于 auth 重放双触发的过时警告        | 机制不存在了，随旧代码删除                                              |
 
 ## 13. 新增设计选择（已确认）
 
 讨论中没逐条过、由本方案补上的选择，2026-10-28 用户确认全部采纳：
 
-| #   | 选择                                                                                                                                                                                                                                                                                                    | 理由                                                                               | 破坏性                                                                                                    |
-| --- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------- |
-| N1  | cancel 进内核：每个逻辑请求一个 controller，`client.cancelAll()`                                                                                                                                                                                                                                        | retry 等待、auth 排队、share 跟随者都依赖 signal，本来就该人人都有                 | 删 `axpCancel`                                                                                            |
-| N2  | key 降为内核服务；`key: true` 包含 query 和 body                                                                                                                                                                                                                                                        | 不再有"filter 必须在 key 前"的约束；旧 `true` 不含 params，同 URL 不同参数会串缓存 | 删 `axpKey`，`fastMode` 去掉                                                                              |
-| N3  | 删 `axpNormalize`，由内核落定；请求级 `normalize: false` 改用 `throws: false`                                                                                                                                                                                                                           | D3                                                                                 | 是                                                                                                        |
-| N4  | 删 `axpLogger`，改 `debug` 选项                                                                                                                                                                                                                                                                         | 原插件只设两个开关                                                                 | 是                                                                                                        |
-| N5  | 请求级选项不再接受函数形式（`MaybeFun`）                                                                                                                                                                                                                                                                | 调用点本就在写代码，函数形式只增加分支                                             | 是                                                                                                        |
-| N6  | 装上即生效；只有改变数据新鲜度的 cache、share 按请求开启                                                                                                                                                                                                                                                | 现在 filter 装了不生效、retry 默认 `max=0`，都是"装了没用"的坑                     | filter 默认生效；retry 默认 `max: 2`、指数退避、`delayMax: 10_000`；share 新增 `methods`（默认 GET/HEAD） |
-| N7  | cache 默认只缓存 GET/HEAD                                                                                                                                                                                                                                                                               | 验收预判"POST 也被缓存"                                                            | 是                                                                                                        |
-| N8  | 传输强制 `validateStatus` 全放行                                                                                                                                                                                                                                                                        | P5；单一路径                                                                       | axios 实例上的错误拦截器不再看到 4xx/5xx                                                                  |
-| N9  | 缓存存判定后的响应，命中不再重跑 `transformResponse`                                                                                                                                                                                                                                                    | 更快，也更好理解                                                                   | 是                                                                                                        |
-| N10 | loading 从逻辑请求一开始显示，包括等待 token 刷新的时间                                                                                                                                                                                                                                                 | 洋葱最外层的自然结果，体验更好                                                     | 时序变化                                                                                                  |
-| N11 | 原生数据方案已被 [ADR 0003](../decisions/0003-native-data-on-ctx.md) 取代；删除 `nullable` 的部分仍然有效，只有 raw/wrap 的原生数据方案被 ADR 0003 取代。原条款：删返回形态 `raw: true`，改用 `wrap: true` 后读 `r.raw`；同时删除只影响类型的 `nullable` 选项（data 为 null/undefined 时照常原样返回）  | 三种形态收成两个开关                                                               | 是                                                                                                        |
-| N12 | `extend()` 默认继承插件（各自新状态）                                                                                                                                                                                                                                                                   | 状态建在 `setup` 里之后，继承变得安全                                              | 与 2026-10-27 review #17（`extends` 不带插件）相反                                                        |
-| N13 | 判定类回调（`shouldRetry`、retry 的 `delay` / `jitter` 函数、`onFailure`、`isProtected`、`fallbackWhen`、`shouldCache`、`ready`）抛错按 bug 处理，抛原始异常；通知类回调（`loading`、`notify`、`stringify`、`onAccessExpired`、`onAccessDenied`）仍隔离，但用 `console.error` 输出，不受 debug 开关控制 | bug 不伪装成请求失败，也不悄悄吞掉                                                 | 判定类回调以前被吞                                                                                        |
+| #   | 选择                                                                                                                                                                                                                                                                                                                | 理由                                                                               | 破坏性                                                                                                    |
+| --- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------- |
+| N1  | cancel 进内核：每个逻辑请求一个 controller，`client.cancelAll()`                                                                                                                                                                                                                                                    | retry 等待、auth 排队、share 跟随者都依赖 signal，本来就该人人都有                 | 删 `axpCancel`                                                                                            |
+| N2  | key 降为内核服务；`key: true` 包含 query 和 body                                                                                                                                                                                                                                                                    | 不再有"filter 必须在 key 前"的约束；旧 `true` 不含 params，同 URL 不同参数会串缓存 | 删 `axpKey`，`fastMode` 去掉                                                                              |
+| N3  | 删 `axpNormalize`，由内核落定；请求级 `normalize: false` 改用 `throws: false`                                                                                                                                                                                                                                       | D3                                                                                 | 是                                                                                                        |
+| N4  | 删 `axpLogger`，改 `debug` 选项                                                                                                                                                                                                                                                                                     | 原插件只设两个开关                                                                 | 是                                                                                                        |
+| N5  | 请求级选项不再接受函数形式（`MaybeFun`）                                                                                                                                                                                                                                                                            | 调用点本就在写代码，函数形式只增加分支                                             | 是                                                                                                        |
+| N6  | 装上即生效；只有改变数据新鲜度的 cache、share 按请求开启                                                                                                                                                                                                                                                            | 现在 filter 装了不生效、retry 默认 `max=0`，都是"装了没用"的坑                     | filter 默认生效；retry 默认 `max: 2`、指数退避、`delayMax: 10_000`；share 新增 `methods`（默认 GET/HEAD） |
+| N7  | cache 默认只缓存 GET/HEAD                                                                                                                                                                                                                                                                                           | 验收预判"POST 也被缓存"                                                            | 是                                                                                                        |
+| N8  | 传输强制 `validateStatus` 全放行                                                                                                                                                                                                                                                                                    | P5；单一路径                                                                       | axios 实例上的错误拦截器不再看到 4xx/5xx                                                                  |
+| N9  | 缓存存判定后的响应，命中不再重跑 `transformResponse`                                                                                                                                                                                                                                                                | 更快，也更好理解                                                                   | 是                                                                                                        |
+| N10 | loading 从逻辑请求一开始显示，包括等待 token 刷新的时间                                                                                                                                                                                                                                                             | 洋葱最外层的自然结果，体验更好                                                     | 时序变化                                                                                                  |
+| N11 | 删除只影响类型的 `nullable` 选项（data 为 null/undefined 时照常原样返回）；`raw: true` 保留为请求级开关，但含义改为"返回带原生数据的副本"（隐含 `wrap`），原生数据默认由 `ctx.native` 持有。原先"删 `raw: true`，改用 `wrap: true` 后读 `r.raw`"的做法已被 [ADR 0003](../decisions/0003-native-data-on-ctx.md) 取代 | 失败的 `R` 会被外部长期引用，默认不能带原生对象；需要时由调用方显式要求            | 是（0.1.0 的 `raw: true` 返回信封 body，形状变了）                                                        |
+| N12 | `extend()` 默认继承插件（各自新状态）                                                                                                                                                                                                                                                                               | 状态建在 `setup` 里之后，继承变得安全                                              | 与 2026-10-27 review #17（`extends` 不带插件）相反                                                        |
+| N13 | 判定类回调（`shouldRetry`、retry 的 `delay` / `jitter` 函数、`onFailure`、`isProtected`、`fallbackWhen`、`shouldCache`、`ready`）抛错按 bug 处理，抛原始异常；通知类回调（`loading`、`notify`、`stringify`、`onAccessExpired`、`onAccessDenied`）仍隔离，但用 `console.error` 输出，不受 debug 开关控制             | bug 不伪装成请求失败，也不悄悄吞掉                                                 | 判定类回调以前被吞                                                                                        |
+| N14 | 响应类回调在原参数之后统一增加末位 `ctx`：retry 的 `respectRetryAfter`（函数形态）与 `delay`、auth 的 `onRefresh` / `onAccessExpired` / `onAccessDenied`、cache 的 `shouldCache`（插件级与请求级）、mock 的 `fallbackWhen`；少参数旧写法照常可用                                                                    | `R.request` 瘦身后，回调要完整请求就读 `ctx.request` / `ctx.originRequest`         | 否                                                                                                        |
+| N15 | notify 的 `stringify(r, ctx)` 必传，返回 falsy 或空串即不提示；内核先过滤成功、取消、`silent`（不调用 stringify），不再有默认文案；`internal` 内核不过滤，交给使用者                                                                                                                                                | 默认文案绑死了 R 上的 message 与状态，换协议就错；让使用者决定                     | 是                                                                                                        |

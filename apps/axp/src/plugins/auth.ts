@@ -42,7 +42,7 @@ export const AuthFailureAction = {
 export type AuthFailureAction = (typeof AuthFailureAction)[keyof typeof AuthFailureAction];
 /** 响应通知与刷新函数的统一参数顺序；末位 ctx 可读完整请求（ctx.request、ctx.originRequest），旧的少参数回调照常可用。
  * 单飞刷新时，onRefresh 以及刷新失败后的 onAccessExpired 拿到的 ctx 属于首个触发刷新的请求；不要用 ctx.signal 去中止共享刷新，否则首个请求被取消会让所有等待者按刷新失败处理。
- * @example `const expired: TAuthFunc<void> = (r, tm, ctx) => showLogin(r.message, ctx.request.url)`
+ * @example `const expired: TAuthFunc<void> = (r, tm, ctx) => showLogin(r.status, ctx.request.url)`
  */
 export type TAuthFunc<T, R extends IAxpResponse<unknown, string | number> = IAxpResponse> = (response: R, tm: ITokenManager, ctx: AxpContext<R>) => T | Promise<T>;
 /** 凭证注入与鉴权恢复选项。 */

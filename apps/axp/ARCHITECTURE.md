@@ -152,9 +152,9 @@ api.get('/pet/{id}')(payload, opts)        一次调用 = 一个逻辑请求
 
 ## 6. 归一化响应
 
-R 的必需契约只有 ok、status（HTTP）、code<C>、data；无响应时 status 为 0，无业务码为 0，无数据为 null。可选 message/raw/error；默认类 AxpResponse 另有 request、stack、toJSON、parse。完整字段、分类表和工厂选项见 [核心架构 §6](docs/design/core-architecture.md#6-归一化响应)。
+R 的必需契约只有 ok、status（HTTP）、code<C>、data；无响应时 status 为 0，无业务码为 0，无数据为 null。接口不声明 message/raw/error；默认类 AxpResponse 另有 message、request（只有 `{ method, url }`）、stack、toJSON、parse。原始响应与异常默认由 `ctx.native` 短期持有、落定后释放，只有请求级 `raw: true` 才以不可枚举属性附到返回或抛出的副本上，用 `nativeOf(e)` 读取抛出对象上的这三项（见 [ADR 0003](docs/decisions/0003-native-data-on-ctx.md)）。完整字段、分类表和工厂选项见 [核心架构 §6](docs/design/core-architecture.md#6-归一化响应)。
 
-HTTP 或业务失败看 ok/status/code；取消、超时、网络、解析、鉴权、程序异常由内核写入不可枚举的 AXP_FAILURE，同时强制 ok 为 false。只读辅助函数 failureOf(r) 返回 `{ type, reason? } | undefined`，失败常量为 AXP_FAILURES。取消用 api.isCancel(e) 或 isAxpCancel(e)。使用者不填写内核分类。
+HTTP 或业务失败看 ok/status/code；取消、超时、网络、解析、鉴权、程序异常由内核写入不可枚举的 AXP_FAILURE，同时强制 ok 为 false。只读辅助函数 failureOf(r) 返回 `{ type, reason?, error? } | undefined`（error 只有 internal 有），失败常量为 AXP_FAILURES。取消用 api.isCancel(e) 或 isAxpCancel(e)。使用者不填写内核分类。
 
 默认 parse 读取 code/data/message，默认成功为 2xx 且 code 为 0 或 '0000'。子类覆盖 parse 适配协议、覆盖 ok 改成功规则，用 axpResponse({ type }) 接入；也可实现接口，用 create 返回普通对象。status 保持 HTTP 语义；业务码回调的完整配置见 [README](README.zh-CN.md#使用警告与业务风格)。
 
@@ -172,7 +172,7 @@ axp 没有错误类。最外层按下表落定：
 
 `throws` 只有请求级，默认 `true`；没有客户端级默认值（`createAxp<S, R>` 显式泛型时返回类型无法如实反映客户端级开关）。
 
-**bug 不伪装成请求失败。** 中间件、判定类用户回调、用户拦截器或 `transformResponse` 抛出的非 AxiosError，在链内被临时包成 `failureOf(r)?.type === 'internal'` 的 `R`，原始异常放在 `r.error`。这样 `next()` 依旧不 reject，外层的计数、注销、订阅者离场照常收尾。等落定时，抛出的是 `r.error` 本身，stack 完整，`throws: false` 也不会把它吞掉。
+**bug 不伪装成请求失败。** 中间件、判定类用户回调、用户拦截器或 `transformResponse` 抛出的非 AxiosError，在链内被临时包成 `failureOf(r)?.type === 'internal'` 的 `R`，原始异常放在失败标记里，用 `failureOf(r)?.error` 读取。这样 `next()` 依旧不 reject，外层的计数、注销、订阅者离场照常收尾。等落定时，抛出的是这个原始异常本身，stack 完整，`throws: false` 也不会把它吞掉。
 
 另外几条：
 

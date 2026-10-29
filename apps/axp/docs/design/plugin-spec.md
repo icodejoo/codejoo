@@ -9,7 +9,8 @@ summary: 10 个内置插件和 4 项内核服务在洋葱管线下的阶段、�
 
 - 内置插件 10 个：loading、notify（outer）；repath、filter（prepare）；retry（attempt）；auth（credential）；mock、share、cache（source）；envs（只在装卸时执行）。
 - 内核服务 4 项：归一化响应、key、取消、日志开关；`axpKey`、`axpCancel`、`axpLogger`、`axpNormalize` 删除。
-- 所有判断函数的第一个参数都是 `R`；请求级选项统一四种写法；只读不删请求上的字段。
+- 所有判断函数的第一个参数都是 `R`，响应类回调的末位多一个 `ctx`；请求级选项统一四种写法；只读不删请求上的字段。
+- 原生响应和异常不在 `R` 上，插件读 `ctx.native`；需要完整请求读 `ctx.request` / `ctx.originRequest`（[ADR 0003](../decisions/0003-native-data-on-ctx.md)）。
 - 改变数据新鲜度的 cache、share 按请求开启（只写 `cache: true` 即可，key 自动算）；其余插件装上即生效。
 - 架构背景见 [核心架构](core-architecture.md)，每条行为变化在末尾汇总，发版时抄进 CHANGELOG。
 
@@ -29,7 +30,12 @@ summary: 10 个内置插件和 4 项内核服务在洋葱管线下的阶段、�
 - **插件级 `enable`**：每个插件工厂都接受 `enable?: boolean`（默认 true，mock 默认 false）。`false` 时插件不进链、不调用 `setup`、`inspect()` 不列出；请求级开关不能把它重新打开。
 - 插件只读请求选项，不 `delete`；需要给内层改请求时用 `next(patch)`。
 - 请求选项类型通过 `declare module '@codejoo/axp' { interface AxpRequestOptions {…} }` 扩展。
-- 内核自带的请求选项：`wrap`、`throws`、`silent`、`key`、`signal`。
+- 内核自带的请求选项：`raw`、`wrap`、`throws`、`silent`、`key`、`signal`。其中 `raw: true` 隐含 `wrap: true`，只有请求级，读 `ctx.originRequest`，`axios.defaults.raw` 不生效；它让落定的副本（成功返回、失败抛出都算）带上不可枚举的 `raw`、`error`、`request`，类型是 `WithNative<WithData<R, D>>`，读取抛出对象上的三项用 `nativeOf(e)`。详见 [核心架构 §7](core-architecture.md#7-落定与错误)。
+
+**响应类回调的末位 `ctx`**：下列回调在原参数之后多一个 `ctx: AxpContext<R>`，旧的少参数写法仍然可用（多出的实参被忽略）：retry 的 `respectRetryAfter`（函数形态）与 `delay`，auth 的 `TAuthFunc`（`onRefresh`、`onAccessExpired`、`onAccessDenied`），cache 的 `shouldCache`（插件级与请求级），mock 的 `fallbackWhen`（notify 的 `stringify` 本来就是 `(r, ctx)`，不在新增之列）。`R.request` 只剩 `{ method, url }`，要完整请求就读 `ctx.request`（本层视图）或 `ctx.originRequest`（调用方原始请求）。
+
+**`ctx.native`**：`{ response?: AxiosResponse; error?: unknown }`，只读，是最近一次传输尝试的结果。传输之前就提前返回的尝试（缓存命中、auth 本地拒绝、share 跟随者）不会刷新它，所以不保证与当前 `R` 配对；逻辑请求落定后清空并封闭，回调里别把它留到落定之后。需要诊断数据的插件读它，不读 `R` 上的可选字段。
+
 - 统一解析函数 `resolveOption` 放在 `src/options.ts`，B2 实现。
 - 命名：内置插件工厂一律 `axpXxx()`，插件 `name` 一律 `'axp:xxx'`（`axp:` 前缀保留给内置插件）：loading、notify、repath、filter、retry、auth、mock、share、cache、envs。
 
@@ -86,15 +92,27 @@ summary: 10 个内置插件和 4 项内核服务在洋葱管线下的阶段、�
 
 ### 2.2 notify（outer，内置次序 2）
 
-| 选项                 | 默认     | 说明               |
-| -------------------- | -------- | ------------------ |
-| `notify(message, r)` | **必填** | 拿到非空消息时调用 |
-| `stringify(r, ctx)`  | 见下     | 返回空串表示不通知 |
+| 选项                 | 默认     | 说明                      |
+| -------------------- | -------- | ------------------------- |
+| `notify(message, r)` | **必填** | 拿到非空消息时调用        |
+| `stringify(r, ctx)`  | **必填** | 返回 falsy 或空串即不通知 |
 
-- 默认 stringify：成功、取消、silent 时为空；否则依次用 message、failureOf(r)?.type、`status <n>`（code 非零时附上）。
-- 请求级：`notify: false`，或内核选项 `silent: true`（现在 `silent` 真正生效）。
-- 行为：每个逻辑请求最多一次。
-- 变化：`stringify` 从 `(data, message, status, config)` 改为 `(r, ctx)`，并且有默认值；文件头那段关于 auth 重放双触发的过时警告随旧代码删除。
+- `stringify` 签名 `(r, ctx) => string | null | undefined | false`，**没有默认文案**。内核先过滤成功、取消、`silent`：这三种情况不调用 `stringify`，所以它只需要写失败文案。`internal` 失败内核不过滤，要不要提示由使用者在 `stringify` 里决定（不想提示就对它返回 falsy）。
+- 请求级：`notify: false`，或内核选项 `silent: true`（由内核统一过滤，自定义 stringify 不必再读 `ctx.request.silent`）。
+- 行为：每个逻辑请求最多一次；`stringify` 抛错被隔离，只 `console.error`。
+- 变化：`stringify` 从 `(data, message, status, config)` 改为 `(r, ctx)`，**由可选变为必传**（破坏性）；文件头那段关于 auth 重放双触发的过时警告随旧代码删除。
+
+```ts
+axpNotify({
+  notify: (message) => toast.error(message),
+  stringify: (r) => {
+    const f = failureOf(r);
+    if (f?.type === "internal") return null; // 程序 bug 不弹给用户
+    if (f?.type === "timeout") return "请求超时，稍后再试";
+    return r.message || `请求失败（${r.status || "网络异常"}）`;
+  },
+});
+```
 
 ## 3. prepare 阶段
 
@@ -114,18 +132,18 @@ summary: 10 个内置插件和 4 项内核服务在洋葱管线下的阶段、�
 
 ## 4. attempt 阶段：retry
 
-| 选项                           | 默认                                             | 说明                                                                                                                                            |
-| ------------------------------ | ------------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------- |
-| `max`                          | **2**（旧 0）                                    | 最大重试次数                                                                                                                                    |
-| `methods`                      | `get put head delete options trace`              | 硬否决：方法不在表里一律不重试                                                                                                                  |
-| `statusCodes`                  | `[408, 429, 500, 502, 503, 504]`                 | 对照 `r.status`（HTTP 状态）                                                                                                                    |
-| `shouldRetry(r, attempt, ctx)` | —                                                | 返回 true/false 即采用，undefined 继续往下判                                                                                                    |
-| `delay`                        | `attempt => 300 * 2 ** (attempt - 1)`（旧 3000） | 数字或函数 `(attempt, max, r) => number`                                                                                                        |
-| `jitter`                       | —                                                | `true` 或 `(delay) => number`                                                                                                                   |
-| `delayMax`                     | 10_000（旧 Infinity）                            | 只封顶自己算出的 delay                                                                                                                          |
-| `respectRetryAfter`            | true                                             | 布尔值按 afterStatusCodes；函数 `(r) => boolean` 独立判定并忽略 afterStatusCodes。头缺失或非法回退本地 delay，不叠加 jitter、不受 delayMax 限制 |
-| `afterStatusCodes`             | `[413, 429, 503]`                                | 对照 `r.status`；仅按 HTTP 状态匹配                                                                                                             |
-| `retryAfterMax`                | 60_000                                           | 服务端要求超过上限时不重试，返回本次响应；Infinity 表示永远照办                                                                                 |
+| 选项                           | 默认                                             | 说明                                                                                                                                                 |
+| ------------------------------ | ------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `max`                          | **2**（旧 0）                                    | 最大重试次数                                                                                                                                         |
+| `methods`                      | `get put head delete options trace`              | 硬否决：方法不在表里一律不重试                                                                                                                       |
+| `statusCodes`                  | `[408, 429, 500, 502, 503, 504]`                 | 对照 `r.status`（HTTP 状态）                                                                                                                         |
+| `shouldRetry(r, attempt, ctx)` | —                                                | 返回 true/false 即采用，undefined 继续往下判                                                                                                         |
+| `delay`                        | `attempt => 300 * 2 ** (attempt - 1)`（旧 3000） | 数字或函数 `(attempt, max, r, ctx) => number`                                                                                                        |
+| `jitter`                       | —                                                | `true` 或 `(delay) => number`                                                                                                                        |
+| `delayMax`                     | 10_000（旧 Infinity）                            | 只封顶自己算出的 delay                                                                                                                               |
+| `respectRetryAfter`            | true                                             | 布尔值按 afterStatusCodes；函数 `(r, ctx) => boolean` 独立判定并忽略 afterStatusCodes。头缺失或非法回退本地 delay，不叠加 jitter、不受 delayMax 限制 |
+| `afterStatusCodes`             | `[413, 429, 503]`                                | 对照 `r.status`；仅按 HTTP 状态匹配                                                                                                                  |
+| `retryAfterMax`                | 60_000                                           | 服务端要求超过上限时不重试，返回本次响应；Infinity 表示永远照办                                                                                      |
 
 **判定顺序**（每级都能提前结束）：
 
@@ -140,6 +158,7 @@ summary: 10 个内置插件和 4 项内核服务在洋葱管线下的阶段、�
 
 **行为**：
 
+- **Retry-After 来源**：读传输层随 `R` 带来的私有小事实（响应头解析结果），不再回头读 AxiosResponse。share 跟随者拿到的是领导者的同一个 `R`，所以也能读到；`ctx.fail({ from })` 派生会继承。头缺失或非法回退本地 delay，超过 `retryAfterMax` 不重试。`fromError` 路径（响应拦截器抛出带 response 的 AxiosError、归为 network，`R.status` 为 0）的 Retry-After 只在 `respectRetryAfter` 为函数时才被采信；布尔形态要查 `afterStatusCodes.includes(r.status)`，默认配置下不采信。
 - 首发前 markReplayable()；每次重放前 canReplay()，false 时返回原响应，不能重发已消耗的一次性体。
 - 等待期间监听 `ctx.signal`，取消立即结束等待。
 - 次数用尽时返回最后一次的 `R`，由落定决定抛不抛。
@@ -152,21 +171,21 @@ summary: 10 个内置插件和 4 项内核服务在洋葱管线下的阶段、�
 - 删除 `axp:retry:share`、`axp:retry:cache` 保活键、`captureRawRequest`、`runAttempt`（O1）。
 - 默认值变化（N6）：`max` 0→2、`delay` 3000→指数退避、`delayMax` Infinity→10_000。
 - statusCodes/afterStatusCodes 只读 HTTP 状态；业务码配置见 [README 示例](../../README.zh-CN.md#使用警告与业务风格)。
-- `shouldRetry` 签名从 `(response?, err?)` 改为 `(r, attempt, ctx)`。
+- `shouldRetry` 签名从 `(response?, err?)` 改为 `(r, attempt, ctx)`；`delay` 函数与 `respectRetryAfter` 函数末位同样带 `ctx`，旧少参数写法可用。
 
 ## 5. credential 阶段：auth
 
-| 选项                     | 默认                  | 说明                                                                          |
-| ------------------------ | --------------------- | ----------------------------------------------------------------------------- |
-| `tokenManager`           | **必填**              | `ITokenManager`（不再有 `canRefresh`）                                        |
-| `onRefresh(r, tm)`       | **必填**              | 返回 `false` 或抛错算失败；同一时刻只跑一个                                   |
-| `refreshTimeout`         | 30_000                | ms；0 或 Infinity 不限时，超时按刷新失败处理                                  |
-| `onAccessExpired(r, tm)` | **必填**              | 会话过期；401 / 刷新失败那条路径每轮只通知一次（见下「本地无 token 的通知」） |
-| `onAccessDenied(r, tm)`  | → `onAccessExpired`   | 越权或本地无 token；本地无 token 时每个受保护请求调一次，不去重               |
-| `onFailure(r, tm, ctx)`  | `defaultAuthFailure`  | 返回 `AuthFailureAction` 五动作之一                                           |
-| `methods` / `urlPattern` | `'*'`                 | 受保护判定，语义不变（URLPattern，`!` 否定）                                  |
-| `isProtected(request)`   | —                     | 布尔即终值                                                                    |
-| `ready(tm, request)`     | 写 `Authorization` 头 | 返回 `AxpRequestPatch`                                                        |
+| 选项                          | 默认                  | 说明                                                                          |
+| ----------------------------- | --------------------- | ----------------------------------------------------------------------------- |
+| `tokenManager`                | **必填**              | `ITokenManager`（不再有 `canRefresh`）                                        |
+| `onRefresh(r, tm, ctx)`       | **必填**              | 返回 `false` 或抛错算失败；同一时刻只跑一个                                   |
+| `refreshTimeout`              | 30_000                | ms；0 或 Infinity 不限时，超时按刷新失败处理                                  |
+| `onAccessExpired(r, tm, ctx)` | **必填**              | 会话过期；401 / 刷新失败那条路径每轮只通知一次（见下「本地无 token 的通知」） |
+| `onAccessDenied(r, tm, ctx)`  | → `onAccessExpired`   | 越权或本地无 token；本地无 token 时每个受保护请求调一次，不去重               |
+| `onFailure(r, tm, ctx)`       | `defaultAuthFailure`  | 返回 `AuthFailureAction` 五动作之一                                           |
+| `methods` / `urlPattern`      | `'*'`                 | 受保护判定，语义不变（URLPattern，`!` 否定）                                  |
+| `isProtected(request)`        | —                     | 布尔即终值                                                                    |
+| `ready(tm, request)`          | 写 `Authorization` 头 | 返回 `AxpRequestPatch`                                                        |
 
 **主流程**：
 
@@ -201,6 +220,10 @@ switch action:
 
 ready、onFailure、刷新排队支持取消，每次异步等待后重查。刷新期间 token 被重新登录或登出替换时，旧刷新失败不清会话、不发过期通知。refreshTimeout 不会停止回调自身，迟到的会话写入由使用者处理。
 
+- **回调 ctx**：`TAuthFunc` 的第三个参数是 `ctx`。单飞刷新时，`onRefresh` / `onAccessExpired` 拿到的 `ctx` 属于**首个触发刷新的请求**，后来排队的请求共用同一次刷新；所以别用 `ctx.signal` 去中止刷新，那只代表首个请求的取消。
+- **ready 期间登出**：`ready` 返回后本地已无 token（等待期间登出），本地拒绝，返回 `unauthenticated`，不发无凭证请求。
+- **dispose 之后**：在途刷新迟到失败，不再清会话、不再发过期通知。
+
 **刷新可用性（O4）**：
 
 - `canRefresh` 从 `ITokenManager` 删除，收进插件状态。
@@ -212,7 +235,7 @@ ready、onFailure、刷新排队支持取消，每次异步等待后重查。刷
 
 **变化**：
 
-- 回调参数统一为 `(r, tm)`；`onFailure` 收到的是 `R` 而不是 `AxiosResponse`。
+- 回调参数统一为 `(r, tm, ctx)`（`ctx` 为后加的末位，少参数写法仍可用）；`onFailure` 收到的是 `R` 而不是 `AxiosResponse`。
 - 删除 `config.authExpired` 标记，改看 `failureOf(r)?.reason === 'expired'`。
 - 删除 `accessDeniedCode`、`ACCESS_DENIED_CODE`、`authFailureFactory`（由 `defaultAuthFailure` 取代，按状态键识别携带的 token，不再解析请求头）。
 - 删除尝试钩子 `registerAttemptHook`：retry 的每次尝试本来就会穿过 auth。
@@ -221,16 +244,16 @@ ready、onFailure、刷新排队支持取消，每次异步等待后重查。刷
 
 ### 6.1 mock（source，内置次序 1）
 
-| 选项              | 默认                                                     | 说明                                                                                         |
-| ----------------- | -------------------------------------------------------- | -------------------------------------------------------------------------------------------- |
-| `enable`          | false                                                    | 通常写 `import.meta.env.DEV`                                                                 |
-| `mock`            | false                                                    | 全部请求走 mock                                                                              |
-| `mockUrl`         | —                                                        | mock 服务器基址；请求开启了 mock 但没有 mockUrl 时跳过 mock、直接走真实接口（debug 下 warn） |
-| `fallbackWhen(r)` | `r.status === 404 \|\| failureOf(r)?.type === 'network'` | 判定回落真实接口                                                                             |
+| 选项                   | 默认                                                     | 说明                                                                                         |
+| ---------------------- | -------------------------------------------------------- | -------------------------------------------------------------------------------------------- |
+| `enable`               | false                                                    | 通常写 `import.meta.env.DEV`                                                                 |
+| `mock`                 | false                                                    | 全部请求走 mock                                                                              |
+| `mockUrl`              | —                                                        | mock 服务器基址；请求开启了 mock 但没有 mockUrl 时跳过 mock、直接走真实接口（debug 下 warn） |
+| `fallbackWhen(r, ctx)` | `r.status === 404 \|\| failureOf(r)?.type === 'network'` | 判定回落真实接口                                                                             |
 
 - 行为：探测 `next({ url: <改写到 mockUrl>, cache: false, share: false })`；`fallbackWhen(r)` 为真时再 `next()` 走真实接口。探测不写缓存、不占共享条目；回落前检查 canReplay()，一次性体不能重放时返回探测响应。
 - 请求级：`false` / `true` / `{ mockUrl, fallbackWhen }`。
-- 变化：`fallbackWhen` 参数从 `{ response?, error? }` 改为 `r`。
+- 变化：`fallbackWhen` 参数从 `{ response?, error? }` 改为 `(r, ctx)`；探测走真实传输，`ctx.native` 里是探测拿到的真实响应。
 
 ### 6.2 share（source，内置次序 2）
 
@@ -250,17 +273,18 @@ ready、onFailure、刷新排队支持取消，每次异步等待后重查。刷
 
 ### 6.3 cache（source，内置次序 3）
 
-| 选项             | 默认             | 说明                                                       |
-| ---------------- | ---------------- | ---------------------------------------------------------- |
-| `expires`        | 60_000           | ms                                                         |
-| `max`            | 500              | LRU 容量，`Infinity` 不限；小于 1 时回退 500               |
-| `methods`        | `get head`（N7） | 其它方法即使请求级开启也不缓存                             |
-| `clone`          | —                | `'shallow'` / `'deep'` / `(data) => data`，作用于 `r.data` |
-| `shouldCache(r)` | `r.ok`           | 是否写入                                                   |
-| `store`          | 内存 LRU         | `IAxpCacheStore`，同步或异步快照存储                       |
+| 选项                  | 默认             | 说明                                                       |
+| --------------------- | ---------------- | ---------------------------------------------------------- |
+| `expires`             | 60_000           | ms                                                         |
+| `max`                 | 500              | LRU 容量，`Infinity` 不限；小于 1 时回退 500               |
+| `methods`             | `get head`（N7） | 其它方法即使请求级开启也不缓存                             |
+| `clone`               | —                | `'shallow'` / `'deep'` / `(data) => data`，作用于 `r.data` |
+| `shouldCache(r, ctx)` | `r.ok`           | 是否写入（插件级与请求级对象都可配）                       |
+| `store`               | 内存 LRU         | `IAxpCacheStore`，同步或异步快照存储                       |
 
 - 开启：请求级 `cache: true`；数字 = `expires`；对象 `{ expires, key, clone, shouldCache }`，其中 `key` 是显式缓存键。
 - `ctx.key()` 为 null（不可哈希）且没有显式 key 时，直接 `next()`，既不读也不写缓存（与 share 一致）。
+- **不缓存 internal 与 cancel**：这两类失败即使 `shouldCache: () => true` 也不写入，避免 internal 命中后丢了原始异常、落定时 `throw undefined`；快照里读取 message 走结构化读取，不依赖 R 的接口字段。
 - 命中：从快照经 ctx.fail/响应工厂重建新的 R，request 是当前调用方，data 按 clone 处理；不触网、不重跑 transformResponse，已取消的请求不返回命中。raw/error/stack 不保存在快照。
 - 新旧顺序：较早发起、较晚返回的响应不覆盖较新的结果；`clear()` 之后在途请求返回也不写回。语义沿用现状。
 - 表收敛（O3）：`written` 和 `inflight` 合并为 `Map<key, { latestSeq, pending }>`；票据是递增的序号，`clear()` 记下当前序号作为下界（取代 `epoch`），下界以前的票据一律不写回；同一 key 的在途数归零就回收它的记录。
@@ -297,7 +321,7 @@ interface IAxpCacheSnapshot {
 - 同 key 的异步写入串行，真正写入前再过新鲜度屏障；clear/dispose 使旧票据失效。内存仓走同步快路径。异步 get、过期删除与写入的等待都可被调用方取消：取消立即以 cancel 落定，迟到结果被隔离、不回写（存储操作本身不取消）。业务数据、扩展数据和 Infinity 的持久化编码由使用者的 store 负责。
 - 默认共享 data 引用；clone 只作用于 data，不克隆整个响应原型。未命中的成功结果同样按 clone 返回，失败原样返回。deep 缺 structuredClone 时在发送前抛错。内存仓的有限有效期写入也会节流清扫，不只在超容量时清扫。
 
-- 变化：`clearCache(ax)` 参数从 axios 实例改为客户端；默认不缓存 POST；`shouldCache` 参数改为 `r`。
+- 变化：`clearCache(ax)` 参数从 axios 实例改为客户端；默认不缓存 POST；`shouldCache` 参数改为 `(r, ctx)`；internal 与 cancel 不再缓存。
 
 ## 7. envs
 
@@ -311,18 +335,23 @@ interface IAxpCacheSnapshot {
 
 ## 9. 行为变化汇总（发版写进 CHANGELOG）
 
-| 范围     | 变化                                                                                                                       |
-| -------- | -------------------------------------------------------------------------------------------------------------------------- |
-| 入口     | `Axp.create` / `Axp.install` / `AxpHandle` / `Core` → `createAxp` + `AxpClient`；插件只对 axp 客户端生效                   |
-| 错误     | 可预期失败抛 R，failureOf 读内核事实；HTTP/业务失败看 ok/status/code；bug 抛原始异常                                       |
-| 成功判定 | 业务转换用 parse，成功用 ok；status 为 HTTP 状态，见 ADR 0002                                                              |
-| 回调抛错 | 判定类回调抛错不再被吞，抛原始异常（N13）                                                                                  |
-| 返回     | `raw: true` 删除；`wrap: true` 成功时返回 `WithData<R, D>`、失败照常抛出；新增请求级 `throws: false`（没有客户端级默认值） |
-| 插件     | 删除 `axpCancel`、`axpKey`、`axpLogger`、`axpNormalize`，能力并入内核                                                      |
-| 请求选项 | 不再接受函数形式；`normalize: false` → `throws: false`；`key: true` 包含参数                                               |
-| 默认值   | filter 装上即生效；retry `max: 2`、指数退避、`delayMax: 10_000`；cache 只缓存 GET/HEAD                                     |
-| 判定     | 插件默认按 HTTP；业务码由 onFailure/shouldRetry/respectRetryAfter 显式配置                                                 |
-| auth     | 回调参数 (r, tm)；失败原因用 failureOf(r)?.reason；新增 refreshTimeout                                                     |
-| 时序     | loading 覆盖 token 刷新等待；缓存命中不重跑 `transformResponse`；axios 错误拦截器不再看到 4xx/5xx                          |
-| 派生     | extend 默认新建 axios 并复制 defaults、不复制拦截器；显式 { axios } 原样使用                                               |
-| 子路径   | 删除 `./cancel` `./key` `./logger` `./normalize`                                                                           |
+| 范围     | 变化                                                                                                                                                                                                                               |
+| -------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 入口     | `Axp.create` / `Axp.install` / `AxpHandle` / `Core` → `createAxp` + `AxpClient`；插件只对 axp 客户端生效                                                                                                                           |
+| 错误     | 可预期失败抛 R，failureOf 读内核事实；HTTP/业务失败看 ok/status/code；bug 抛原始异常                                                                                                                                               |
+| 成功判定 | 业务转换用 parse，成功用 ok；status 为 HTTP 状态，见 ADR 0002                                                                                                                                                                      |
+| 回调抛错 | 判定类回调抛错不再被吞，抛原始异常（N13）                                                                                                                                                                                          |
+| 返回     | `wrap: true` 成功时返回 `WithData<R, D>`、失败照常抛出；新增请求级 `throws: false`（没有客户端级默认值）；`raw: true` 含义改变：由"返回信封 body"改为"返回带 raw/error/request 的副本"（隐含 wrap，新增 `nativeOf`、`WithNative`） |
+| 响应     | `IAxpResponse` 只留 ok/status/code/data；message 在 `AxpResponse` 类上；`R.request` 只剩 `{ method, url }`；internal 的原始异常经 `failureOf(r)?.error` 读取，网络/超时/取消不再带 error；原生数据经 `ctx.native` 与 raw 开关获得  |
+| 回调     | retry 的 `respectRetryAfter`/`delay`、auth 的三个回调、cache 与 mock 的判定函数末位新增 `ctx`；旧少参数写法兼容                                                                                                                    |
+| 通知     | notify 的 `stringify` 必传（破坏性），无默认文案；成功、取消、silent 由内核过滤；internal 不过滤                                                                                                                                   |
+| 重试     | Retry-After 随 `R` 走（share 跟随者也能读到）；`respectRetryAfter` 为函数时 fromError 路径才采信 `error.response`；超过 `retryAfterMax` 仍不重试                                                                                   |
+| 缓存     | internal 与 cancel 不再缓存；异步存储的 get/delete/set 等待可被取消                                                                                                                                                                |
+| 插件     | 删除 `axpCancel`、`axpKey`、`axpLogger`、`axpNormalize`，能力并入内核                                                                                                                                                              |
+| 请求选项 | 不再接受函数形式；`normalize: false` → `throws: false`；`key: true` 包含参数                                                                                                                                                       |
+| 默认值   | filter 装上即生效；retry `max: 2`、指数退避、`delayMax: 10_000`；cache 只缓存 GET/HEAD                                                                                                                                             |
+| 判定     | 插件默认按 HTTP；业务码由 onFailure/shouldRetry/respectRetryAfter 显式配置                                                                                                                                                         |
+| auth     | 回调参数 (r, tm, ctx)；失败原因用 failureOf(r)?.reason；新增 refreshTimeout；ready 期间登出本地拒绝；dispose 后迟到的刷新失败不清会话                                                                                              |
+| 时序     | loading 覆盖 token 刷新等待；缓存命中不重跑 `transformResponse`；axios 错误拦截器不再看到 4xx/5xx                                                                                                                                  |
+| 派生     | extend 默认新建 axios 并复制 defaults、不复制拦截器；显式 { axios } 原样使用                                                                                                                                                       |
+| 子路径   | 删除 `./cancel` `./key` `./logger` `./normalize`                                                                                                                                                                                   |

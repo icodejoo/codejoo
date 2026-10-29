@@ -52,7 +52,7 @@ settle 必须先取 native，再生成副本，最后在覆盖 return、throw、
 
 ### 失败事实、重试与缓存
 
-完整 native 只留在 state 单槽；传输层将解析出的 `Retry-After` 等待时长作为小事实放进私有失败标记随 R 流转，retry 改读该事实。share 跟随者拿到领导者的同一个 R，因此仍能遵守等待时长与 D1（超过 `retryAfterMax` 不重试），无需携带完整响应。
+完整 native 只留在 state 单槽；传输层将 `Retry-After` 的原始头字符串以私有 symbol 挂在 R 上随 R 流转（不依赖失败标记，429、503 这类响应也带），retry 解析时再套用 `retryAfterMax`。share 跟随者拿到领导者的同一个 R，因此仍能遵守等待时长与 D1（超过 `retryAfterMax` 不重试），无需携带完整响应。
 
 只有 `internal` 失败的原始 error 默认保留在私有失败标记中，与 kind 同处，通过 `failureOf(r)?.error` 读取。`client.ts` 的 internal 抛出、继承路径（`response.ts:187`）与 guardFactory 的 recover（`response.ts:266`）均改读该字段。`failureOf` / `IAxpFailure` 已公开导出，因此 error 是公开字段，必须记录其仅用于 internal 的约束；网络、超时、取消的 AxiosError 不再默认挂到 R。
 

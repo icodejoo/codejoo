@@ -9,6 +9,8 @@ summary: 为什么把 axios 拦截器底座换成自有洋葱管线，插件怎�
 
 > 2026-10-29 更新：D3、D5 中关于 `kind`、逻辑状态的部分已被 [0002 响应契约](0002-response-contract.md) 取代；D4、D6 中对应字段的写法也属历史表述。本文保持 active，其余核心决策继续有效。
 
+> 2026-10-29 补充：D4、D6 里把原始异常放在 `r.error` 的写法已被 [0003 原生诊断数据移入上下文](0003-native-data-on-ctx.md) 取代：internal 的原始异常放在内核私有失败标记里，用 `failureOf(r)?.error` 读取；网络、超时、取消不再带 error，需要时请求级 `raw: true`。
+
 - 执行模型：axp 自己管一次请求的生命周期，插件是 `(ctx, next)` 中间件，最内层调 `axios.request`。
 - 排序：具名阶段 + 同阶段内数组顺序；不对称需求用 `taps` 分段挂载。不用 `before/after`。
 - 归一化进内核：传输边界做**判定**（产出 `IAxpResponse`），最外层做**落定**（返回 data 或抛出）。
