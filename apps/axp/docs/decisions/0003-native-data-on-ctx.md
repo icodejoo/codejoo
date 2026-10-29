@@ -86,5 +86,6 @@ retry 的 `respectRetryAfter`、`delay`（`retry-timing.ts`）及 auth 的 `TAut
 - **破坏性：raw 含义变化**，0.1.0 的 `raw: true` 返回信封 body，现在返回带原生数据的 R；旧 raw 对应 `r.raw?.data`。仅 `wrap: true` 不再获得原生数据。
 - **回调新增末位 ctx 参数**，respectRetryAfter、delay 与 TAuthFunc 的旧少参数回调保持兼容，需要完整请求的回调改读 ctx。
 - **非破坏性的行为变化：缓存排除 internal 和 cancel**，即使配置 `shouldCache: () => true` 也不再缓存这两类失败。
+- **体积增加，门槛已放宽**：`./min`（`gzip -9`）从 13,080 增至 14,677 字节（约 +12%），`dist/esm` 逐文件求和 62,043 字节；用户于 2026-10-29 确认接受，并以 14,677 作为新基线。
 
 内核需要维护身份关联、派生改绑和 settle 清理，并验证 return、throw、reject 与 share 迟到传输的释放行为。显式开启 raw 后，原生对象仍会随返回或抛出的副本存活，这是调用方主动选择的成本。B1–B5 完成实现与验证，迁移指南、README 中英、插件规格和架构等正文统一在 B6 更新。
