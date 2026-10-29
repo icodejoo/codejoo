@@ -129,8 +129,6 @@ it("[core.fn.createAxp][core.req.wrap][core.req.throws] Schema/响应泛型/插�
     const local = createAxp<model.LocalMethodRefs>();
     expectTypeOf(local.post("/pet/draft")({ name: "draft", photoUrls: [] })).toEqualTypeOf<Promise<model.Pet>>();
     expectTypeOf(local.get("/experimental/whatever")()).toEqualTypeOf<Promise<unknown>>();
-    // @ts-expect-error 旧 raw 返回形态已经删除。
-    void api.get("/empty")(undefined, { raw: true });
     // @ts-expect-error nullable 不再是新请求选项。
     void api.get("/empty")(undefined, { nullable: true });
     // key: true 保留为"自动计算"，兼容旧写法。

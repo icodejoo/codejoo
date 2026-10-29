@@ -1,3 +1,4 @@
+import type { AxiosResponse } from "axios";
 import { AXP_FAILURES } from "./brand";
 import { requestKey, type IKeyOptions } from "./key";
 import { type AxpResponse, type AxpResponseInit, type IAxpResponse, type IAxpResponseFactory } from "./response";
@@ -74,8 +75,20 @@ export interface IAxpContextInit<R extends IAxpResponse<unknown, string | number
   /** 合并 defaults 之前的原始请求级配置；省略时视为与 request 相同。 */
   origin?: AxpRequestConfig;
 }
+/** 最近一次传输尝试的只读原生数据快照。 */
+export interface IAxpNative {
+  /** 完整的原始传输响应。 */ readonly response?: AxiosResponse;
+  /** 原始传输异常，成功时为 undefined。 */ readonly error?: unknown;
+}
 /** 请求各层共享的状态容器。 */
-interface IAxpContextState {
+interface IAxpContextState<R> {
+  /** 最近一次传输尝试的原生数据及响应配对，落定后禁止写入。 */
+  native: {
+    /** 配对的业务响应。 */ for: R | undefined;
+    /** 原始传输响应。 */ raw: AxiosResponse | undefined;
+    /** 原始传输异常。 */ error: unknown;
+    /** 逻辑请求是否已经落定。 */ settled: boolean;
+  };
   /** 类型化插件状态。 */
   values?: Map<symbol, unknown>;
   /** 是否需要重放保护。 */
@@ -107,7 +120,7 @@ export class AxpContext<R extends IAxpResponse<unknown, string | number> = AxpRe
   /** 指纹配置。 */
   private readonly keyOptions: IKeyOptions | undefined;
   /** 同一逻辑请求的各层共享的可变状态。 */
-  private readonly state: IAxpContextState;
+  private readonly state: IAxpContextState<R>;
   /** 本层请求视图的惰性指纹；undefined 表示尚未计算，null 表示不可哈希。 */
   private keyValue: string | null | undefined;
 
@@ -134,7 +147,7 @@ export class AxpContext<R extends IAxpResponse<unknown, string | number> = AxpRe
     } else {
       this.factory = init.factory;
       this.keyOptions = init.key;
-      this.state = { replayable: false, origin: init.origin ?? request };
+      this.state = { replayable: false, origin: init.origin ?? request, native: { for: undefined, raw: undefined, error: undefined, settled: false } };
     }
   }
   /** 按本层请求视图惰性缓存指纹；有补丁必派生新层，指纹随新层重算。
@@ -162,6 +175,7 @@ export class AxpContext<R extends IAxpResponse<unknown, string | number> = AxpRe
     (this.state.values ??= new Map()).set(key, value);
   }
   /** 经工厂构造失败或派生响应，确保扩展字段存在。
+   * from 为当前配对响应时，配对随之转移到派生出的新响应。
    * @param init 分类和覆盖字段。
    * @returns 当前客户端的响应类型。
    * @example `ctx.fail({ failure: 'auth', reason: 'expired' })`
@@ -171,7 +185,53 @@ export class AxpContext<R extends IAxpResponse<unknown, string | number> = AxpRe
   fail(init: AxpResponseInit<IAxpResponse<unknown, string | number>>): R;
   /** 扩展字段只在工厂边界收窄，运行期保持原样。 */
   fail(init: AxpResponseInit<R> | AxpResponseInit<IAxpResponse<unknown, string | number>>): R {
-    return this.factory.fail(init as AxpResponseInit<R>, this);
+    const response = this.factory.fail(init as AxpResponseInit<R>, this);
+    if (init.from !== undefined && init.from === this.state.native.for) this.state.native.for = response;
+    return response;
+  }
+  /** 读取最近一次传输尝试的原生数据，与管线最终返回的响应未必配对。
+   * 传输前提前返回的尝试不会刷新它，可能仍是上一次尝试的数据，不保证与当前响应配对；需要配对结果请由内核处理。
+   * @returns 只读数据快照，落定后字段均为 undefined。
+   * @example `const raw = ctx.native.response`
+   */
+  get native(): IAxpNative {
+    return { response: this.state.native.raw, error: this.state.native.error };
+  }
+  /** 写入一次传输结果，落定后忽略迟到结果。
+   * @internal
+   * @param response 本次构造的业务响应。
+   * @param raw 原始传输响应。
+   * @param error 原始异常，成功时传 undefined 清除旧异常。
+   * @returns 无返回值。
+   * @example `ctx.setNative(response, raw, undefined)`
+   */
+  setNative(response: R, raw: AxiosResponse | undefined, error: unknown): void {
+    const slot = this.state.native;
+    if (slot.settled) return;
+    slot.for = response;
+    slot.raw = raw;
+    slot.error = error;
+  }
+  /** 仅为身份配对的响应读取原生数据。
+   * @internal
+   * @param response 待落定的业务响应。
+   * @returns 配对的数据快照，错配时为 undefined。
+   * @example `const native = ctx.nativeFor(response)`
+   */
+  nativeFor(response: R): IAxpNative | undefined {
+    return response === this.state.native.for ? this.native : undefined;
+  }
+  /** 清空原生数据并永久关闭本次逻辑请求的数据槽。
+   * @internal
+   * @returns 无返回值。
+   * @example `ctx.clearNative()`
+   */
+  clearNative(): void {
+    const slot = this.state.native;
+    slot.for = undefined;
+    slot.raw = undefined;
+    slot.error = undefined;
+    slot.settled = true;
   }
   /** 标记后续传输需保护可重放的 JSON 请求体。
    * @example `ctx.markReplayable()`

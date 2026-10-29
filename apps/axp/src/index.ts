@@ -7,7 +7,7 @@ export { AXP_FAILURE, AXP_FAILURES, AXP_RESPONSE, AxpResponse, axpResponse, fail
 export type { AxpFailureType, IAxpFailure, AxpResponseInit, IAxpResponse, IAxpResponseFactory, IAxpResponseOptions } from "./response";
 
 export { stateKey } from "./context";
-export type { AxpContext, AxpStateKey } from "./context";
+export type { AxpContext, AxpStateKey, IAxpNative } from "./context";
 
 export type { IKeyOptions } from "./key";
 

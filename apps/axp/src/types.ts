@@ -103,6 +103,8 @@ export interface AxpLogger {
 export interface AxpRequestOptions {
   /** 成功也返回响应对象。 */
   wrap?: boolean;
+  /** 请求级原生数据开关，开启时隐含 wrap，原生数据不可枚举地附到响应副本。 */
+  raw?: boolean;
   /** false 时可预期失败也返回响应。 */
   throws?: boolean;
   /** 跳过通知。 */

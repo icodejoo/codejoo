@@ -101,8 +101,12 @@ export function createTransport<R extends IAxpResponse<unknown, string | number>
       request.validateStatus = ACCEPT_HTTP_STATUS;
       response = await axios.request(request);
     } catch (error) {
-      return factory.fromError(error, ctx);
+      const result = factory.fromError(error, ctx);
+      ctx.setNative(result, isAxiosError(error) ? error.response : undefined, error);
+      return result;
     }
-    return factory.fromResponse(response, ctx);
+    const result = factory.fromResponse(response, ctx);
+    ctx.setNative(result, response, undefined);
+    return result;
   };
 }

@@ -1,4 +1,4 @@
-import { create as createAxios, mergeConfig, type AxiosInstance, type AxiosRequestConfig } from "axios";
+import { create as createAxios, isAxiosError, mergeConfig, type AxiosInstance, type AxiosRequestConfig } from "axios";
 import { AxpContext, cancelIfAborted, NO_LOG } from "./context";
 import { BODY_METHODS, NO_BODY_METHODS, normalizeMethod } from "./methods";
 import { composePipeline, sortPipeline, type IAxpRegistration, type IAxpLayer } from "./pipeline";
@@ -14,23 +14,43 @@ export interface IAxpSettleOptions<R extends IAxpResponse<unknown, string | numb
 }
 
 /** 将链内响应落定为数据、响应或异常；internal 始终抛原始异常。
+ * raw 开启时返回带不可枚举 raw/error/request 的响应副本；落定后清空并封闭原生槽。
  * @param response 链最终产出。
  * @param ctx 逻辑请求上下文。
  * @param options 客户端默认选项。
  * @param callsite debug 模式下的请求调用点，失败时才读取其 stack。
- * @returns 业务数据或响应，失败时抛出约定对象。
+ * @returns 业务数据或响应；raw 开启时为附带原生数据的副本，失败时抛出约定对象。
  * @example `settle(response, ctx, {})`
  */
 export function settle<R extends IAxpResponse<unknown, string | number>>(response: R, ctx: AxpContext<R>, options: IAxpSettleOptions<R>, callsite?: Error): unknown {
-  if (failureOf(response)?.type === AXP_FAILURES.INTERNAL) throw response.error;
-  const throws = ctx.request.throws ?? true;
-  if (!response.ok && throws) {
-    const stack = callsite?.stack;
-    const failure = stack === undefined ? response : ctx.fail({ from: response, stack });
-    if (failureOf(failure)?.type === AXP_FAILURES.INTERNAL) throw failure.error;
-    throw options.reject ? options.reject(failure) : failure;
+  try {
+    if (failureOf(response)?.type === AXP_FAILURES.INTERNAL) throw response.error;
+    const throws = ctx.request.throws ?? true;
+    const raw = ctx.originRequest.raw;
+    const stack = !response.ok && throws ? callsite?.stack : undefined;
+    let result = response;
+    if (raw) {
+      const native = ctx.nativeFor(response);
+      result = ctx.fail({ from: response, ...(stack === undefined ? {} : { stack }) });
+      if (failureOf(result)?.type !== AXP_FAILURES.INTERNAL) {
+        try {
+          const config = isAxiosError(native?.error) ? native.error.config : undefined;
+          Object.defineProperties(result, {
+            raw: { value: native?.response, enumerable: false, configurable: true },
+            error: { value: native?.error, enumerable: false, configurable: true },
+            request: { value: native?.response?.config ?? config ?? ctx.request, enumerable: false, configurable: true },
+          });
+        } catch (error) {
+          result = ctx.fail({ failure: AXP_FAILURES.INTERNAL, error });
+        }
+      }
+    } else if (stack !== undefined) result = ctx.fail({ from: response, stack });
+    if (failureOf(result)?.type === AXP_FAILURES.INTERNAL) throw result.error;
+    if (!result.ok && throws) throw options.reject ? options.reject(result) : result;
+    return raw || ctx.request.wrap || !throws ? result : result.data;
+  } finally {
+    ctx.clearNative();
   }
-  return ctx.request.wrap || !throws ? response : response.data;
 }
 
 /** 创建自有洋葱管线客户端，不修改 axios 拦截器。
