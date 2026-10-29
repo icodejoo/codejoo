@@ -56,6 +56,7 @@ import type {
   TShouldRetry,
   SharePolicy,
   WithData,
+  WithNative,
 } from "../../src/index";
 import axpAuth, { AuthFailureAction, defaultAuthFailure } from "../../src/plugins/auth";
 import axpCache, { clearCache, removeCache } from "../../src/plugins/cache";
@@ -67,7 +68,7 @@ import axpNotify from "../../src/plugins/notify";
 import axpRepath from "../../src/plugins/repath";
 import axpRetry from "../../src/plugins/retry";
 import axpShare from "../../src/plugins/share";
-import { AXP_FAILURE, AXP_FAILURES, AXP_RESPONSE, AxpResponse, axpResponse, failureOf, isAxpCancel, isAxpResponse } from "../../src/response";
+import { AXP_FAILURE, AXP_FAILURES, AXP_RESPONSE, AxpResponse, axpResponse, failureOf, isAxpCancel, isAxpResponse, nativeOf } from "../../src/response";
 import { stateKey } from "../../src/context";
 import TokenManager from "../../src/objects/TokenManager";
 
@@ -96,6 +97,7 @@ const PUBLIC_VALUES = [
   "failureOf",
   "isAxpCancel",
   "isAxpResponse",
+  "nativeOf",
   "removeCache",
   "stateKey",
 ];
@@ -107,6 +109,7 @@ const IDENTITIES: Array<[keyof typeof entry, unknown]> = [
   ["AxpResponse", AxpResponse],
   ["axpResponse", axpResponse],
   ["isAxpResponse", isAxpResponse],
+  ["nativeOf", nativeOf],
   ["AXP_FAILURE", AXP_FAILURE],
   ["AXP_FAILURES", AXP_FAILURES],
   ["failureOf", failureOf],
@@ -286,6 +289,7 @@ it("[index.type.exports] 入口的类型导出齐全，AuthFailureAction 同名�
     TShouldRetry,
     SharePolicy,
     WithData<IAxpResponse, string>,
+    WithNative<IAxpResponse>,
   ];
   expectTypeOf<Surface>().not.toBeNever();
   expectTypeOf<entry.AuthFailureAction>().toEqualTypeOf<"refresh" | "replay" | "deny" | "expired" | "others">();

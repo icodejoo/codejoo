@@ -4,8 +4,8 @@ import axpCache from "../../src/plugins/cache";
 import axpMock from "../../src/plugins/mock";
 import axpRetry from "../../src/plugins/retry";
 import type { AxpPlugin } from "../../src/types";
-import { authClient, failure, guarded, run } from "../helpers/b3";
-import { envelope, sourceClient } from "../helpers/source";
+import { authClient, failure, guarded, run, TOKEN_NEW, REFRESH_TOKEN } from "../helpers/b3";
+import { envelope, settleAll, sourceClient } from "../helpers/source";
 
 /** 全部等待经假时钟推进。 */
 beforeEach(() => {
@@ -173,4 +173,61 @@ it("[auth.cb.onRefresh][auth.cb.onAccessExpired][auth.cb.onAccessDenied] 三个�
   h.net.on("get", OTHER_URL, () => failure(403));
   await run(h, { url: OTHER_URL, throws: false });
   expect(denied).toEqual([OTHER_URL]);
+});
+
+it("[auth.cb.onRefresh] 并发 401 单飞刷新：onRefresh 只收到首个触发请求的 ctx，onAccessDenied 各收到各自的 ctx", async () => {
+  const refreshed: string[] = [];
+  const denied: string[] = [];
+  const h = authClient({
+    onRefresh: /** 延后一拍完成刷新，让第二个请求加入同一轮。 */ async (_r, tm, ctx) => {
+      refreshed.push(ctx.request.url ?? "");
+      await new Promise((resolve) => setTimeout(resolve, 10));
+      tm.set(TOKEN_NEW, REFRESH_TOKEN);
+    },
+    onAccessDenied: /** 记录拒绝通知的 ctx。 */ (_r, _tm, ctx) => {
+      denied.push(ctx.request.url ?? "");
+    },
+  });
+  h.net.on(
+    "get",
+    URL,
+    guarded(() => TOKEN_NEW),
+  );
+  h.net.on(
+    "get",
+    OTHER_URL,
+    guarded(() => TOKEN_NEW),
+  );
+  const [a, b] = await settleAll(h.send({ url: URL }), h.send({ url: OTHER_URL }));
+  expect(a.ok && b.ok).toBe(true);
+  expect(refreshed).toEqual([URL]);
+  h.net.on("get", URL, () => failure(403));
+  h.net.on("get", OTHER_URL, () => failure(403));
+  await settleAll(h.send({ url: URL, throws: false }), h.send({ url: OTHER_URL, throws: false }));
+  expect(denied.toSorted()).toEqual([URL, OTHER_URL]);
+});
+
+it("[retry.opt.delay][retry.opt.respectRetryAfter] 并发请求各自重试：回调收到各自的 ctx", async () => {
+  const delays = new Map<number, string>();
+  const afters = new Map<number, string>();
+  const h = sourceClient([
+    axpRetry({
+      max: 1,
+      respectRetryAfter: /** 记录各请求的 ctx。 */ (_r, ctx) => {
+        afters.set(ctx.id, ctx.request.url ?? "");
+        return false;
+      },
+      delay: /** 记录各请求的 ctx。 */ (_attempt, _max, _r, ctx) => {
+        delays.set(ctx.id, ctx.request.url ?? "");
+        return 0;
+      },
+    }),
+  ]);
+  for (const url of [URL, OTHER_URL]) h.net.on("get", url, (_c, hit) => (hit === 1 ? { status: 503, headers: { [RETRY_AFTER]: "1" } } : envelope(url)));
+  const [a, b] = await settleAll(h.send({ url: URL }), h.send({ url: OTHER_URL }));
+  expect(a.data).toBe(URL);
+  expect(b.data).toBe(OTHER_URL);
+  expect(delays.size).toBe(2);
+  expect([...delays.values()].toSorted()).toEqual([URL, OTHER_URL]);
+  expect(afters).toEqual(delays);
 });

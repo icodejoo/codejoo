@@ -210,6 +210,18 @@ export function withRetryAfter<R extends IAxpResponse<unknown, string | number>>
 export function failureOf(response: unknown): IAxpFailure | undefined {
   return isObject(response) ? (response as Record<symbol, IAxpFailure | undefined>)[AXP_FAILURE] : undefined;
 }
+/** 读取 raw 副本上的原生数据（catch 到的 R 同样适用）。
+ * @param value 任意被抛出或返回的值。
+ * @returns raw/error/request 三项；不是归一化响应或没有 raw 副本标记时为 undefined。
+ * 已知限制：以自有不可枚举属性 `raw` 作为副本标记；自定义工厂若主动把 `raw` 定义成不可枚举自有属性，也会被识别成副本。
+ * @example `try { await api.get('/pet', { raw: true })() } catch (e) { nativeOf(e)?.raw?.status }`
+ */
+export function nativeOf(value: unknown): { /** 原生响应。 */ raw?: AxiosResponse; /** 原始异常。 */ error?: unknown; /** 完整请求配置。 */ request?: Readonly<AxpRequestConfig> } | undefined {
+  if (!isAxpResponse(value)) return undefined;
+  // 轻量 R 的 request 是可枚举属性；只有 raw 副本把三项以不可枚举自有属性挂上。
+  if (Object.getOwnPropertyDescriptor(value, "raw")?.enumerable !== false) return undefined;
+  return { raw: Reflect.get(value, "raw"), error: Reflect.get(value, "error"), request: Reflect.get(value, "request") };
+}
 /** 判断是否为内核取消响应。
  * @param error 任意响应或异常。
  * @returns 是否带 cancel 标记。

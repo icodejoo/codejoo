@@ -1,5 +1,5 @@
 import { readFileSync } from "node:fs";
-import { create as createAxios } from "axios";
+import { create as createAxios, type AxiosResponse } from "axios";
 import type { IAxpCacheStore, ICacheApi, MaybePromise } from "../../src/index";
 import { asyncCacheStore } from "../helpers/source";
 import { expect, expectTypeOf, it } from "vitest";
@@ -12,7 +12,7 @@ import axpMock from "../../src/plugins/mock";
 import axpRetry, { type IRetryOptions } from "../../src/plugins/retry";
 import type { AxpOption } from "../../src/options";
 import { AxpResponse, axpResponse, isAxpResponse, type IAxpResponse, type IAxpResponseFactory } from "../../src/response";
-import type { AxpPlugin, AxpRequestOptions, WithData } from "../../src/types";
+import type { AxpClient, AxpPlugin, AxpRequestConfig, AxpRequestOptions, WithData, WithNative } from "../../src/types";
 import { customResponse, TestResponse } from "../helpers/client";
 
 it("[core.method.extend][cache.type.options] 指定 axios、异步仓与管理 API 的类型契约", () => {
@@ -335,6 +335,103 @@ it("[core.fn.axpResponse][core.prop.ok][core.prop.status] 子类覆盖 ok getter
       }
     }
     void BadResponse;
+  }
+  expect(contracts).toBeTypeOf("function");
+});
+
+/** 带同名业务字段 error 的自定义响应。 */
+interface IBizResponse extends IAxpResponse {
+  /** 业务错误文案，与原生 error 同名。 */
+  readonly error: string;
+}
+/** 带原生数据的返回类型简写。 */
+type Native<D> = WithNative<WithData<TestResponse, D>>;
+
+it("[core.req.raw] raw:true 返回带原生数据的响应副本，未写时没有 raw", /** 仅编译类型调用。 */ () => {
+  /** 仅编译类型调用。 */
+  async function contracts() {
+    const api = createAxp<unknown, TestResponse>({ response: customResponse() });
+    const r = api.get("/x")<number>(undefined, { raw: true });
+    expectTypeOf(r).toEqualTypeOf<Promise<Native<number>>>();
+    expectTypeOf<Awaited<typeof r>["raw"]>().toEqualTypeOf<AxiosResponse | undefined>();
+    expectTypeOf<Awaited<typeof r>["error"]>().toEqualTypeOf<unknown>();
+    expectTypeOf<Awaited<typeof r>["request"]>().toEqualTypeOf<Readonly<AxpRequestConfig>>();
+    expectTypeOf<Awaited<typeof r>["traceId"]>().toEqualTypeOf<string>();
+    // 不写 raw 时响应类型上没有 raw。
+    void api
+      .get("/x")<number>(undefined, { wrap: true })
+      .then((w) => {
+        // @ts-expect-error 未开启 raw 不应有 raw 字段。
+        void w.raw;
+      });
+    // raw 与 wrap:false 同写，raw 优先。
+    expectTypeOf(api.get("/x")<number>(undefined, { raw: true, wrap: false })).toEqualTypeOf<Promise<Native<number>>>();
+    expectTypeOf(api.get("/x")<number>(undefined, { raw: true, wrap: false, throws: true })).toEqualTypeOf<Promise<Native<number>>>();
+    expectTypeOf(api.get("/x", { raw: true, wrap: false })<number>()).toEqualTypeOf<Promise<Native<number>>>();
+    // throws:false 与 raw 组合。
+    expectTypeOf(api.get("/x")<number>(undefined, { raw: true, throws: false })).toEqualTypeOf<Promise<Native<number>>>();
+    expectTypeOf(api.get("/x", { throws: false })<number>(undefined, { raw: true })).toEqualTypeOf<Promise<Native<number>>>();
+    // 方法级 raw 与调用级覆盖。
+    expectTypeOf(api.get("/x", { raw: true })<number>()).toEqualTypeOf<Promise<Native<number>>>();
+    expectTypeOf(api.get("/x", { raw: true })<number>(undefined, { wrap: false })).toEqualTypeOf<Promise<Native<number>>>();
+    expectTypeOf(api.get("/x", { raw: true })<number>(undefined, { throws: false })).toEqualTypeOf<Promise<Native<number>>>();
+    expectTypeOf(api.get("/x", { raw: true })<number>(undefined, { wrap: true })).toEqualTypeOf<Promise<Native<number>>>();
+    expectTypeOf(api.get("/x", { raw: true })<number>(undefined, { raw: false })).toEqualTypeOf<Promise<number>>();
+    expectTypeOf(api.get("/x", { raw: true })<number>(undefined, { raw: false, wrap: true })).toEqualTypeOf<Promise<WithData<TestResponse, number>>>();
+    expectTypeOf(api.get("/x", { raw: true })<number>(undefined, { raw: false, throws: false })).toEqualTypeOf<Promise<WithData<TestResponse, number>>>();
+    expectTypeOf(api.get("/x", { raw: true })<number>(undefined, { raw: false, wrap: false, throws: true })).toEqualTypeOf<Promise<number>>();
+    expectTypeOf(api.get("/x", { raw: true })<number>(undefined, { raw: undefined })).toEqualTypeOf<Promise<Native<number>>>();
+    expectTypeOf(api.get("/x", { raw: false })<number>(undefined, { raw: true })).toEqualTypeOf<Promise<Native<number>>>();
+    expectTypeOf(api.get("/x", { wrap: true })<number>(undefined, { raw: false })).toEqualTypeOf<Promise<WithData<TestResponse, number>>>();
+    expectTypeOf(api.get("/x", { wrap: true })<number>(undefined, { raw: false, wrap: false })).toEqualTypeOf<Promise<number>>();
+    // 宽 boolean 返回联合，不断言成数据。
+    const flag = Math.random() > 0.5;
+    // 宽 raw 与同次调用的 wrap/throws 一起计算。
+    expectTypeOf(api.get("/x")<number>(undefined, { raw: flag, wrap: true })).toEqualTypeOf<Promise<Native<number> | WithData<TestResponse, number>>>();
+    expectTypeOf(api.get("/x")<number>(undefined, { raw: flag, throws: false })).toEqualTypeOf<Promise<Native<number> | WithData<TestResponse, number>>>();
+    expectTypeOf(api.get("/x", { throws: false })<number>(undefined, { raw: flag, throws: true })).toEqualTypeOf<Promise<Native<number> | number>>();
+    expectTypeOf(api.get("/x")<number>(undefined, { raw: flag, wrap: false, throws: true })).toEqualTypeOf<Promise<Native<number> | number>>();
+    // 方法级宽 raw 不再推成纯数据。
+    expectTypeOf(api.get("/x", { raw: flag })<number>()).toEqualTypeOf<Promise<Native<number> | number>>();
+    expectTypeOf(api.get("/x", { raw: flag, wrap: true })<number>()).toEqualTypeOf<Promise<Native<number> | WithData<TestResponse, number>>>();
+    expectTypeOf(api.get("/x", { raw: flag })<number>(undefined, { raw: false })).toEqualTypeOf<Promise<number>>();
+    expectTypeOf(api.get("/x", { raw: flag })<number>(undefined, { raw: true })).toEqualTypeOf<Promise<Native<number>>>();
+    // 宽 wrap/throws 返回联合。
+    expectTypeOf(api.get("/x")<number>(undefined, { wrap: flag })).toEqualTypeOf<Promise<WithData<TestResponse, number> | number>>();
+    expectTypeOf(api.get("/x")<number>(undefined, { throws: flag })).toEqualTypeOf<Promise<WithData<TestResponse, number> | number>>();
+    expectTypeOf(api.get("/x", { wrap: true })<number>(undefined, { throws: flag })).toEqualTypeOf<Promise<WithData<TestResponse, number>>>();
+    expectTypeOf(api.get("/x")<number>(undefined, { wrap: flag, throws: flag })).toEqualTypeOf<Promise<WithData<TestResponse, number> | number>>();
+    expectTypeOf(api.request<number>({ wrap: flag })).toEqualTypeOf<Promise<WithData<TestResponse, number> | number>>();
+    expectTypeOf(api.request<number>({ throws: flag })).toEqualTypeOf<Promise<WithData<TestResponse, number> | number>>();
+    expectTypeOf(api.get("/x")<number>(undefined, { raw: flag })).toEqualTypeOf<Promise<Native<number> | number>>();
+    const config: AxpRequestConfig = {};
+    expectTypeOf(api.get("/x")<number>(undefined, config)).toEqualTypeOf<Promise<Native<number> | number>>();
+    expectTypeOf(api.get("/x", { wrap: true })<number>(undefined, config)).toEqualTypeOf<Promise<Native<number> | WithData<TestResponse, number>>>();
+    // request() 的 raw 重载。
+    expectTypeOf(api.request<number>({ raw: true })).toEqualTypeOf<Promise<Native<number>>>();
+    expectTypeOf(api.request<number>({ raw: true, wrap: false })).toEqualTypeOf<Promise<Native<number>>>();
+    expectTypeOf(api.request<number>({ raw: true, throws: false })).toEqualTypeOf<Promise<Native<number>>>();
+    expectTypeOf(api.request<number>({ raw: false })).toEqualTypeOf<Promise<number>>();
+    expectTypeOf(api.request<number>({ raw: false, wrap: true })).toEqualTypeOf<Promise<WithData<TestResponse, number>>>();
+    expectTypeOf(api.request<number>({ raw: flag })).toEqualTypeOf<Promise<Native<number> | number>>();
+    expectTypeOf(api.request<number>({ raw: flag, wrap: true })).toEqualTypeOf<Promise<WithData<TestResponse, number> | Native<number>>>();
+    expectTypeOf(api.request<number>(config)).toEqualTypeOf<Promise<Native<number> | number>>();
+  }
+  expect(contracts).toBeTypeOf("function");
+});
+
+it("[core.req.raw] WithNative 替换同名业务字段而不是交叉成 never", /** 仅编译类型调用。 */ () => {
+  /** 仅编译类型调用。 */
+  async function contracts(biz: AxpClient<unknown, IBizResponse>) {
+    expectTypeOf<IBizResponse["error"]>().toEqualTypeOf<string>();
+    expectTypeOf<WithNative<IBizResponse>["error"]>().toEqualTypeOf<unknown>();
+    expectTypeOf<WithNative<IBizResponse>["raw"]>().toEqualTypeOf<AxiosResponse | undefined>();
+    expectTypeOf<WithNative<IBizResponse>["data"]>().toEqualTypeOf<unknown>();
+    const native = await biz.request<number>({ raw: true });
+    expectTypeOf(native.error).toEqualTypeOf<unknown>();
+    expectTypeOf(native.data).toEqualTypeOf<number>();
+    const wrapped = await biz.request<number>({ wrap: true });
+    expectTypeOf(wrapped.error).toEqualTypeOf<string>();
   }
   expect(contracts).toBeTypeOf("function");
 });

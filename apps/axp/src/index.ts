@@ -3,7 +3,7 @@ export type * from "./types";
 /* ── 内核：客户端、响应、上下文、key ───────────────────────────────────────── */
 export { createAxp } from "./client";
 
-export { AXP_FAILURE, AXP_FAILURES, AXP_RESPONSE, AxpResponse, axpResponse, failureOf, isAxpCancel, isAxpResponse } from "./response";
+export { AXP_FAILURE, AXP_FAILURES, AXP_RESPONSE, AxpResponse, axpResponse, failureOf, isAxpCancel, isAxpResponse, nativeOf } from "./response";
 export type { AxpFailureType, IAxpFailure, AxpResponseInit, IAxpResponse, IAxpResponseFactory, IAxpResponseOptions } from "./response";
 
 export { stateKey } from "./context";
