@@ -142,8 +142,9 @@ export class RunEnvironment implements StepEnv {
     this.#d.client.cancelAll();
   }
 
-  clearCache(): void {
-    this.#d.client.clearCache();
+  /** 等待同步或异步缓存仓清理完成，再执行后续场景步骤。 */
+  async clearCache(): Promise<void> {
+    await this.#d.client.clearCache();
   }
 
   async network(value: NetworkValue): Promise<void> {

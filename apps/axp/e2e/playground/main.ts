@@ -6,11 +6,12 @@
  *   createAxp（七个动词、默认解包 / wrap / throws:false、use / eject / inspect / extend / plugin / cancelAll / pending / isResponse）
  *   key 内核服务（自动 key、显式字符串 key、scope）· axpCache / removeCache / clearCache · axpShare · axpRetry
  *   axpLoading · axpNotify · axpMock · axpEnvs · axpFilter · axpRepath · axpAuth
- *   axpResponse / AxpResponse / isAxpResponse / AXP_KINDS · stateKey · TokenManager
+ *   axpResponse / AxpResponse / isAxpResponse / failureOf / AXP_FAILURES · stateKey · TokenManager
  */
 import { create as createAxios } from "axios";
 import {
-  AXP_KINDS,
+  AXP_FAILURES,
+  failureOf,
   AxpResponse,
   TokenManager,
   axpAuth,
@@ -65,6 +66,8 @@ const ALWAYS_FAIL = 9;
 const RETRY_MAX = 3;
 /** 自定义响应认定为成功的业务码。 */
 const CUSTOM_OK_CODE = "7777";
+/** 没有失败标记时展示的成功类别。 */
+const RESULT_OK = "ok";
 
 /** 解析后的动作结果，字段由各动作自行约定。 */
 type Row = Record<string, any>;
@@ -88,7 +91,7 @@ const readHits = async (id: string): Promise<number> => (await raw.get("/api/hit
 /** 取客户端当前挂载链的名字，顺序即执行顺序（外 → 内）。 */
 const chainNames = (api: AxpClient): string[] => api.inspect().map((item) => item.name);
 /** 捕获一次可预期失败：不抛出则返回 undefined，抛出非响应的程序异常则原样再抛。 */
-async function failureOf(api: AxpClient, call: () => Promise<unknown>): Promise<AxpResponse | undefined> {
+async function captureFailure(api: AxpClient, call: () => Promise<unknown>): Promise<AxpResponse | undefined> {
   try {
     await call();
     return undefined;
@@ -241,16 +244,23 @@ export const features: Feature[] = [
       act("core-wrap", "wrap → IAxpResponse", async () => {
         const api = mkApi();
         const r = await api.get(ECHO)(undefined, { wrap: true });
-        return { ok: r.ok, kind: r.kind, status: r.status, isResponse: api.isResponse(r), isBrand: isAxpResponse(r), data: r.data };
+        return { ok: r.ok, failure: failureOf(r)?.type ?? (r.ok ? RESULT_OK : r.status), status: r.status, isResponse: api.isResponse(r), isBrand: isAxpResponse(r), data: r.data };
       }),
       act("core-throws-false", "throws:false → 失败也 resolve", async () => {
         const r = await mkApi().get(ECHO)({ status: BAD_REQUEST }, { throws: false });
-        return { resolved: true, ok: r.ok, kind: r.kind, status: r.status, httpStatus: r.httpStatus };
+        return { resolved: true, ok: r.ok, failure: failureOf(r)?.type ?? (r.ok ? RESULT_OK : r.status), status: r.status };
       }),
       act("core-throw", "默认 → 抛出 IAxpResponse", async () => {
         const api = mkApi();
-        const e = await failureOf(api, () => api.get(ECHO)({ status: BAD_REQUEST }));
-        return { thrown: e !== undefined, isResponse: e !== undefined, isError: (e as unknown) instanceof Error, kind: e?.kind, status: e?.status, hasStack: e?.stack !== undefined };
+        const e = await captureFailure(api, () => api.get(ECHO)({ status: BAD_REQUEST }));
+        return {
+          thrown: e !== undefined,
+          isResponse: e !== undefined,
+          isError: (e as unknown) instanceof Error,
+          failure: e ? (failureOf(e)?.type ?? (e.ok ? RESULT_OK : e.status)) : undefined,
+          status: e?.status,
+          hasStack: e?.stack !== undefined,
+        };
       }),
     ],
   },
@@ -316,7 +326,7 @@ export const features: Feature[] = [
       }),
       act("lifecycle-dispose", "dispose 中止在途并拒绝新请求", async () => {
         const api = mkApi();
-        const slow = failureOf(api, () => api.get(HIT)({ id: "disposeDemo", delay: 1500 }));
+        const slow = captureFailure(api, () => api.get(HIT)({ id: "disposeDemo", delay: 1500 }));
         await sleep(50);
         const pendingBefore = api.pending();
         api.dispose();
@@ -328,7 +338,7 @@ export const features: Feature[] = [
         } catch {
           afterDispose = "rejected";
         }
-        return { pendingBefore, kind: e?.kind, pendingAfter: api.pending(), afterDispose };
+        return { pendingBefore, failure: e ? (failureOf(e)?.type ?? (e.ok ? RESULT_OK : e.status)) : undefined, pendingAfter: api.pending(), afterDispose };
       }),
     ],
   },
@@ -464,33 +474,33 @@ export const features: Feature[] = [
         await resetHits();
         const id = "retryOff";
         const api = mkApi({ plugins: [axpRetry({ max: 5, delay: 0 })] });
-        const e = await failureOf(api, () => api.get(HIT)({ id, fail: ALWAYS_FAIL }, { retry: 0 }));
-        return { rejected: e !== undefined, kind: e?.kind, status: e?.status, serverHits: await readHits(id) };
+        const e = await captureFailure(api, () => api.get(HIT)({ id, fail: ALWAYS_FAIL }, { retry: 0 }));
+        return { rejected: e !== undefined, failure: e ? (failureOf(e)?.type ?? (e.ok ? RESULT_OK : e.status)) : undefined, status: e?.status, serverHits: await readHits(id) };
       }),
     ],
   },
   {
     id: "cancel",
     title: "cancelAll · signal",
-    desc: "取消是内核能力：api.cancelAll 一次性中止在飞请求，用户 signal 同样联动；取消落定为 kind:cancel 的响应，不是异常",
+    desc: "取消是内核能力：api.cancelAll 一次性中止在飞请求，用户 signal 同样联动；取消落定为带 cancel 失败标记的响应，不是异常",
     actions: [
       act("cancel-run", "慢请求 + cancelAll", async () => {
         const api = mkApi();
-        const p = failureOf(api, () => api.get(HIT)({ id: "cancelDemo", delay: 1500 }));
+        const p = captureFailure(api, () => api.get(HIT)({ id: "cancelDemo", delay: 1500 }));
         await sleep(100);
         const pendingBefore = api.pending();
         const cancelled = api.cancelAll("user navigated away");
         const e = await p;
-        return { canceled: e?.kind === AXP_KINDS.CANCEL, kind: e?.kind, pendingBefore, cancelled, again: api.cancelAll(), pendingAfter: api.pending() };
+        return { canceled: api.isCancel(e), failure: e ? (failureOf(e)?.type ?? (e.ok ? RESULT_OK : e.status)) : undefined, pendingBefore, cancelled, again: api.cancelAll(), pendingAfter: api.pending() };
       }),
       act("cancel-signal", "用户 signal 取消", async () => {
         const api = mkApi();
         const controller = new AbortController();
-        const p = failureOf(api, () => api.get(HIT)({ id: "cancelSignal", delay: 1500 }, { signal: controller.signal }));
+        const p = captureFailure(api, () => api.get(HIT)({ id: "cancelSignal", delay: 1500 }, { signal: controller.signal }));
         await sleep(100);
         controller.abort();
         const e = await p;
-        return { canceled: e?.kind === AXP_KINDS.CANCEL, pendingAfter: api.pending() };
+        return { canceled: api.isCancel(e), pendingAfter: api.pending() };
       }),
     ],
   },
@@ -591,33 +601,41 @@ export const features: Feature[] = [
   {
     id: "response",
     title: "归一化响应 · axpResponse",
-    desc: "业务码失败是 kind:biz 的 IAxpResponse（不是 Error）；reject 可适配成 Error；响应类可自定义成功判定",
+    desc: "业务码失败保留 HTTP status 与业务 code，是 IAxpResponse（不是 Error）；reject 可适配成 Error；响应类可自定义成功判定",
     actions: [
       act("response-ok", "code=0000 → 成功", () => mkApi().get(ECHO)({ ok: 1 })),
       act("response-biz", "code=5001 → 抛出 IAxpResponse", async () => {
         const api = mkApi();
-        const e = await failureOf(api, () => api.get(ECHO)({ code: "5001" }));
-        return { rejected: e !== undefined, isResponse: e !== undefined, isError: (e as unknown) instanceof Error, kind: e?.kind, code: e?.code, ok: e?.ok };
+        const e = await captureFailure(api, () => api.get(ECHO)({ code: "5001" }));
+        return {
+          rejected: e !== undefined,
+          isResponse: e !== undefined,
+          isError: (e as unknown) instanceof Error,
+          failure: e ? (failureOf(e)?.type ?? (e.ok ? RESULT_OK : e.status)) : undefined,
+          code: e?.code,
+          ok: e?.ok,
+          failureTypes: Object.values(AXP_FAILURES),
+        };
       }),
       act("response-reject", "reject 适配成 Error", async () => {
-        const api = mkApi({ reject: (r) => Object.assign(new Error(r.message), { response: r }) });
+        const api = mkApi({ reject: (r) => Object.assign(new Error(r.message ?? undefined), { response: r }) });
         try {
           await api.get(ECHO)({ code: "5001" });
           return { rejected: false };
         } catch (e: any) {
-          return { rejected: true, isError: e instanceof Error, isResponse: api.isResponse(e.response), kind: e.response?.kind };
+          return { rejected: true, isError: e instanceof Error, isResponse: api.isResponse(e.response), failure: failureOf(e.response)?.type ?? e.response?.status };
         }
       }),
       act("response-empty", "204 空 body 不崩", async () => {
         const r = await mkApi().get(ECHO)({ status: 204 }, { throws: false });
-        return { ok: r.ok, kind: r.kind, httpStatus: r.httpStatus };
+        return { ok: r.ok, failure: failureOf(r)?.type ?? (r.ok ? RESULT_OK : r.status), status: r.status };
       }),
       act("response-custom", "自定义响应类的成功判定", async () => {
         /** 业务码恰为 7777 才算成功的响应类。 */
-        class MyResponse<D = unknown> extends AxpResponse<D> {
+        class MyResponse<D = unknown> extends AxpResponse<D, string | number> {
           /** 成功码是 7777，而不是默认的 0 / "0000"。 */
           get ok() {
-            return this.httpStatus < 300 && this.code === CUSTOM_OK_CODE;
+            return this.status >= 200 && this.status < 300 && this.code === CUSTOM_OK_CODE;
           }
         }
         const custom = createAxp<unknown, MyResponse>({
@@ -626,7 +644,13 @@ export const features: Feature[] = [
         });
         const byDefault = await mkApi().get(ECHO)({ code: CUSTOM_OK_CODE }, { throws: false });
         const byCustom = await custom.get(ECHO)({ code: CUSTOM_OK_CODE }, { throws: false });
-        return { defaultKind: byDefault.kind, customOk: byCustom.ok, customKind: byCustom.kind, isBrand: isAxpResponse(byCustom), isSubclass: byCustom instanceof MyResponse };
+        return {
+          defaultFailure: failureOf(byDefault)?.type ?? (byDefault.ok ? RESULT_OK : byDefault.status),
+          customOk: byCustom.ok,
+          customFailure: failureOf(byCustom)?.type ?? (byCustom.ok ? RESULT_OK : byCustom.status),
+          isBrand: isAxpResponse(byCustom),
+          isSubclass: byCustom instanceof MyResponse,
+        };
       }),
     ],
   },
@@ -721,10 +745,10 @@ export const integrationFeatures: Feature[] = [
         await resetHits();
         const id = "intExhaust";
         const api = mkApi({ plugins: [axpRetry({ max: 2, delay: 0 })] });
-        const e = await failureOf(api, () => api.get(HIT)({ id, fail: ALWAYS_FAIL, delay: 5 }, { retry: 2 }));
+        const e = await captureFailure(api, () => api.get(HIT)({ id, fail: ALWAYS_FAIL, delay: 5 }, { retry: 2 }));
         if (!e) return { pass: false, note: "应当 reject 却成功了" };
         const serverHits = await readHits(id);
-        return { pass: serverHits === 3 && e.status === 500, serverHits, status: e.status, kind: e.kind };
+        return { pass: serverHits === 3 && e.status === 500, serverHits, status: e.status, failure: failureOf(e)?.type ?? (e.ok ? RESULT_OK : e.status) };
       }),
     ],
   },
@@ -830,7 +854,7 @@ export const integrationFeatures: Feature[] = [
         });
         const settled = await Promise.allSettled(Array.from({ length: 10 }, () => api.get(SECURE)({ delay: 10 })));
         const allRejected = settled.every((s) => s.status === "rejected");
-        const reasons = settled.map((s) => (s.status === "rejected" && isAxpResponse(s.reason) ? `${s.reason.kind}/${s.reason.reason}` : "?"));
+        const reasons = settled.map((s) => (s.status === "rejected" && isAxpResponse(s.reason) ? `${failureOf(s.reason)?.type}/${failureOf(s.reason)?.reason}` : "?"));
         return { pass: allRejected && refreshCalls === 1 && expired > 0 && tm.accessToken === undefined, allRejected, refreshCalls, expired, reasons: [...new Set(reasons)] };
       }),
     ],

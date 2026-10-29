@@ -51,7 +51,7 @@ const cases = [
     result: "core-result",
     exports: ["wrap", "isAxpResponse"],
     check: (j) => {
-      ok(j.ok === true && j.kind === "ok" && j.status === 200, "wrap ok");
+      ok(j.ok === true && j.failure === "ok" && j.status === 200, "wrap ok");
       ok(j.isResponse === true && j.isBrand === true, "brand recognized by api.isResponse / isAxpResponse");
       eq(j.data.method, "GET", "business data under r.data");
     },
@@ -62,7 +62,7 @@ const cases = [
     exports: ["throws:false"],
     check: (j) => {
       ok(j.resolved === true && j.ok === false, "failure resolves, ok=false");
-      eq([j.kind, j.status, j.httpStatus], ["http", 400, 400], "http failure fields");
+      eq([j.failure, j.status], [400, 400], "http failure fields");
     },
   },
   {
@@ -72,7 +72,7 @@ const cases = [
     check: (j) => {
       ok(j.thrown === true && j.isResponse === true, "failure is thrown as IAxpResponse");
       ok(j.isError === false && j.hasStack === false, "plain object, no stack by default");
-      eq([j.kind, j.status], ["http", 400], "http failure fields");
+      eq([j.failure, j.status], [400, 400], "http failure fields");
     },
   },
 
@@ -138,7 +138,7 @@ const cases = [
     exports: ["dispose", "pending"],
     check: (j) => {
       eq(j.pendingBefore, 1, "one in flight");
-      eq(j.kind, "cancel", "dispose aborts in-flight requests");
+      eq(j.failure, "cancel", "dispose aborts in-flight requests");
       eq(j.pendingAfter, 0, "nothing pending after dispose");
       eq(j.afterDispose, "rejected", "disposed client refuses new requests");
     },
@@ -240,7 +240,7 @@ const cases = [
     exports: ["retry:0"],
     check: (j) => {
       ok(j.rejected === true, "retry:0 rejects");
-      eq([j.kind, j.status], ["http", 500], "http failure");
+      eq([j.failure, j.status], [500, 500], "http failure");
       eq(j.serverHits, 1, "no retry");
     },
   },
@@ -334,11 +334,12 @@ const cases = [
   {
     action: "response-biz",
     result: "response-result",
-    exports: ["response (biz failure)", "AXP_KINDS"],
+    exports: ["response (business failure)", "failureOf", "AXP_FAILURES"],
     check: (j) => {
       ok(j.rejected === true && j.isResponse === true, "rejects with an IAxpResponse");
       ok(j.isError === false, "not an Error");
-      eq([j.kind, j.code, j.ok], ["biz", "5001", false], "carries the business code");
+      eq([j.failure, j.code, j.ok], [200, "5001", false], "carries the business code");
+      eq(j.failureTypes, ["network", "timeout", "cancel", "parse", "auth", "internal"], "six kernel failure types");
     },
   },
   {
@@ -347,7 +348,7 @@ const cases = [
     exports: ["reject"],
     check: (j) => {
       ok(j.rejected === true && j.isError === true, "reject adapts the failure into an Error");
-      ok(j.isResponse === true && j.kind === "biz", "the response rides on error.response");
+      ok(j.isResponse === true && j.failure === 200, "the response rides on error.response");
     },
   },
   {
@@ -355,8 +356,8 @@ const cases = [
     result: "response-result",
     exports: ["response (empty body)"],
     check: (j) => {
-      ok(j.ok === true && j.kind === "ok", "204 with no body is a success");
-      eq(j.httpStatus, 204, "http status");
+      ok(j.ok === true && j.failure === "ok", "204 with no body is a success");
+      eq(j.status, 204, "http status");
     },
   },
   {
@@ -364,8 +365,8 @@ const cases = [
     result: "response-result",
     exports: ["axpResponse", "AxpResponse"],
     check: (j) => {
-      eq(j.defaultKind, "biz", "default rule rejects code 7777");
-      ok(j.customOk === true && j.customKind === "ok", "subclass overrides ok, kind follows");
+      eq(j.defaultFailure, 200, "default rule rejects code 7777");
+      ok(j.customOk === true && j.customFailure === "ok", "subclass overrides ok, failure display follows");
       ok(j.isBrand === true && j.isSubclass === true, "still recognized, still the subclass");
     },
   },
@@ -468,7 +469,7 @@ const cases = [
       ok(j.pass === true, "all reject");
       ok(j.allRejected === true, "no replay");
       eq(j.expired, 1, "onAccessExpired fires once per round, not once per request");
-      eq(j.reasons, ["auth/expired"], "every caller gets kind:auth reason:expired");
+      eq(j.reasons, ["auth/expired"], "every caller gets failure auth/expired");
     },
   },
   {

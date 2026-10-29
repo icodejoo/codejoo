@@ -1,5 +1,5 @@
-import type { AxpKind, IAxpResponse } from "../../src/response.ts";
-import { AXP_RESPONSE, AXP_KINDS } from "../../src/brand.ts";
+import type { AxpFailureType, IAxpFailure, IAxpResponse } from "../../src/response.ts";
+import { AXP_RESPONSE, AXP_FAILURE, AXP_FAILURES } from "../../src/brand.ts";
 import type { Style } from "./constants.ts";
 
 /** 鉴权类别的取值：与 auth 失败响应的 `reason` 一一对应 */
@@ -18,13 +18,17 @@ const UNKNOWN_MESSAGE_MAX = 80;
 /** 抛出的东西没有名称时，`unknown:` 类别里用的名称 */
 const UNKNOWN_DEFAULT_NAME = "Error";
 
-/** kind 到错误类别的直接对应（不需要再看别的字段的几类） */
-const KIND_CLASS: Partial<Record<AxpKind, string>> = {
-  [AXP_KINDS.CANCEL]: CLASS.CANCELED,
-  [AXP_KINDS.TIMEOUT]: CLASS.TIMEOUT,
-  [AXP_KINDS.NETWORK]: CLASS.NETWORK,
-  [AXP_KINDS.PARSE]: CLASS.PARSE,
+/** 失败标记到错误类别的直接对应。 */
+const FAILURE_CLASS: Partial<Record<AxpFailureType, string>> = {
+  [AXP_FAILURES.CANCEL]: CLASS.CANCELED,
+  [AXP_FAILURES.TIMEOUT]: CLASS.TIMEOUT,
+  [AXP_FAILURES.NETWORK]: CLASS.NETWORK,
+  [AXP_FAILURES.PARSE]: CLASS.PARSE,
 };
+/** HTTP 成功区间，右端不含。 */
+const HTTP_SUCCESS_START = 200;
+/** HTTP 成功区间的终点。 */
+const HTTP_SUCCESS_END = 300;
 
 /** auth 响应里 `reason` 允许直接当类别的取值 */
 const AUTH_REASON_CLASSES: ReadonlySet<string> = new Set(AUTH_CLASSES);
@@ -51,32 +55,29 @@ function unknownClass(name: string, message: string): string {
  * @returns 是否为 IAxpResponse
  * @example hasAxpBrand(await api.get('/x')().catch((e) => e)) // true
  */
-export function hasAxpBrand(e: unknown): e is IAxpResponse {
+export function hasAxpBrand(e: unknown): e is IAxpResponse<unknown, string | number> {
   return typeof e === "object" && e !== null && Reflect.get(e, AXP_RESPONSE) === true;
 }
 
 /**
  * 把抛出的 IAxpResponse 直接按字段归到错误类别，不看 message、不猜形状。
  * `cancel`→canceled，`timeout`→timeout，`network`→network，`parse`→parse；
- * `auth` 按 `reason`（expired / denied / unauthenticated）；`http`→`http:<httpStatus>`；`biz`→`business:<code>`。
+ * `auth` 按隐藏标记的 reason；无标记的失败按 HTTP status 区分 HTTP 与业务码失败。
  * 其余（`ok`、`internal`、认不出的 auth reason）都不该被抛出，记为 `unknown:`，意味着 axp 有 bug。
  * @param r 被抛出的归一化响应
  * @returns 具体错误类别
  * @example classifyResponse(r) // 'business:1001'
  */
-export function classifyResponse(r: IAxpResponse): string {
-  const direct = KIND_CLASS[r.kind];
+export function classifyResponse(r: IAxpResponse<unknown, string | number>): string {
+  const failure = Reflect.get(r, AXP_FAILURE) as IAxpFailure | undefined;
+  const direct = failure && FAILURE_CLASS[failure.type];
   if (direct) return direct;
-  switch (r.kind) {
-    case AXP_KINDS.AUTH:
-      return r.reason && AUTH_REASON_CLASSES.has(r.reason) ? r.reason : unknownClass(r.kind, r.reason ?? r.message);
-    case AXP_KINDS.HTTP:
-      return httpClass(r.httpStatus);
-    case AXP_KINDS.BIZ:
-      return businessClass(r.code);
-    default:
-      return unknownClass(r.kind, r.message);
+  if (failure) {
+    if (failure.type === AXP_FAILURES.AUTH && failure.reason && AUTH_REASON_CLASSES.has(failure.reason)) return failure.reason;
+    return unknownClass(failure.type, failure.reason ?? r.message ?? "");
   }
+  if (r.ok || r.status === 0) return unknownClass(r.ok ? "ok" : "response", r.message ?? "");
+  return r.status >= HTTP_SUCCESS_START && r.status < HTTP_SUCCESS_END ? businessClass(r.code) : httpClass(r.status);
 }
 
 /**

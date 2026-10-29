@@ -1,6 +1,5 @@
 import { PRIVATE_PREFIX, SUPPORTED_CAPABILITIES } from "./constants.ts";
-import type { NetworkName, Style } from "./constants.ts";
-import type { Expectation, PluginConfigs, RequestOptions, RequestSpec, ResultExpect, Scenario } from "./types.ts";
+import type { PluginConfigs, RequestOptions, RequestSpec, Scenario } from "./types.ts";
 import { collectRequests, stepKind, STEP_KINDS, walkSteps } from "./walk.ts";
 
 /**
@@ -288,69 +287,4 @@ export function withNeutralDefaults(config: MappedRequestConfig, plugins: Plugin
   if (out.key === undefined) out.key = false;
   if (plugins?.filter !== undefined && out.filter === undefined) out.filter = false;
   return out;
-}
-
-/** 跳过理由：axp 把归一化做进内核、不能关闭，testkit D21 的"未装 normalize 时业务码透传"在 axp 上不适用 */
-export const SKIP_NORMALIZE_KERNEL = "axp 归一化为内核能力，不支持关闭；testkit D21 的“未装 normalize 时业务码透传”不适用";
-/** 跳过理由：场景在 blackhole 下期望 timeout，却没有配置任何超时，请求挂住直到运行被强制结束 */
-export const SKIP_BLACKHOLE_NO_TIMEOUT = "场景未配置超时，blackhole 下请求无法落定";
-
-/** 注入"HTTP 状态"的查询参数名（CONTRACT §3） */
-const QUERY_STATUS = "status";
-/** 注入"业务码"的查询参数名（CONTRACT §3） */
-const QUERY_CODE = "code";
-/** 没注入 status 时的 HTTP 状态，也是 2xx 区间的起点 */
-const HTTP_OK = 200;
-/** 2xx 区间的终点（不含） */
-const HTTP_SUCCESS_END = 300;
-/** 业务成功的码 */
-const CODE_OK = 0;
-/** 预期里"超时"类别的名字 */
-const EXPECT_TIMEOUT = "timeout";
-
-/**
- * 判断一个请求按服务端规则会不会返回"HTTP 2xx + 非 0 业务码"的纯业务失败（CONTRACT 附录 A.4、B.1）：
- * http 风格下 HTTP 状态取 `status`，business 风格下一律 200；业务码取 `code`，没写就取 `status`（`status` 为 200 时取 0）。
- * @param query 请求的查询参数
- * @param style 响应风格
- * @returns 是纯业务失败时为 true
- * @example injectsBusinessFailure({ status: 500 }, 'business') // true；同样的请求在 'http' 下是 HTTP 500，返回 false
- */
-export function injectsBusinessFailure(query: Record<string, unknown> | undefined, style: Style): boolean {
-  const status = Number(query?.[QUERY_STATUS] ?? HTTP_OK);
-  const code = query?.[QUERY_CODE] === undefined ? (status === HTTP_OK ? CODE_OK : status) : Number(query[QUERY_CODE]);
-  const httpStatus = style === "http" ? status : HTTP_OK;
-  return Number.isFinite(code) && code !== CODE_OK && httpStatus >= HTTP_OK && httpStatus < HTTP_SUCCESS_END;
-}
-
-/** 某个请求 id 在预期里的结果（repeat 展开的 `id#i` 也算该请求） */
-function resultsOf(exp: Expectation, id: string): ResultExpect[] {
-  return Object.entries(exp.results ?? {})
-    .filter(([key]) => key === id || key.startsWith(`${id}#`))
-    .map(([, r]) => r);
-}
-
-/**
- * 判断一个 网络×风格 格子在 axp 上是否不适用，不适用就跳过（返回理由，适用返回 null）。两条规则：
- * 1. testkit D21：场景没装 normalize，却期望某个被注入"HTTP 2xx + 非 0 业务码"的请求成功（`ok: true`，业务码透传）。
- *    axp 的归一化是内核能力、不能关闭，这类请求一定判失败，所以跳过；请求自己写了 `normalize: false` 的不算（映射成 `throws: false`，本来就 resolve）。
- * 2. blackhole：期望某个请求 `timeout`，场景却没有 `base_timeout_ms`，请求也没有 `timeout_ms`，请求会一直挂到运行被强制结束，无法落定。
- * @param scenario 场景
- * @param network 网络预设名
- * @param style 响应风格
- * @param exp 该格子合并后的预期
- * @returns 跳过理由；适用返回 null
- * @example inapplicableReason(sc, 'normal', 'business', exp) // SKIP_NORMALIZE_KERNEL
- */
-export function inapplicableReason(scenario: Scenario, network: NetworkName, style: Style, exp: Expectation): string | null {
-  const requests = collectRequests(scenario.steps);
-  if (scenario.client?.plugins?.normalize === undefined) {
-    const passthrough = requests.some((req) => req.options?.normalize !== false && injectsBusinessFailure(req.query, style) && resultsOf(exp, req.id).some((r) => r.ok === true));
-    if (passthrough) return SKIP_NORMALIZE_KERNEL;
-  }
-  if (network === "blackhole" && scenario.client?.base_timeout_ms === undefined) {
-    const hangs = requests.some((req) => req.options?.timeout_ms === undefined && resultsOf(exp, req.id).some((r) => [r.error].flat().includes(EXPECT_TIMEOUT)));
-    if (hangs) return SKIP_BLACKHOLE_NO_TIMEOUT;
-  }
-  return null;
 }

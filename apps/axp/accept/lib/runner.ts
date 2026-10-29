@@ -16,6 +16,8 @@ import type { ProxyEndpoint } from "./run-env.ts";
 import { makeRunId, ServerClient } from "./server-client.ts";
 import { drainFired, newStepState, runStep } from "./steps.ts";
 import { TokenStore } from "./tokens.ts";
+import { usedStepKinds } from "./mapping.ts";
+import { collectRequests } from "./walk.ts";
 import type { Expectation, PlanEntry, RunResult, Scenario } from "./types.ts";
 
 /** 执行一次运行所需的共享依赖 */
@@ -135,6 +137,7 @@ export async function runEntry(entry: PlanEntry, seq: number, deps: RunnerDeps):
       unauthenticated: events.onUnauthenticated,
     },
     getStyle: () => server.style,
+    styleChanges: usedStepKinds(sc).has("style") || collectRequests(sc.steps).some(/** 查询参数也能覆盖单次风格。 */ (req) => req.query?.style === "business"),
     runId,
   });
   const env = new RunEnvironment({

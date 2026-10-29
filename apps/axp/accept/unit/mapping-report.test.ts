@@ -10,7 +10,6 @@ import {
   mapKeyOption,
   mapRequestOptions,
   withNeutralDefaults,
-  injectsBusinessFailure,
   authUrlPatterns,
   PLUGIN_OPTION_MAP,
   REQUEST_OPTION_MAP,
@@ -98,23 +97,6 @@ describe("映射：中立选项 → axp 参数", () => {
     const input = {};
     withNeutralDefaults(input, { filter: {} });
     expect(input).toEqual({});
-  });
-
-  it("injectsBusinessFailure：按服务端规则判断是否纯业务失败（HTTP 2xx + 非 0 业务码）", () => {
-    // status=500：http 风格是 HTTP 500（不是纯业务失败），business 风格是 HTTP 200 + code 500
-    expect(injectsBusinessFailure({ status: 500 }, "http")).toBe(false);
-    expect(injectsBusinessFailure({ status: 500 }, "business")).toBe(true);
-    // code=1001（不写 status）：两种风格都是 HTTP 200 + 业务码
-    expect(injectsBusinessFailure({ code: 1001 }, "http")).toBe(true);
-    expect(injectsBusinessFailure({ code: 1001 }, "business")).toBe(true);
-    // status 与 code 同时出现：http 风格以 HTTP 状态为准
-    expect(injectsBusinessFailure({ status: 500, code: 5001 }, "http")).toBe(false);
-    expect(injectsBusinessFailure({ status: 500, code: 5001 }, "business")).toBe(true);
-    // 没注入、code=0、非数字：都不是
-    expect(injectsBusinessFailure(undefined, "business")).toBe(false);
-    expect(injectsBusinessFailure({ delay_ms: 5 }, "business")).toBe(false);
-    expect(injectsBusinessFailure({ code: 0 }, "business")).toBe(false);
-    expect(injectsBusinessFailure({ code: "abc" }, "business")).toBe(false);
   });
 
   it("filter：请求级布尔原样映射成 config.filter；非布尔显式报错", () => {

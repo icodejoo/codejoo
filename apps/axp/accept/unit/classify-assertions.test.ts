@@ -9,8 +9,8 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { checkResults, evaluateLocal, checkServer, checkClient, checkGeneric } from "../lib/assertions.ts";
 import type { Observed, RequestRecord } from "../lib/assertions.ts";
 import { AxpResponse, AXP_RESPONSE as RESPONSE_BRAND } from "../../src/response.ts";
-import { AXP_RESPONSE } from "../../src/brand.ts";
-import type { AxpKind } from "../../src/response.ts";
+import { AXP_RESPONSE, AXP_FAILURE } from "../../src/brand.ts";
+import type { AxpFailureType } from "../../src/response.ts";
 import { classifyError, classifyResponse, errorMatches, errorMatchesAny } from "../lib/classify.ts";
 import type { Expectation } from "../lib/types.ts";
 
@@ -23,74 +23,83 @@ const OLD_DENIED_MESSAGE = "[axp:auth] access denied";
 const OLD_REFRESH_FAILED_MESSAGE = "[axp:auth] refresh failed";
 
 /** 造一个真实的归一化响应（src 的默认实现），与 axp 实际抛出的对象同形 */
-function axpResp(init: ConstructorParameters<typeof AxpResponse>[0]): AxpResponse {
+function axpResp(init: ConstructorParameters<typeof AxpResponse>[0]): AxpResponse<unknown, string | number> {
   return new AxpResponse(init);
 }
 
-/** 造一个没有收到响应的失败（取消 / 超时 / 网络 / 解析 / 鉴权），kind 在构造时写死 */
-function failure(kind: AxpKind, extra: Record<string, unknown> = {}): AxpResponse {
-  return axpResp({ kind, ...extra });
+/** 模拟内核挂隐藏失败事实；默认类本身不接受使用者提供的失败类别。 */
+function failure(type: AxpFailureType, extra: Record<string, unknown> = {}): AxpResponse<unknown, string | number> {
+  return Object.defineProperties(axpResp(extra), { [AXP_FAILURE]: { value: { type, reason: extra.reason } }, ok: { value: false } });
 }
 
-describe("classifyError：IAxpResponse（新架构，直接读 kind / reason）", () => {
-  it("cancel / timeout / network / parse 各自对应同名类别", () => {
+describe("classifyError：IAxpResponse（隐藏失败标记与 HTTP status）", () => {
+  it("[accept.classify] cancel / timeout / network / parse 各自对应同名类别", () => {
     expect(classifyError(failure("cancel"))).toBe("canceled");
     expect(classifyError(failure("timeout"))).toBe("timeout");
     expect(classifyError(failure("network"))).toBe("network");
     expect(classifyError(failure("parse"))).toBe("parse");
   });
 
-  it("auth 按 reason：expired / denied / unauthenticated", () => {
-    expect(classifyError(failure("auth", { reason: "expired", httpStatus: 401 }))).toBe("expired");
-    expect(classifyError(failure("auth", { reason: "denied", httpStatus: 403 }))).toBe("denied");
+  it("[accept.classify] auth 按 reason：expired / denied / unauthenticated", () => {
+    expect(classifyError(failure("auth", { reason: "expired", status: 401 }))).toBe("expired");
+    expect(classifyError(failure("auth", { reason: "denied", status: 403 }))).toBe("denied");
     expect(classifyError(failure("auth", { reason: "unauthenticated" }))).toBe("unauthenticated");
   });
 
-  it("auth 的 reason 缺失或不认识 → unknown:（axp 有 bug 的信号），不会被猜成已知类别", () => {
+  it("[accept.classify] auth 的 reason 缺失或不认识 → unknown:（axp 有 bug 的信号），不会被猜成已知类别", () => {
     expect(classifyError(failure("auth"))).toMatch(/^unknown:auth:/);
     expect(classifyError(failure("auth", { reason: "weird" }))).toBe("unknown:auth:weird");
   });
 
-  it("http → http:<httpStatus>", () => {
-    expect(classifyError(axpResp({ httpStatus: 500 }))).toBe("http:500");
-    expect(classifyError(axpResp({ httpStatus: 404, code: 404 }))).toBe("http:404");
+  it("[accept.classify] 无标记的非 2xx 失败 → http:<status>", () => {
+    expect(classifyError(axpResp({ status: 500 }))).toBe("http:500");
+    expect(classifyError(axpResp({ status: 404, code: 404 }))).toBe("http:404");
+    expect(classifyError(axpResp({ status: 500, code: 5001 }))).toBe("http:500");
   });
 
-  it("biz → business:<code>（HTTP 200 + 非 0 业务码，含 401 这类被 axp 当逻辑状态的码）", () => {
-    expect(classifyError(axpResp({ httpStatus: 200, code: 1001 }))).toBe("business:1001");
-    expect(classifyError(axpResp({ httpStatus: 200, code: 401 }))).toBe("business:401");
-    expect(classifyError(axpResp({ httpStatus: 200, code: "E_BAD" }))).toBe("business:E_BAD");
+  it("[accept.classify] 无标记的 2xx 失败 → business:<code>（HTTP 200 + 非 0 业务码，含 401，HTTP 状态仍为 200）", () => {
+    expect(classifyError(axpResp({ status: 200, code: 1001 }))).toBe("business:1001");
+    expect(classifyError(axpResp({ status: 200, code: 401 }))).toBe("business:401");
+    expect(classifyError(axpResp({ status: 200, code: "E_BAD" }))).toBe("business:E_BAD");
+    expect(classifyError(axpResp({ status: 299, code: 1001 }))).toBe("business:1001");
+    expect(classifyError(axpResp({ status: 300, code: 1001 }))).toBe("http:300");
   });
 
-  it("不该被抛出的 ok / internal → unknown:，意味着 axp 有 bug", () => {
-    expect(classifyError(axpResp({ httpStatus: 200, code: 0 }))).toMatch(/^unknown:ok:/);
+  it("[accept.classify] 不该被抛出的 ok / internal → unknown:，意味着 axp 有 bug", () => {
+    expect(classifyError(axpResp({ status: 200, code: 0 }))).toMatch(/^unknown:ok:/);
     expect(classifyError(failure("internal", { message: "boom", error: new Error("boom") }))).toBe("unknown:internal:boom");
   });
 
-  it("类别只看字段，不看 message：旧 auth 错误消息不起作用", () => {
+  it("[accept.classify] 类别只看字段，不看 message：旧 auth 错误消息不起作用", () => {
     expect(classifyError(failure("network", { message: OLD_DENIED_MESSAGE }))).toBe("network");
     expect(classifyError(failure("timeout", { message: OLD_REFRESH_FAILED_MESSAGE }))).toBe("timeout");
+    expect(classifyError(failure("parse", { status: 200, code: 1001 }))).toBe("parse");
+    expect(classifyError(failure("cancel", { status: 503, code: 503 }))).toBe("canceled");
   });
 
-  it("按品牌识别，不依赖 instanceof：create 返回的普通对象补了品牌也算", () => {
-    const plain = Object.defineProperty({ kind: "timeout", message: "", httpStatus: 0 }, Symbol.for("axp.response"), { value: true });
+  it("[accept.classify] 按品牌识别，不依赖 instanceof：create 返回的普通对象补了品牌也算", () => {
+    const plain = Object.defineProperties({ ok: false, status: 0, code: 0, data: null }, { [AXP_RESPONSE]: { value: true }, [AXP_FAILURE]: { value: { type: "timeout" } } });
     expect(classifyError(plain)).toBe("timeout");
   });
 
-  it("classifyResponse 直接按字段归类，不经过品牌检查", () => {
+  it("[accept.classify] classifyResponse 直接按字段归类，不经过品牌检查", () => {
     expect(classifyResponse(failure("timeout"))).toBe("timeout");
-    expect(classifyResponse(axpResp({ httpStatus: 503 }))).toBe("http:503");
-    expect(classifyResponse(axpResp({ httpStatus: 200, code: 7 }))).toBe("business:7");
+    expect(classifyResponse(axpResp({ status: 503 }))).toBe("http:503");
+    expect(classifyResponse(axpResp({ status: 200, code: 7 }))).toBe("business:7");
   });
 
-  it("非 IAxpResponse 的异常：形状像也不认（没有品牌），走 unknown: 兜底", () => {
-    expect(classifyError({ kind: "timeout", httpStatus: 0 })).toMatch(/^unknown:/);
+  it("[accept.classify] 非 IAxpResponse 的异常：形状像也不认（没有品牌），走 unknown: 兜底", () => {
+    expect(classifyError({ [AXP_FAILURE]: { type: "timeout" }, status: 0 })).toMatch(/^unknown:/);
     expect(classifyError(new TypeError("weird"))).toBe("unknown:TypeError:weird");
     expect(classifyError(null)).toMatch(/^unknown:/);
     expect(classifyError(undefined)).toMatch(/^unknown:/);
   });
 
-  it("响应模块重新导出同一个叶子模块品牌", () => {
+  it("[accept.classify] 无失败标记且 status 为 0 → unknown，不能伪装成 HTTP 失败", () => {
+    expect(classifyError(axpResp({ message: null }))).toBe("unknown:response:");
+  });
+
+  it("[accept.classify] 响应模块重新导出同一个叶子模块品牌", () => {
     expect(RESPONSE_BRAND).toBe(AXP_RESPONSE);
   });
 });

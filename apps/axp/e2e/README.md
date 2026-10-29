@@ -45,24 +45,24 @@ ALL E2E PASSED ✅
 
 ## API 覆盖(运行时公开导出)
 
-| 模块           | 覆盖的导出 / 行为                                                                                                                                 |
-| -------------- | ------------------------------------------------------------------------------------------------------------------------------------------------- |
-| createAxp      | `get/post/put/delete/patch/head/options` · 默认解包 / `wrap`(`r.raw` 逃生口) / `throws:false` · 默认抛出 `IAxpResponse`(不是 Error、默认无 stack) |
-| 客户端生命周期 | `use` / `eject` / `inspect`(内置插件按 stage 排序) / `plugin` / `extend`(默认继承、状态独立) / `dispose` / `pending` / `isResponse` / `stateKey`  |
-| key(内核服务)  | 自动 key 含 params · 请求级显式字符串 key · `createAxp({ key: { scope } })` 切账号                                                                |
-| cache          | `axpCache` · `removeCache` · `clearCache`(用服务端命中数证明只发一次网络) · POST 默认不缓存                                                       |
-| share          | `axpShare` 的 `start`/`race`/`end` 三策略 · `share:false`                                                                                         |
-| retry          | `axpRetry`(失败重试到成功 / `retry:0` 禁用)                                                                                                       |
-| 取消(内核)     | `api.cancelAll` · 用户 `signal`(取消落定为 `kind:'cancel'` 的响应)                                                                                |
-| loading        | `axpLoading`(全局计数 0→1 / 1→0 触发)                                                                                                             |
-| notify         | `axpNotify`(失败通知一次,`notify:false` / `silent` / 成功不通知)                                                                                  |
-| mock           | `axpMock`(URL 重写到 mockUrl;mock 不存在时回落真实接口;请求级 `mock:true`)                                                                        |
-| envs           | `axpEnvs`(安装期规则合并,不进中间件链)                                                                                                            |
-| filter         | `axpFilter`(装上即过滤空字段,`filter:false` 退出)                                                                                                 |
-| repath         | `axpRepath`(`{id}`/`:pid` 替换)                                                                                                                   |
-| auth           | `axpAuth`(并发 401 单飞刷新 / 刷新失败每轮只通知一次 / 刷新时间线 / 有界收敛)                                                                     |
-| 响应           | `axpResponse` · `AxpResponse` 子类覆盖 `ok` · `isAxpResponse` · `AXP_KINDS` · `reject` 适配 Error · 业务码失败 `kind:'biz'` · 空 body             |
-| TokenManager   | `TokenManager`(set/get/clear,Bearer 前缀)                                                                                                         |
+| 模块           | 覆盖的导出 / 行为                                                                                                                                               |
+| -------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| createAxp      | `get/post/put/delete/patch/head/options` · 默认解包 / `wrap`(`r.raw` 逃生口) / `throws:false` · 默认抛出 `IAxpResponse`(不是 Error、默认无 stack)               |
+| 客户端生命周期 | `use` / `eject` / `inspect`(内置插件按 stage 排序) / `plugin` / `extend`(默认继承、状态独立) / `dispose` / `pending` / `isResponse` / `stateKey`                |
+| key(内核服务)  | 自动 key 含 params · 请求级显式字符串 key · `createAxp({ key: { scope } })` 切账号                                                                              |
+| cache          | `axpCache` · `removeCache` · `clearCache`(用服务端命中数证明只发一次网络) · POST 默认不缓存                                                                     |
+| share          | `axpShare` 的 `start`/`race`/`end` 三策略 · `share:false`                                                                                                       |
+| retry          | `axpRetry`(失败重试到成功 / `retry:0` 禁用)                                                                                                                     |
+| 取消(内核)     | api.cancelAll · 用户 signal · api.isCancel / isAxpCancel 识别取消失败标记，ok=false                                                                             |
+| loading        | `axpLoading`(全局计数 0→1 / 1→0 触发)                                                                                                                           |
+| notify         | `axpNotify`(失败通知一次,`notify:false` / `silent` / 成功不通知)                                                                                                |
+| mock           | `axpMock`(URL 重写到 mockUrl;mock 不存在时回落真实接口;请求级 `mock:true`)                                                                                      |
+| envs           | `axpEnvs`(安装期规则合并,不进中间件链)                                                                                                                          |
+| filter         | `axpFilter`(装上即过滤空字段,`filter:false` 退出)                                                                                                               |
+| repath         | `axpRepath`(`{id}`/`:pid` 替换)                                                                                                                                 |
+| auth           | `axpAuth`(并发 401 单飞刷新 / 刷新失败每轮只通知一次 / 刷新时间线 / 有界收敛)                                                                                   |
+| 响应           | axpResponse · AxpResponse 子类的 parse/ok · isAxpResponse · failureOf / AXP_FAILURES · reject 适配 Error · 业务失败保留 HTTP status 与 code、ok=false · 空 body |
+| TokenManager   | `TokenManager`(set/get/clear,Bearer 前缀)                                                                                                                       |
 
 ## mock 服务端点速查
 

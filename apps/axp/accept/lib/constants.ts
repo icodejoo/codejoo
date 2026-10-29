@@ -73,7 +73,8 @@ export const PLUGIN_CAPABILITIES: readonly string[] = ["auth", "cache", "retry",
 /**
  * 行为级能力：不对应插件或请求选项，是 axp 管线本身的语义，场景只靠 `requires` 声明。
  * mock-in-chain：mock 探测在插件链内发出，不走 cache / share，回落后的真实请求才走；keep-alive：连接复用不受上一次失败影响。
- * 同属 CONTRACT §7 细分能力的 multipart、share-retry、timeout-send 不在其中（执行器未实现或 axp 没有）。
+ * multipart、share-retry、timeout-send 未实现；raw-business-code（归一化不可关闭）
+ * 和 timeout-total（尚无逻辑请求截止时间）也不登记。
  */
 export const BEHAVIOR_CAPABILITIES: readonly string[] = ["mock-in-chain", "keep-alive"];
 /** axp 具备的能力名（CONTRACT §7，内核 + 插件 + 行为级）；不在其中的能力，场景直接跳过 */
