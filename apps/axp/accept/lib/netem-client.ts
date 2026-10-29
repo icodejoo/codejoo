@@ -106,6 +106,28 @@ export class NetemClient {
   }
 }
 
+/**
+ * Fetch 规范的受限端口（WHATWG Fetch "bad port"，undici 同款）：fetch 访问这些端口会直接抛
+ * `TypeError: bad port`，请求根本不会发出，axios 的 fetch adapter 把它吞成 Network Error。
+ * netem 的代理端口由系统随机分配，约千分之一的格子会撞上，所以分到这些端口要换一个。
+ */
+const FETCH_BLOCKED_PORTS: ReadonlySet<number> = new Set([
+  1, 7, 9, 11, 13, 15, 17, 19, 20, 21, 22, 23, 25, 37, 42, 43, 53, 69, 77, 79, 87, 95, 101, 102, 103, 104, 109, 110, 111, 113, 115, 117, 119, 123, 135, 137, 139, 143, 161, 179, 389, 427, 465, 512, 513, 514, 515, 526,
+  530, 531, 532, 540, 548, 554, 556, 563, 587, 601, 636, 989, 990, 993, 995, 1719, 1720, 1723, 2049, 3659, 4045, 4190, 5060, 5061, 6000, 6566, 6665, 6666, 6667, 6668, 6669, 6679, 6697, 10080,
+]);
+/** 为避开受限端口，创建代理最多尝试的次数 */
+export const OPEN_PROXY_MAX_TRIES = 20;
+
+/**
+ * 判断端口是否在 Fetch 规范的受限名单里。
+ * @param port 端口号
+ * @returns 受限返回 true
+ * @example isFetchBlockedPort(6666) // true
+ */
+export function isFetchBlockedPort(port: number): boolean {
+  return FETCH_BLOCKED_PORTS.has(port);
+}
+
 /** 代理出口：客户端实际使用的 baseURL 与代理 id */
 export interface ProxyEndpointInfo {
   id: string;
@@ -136,12 +158,19 @@ export function upstreamOf(url: string): string {
 /**
  * 通过 netem 创建专属代理，并返回客户端应使用的 baseURL。
  * flap 先以 normal 创建再下发时间表；dns 不经过 netem，不要调用本函数。
+ * 分到 fetch 受限端口会删掉重建，保证 http 与 fetch 两种 adapter 用的是同一套可用端口。
  * @param netem netem 客户端
  * @param serverUrl 测试服务器地址
  * @param network 初始网络预设（不含 dns）
  */
 export async function openProxy(netem: NetemClient, serverUrl: string, network: NetworkName): Promise<ProxyEndpointInfo> {
-  const proxy = await netem.createProxy(upstreamOf(serverUrl), network === "flap" ? "normal" : network);
+  let proxy = await netem.createProxy(upstreamOf(serverUrl), network === "flap" ? "normal" : network);
+  // 分到 fetch 的受限端口（约千分之一）就删掉换一个，否则 fetch adapter 的格子会在 0ms 内失败且服务端收不到请求
+  for (let tries = 1; isFetchBlockedPort(proxy.port); tries++) {
+    if (tries >= OPEN_PROXY_MAX_TRIES) throw new NetemError(`netem 连续 ${OPEN_PROXY_MAX_TRIES} 次分到 fetch 受限端口，放弃（最后一次 ${proxy.port}）`);
+    await netem.deleteProxy(proxy.id);
+    proxy = await netem.createProxy(upstreamOf(serverUrl), network === "flap" ? "normal" : network);
+  }
   if (network === "flap") await netem.schedule(proxy.id, FLAP_SCHEDULE);
   const u = new URL(serverUrl);
   return { id: proxy.id, baseURL: `${u.protocol}//${new URL(netem.controlUrl).hostname}:${proxy.port}` };
