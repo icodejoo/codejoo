@@ -28,7 +28,7 @@ it.each(["/u/{id}", "/u/[id]", "/u/:id", "/users/:id/posts/:pid", "/mix/:id/{x}/
   "[repath.fn.axpRepath] 三种占位符和多段路径 %s",
   /** 各种路径风格。 */ async (url) => {
     const plugin = axpRepath();
-    const { api } = preparedClient([plugin]);
+    const { api, request } = preparedClient([plugin]);
     const r = await api.request({ url, params: PARAMS, throws: false });
     expect(r.request.url).toBe(
       url
@@ -37,22 +37,22 @@ it.each(["/u/{id}", "/u/[id]", "/u/:id", "/users/:id/posts/:pid", "/mix/:id/{x}/
         .replace("{x}", X_VALUE)
         .replace("[y]", Y_VALUE),
     );
-    expect(r.request.params.id).toBeUndefined();
+    expect(request().params.id).toBeUndefined();
     expect(PARAMS.id).toBe(PARAMS_VALUE);
     expect(plugin.name).toBe(NAME);
     api.dispose();
   },
 );
 it("[repath.opt.removeKey][repath.req.repath] params 优先、空值回退 data、请求关闭和保留来源字段", /** 替换来源与消费规则。 */ async () => {
-  const { api } = preparedClient([axpRepath()]);
+  const { api, request } = preparedClient([axpRepath()]);
   const params = Object.freeze({ id: 0, x: undefined, y: null });
   const data = Object.freeze({ id: UNUSED_VALUE, x: false, y: DATA_VALUE, z: LAST_VALUE });
   const url = "/:id/{x}/[y]/:z";
   for (const repath of [undefined, false, { removeKey: false }]) {
     const r = await api.request({ url, params, data, repath, throws: false });
     expect(r.request.url).toBe(repath === false ? url : "/0/false/data/last");
-    expect(r.request.params).toEqual(repath !== undefined ? params : {});
-    expect(r.request.data).toEqual(repath !== undefined ? data : { id: UNUSED_VALUE });
+    expect(request().params).toEqual(repath !== undefined ? params : {});
+    expect(request().data).toEqual(repath !== undefined ? data : { id: UNUSED_VALUE });
   }
   expect(params).toEqual({ id: 0, x: undefined, y: null });
   expect(data).toEqual({ id: UNUSED_VALUE, x: false, y: DATA_VALUE, z: LAST_VALUE });

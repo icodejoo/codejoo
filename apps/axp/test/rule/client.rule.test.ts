@@ -38,7 +38,8 @@ it("[core.method.extend] 指定 axios 保留拦截器，setup 后 overrides 优�
   expect(axios.defaults.timeout).toBe(22);
   expect(axios.defaults.headers.common["parent-only"]).toBeUndefined();
   const result = await child.request({ url: URL, wrap: true });
-  expect(result.request.headers).toMatchObject({ "child-interceptor": "yes" });
+  expect(interceptor.mock.results[0].value.headers.get("child-interceptor")).toBe("yes");
+  expect(result.request).toEqual({ method: "get", url: URL });
   expect(interceptor).toHaveBeenCalledOnce();
   expect(api.axios.defaults.baseURL).toBe("/parent");
   expect(api.axios.defaults.timeout).toBe(0);
@@ -133,7 +134,7 @@ describe("客户端", /** 客户端的用例集合。 */ () => {
     expect(await api.request({ url: URL })).toBe("value");
     const wrapped = await api.get(URL)(undefined, { wrap: true });
     expect(wrapped.data).toBe("value");
-    expect(wrapped.raw).toBeDefined();
+    expect(wrapped).not.toHaveProperty("raw");
     expect(api.isResponse(wrapped)).toBe(true);
 
     net.fallback(/** 返回 HTTP 500。 */ () => ({ status: 500, data: "server" }));

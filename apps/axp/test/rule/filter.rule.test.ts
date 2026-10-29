@@ -17,23 +17,24 @@ const SOURCE = Object.freeze({
 });
 it("[filter.fn.axpFilter][filter.req.filter] 装上即生效，布尔和对象关闭，选项不删除且调用方不可变", /** 默认过滤与关闭。 */ async () => {
   const plugin = axpFilter();
-  const { api } = preparedClient([plugin]);
+  const { api, request } = preparedClient([plugin]);
   expect(plugin.name).toBe("axp:filter");
   for (const filter of [undefined, true, false, { enable: false }, null]) {
     const config = Object.freeze({ params: SOURCE, data: SOURCE, filter });
-    const r = await api.request({ ...config, throws: false });
-    expect(r.request.filter).toEqual(filter);
-    expect(r.request.params).toEqual(filter === false || (typeof filter === "object" && filter?.enable === false) ? SOURCE : { zero: 0, bool: false, nested: SOURCE.nested });
-    expect(r.request.data).toEqual(r.request.params);
+    await api.request({ ...config, throws: false });
+    expect(request().filter).toEqual(filter);
+    expect(request().params).toEqual(filter === false || (typeof filter === "object" && filter?.enable === false) ? SOURCE : { zero: 0, bool: false, nested: SOURCE.nested });
+    expect(request().data).toEqual(request().params);
     expect(config.params).toBe(SOURCE);
   }
   expect(api.eject(plugin.name)).toBe(true);
-  expect((await api.request({ params: SOURCE, throws: false })).request.params).toEqual(SOURCE);
+  await api.request({ params: SOURCE, throws: false });
+  expect(request().params).toEqual(SOURCE);
   api.dispose();
 });
 it("[filter.req.predicate][filter.req.ignoreKeys][filter.req.ignoreValues] 字段覆盖插件配置，空数组清空豁免", /** 请求覆盖和 nullish 继承。 */ async () => {
   const predicate = vi.fn<TPredicate>(/** 默认把全部字段视为可丢弃。 */ () => true);
-  const { api } = preparedClient([axpFilter({ predicate, ignoreKeys: ["keep"], ignoreValues: [NaN] })]);
+  const { api, request } = preparedClient([axpFilter({ predicate, ignoreKeys: ["keep"], ignoreValues: [NaN] })]);
   const params = { keep: null, nan: NaN, zero: 0 };
   const configs = [
     { filter: {}, expected: { keep: null, nan: NaN } },
@@ -50,8 +51,8 @@ it("[filter.req.predicate][filter.req.ignoreKeys][filter.req.ignoreValues] 字�
     },
   ];
   for (const { filter, expected } of configs) {
-    const r = await api.request({ params, filter, throws: false });
-    expect(r.request.params).toEqual(expected);
+    await api.request({ params, filter, throws: false });
+    expect(request().params).toEqual(expected);
   }
   api.dispose();
 });
@@ -109,9 +110,9 @@ it("[filter.fn.axpFilter] 没有字段要丢时不打补丁：请求视图原样
 
 it("[filter.fn.axpFilter] 自定义谓词每个字段只被调用一次，预扫不会让它重复求值", async () => {
   const predicate = vi.fn<TPredicate>(([, value]) => value === "");
-  const { api } = preparedClient([axpFilter({ predicate })]);
-  const response = await api.request({ params: { a: 1, b: "", c: 2 }, throws: false });
-  expect(response.request.params).toEqual({ a: 1, c: 2 });
+  const { api, request } = preparedClient([axpFilter({ predicate })]);
+  await api.request({ params: { a: 1, b: "", c: 2 }, throws: false });
+  expect(request().params).toEqual({ a: 1, c: 2 });
   expect(predicate).toHaveBeenCalledTimes(3);
   api.dispose();
 });

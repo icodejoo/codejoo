@@ -1,3 +1,4 @@
+import { UI_OBSERVER } from "../helpers/ui";
 import { failureOf } from "../../src/response";
 import { beforeEach, expect, it, vi } from "vitest";
 import axpLoading from "../../src/plugins/loading";
@@ -81,5 +82,5 @@ it("[loading.method.lifecycle × mock.method.lifecycle] 先卸 mock：loading �
   expect(h.events.loading.get(LABEL)).toEqual([true, false, true, false]);
   expect(h.api.eject("axp:mock")).toBe(true);
   expect((await send()).data).toBe("real");
-  expect(h.api.inspect()).toEqual([]);
+  expect(h.api.inspect().filter(/** 排除夹具自身的上下文观测层。 */ (item) => item.name !== UI_OBSERVER)).toEqual([]);
 });

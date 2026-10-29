@@ -1,3 +1,4 @@
+import { nativeFields } from "../helpers/native";
 import { AxiosError, AxiosHeaders, create as createAxios, type AxiosResponse } from "axios";
 import { assert, expect, it, vi } from "vitest";
 import { settle } from "../../src/client";
@@ -98,7 +99,7 @@ it.each(["return", "throw", "reject", "reject-throw", "internal"] as const)("[co
   const reject = vi.fn(
     /** 确认转换器运行时仍能读取原生数据。 */ (result: AxpResponse) => {
       expect(ctx.native.response).toBe(raw);
-      expect(result.raw).toBe(raw);
+      expect(nativeFields(result).raw).toBe(raw);
       if (path === "reject-throw") throw error;
       return error;
     },
@@ -109,8 +110,8 @@ it.each(["return", "throw", "reject", "reject-throw", "internal"] as const)("[co
     const result = run();
     assert(isAxpResponse(result));
     expect(result).not.toBe(response);
-    expect(result.raw).toBe(raw);
-    expect(result.error).toBe(error);
+    expect(nativeFields(result).raw).toBe(raw);
+    expect(nativeFields(result).error).toBe(error);
     expect(result.request).toBe(raw.config);
     for (const key of ["raw", "error", "request"]) {
       expect(Object.hasOwn(result, key)).toBe(true);
@@ -149,8 +150,8 @@ it.each(["raw", "error", "context"] as const)("[core.req.raw] request 按原生�
   const result = settle(response, ctx, {});
   assert(isAxpResponse(result));
   expect(result.request).toBe(source === "context" ? ctx.request : raw.config);
-  expect(result.raw).toBe(source === "raw" ? raw : undefined);
-  expect(result.error).toBe(source === "context" ? undefined : error);
+  expect(nativeFields(result).raw).toBe(source === "raw" ? raw : undefined);
+  expect(nativeFields(result).error).toBe(source === "context" ? undefined : error);
 });
 
 it("[core.req.raw] 副本工厂失败仍抛原始程序异常且清空原生槽", () => {
@@ -209,7 +210,7 @@ it.each([
   assert(recorded.type === "return");
   const internal = recorded.value;
   expect(failureOf(internal)?.type).toBe(AXP_FAILURES.INTERNAL);
-  expect(internal.error).toBe(thrown);
+  expect(failureOf(internal)?.error).toBe(thrown);
   expect(reject).not.toHaveBeenCalled();
   expect(ctx.native).toEqual(EMPTY_NATIVE);
   ctx.setNative(response, raw, undefined);

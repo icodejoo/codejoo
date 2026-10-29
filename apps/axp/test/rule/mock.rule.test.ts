@@ -1,3 +1,4 @@
+import { UI_OBSERVER } from "../helpers/ui";
 import { expect, it, vi } from "vitest";
 import axpMock, { type IMockOptions } from "../../src/plugins/mock";
 import type { AxpResponse } from "../../src/response";
@@ -35,12 +36,12 @@ it("[mock.prop.name][mock.opt.enable] 名称为 axp:mock，默认不启用：不
   const r = await h.send({ url: REAL, mock: true });
   expect(r.data).toBe(REAL_DATA);
   expect(handle).not.toHaveBeenCalled();
-  expect(h.api.inspect()).toEqual([]);
+  expect(h.api.inspect().filter(/** 排除夹具自身的上下文观测层。 */ (item) => item.name !== UI_OBSERVER)).toEqual([]);
 });
 
 it("[mock.opt.enable] enable:true 进入 source 阶段；请求级开关不能把关闭的插件重新打开", async () => {
   const on = sourceClient([axpMock({ enable: true })]);
-  expect(on.api.inspect()).toEqual([{ stage: "source", name: NAME }]);
+  expect(on.api.inspect().filter(/** 排除夹具自身的上下文观测层。 */ (item) => item.name !== UI_OBSERVER)).toEqual([{ stage: "source", name: NAME }]);
   const off = sourceClient([axpMock({ enable: false, mockUrl: MOCK })]);
   off.net.on("get", REAL, () => envelope(REAL_DATA));
   const r = await off.send({ url: REAL, mock: { enable: true, mockUrl: MOCK } });
@@ -147,5 +148,5 @@ it("[mock.method.lifecycle] eject 后不再 mock，请求直达真实接口", as
   expect((await h.send({ url: REAL, mock: true })).data).toBe(MOCK_DATA);
   expect(h.api.eject(NAME)).toBe(true);
   expect((await h.send({ url: REAL, mock: true })).data).toBe(REAL_DATA);
-  expect(h.api.inspect()).toEqual([]);
+  expect(h.api.inspect().filter(/** 排除夹具自身的上下文观测层。 */ (item) => item.name !== UI_OBSERVER)).toEqual([]);
 });

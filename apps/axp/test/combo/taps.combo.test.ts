@@ -12,6 +12,7 @@ import type { AxpResponse } from "../../src/response";
 import type { AxpPlugin, AxpRequestConfig, AxpStage } from "../../src/types";
 import { authClient, failure, guarded, TOKEN_NEW, TOKEN_OLD } from "../helpers/b3";
 import { settleAll } from "../helpers/source";
+import { UI_OBSERVER } from "../helpers/ui";
 
 /** 带路径变量的接口，repath 把 `{id}` 换成 params 里的值。 */
 const TEMPLATE_URL = "/users/{id}/orders";
@@ -143,7 +144,7 @@ function row(stage: AxpStage, name: string) {
 
 it("[core.method.inspect][core.opt.plugins] taps 各段与全部内置插件的顺序与 inspect() 一致：阶段固定，阶段内 pre、内置、post", /** 注册顺序打乱也不影响排序。 */ () => {
   const h = client();
-  expect(h.api.inspect().filter(/** 去掉夹具自带的观测插件。 */ (item) => item.name !== OBSERVER)).toEqual([
+  expect(h.api.inspect().filter(/** 只去掉夹具自带的两个观测插件。 */ (item) => item.name !== OBSERVER && item.name !== UI_OBSERVER)).toEqual([
     row("outer", `${AUDIT}#1`),
     row("outer", NAME.loading),
     row("outer", NAME.notify),

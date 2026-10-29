@@ -20,14 +20,14 @@ it.each(["/:id/{id}/[id]", "https://host:8080/:id/{id}/[id]?q=:id#hash={id}", "/
   "[repath.fn.pathname] 只替换 pathname，重复变量编码且保留 host/query/hash：%s",
   /** 重复变量从未修改来源取值。 */ async (url) => {
     for (const source of [PARAMS_FIELD, DATA_FIELD]) {
-      const { api } = preparedClient([axpRepath()]);
+      const { api, request } = preparedClient([axpRepath()]);
       const original = Object.freeze({ id: VALUE });
       const r = await api.request({ url, [source]: original, throws: false });
       const end = url.indexOf("?");
       const path = end < 0 ? url : url.slice(0, end);
       const suffix = end < 0 ? EMPTY_TEXT : url.slice(end);
       expect(r.request.url).toBe(path.replace(/:id|{id}|\[id\]/g, ENCODED) + suffix);
-      expect(r.request[source as typeof PARAMS_FIELD | typeof DATA_FIELD]).toEqual({});
+      expect(request()[source as typeof PARAMS_FIELD | typeof DATA_FIELD]).toEqual({});
       expect(original.id).toBe(VALUE);
       api.dispose();
     }
@@ -37,14 +37,14 @@ it.each([0, false, EMPTY_TEXT, 1n, Symbol("id")])(
   "[repath.req.primitive] 原始 data %s 可替换重复变量，删除只影响内层",
   /** 原始值来源。 */ async (data) => {
     for (const removeKey of [true, false]) {
-      const { api } = preparedClient([axpRepath({ removeKey })], {
+      const { api, request } = preparedClient([axpRepath({ removeKey })], {
         transformRequest: /** 保留原始请求体。 */ (value) => value,
       });
       const config = Object.freeze({ url: "/:id/{id}", data });
       const r = await api.request({ ...config, throws: false });
       const encoded = encodeURIComponent(String(data));
       expect(r.request.url).toBe(`/${encoded}/${encoded}`);
-      expect(r.request.data).toBe(removeKey ? undefined : data);
+      expect(request().data).toBe(removeKey ? undefined : data);
       expect(config.data).toBe(data);
       api.dispose();
     }

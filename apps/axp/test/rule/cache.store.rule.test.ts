@@ -2,7 +2,7 @@ import { beforeEach, expect, it, vi } from "vitest";
 import axpCache, { clearCache, removeCache } from "../../src/plugins/cache";
 import { AxpResponse, axpResponse, isAxpResponse, type AxpResponseInit } from "../../src/response";
 import { createTestClient } from "../helpers/client";
-import { asyncCacheStore, countingCacheStore, envelope, requestRecorder, sourceClient } from "../helpers/source";
+import { asyncCacheStore, countingCacheStore, envelope, sourceClient } from "../helpers/source";
 
 /** 存储有效期统一使用假时钟。 */
 beforeEach(() => {
@@ -24,20 +24,19 @@ async function settled<T>(pending: Promise<T>): Promise<T> {
 }
 
 it("[cache.req.cache] 每次命中重建 R，使用当前请求并共享未 clone 的 data", async () => {
-  const recorder = requestRecorder("pre");
-  const h = sourceClient([recorder.plugin, axpCache()]);
+  const h = sourceClient([axpCache()]);
   h.net.on("get", URL, () => envelope({ value: 1 }));
   const miss = await settled(h.send(REQUEST));
-  const first = await settled(h.send({ ...REQUEST, headers: { caller: "one" } }));
-  const second = await settled(h.send({ ...REQUEST, headers: { caller: "two" } }));
+  const first = await settled(h.send({ ...REQUEST, url: "/store-one" }));
+  const second = await settled(h.send({ ...REQUEST, url: "/store-two" }));
   expect(new Set([miss, first, second]).size).toBe(3);
-  expect(first.request).toBe(recorder.seen[1]);
-  expect(second.request).toBe(recorder.seen[2]);
-  expect(second.request.headers).toMatchObject({ caller: "two" });
+  expect(miss.request).toEqual({ method: "get", url: URL });
+  expect(first.request).toEqual({ method: "get", url: "/store-one" });
+  expect(second.request).toEqual({ method: "get", url: "/store-two" });
   expect(first.data).toBe(miss.data);
   expect(second.data).toBe(first.data);
-  expect(first.raw).toBeUndefined();
-  expect(first.error).toBeUndefined();
+  expect(first).not.toHaveProperty("raw");
+  expect(first).not.toHaveProperty("error");
   expect(isAxpResponse(first)).toBe(true);
   expect(h.net.totalStarted).toBe(1);
 });

@@ -70,7 +70,7 @@ it.each(["response", "error"] as const)(
         throw new Error("transport");
       };
     await expect(api.request({ url: URL, throws: false })).rejects.toBe(original);
-    expect(observed).toMatchObject({ error: original, [AXP_FAILURE]: { type: "internal" } });
+    expect(observed).toMatchObject({ [AXP_FAILURE]: { type: "internal", error: original } });
     expect(api.pending()).toBe(0);
   },
 );
@@ -209,7 +209,7 @@ it.each(["transform", "interceptor", "middleware"] as const)(
         },
       );
     await expect(api.get(URL)(undefined, { throws: false })).rejects.toBe(bug);
-    expect(observed).toMatchObject({ error: bug, [AXP_FAILURE]: { type: "internal" } });
+    expect(observed).toMatchObject({ [AXP_FAILURE]: { type: "internal", error: bug } });
     expect(api.pending()).toBe(0);
   },
 );

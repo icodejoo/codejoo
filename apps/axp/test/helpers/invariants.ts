@@ -1,4 +1,4 @@
-import { failureOf } from "../../src/response";
+import { failureOf, messageOf } from "../../src/response";
 /* eslint-disable no-await-in-loop -- 排空假时钟必须逐轮串行推进，并行没有意义。 */
 import { AxiosHeaders, type AxiosAdapter } from "axios";
 import { expect, vi } from "vitest";
@@ -167,7 +167,7 @@ export function createChainProbe(events: ITestEvents): IChainProbe {
           }
           if (failureOf(response)?.type === AXP_FAILURES.INTERNAL && !seen.has(response)) {
             seen.add(response);
-            probe.internalErrors.push(response.error);
+            probe.internalErrors.push(failureOf(response)?.error);
           }
           if (name === outermost) bump(probe.exited, ctx.id);
           return response;
@@ -251,7 +251,7 @@ export function createNotifyRecorder<R extends IAxpResponse = AxpResponse>(event
     stringify(response, ctx) {
       current = ctx.id;
       if (response.ok || failureOf(response)?.type === AXP_FAILURES.CANCEL || ctx.request.silent) return "";
-      return response.message || failureOf(response)?.type || "status " + response.status + (response.code !== 0 ? " code " + response.code : "");
+      return messageOf(response) || failureOf(response)?.type || "status " + response.status + (response.code !== 0 ? " code " + response.code : "");
     },
   };
 }

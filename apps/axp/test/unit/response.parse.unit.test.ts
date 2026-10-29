@@ -16,7 +16,7 @@ it("[core.opt.response] 默认工厂的解析异常仍由内核保护，快路�
   };
   const response = guardFactory(DEFAULT_RESPONSE_FACTORY).fromResponse(raw, testContext());
   expect(response.ok).toBe(false);
-  expect(response.error).toBe(bug);
+  expect(failureOf(response)?.error).toBe(bug);
   expect(failureOf(response)?.type).toBe("internal");
 });
 
@@ -72,7 +72,7 @@ it("[core.method.parse][core.opt.type] parse 缺省字段由基类补齐，构�
   const factory = axpResponse<Empty>({ type: Empty });
   const response = factory.fail({ raw: RAW }, testContext(request) as never);
   expect(response).toMatchObject({ code: 0, data: null, message: "", request, ok: true });
-  expect(factory.fail({ request }, testContext() as never).request).toBe(request);
+  expect(factory.fail({ request }, testContext() as never).request).toEqual({ method: undefined, url: request.url });
 });
 
 it("[core.method.parse] 自定义 parse 承接信封字段映射与保留完整响应体的扩展方式", /** 删除 envelope 选项后仍可通过继承表达旧定制行为。 */ () => {
@@ -111,7 +111,7 @@ it("[core.method.fail] create 与完整工厂派生失败默认继承标记，�
   expect(failureOf(original)?.reason).toBeUndefined();
   const bug = new Error("inherited internal");
   const internal = factory.fail({ failure: "internal", error: bug }, ctx);
-  expect(factory.fail({ from: internal }, ctx).error).toBe(bug);
-  expect(guarded.fail({ from: internal }, ctx).error).toBe(bug);
-  expect(factory.fail({ failure: "internal" }, ctx).error).toBeUndefined();
+  expect(failureOf(factory.fail({ from: internal }, ctx))?.error).toBe(bug);
+  expect(failureOf(guarded.fail({ from: internal }, ctx))?.error).toBe(bug);
+  expect(failureOf(factory.fail({ failure: "internal" }, ctx))?.error).toBeUndefined();
 });

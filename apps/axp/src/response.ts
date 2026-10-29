@@ -3,6 +3,7 @@ import { AXP_FAILURE, AXP_FAILURES, AXP_RESPONSE } from "./brand";
 export { AXP_FAILURE, AXP_FAILURES, AXP_RESPONSE } from "./brand";
 import type { AxpContext } from "./context";
 import { classifyError } from "./transport";
+import { retryAfterHeader } from "./plugins/retry-timing";
 import type { AxpRequestConfig, TAxpArgs, TAxpDefaultResponse } from "./types";
 import { isObject, toText } from "./utils";
 
@@ -12,6 +13,8 @@ const EMPTY_MESSAGE = "";
 const JSON_CONTENT_TYPE = /json|html/i;
 /** HTTP 成功区间的终点（不含）。 */
 const HTTP_SUCCESS_END = 300;
+/** 随响应派生的服务端重试头，不保留原生响应。 */
+const RETRY_AFTER = Symbol("axp.retry-after");
 /** 内核记录的六种失败类别。
  * @example `const type: AxpFailureType = 'network'`
  */
@@ -22,6 +25,7 @@ export type AxpFailureType = (typeof AXP_FAILURES)[keyof typeof AXP_FAILURES];
 export interface IAxpFailure {
   /** 失败类别。 */ readonly type: AxpFailureType;
   /** 细分原因。 */ readonly reason?: string;
+  /** 仅 internal 失败保留的原始程序异常。 */ readonly error?: unknown;
 }
 /** 使用者实现的只读响应契约，C 为业务码类型，只有 data 的缺省值为 null。
  * @example `const response: IAxpResponse<null, string> = { ok: false, status: 200, code: 'DENIED', data: null }`
@@ -31,12 +35,12 @@ export interface IAxpResponse<D = unknown, C extends string | number = number> {
   /** HTTP 状态码，没有响应时为零。 */ readonly status: number;
   /** 业务码，没有转换结果时为零。 */ readonly code: C;
   /** 业务数据，没有数据时为 null。 */ readonly data: D;
-  /** 可选业务消息。 */ readonly message?: string | null;
-  /** 原始 axios 响应。 */ readonly raw?: AxiosResponse;
-  /** 原始异常，internal 落定时原样抛出。 */ readonly error?: unknown;
 }
 /** 构造与派生共用的基础字段。 */
 interface IAxpResponseFields extends Partial<IAxpResponse<unknown, string | number>> {
+  /** 可选业务消息。 */ readonly message?: string | null;
+  /** 仅供解析的原始响应，不存入响应字段。 */ readonly raw?: AxiosResponse;
+  /** 仅供 internal 失败标记使用的异常。 */ readonly error?: unknown;
   /** 实际请求视图。 */ readonly request?: Readonly<AxpRequestConfig>;
   /** debug 调用点。 */ readonly stack?: string;
   /** 插件或内核指定的失败类别。 */ readonly failure?: AxpFailureType;
@@ -61,10 +65,8 @@ export class AxpResponse<D = unknown, C extends string | number = number> implem
   /** 业务码。 */ readonly code: C;
   /** 业务数据，无数据为 null。 */ readonly data: D;
   /** 业务消息，默认空串。 */ readonly message: string | null;
-  /** 当前请求视图。 */ readonly request: Readonly<AxpRequestConfig>;
+  /** 轻量请求视图；开 raw 时内核在副本上以不可枚举方式覆盖为完整配置。 */ readonly request: Readonly<Pick<AxpRequestConfig, "method" | "url">>;
   /** debug 调用点。 */ readonly stack?: string;
-  /** axios 原始响应。 */ readonly raw?: AxiosResponse;
-  /** 原始异常。 */ readonly error?: unknown;
 
   /** 构造响应，仅未显式提供业务字段的原始响应调用 parse。
    * @param init 响应字段或派生来源。
@@ -78,10 +80,9 @@ export class AxpResponse<D = unknown, C extends string | number = number> implem
     this.code = (parsed.code ?? 0) as C;
     this.data = (parsed.data ?? null) as D;
     this.message = parsed.message === undefined ? EMPTY_MESSAGE : parsed.message;
-    this.request = fields.request ?? request ?? {};
+    const config = fields.request ?? request;
+    this.request = { method: config?.method, url: config?.url };
     this.stack = fields.stack;
-    this.raw = fields.raw;
-    this.error = fields.error;
   }
   /** HTTP 2xx 且业务码为数字零或字符串 0000 时成功。 */
   get ok(): boolean {
@@ -102,9 +103,9 @@ export class AxpResponse<D = unknown, C extends string | number = number> implem
    * @example `JSON.stringify(response)`
    */
   toJSON(): object {
-    const { raw: _raw, error: _error, ...fields } = this;
+    const { raw: _raw, error: _error, ...fields } = this as this & { /** 可选原生响应。 */ raw?: unknown; /** 可选原生异常。 */ error?: unknown };
     const failure = failureOf(this);
-    return { ...fields, ok: this.ok, ...(failure ? { failure } : {}), request: { method: this.request.method, url: this.request.url } };
+    return { ...fields, ok: this.ok, ...(failure ? { failure: { type: failure.type, reason: failure.reason } } : {}), request: { method: this.request.method, url: this.request.url } };
   }
 }
 Object.defineProperty(AxpResponse.prototype, AXP_RESPONSE, { value: true });
@@ -158,11 +159,52 @@ function resolveInit<R extends IAxpResponse<unknown, string | number>>(init: Axp
   if (!init.from) return init;
   const source = init.from;
   const failure = failureOf(source);
-  return { ...source, code: source.code, data: source.data, message: source.message, status: source.status, failure: failure?.type, reason: failure?.reason, ...init };
+  return {
+    ...source,
+    code: source.code,
+    data: source.data,
+    ...("message" in source ? { message: messageOf(source) } : {}),
+    status: source.status,
+    failure: failure?.type,
+    reason: failure?.reason,
+    ...(failure?.type === AXP_FAILURES.INTERNAL ? { error: failure.error } : {}),
+    ...init,
+  };
+}
+/** 结构化读取业务消息，接口实现可以不提供。
+ * @internal
+ * @param response 当前业务响应。
+ * @returns 字符串或 null，其余值为 undefined。
+ * @example `messageOf(response)`
+ */
+export function messageOf(response: IAxpResponse<unknown, string | number>): string | null | undefined {
+  const message: unknown = Reflect.get(response, "message");
+  return typeof message === "string" || message === null ? message : undefined;
+}
+/** 读取随响应流转的服务端重试头。
+ * @internal
+ * @param response 当前业务响应。
+ * @returns 原始头字符串，缺失时为 undefined。
+ * @example `retryAfterOf(response)`
+ */
+export function retryAfterOf(response: IAxpResponse<unknown, string | number>): string | undefined {
+  return (response as unknown as Record<symbol, string | undefined>)[RETRY_AFTER];
+}
+/** 写入或继承轻量重试事实，不保留传输引用。
+ * 值为 undefined 时不清除旧值，工厂复用同一个 R 实例不受支持。
+ * @internal
+ * @param response 目标响应。
+ * @param value 已读取的头值。
+ * @returns 目标响应。
+ * @example `withRetryAfter(response, '2')`
+ */
+export function withRetryAfter<R extends IAxpResponse<unknown, string | number>>(response: R, value: string | undefined): R {
+  if (value !== undefined) Object.defineProperty(response, RETRY_AFTER, { value, configurable: true });
+  return response;
 }
 /** 读取内核记录的失败事实。
  * @param response 任意响应或异常。
- * @returns 失败标记，普通收到的响应为 undefined。
+ * @returns 失败标记，error 仅 internal 有；普通收到的响应为 undefined。
  * @example `failureOf(response)?.type === 'network'`
  */
 export function failureOf(response: unknown): IAxpFailure | undefined {
@@ -184,10 +226,10 @@ function markFailure<R extends IAxpResponse<unknown, string | number>>(
 ): R {
   if (failure) {
     // internal 必须抛原始异常，接口实现可以省略 error，内核仍须保留它。
-    if (failure.type === AXP_FAILURES.INTERNAL) Object.defineProperty(response, "error", { value: "error" in init ? init.error : init.from?.error, enumerable: true, configurable: true });
+    if (failure.type === AXP_FAILURES.INTERNAL) failure = { ...failure, error: "error" in init ? init.error : failureOf(init.from)?.error };
     Object.defineProperties(response, { [AXP_FAILURE]: { value: Object.freeze(failure), configurable: true }, ok: { value: false, enumerable: true, configurable: true } });
   }
-  return response;
+  return init.from ? withRetryAfter(response, retryAfterOf(init.from)) : response;
 }
 /** 检查跨入口共享品牌。
  * @param value 任意被抛出的值。
@@ -202,7 +244,6 @@ function brandResponse<R extends IAxpResponse<unknown, string | number>>(respons
   if (!isAxpResponse<R>(response)) Object.defineProperty(response, AXP_RESPONSE, { value: true });
   if (response.code === undefined) Object.defineProperty(response, "code", { value: 0, enumerable: true, configurable: true });
   if (response.data === undefined) Object.defineProperty(response, "data", { value: null, enumerable: true, configurable: true });
-  if (response.message === undefined) Object.defineProperty(response, "message", { value: EMPTY_MESSAGE, enumerable: true, configurable: true });
   return response;
 }
 /** 创建响应工厂，支持继承和接口两条路径。
@@ -224,7 +265,10 @@ export function axpResponse<R extends IAxpResponse<unknown, string | number> = A
   return {
     /** 原始响应交给 parse/create，守卫失败在构造后强制标记。 */
     fromResponse(raw, ctx) {
-      const init = { raw, status: raw.status, request: raw.config as AxpRequestConfig } as AxpResponseInit<R>;
+      const config = raw.config ?? ctx.request;
+      // 默认路径仅在构造器内投影一次；自定义工厂仍只收到轻量视图。
+      const request = options.type || options.create ? { method: config.method, url: config.url } : config;
+      const init = { raw, status: raw.status, request } as AxpResponseInit<R>;
       if (options.expectJson && isHttpOk(raw.status)) {
         const body = raw.data as unknown;
         if (typeof body === "string" && body.trim() !== "" && JSON_CONTENT_TYPE.test(toText(raw.headers?.["content-type"] ?? "")))
@@ -238,7 +282,7 @@ export function axpResponse<R extends IAxpResponse<unknown, string | number> = A
         {
           failure: classifyError(error),
           error,
-          request: isAxiosError(error) ? (error.config as AxpRequestConfig | undefined) : undefined,
+          request: isAxiosError(error) && error.config ? { method: error.config.method, url: error.config.url } : undefined,
           message: error instanceof Error ? error.message : String(error),
         } as AxpResponseInit<R>,
         ctx,
@@ -262,16 +306,16 @@ export function guardFactory<R extends IAxpResponse<unknown, string | number>>(f
   const directFail = (factory as unknown) === DEFAULT_RESPONSE_FACTORY;
   /** 工厂失败时用默认实现保留原始程序异常。 */
   function recover(error: unknown, ctx: AxpContext<R>, init?: AxpResponseInit<R>): R {
-    return DEFAULT_RESPONSE_FACTORY.fail(
-      { failure: AXP_FAILURES.INTERNAL, error: init?.failure === AXP_FAILURES.INTERNAL ? init.error : error, request: ctx.request },
-      ctx as unknown as AxpContext<AxpResponse>,
-    ) as unknown as R;
+    const inherited = failureOf(init?.from);
+    let cause = error;
+    if (init && (init.failure ?? inherited?.type) === AXP_FAILURES.INTERNAL) cause = "error" in init ? init.error : inherited?.error;
+    return DEFAULT_RESPONSE_FACTORY.fail({ failure: AXP_FAILURES.INTERNAL, error: cause, request: ctx.request }, ctx as unknown as AxpContext<AxpResponse>) as unknown as R;
   }
   return {
     /** 保护收到响应后的构造。 */
     fromResponse(raw, ctx) {
       try {
-        return brandResponse(factory.fromResponse(raw, ctx));
+        return withRetryAfter(brandResponse(factory.fromResponse(raw, ctx)), retryAfterHeader(raw.headers));
       } catch (error) {
         return recover(error, ctx);
       }
@@ -279,7 +323,8 @@ export function guardFactory<R extends IAxpResponse<unknown, string | number>>(f
     /** 构造后强制传输分类，使用者无法改写。 */
     fromError(error, ctx) {
       try {
-        return markFailure(brandResponse(factory.fromError(error, ctx)), { type: classifyError(error) }, { error });
+        const response = markFailure(brandResponse(factory.fromError(error, ctx)), { type: classifyError(error) }, { error });
+        return withRetryAfter(response, retryAfterHeader(isAxiosError(error) ? error.response?.headers : undefined));
       } catch (cause) {
         return recover(cause, ctx);
       }

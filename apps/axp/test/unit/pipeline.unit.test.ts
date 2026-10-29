@@ -28,7 +28,7 @@ describe("管线与上下文", /** 管线与上下文的用例集合。 */ () =>
         },
       },
     );
-    expect(ctx.fail({ failure: "auth" })).toMatchObject({ error: factoryBug, [AXP_FAILURE]: { type: "internal" } });
+    expect(ctx.fail({ failure: "auth" })).toMatchObject({ [AXP_FAILURE]: { type: "internal", error: factoryBug } });
     const layers = sort([
       {
         name: "observer",
@@ -46,14 +46,14 @@ describe("管线与上下文", /** 管线与上下文的用例集合。 */ () =>
       },
     ]);
     expect(
-      (
+      failureOf(
         await composePipeline(
           layers,
           /** 中间件已抛错，传输不应被执行。 */ async () => {
             throw new Error("unreachable");
           },
-        )(ctx)
-      ).error,
+        )(ctx),
+      )?.error,
     ).toBe(original);
   });
   it("[core.fn.sortPipeline] 阶段表从外到内固定为五段", /** 阶段次序由内置位置表的声明顺序派生。 */ () => {
@@ -169,7 +169,7 @@ describe("管线与上下文", /** 管线与上下文的用例集合。 */ () =>
         },
       ]);
       const response = await composePipeline(layers, /** 传输返回空响应。 */ async (ctx) => ctx.fail({}))(testContext());
-      expect(response.error).toBe(bug);
+      expect(failureOf(response)?.error).toBe(bug);
       expect(events).toEqual(["enter", "internal"]);
     },
   );
@@ -187,7 +187,7 @@ describe("管线与上下文", /** 管线与上下文的用例集合。 */ () =>
         },
       },
     ]);
-    expect((await composePipeline(layers, /** 传输返回空响应。 */ async (ctx) => ctx.fail({}))(testContext())).error).toBe(bug);
+    expect(failureOf(await composePipeline(layers, /** 传输返回空响应。 */ async (ctx) => ctx.fail({}))(testContext()))?.error).toBe(bug);
   });
   it("[core.fn.composePipeline] taps 请求补丁与响应替换、无回调透传", /** taps 请求补丁与响应替换、无回调透传。 */ async () => {
     const ctx = testContext();

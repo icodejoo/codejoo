@@ -1,3 +1,4 @@
+import { nativeFields } from "../helpers/native";
 import { once } from "node:events";
 import { createServer } from "node:http";
 import { expect, it } from "vitest";
@@ -30,9 +31,9 @@ it("[core.method.toJSON] 真实 HTTP 响应排除传输循环引用并保留判�
       },
       { adapter: "http", proxy: false },
     );
-    const response = await api.get(url)(undefined, { wrap: true });
-    expect(response.raw?.request).toBeDefined();
-    expect(/** 尝试直接序列化原始循环引用。 */ () => JSON.stringify(response.raw?.request)).toThrow();
+    const response = await api.get(url)(undefined, { wrap: true, raw: true });
+    expect(nativeFields(response).raw?.request).toBeDefined();
+    expect(/** 尝试直接序列化原始循环引用。 */ () => JSON.stringify(nativeFields(response).raw?.request)).toThrow();
     const text = JSON.stringify(response);
     expect(JSON.parse(text)).toEqual({
       ok: true,

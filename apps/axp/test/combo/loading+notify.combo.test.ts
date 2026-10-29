@@ -1,3 +1,4 @@
+import { UI_OBSERVER } from "../helpers/ui";
 import { beforeEach, expect, it, vi } from "vitest";
 import axpLoading from "../../src/plugins/loading";
 import axpNotify from "../../src/plugins/notify";
@@ -39,7 +40,7 @@ it("[loading.cb.loading][notify.cb.notify] 任意注册顺序仍是一对显示�
   const result = await pending;
   expect(h.events.loading.get(LOADING_LABEL)).toEqual([true, false]);
   expect(notify).toHaveBeenCalledExactlyOnceWith(FAILURE_MESSAGE, result);
-  expect(h.api.inspect()).toEqual([
+  expect(h.api.inspect().filter(/** 排除夹具自身的上下文观测层。 */ (item) => item.name !== UI_OBSERVER)).toEqual([
     { name: LOADING_NAME, stage: OUTER_STAGE },
     { name: NOTIFY_NAME, stage: OUTER_STAGE },
   ]);
@@ -73,7 +74,7 @@ it("[loading.cb.loading][notify.cb.stringify][notify.combo.taps] taps 的 outer 
   expect(response).toMatchObject({ message: FINAL_MESSAGE, traceId: TRACE_ID });
   expect(results).toEqual([response]);
   expect(notify).toHaveBeenCalledExactlyOnceWith(FINAL_MESSAGE, response);
-  expect(h.api.inspect()).toEqual([
+  expect(h.api.inspect().filter(/** 排除夹具自身的上下文观测层。 */ (item) => item.name !== UI_OBSERVER)).toEqual([
     { stage: OUTER_STAGE, name: LOADING_NAME },
     { stage: OUTER_STAGE, name: NOTIFY_NAME },
     { stage: OUTER_STAGE, name: "audit#1" },

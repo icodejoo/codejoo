@@ -1,7 +1,7 @@
 import { cancelIfAborted, type AxpContext } from "../context";
 import { methodSet, normalizeMethod, SAFE_METHODS } from "../methods";
 import { resolveOption, resolveRequestOption, type AxpOption, type IPluginSwitch } from "../options";
-import { failureOf, type AxpResponse, type AxpResponseInit, type IAxpResponse } from "../response";
+import { failureOf, messageOf, type AxpResponse, type AxpResponseInit, type IAxpResponse } from "../response";
 import type { AxpClient, AxpNext, AxpPlugin } from "../types";
 import { waitAbortable } from "../utils";
 import { createFreshnessBarrier, createMemoryStore, type IAxpCacheEntry, type IAxpCacheSnapshot, type IAxpCacheStore, type MaybePromise } from "./cache-store";
@@ -144,12 +144,13 @@ function snapshotResponse(response: IAxpResponse<unknown, string | number>): IAx
   }
   const snapshot: IAxpCacheSnapshot = {
     code: response.code,
-    message: response.message,
     data: response.data,
     reason: failureOf(response)?.reason,
     failure: failureOf(response)?.type,
     status: response.status,
   };
+  const message = messageOf(response);
+  if (message !== undefined) snapshot.message = message;
   if (extra) snapshot.extra = extra;
   return snapshot;
 }

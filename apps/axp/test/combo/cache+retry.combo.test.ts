@@ -47,7 +47,7 @@ it.each([false, true])(
     expect([...h.cache.entries.values()].map(/** 只缓存重试成功的快照。 */ (e) => e.snapshot)).toEqual([
       { code: first.code, message: first.message, data: first.data, status: first.status, failure: failureOf(first)?.type, reason: failureOf(first)?.reason },
     ]);
-    const [hit] = await settleAll(h.send({ url: URL, cache: { key: CACHE_KEY } }));
+    const [hit] = await settleAll(h.send({ url: URL, cache: { key: CACHE_KEY }, raw: true }));
     expect(hit).not.toBe(first);
     expect(hit.data).toEqual(first.data);
     expect(hit.request).toBe(h.attempts.at(-1));

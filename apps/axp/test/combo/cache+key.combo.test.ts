@@ -32,7 +32,7 @@ it("[core.req.key × cache.req.cache] 不写 key 也自动计算：相同 method
   const different = await call(h, { params: { a: 1, b: 3 } });
   expect(reordered).not.toBe(first);
   expect(reordered.data).toEqual(first.data);
-  expect(reordered.request.params).toEqual({ b: 2, a: 1 });
+  // 命中 R 的当前调用方视图由 cache.snapshot.rule 的 /second 用例验证。
   expect(different.data).not.toEqual(first.data);
   expect(h.net.calls("get", URL)).toBe(2);
 });
@@ -47,7 +47,6 @@ it("[core.req.key × cache.opt.methods] 有请求体的方法把 data 并入 key
   const textAgain = await call(h, { method: "post", data: "alpha" });
   expect(reordered).not.toBe(a);
   expect(reordered.data).toEqual(a.data);
-  expect(reordered.request.data).toEqual({ y: 2, x: 1 });
   expect(other.data).not.toEqual(a.data);
   expect(textB.data).not.toEqual(textA.data);
   expect(textAgain).not.toBe(textA);

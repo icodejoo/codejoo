@@ -24,7 +24,8 @@ export interface IAxpSettleOptions<R extends IAxpResponse<unknown, string | numb
  */
 export function settle<R extends IAxpResponse<unknown, string | number>>(response: R, ctx: AxpContext<R>, options: IAxpSettleOptions<R>, callsite?: Error): unknown {
   try {
-    if (failureOf(response)?.type === AXP_FAILURES.INTERNAL) throw response.error;
+    const failure = failureOf(response);
+    if (failure?.type === AXP_FAILURES.INTERNAL) throw failure.error;
     const throws = ctx.request.throws ?? true;
     const raw = ctx.originRequest.raw;
     const stack = !response.ok && throws ? callsite?.stack : undefined;
@@ -45,7 +46,8 @@ export function settle<R extends IAxpResponse<unknown, string | number>>(respons
         }
       }
     } else if (stack !== undefined) result = ctx.fail({ from: response, stack });
-    if (failureOf(result)?.type === AXP_FAILURES.INTERNAL) throw result.error;
+    const resultFailure = failureOf(result);
+    if (resultFailure?.type === AXP_FAILURES.INTERNAL) throw resultFailure.error;
     if (!result.ok && throws) throw options.reject ? options.reject(result) : result;
     return raw || ctx.request.wrap || !throws ? result : result.data;
   } finally {

@@ -92,15 +92,15 @@ it("[core.method.key] 非普通原型对象返回 null，不读取继承的 gett
 
 it("[filter.opt.snapshot] 装配配置快照不受原选项和豁免数组后续修改影响", /** 对象覆盖也应继承同一份配置。 */ async () => {
   const options = { /** 原始豁免列表。 */ ignoreKeys: [PATH_FIELD] };
-  const { api } = preparedClient([axpFilter(options)]);
+  const { api, request } = preparedClient([axpFilter(options)]);
   options.ignoreKeys.length = 0;
-  const response = await api.request({
+  await api.request({
     /** 固定地址。 */ url: TEST_URL,
     /** id 在装配时已经豁免。 */ params: { id: null },
     /** 触发对象级覆盖。 */ filter: {},
     /** 保留响应供检查。 */ throws: false,
   });
-  expect(response.request.params).toEqual({ id: null });
+  expect(request().params).toEqual({ id: null });
   api.dispose();
 });
 
@@ -131,7 +131,7 @@ it("[repath.opt.pattern] 默认无变量路径直接透传，请求级正则使�
       return next();
     },
   };
-  const { api } = preparedClient([axpRepath(), untouched]);
+  const { api, request } = preparedClient([axpRepath(), untouched]);
   const plain = TEST_URL + "?query={id}";
   expect((await api.request({ /** 变量只在查询中。 */ url: plain, /** 不抛出。 */ throws: false })).request.url).toBe(plain);
   api.eject(untouched.name);
@@ -145,6 +145,6 @@ it("[repath.opt.pattern] 默认无变量路径直接透传，请求级正则使�
   });
   expect(response.request.url).toBe("/7");
   expect(pattern.lastIndex).toBe(2);
-  expect((response.request.headers as AxiosHeaders).has("accept")).toBe(true);
+  expect((request().headers as AxiosHeaders).has("accept")).toBe(true);
   api.dispose();
 });

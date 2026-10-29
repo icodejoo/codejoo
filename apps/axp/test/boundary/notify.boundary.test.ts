@@ -1,3 +1,4 @@
+import { UI_OBSERVER } from "../helpers/ui";
 import { failureOf } from "../../src/response";
 import { AXP_FAILURE } from "../../src/response";
 /* eslint-disable no-await-in-loop -- 同一客户端依次核对请求选项和生命周期，避免引入额外并发语义。 */
@@ -89,7 +90,7 @@ it("[notify.opt.enable][notify.method.lifecycle] 禁用不 setup，重名拒绝�
   const notify = vi.fn(notifyRecorder(h.events));
   const disabled = axpNotify<AxpResponse>({ enable: false, notify });
   h.api.use(disabled);
-  expect(h.api.inspect()).toEqual([]);
+  expect(h.api.inspect().filter(/** 排除夹具自身的上下文观测层。 */ (item) => item.name !== UI_OBSERVER)).toEqual([]);
   let pending = h.send({ notify: true });
   await vi.runAllTimersAsync();
   await pending;
@@ -140,7 +141,7 @@ it("[notify.method.lifecycle] 同一插件定义复用时，卸载一个客户�
   await vi.runAllTimersAsync();
   await pending;
   expect(notify).toHaveBeenCalledTimes(3);
-  expect(second.api.inspect()).toEqual([{ stage: "outer", name: NAME }]);
+  expect(second.api.inspect().filter(/** 排除夹具自身的上下文观测层。 */ (item) => item.name !== UI_OBSERVER)).toEqual([{ stage: "outer", name: NAME }]);
 });
 it.each([undefined, null, false, 0, EMPTY_TEXT, true])(
   "[notify.req.silent] 自定义 stringify 读取原始 silent=%s，可自行决定通知",

@@ -196,7 +196,7 @@ describe("[core.opt.response][core.fn.createAxp] 自定义 R + 全部内置插�
     expect(hit.data).toEqual(miss.data);
     expect(hit.data).not.toBe(miss.data);
     expect(hit.request).not.toBe(miss.request);
-    expect(hit.raw).toBeUndefined();
+    expect(hit).not.toHaveProperty("raw");
     expect(h.net.totalStarted).toBe(1);
     h.dispose();
   });

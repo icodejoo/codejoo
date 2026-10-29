@@ -1,7 +1,7 @@
 import { AXP_FAILURE } from "../../src/response";
 import { failureOf } from "../../src/response";
 import { AxiosError, AxiosHeaders, type AxiosInstance, type AxiosRequestConfig } from "axios";
-import { afterEach, expect, it, vi } from "vitest";
+import { afterEach, assert, expect, it, vi } from "vitest";
 import { axpResponse } from "../../src/response";
 import { createTransport } from "../../src/transport";
 import { requestContext } from "../../src/context";
@@ -32,7 +32,8 @@ it("[core.fn.createTransport] 强制全状态放行，默认使用逻辑 signal"
   const config = request.mock.calls[0][0];
   expect(config.signal).toBe(ctx.signal);
   expect(config.validateStatus!(500)).toBe(true);
-  expect(response.request).toMatchObject({ signal: ctx.signal });
+  expect(ctx.native.response?.config.signal).toBe(ctx.signal);
+  expect(response.request).toEqual({ method: undefined, url: undefined });
 });
 it("[core.req.signal] 显式传输 signal 优先，已取消不发送", /** 显式传输 signal 优先，已取消不发送。 */ async () => {
   const { send, request } = transport();
@@ -83,13 +84,18 @@ it("[core.fn.createTransport] 非 axios 的程序异常由传输自身兜底为 
   const { send, request } = transport();
   const bug = new TypeError("adapter bug");
   request.mockRejectedValue(bug);
-  expect(await send(testContext())).toMatchObject({ error: bug, [AXP_FAILURE]: { type: "internal" } });
+  expect(await send(testContext())).toMatchObject({ [AXP_FAILURE]: { type: "internal", error: bug } });
 });
 it("[core.fn.createTransport] axios 异常交给响应工厂", /** axios 异常交给响应工厂。 */ async () => {
   const { send, request } = transport();
   const error = new AxiosError("offline");
   request.mockRejectedValue(error);
-  expect(await send(testContext())).toMatchObject({ error, [AXP_FAILURE]: { type: "network" } });
+  const ctx = testContext();
+  const response = await send(ctx);
+  expect(response).toMatchObject({ [AXP_FAILURE]: { type: "network" } });
+  expect(response).not.toHaveProperty("error");
+  expect(failureOf(response)?.error).toBeUndefined();
+  expect(ctx.native.error).toBe(error);
 });
 it("[core.fn.createTransport] 未改动的纯对象默认 params 仍复制完整视图，headers 原样透传", /** 默认参数固定为视图，默认头继续以发送时为准。 */ async () => {
   const request = vi.fn(
@@ -154,7 +160,8 @@ it("[core.method.canReplay] 传输记录一次性请求体，再发时返回原�
   expect(ctx.canReplay()).toBe(false);
   const failure = await send(ctx);
   expect(failureOf(failure)?.type).toBe("internal");
-  expect(failure.error).toBeInstanceOf(Error);
-  expect((failure.error as Error).message).toBe("一次性请求体已发送，不能重放；重放前请先检查 ctx.canReplay()");
+  const error = failureOf(failure)?.error;
+  assert(error instanceof Error);
+  expect(error.message).toBe("一次性请求体已发送，不能重放；重放前请先检查 ctx.canReplay()");
   expect(request).toHaveBeenCalledTimes(1);
 });

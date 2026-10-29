@@ -1,6 +1,6 @@
 import type { AxpContext } from "../context";
 import { isEnabled, type AxpOption, type IPluginSwitch } from "../options";
-import { failureOf, AXP_FAILURES, type AxpResponse, type IAxpResponse } from "../response";
+import { failureOf, messageOf, AXP_FAILURES, type AxpResponse, type IAxpResponse } from "../response";
 import type { AxpPlugin } from "../types";
 import { fireNotice } from "../utils";
 
@@ -18,7 +18,7 @@ export interface INotifyOptions<R extends IAxpResponse<unknown, string | number>
 /** 从最终逻辑结果生成默认消息。 */
 function defaultStringify<R extends IAxpResponse<unknown, string | number>>(response: R, ctx: AxpContext<R>): string {
   if (response.ok || failureOf(response)?.type === AXP_FAILURES.CANCEL || ctx.request.silent) return "";
-  return response.message || failureOf(response)?.type || `status ${response.status}${response.code !== 0 ? ` code ${response.code}` : ""}`;
+  return messageOf(response) || failureOf(response)?.type || `status ${response.status}${response.code !== 0 ? ` code ${response.code}` : ""}`;
 }
 /** 在 outer 阶段最多通知一次，原样透传最终响应。
  * @param options 必填通知回调和可选消息格式化规则。

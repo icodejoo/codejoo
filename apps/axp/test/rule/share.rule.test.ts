@@ -1,3 +1,4 @@
+import { UI_OBSERVER } from "../helpers/ui";
 import { beforeEach, expect, it, vi } from "vitest";
 import axpShare, { type ISharedOptions, type SharePolicy } from "../../src/plugins/share";
 import { envelope, requestRecorder, sourceClient } from "../helpers/source";
@@ -35,10 +36,14 @@ it("[share.prop.name][share.opt.enable] 名称为 axp:share，enable:false 不�
   expect(plugin.name).toBe(NAME);
   const h = sourceClient([plugin]);
   h.net.on("get", URL, () => envelope(1));
-  expect(h.api.inspect()).toEqual([]);
+  expect(h.api.inspect().filter(/** 排除夹具自身的上下文观测层。 */ (item) => item.name !== UI_OBSERVER)).toEqual([]);
   await settled(h.send({ url: URL, share: true }), h.send({ url: URL, share: true }));
   expect(h.net.calls("get", URL)).toBe(2);
-  expect(sourceClient([axpShare()]).api.inspect()).toEqual([{ stage: "source", name: NAME }]);
+  expect(
+    sourceClient([axpShare()])
+      .api.inspect()
+      .filter(/** 排除夹具自身的上下文观测层。 */ (item) => item.name !== UI_OBSERVER),
+  ).toEqual([{ stage: "source", name: NAME }]);
 });
 
 it("[share.opt.policy][share.req.share] start 并发 50 个同 key 请求只发一次，所有人拿到同一个 R，结束后重新发送", async () => {
@@ -214,9 +219,9 @@ it("[share.req.share] 不修改调用方的请求对象，选项原样保留在�
   const snapshot = JSON.stringify(config);
   const pending = h.api.request(config);
   await vi.runAllTimersAsync();
-  const r = await pending;
+  await pending;
   expect(JSON.stringify(config)).toBe(snapshot);
-  expect(r.request.share).toEqual(config.share);
+  expect(h.requests[0].share).toEqual(config.share);
 });
 
 it("[share.method.lifecycle] eject 后不再共享，在途订阅者仍拿到结果", async () => {

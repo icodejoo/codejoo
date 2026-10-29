@@ -1,3 +1,4 @@
+import { UI_OBSERVER } from "../helpers/ui";
 import { failureOf } from "../../src/response";
 /* eslint-disable no-await-in-loop -- 同一客户端依次核对请求选项和生命周期，避免引入额外并发语义。 */
 import type { AxpResponse } from "../../src/response";
@@ -46,11 +47,11 @@ it("[notify.req.notify][notify.req.silent] 请求关闭与 silent 默认静默�
   for (const config of [{ notify: false }, { notify: { enable: false } }, { silent: true }, { notify: null }, {}]) {
     const pending = h.send(config);
     await vi.runAllTimersAsync();
-    const response = await pending;
-    expect(response.request.notify).toEqual(config.notify);
+    await pending;
+    expect(h.requests[h.requests.length - 1].notify).toEqual(config.notify);
   }
   expect(notify).toHaveBeenCalledTimes(2);
-  expect(h.api.inspect()).toEqual([{ name: NAME, stage: "outer" }]);
+  expect(h.api.inspect().filter(/** 排除夹具自身的上下文观测层。 */ (item) => item.name !== UI_OBSERVER)).toEqual([{ name: NAME, stage: "outer" }]);
   h.api.eject(NAME);
   const pending = h.send();
   await vi.runAllTimersAsync();

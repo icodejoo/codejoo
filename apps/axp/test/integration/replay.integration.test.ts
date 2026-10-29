@@ -1,3 +1,4 @@
+import { failureOf } from "../../src/response";
 import { once } from "node:events";
 import { createServer } from "node:http";
 import { Readable } from "node:stream";
@@ -108,7 +109,7 @@ it("[core.method.canReplay][core.fn.createTransport] 自定义插件直接重放
     /** 故意不检查 canReplay，验证传输层兜底。 */ async handle(_ctx, next) {
       await next();
       const response = await next();
-      original = response.error;
+      original = failureOf(response)?.error;
       return response;
     },
   };

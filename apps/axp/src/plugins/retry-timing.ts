@@ -1,3 +1,4 @@
+import type { AxiosResponse } from "axios";
 import { waitAbortable } from "../utils";
 
 /** 默认首轮退避毫秒数。 */
@@ -7,7 +8,7 @@ const BACKOFF_FACTOR = 2;
 /** 秒到毫秒的换算倍数。 */
 const MS_PER_SECOND = 1000;
 /** Retry-After 头名。 */
-const RETRY_AFTER = "retry-after";
+export const RETRY_AFTER_HEADER = "retry-after";
 /** 默认计算延迟上限（毫秒）。 */
 export const DEFAULT_DELAY_MAX = 10_000;
 /** 默认采信 Retry-After 的 HTTP 状态。 */
@@ -31,7 +32,7 @@ export interface IRetryAfterHeaders {
   /** 优先采用的头访问器。 */
   get?: (name: string) => unknown;
   /** 普通对象头字段。 */
-  "retry-after"?: unknown;
+  [RETRY_AFTER_HEADER]?: unknown;
 }
 
 /**
@@ -88,8 +89,30 @@ export function applyJitter(ms: number, jitter?: TRetryJitter, delayMax = DEFAUL
  * @example retryAfterMs({ 'retry-after': '2' }, Infinity); // 2000
  */
 export function retryAfterMs(headers: IRetryAfterHeaders | null | undefined, cap: number, now = Date.now): number | null | undefined {
-  const raw = typeof headers?.get === "function" ? headers.get(RETRY_AFTER) : headers?.[RETRY_AFTER];
-  if (typeof raw !== "string" && typeof raw !== "number") return undefined;
+  return parseRetryAfter(retryAfterHeader(headers), cap, now);
+}
+
+/** 提取原始重试头，优先使用 get，数字按秒数转为字符串。
+ * @internal
+ * @param headers 普通头对象或提供 get 的头对象。
+ * @returns 原始头字符串，缺失或类型非法时为 undefined。
+ * @example `retryAfterHeader({ 'retry-after': 2 }) // '2'`
+ */
+export function retryAfterHeader(headers: IRetryAfterHeaders | AxiosResponse["headers"] | null | undefined): string | undefined {
+  const raw: unknown = typeof headers?.get === "function" ? headers.get(RETRY_AFTER_HEADER) : headers?.[RETRY_AFTER_HEADER];
+  return typeof raw === "string" || typeof raw === "number" ? String(raw) : undefined;
+}
+
+/** 按原始字符串解析数字秒或 HTTP-date，沿用 Number/Date.parse 语义。
+ * @internal
+ * @param raw 原始头字符串。
+ * @param cap 服务端延迟上限（毫秒）。
+ * @param now 当前毫秒时钟，仅有效日期头需要调用。
+ * @returns 非负毫秒数，缺失或非法为 undefined，超限为 null。
+ * @example `parseRetryAfter('2', Infinity) // 2000`
+ */
+export function parseRetryAfter(raw: string | undefined, cap: number, now = Date.now): number | null | undefined {
+  if (raw === undefined) return undefined;
   const seconds = Number(raw);
   let ms: number;
   if (Number.isFinite(seconds)) ms = Math.max(0, seconds * MS_PER_SECOND);

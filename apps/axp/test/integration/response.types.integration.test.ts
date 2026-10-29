@@ -1,6 +1,8 @@
 import { expect, expectTypeOf, it } from "vitest";
 import { createAxp } from "../../src/client";
 import type { AxpContext } from "../../src/context";
+import type { AxpRequestConfig } from "../../src/types";
+import type { IAxpFailure } from "../../src/index";
 import { AxpResponse, axpResponse, type AxpResponseInit, type IAxpResponse } from "../../src/response";
 
 it("[core.type.IAxpResponse][core.type.AxpResponseInit] 精简接口、业务码泛型和扩展数据字段", /** 只执行类型契约函数的声明检查。 */ () => {
@@ -9,7 +11,14 @@ it("[core.type.IAxpResponse][core.type.AxpResponseInit] 精简接口、业务码
     const minimal: IAxpResponse<null, string> = { ok: false, status: 0, code: "OFFLINE", data: null };
     expectTypeOf(minimal.code).toEqualTypeOf<string>();
     expectTypeOf<IAxpResponse["code"]>().toEqualTypeOf<number>();
-    expectTypeOf<keyof IAxpResponse>().toEqualTypeOf<"ok" | "status" | "code" | "data" | "message" | "raw" | "error">();
+    expectTypeOf<keyof IAxpResponse>().toEqualTypeOf<"ok" | "status" | "code" | "data">();
+    expectTypeOf<AxpResponse["message"]>().toEqualTypeOf<string | null>();
+    expectTypeOf<AxpResponse["request"]>().toEqualTypeOf<Readonly<Pick<AxpRequestConfig, "method" | "url">>>();
+    expectTypeOf<IAxpFailure["error"]>().toEqualTypeOf<unknown>();
+    // @ts-expect-error 默认响应不声明原生响应。
+    expectTypeOf<AxpResponse["raw"]>().toBeAny();
+    // @ts-expect-error 默认响应不声明原始异常。
+    expectTypeOf<AxpResponse["error"]>().toBeAny();
     /** 响应上的扩展数据与函数。 */
     class Extended extends AxpResponse<unknown, string | number> {
       /** 扩展追踪字段。 */ traceId = "";

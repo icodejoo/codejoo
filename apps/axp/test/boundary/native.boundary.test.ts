@@ -1,3 +1,4 @@
+import { nativeFields } from "../helpers/native";
 import { AxiosHeaders, create as createAxios, type AxiosResponse } from "axios";
 import { afterEach, assert, beforeEach, expect, it, vi } from "vitest";
 import { settle } from "../../src/client";
@@ -55,11 +56,11 @@ it("[core.req.raw] 缓存命中无配对数据；mock 探测回落后命中缓�
   const [first] = await settleAll(api.request<AxpResponse>({ url: URL, cache: true, raw: true }));
   const [cached] = await settleAll(api.request<AxpResponse>({ url: URL, cache: true, raw: true }));
   const [fallback] = await settleAll(api.request<AxpResponse>({ url: URL, cache: true, mock: true, raw: true }));
-  expect(first.raw?.config.url).toBe(URL);
-  expect(cached.raw).toBeUndefined();
-  expect(cached.error).toBeUndefined();
-  expect(fallback.raw).toBeUndefined();
-  expect(fallback.error).toBeUndefined();
+  expect(nativeFields(first).raw?.config.url).toBe(URL);
+  expect(nativeFields(cached).raw).toBeUndefined();
+  expect(nativeFields(cached).error).toBeUndefined();
+  expect(nativeFields(fallback).raw).toBeUndefined();
+  expect(nativeFields(fallback).error).toBeUndefined();
   expect(fallback.request.url).toBe(URL);
   expect(seen[1]).toEqual({ native: EMPTY_NATIVE, paired: undefined });
   expect(seen[2].native.response?.config.url).toBe(PROBE);
@@ -72,11 +73,11 @@ it("[core.req.raw] 缓存命中无配对数据；mock 探测回落后命中缓�
 it("[core.req.raw] auth 本地拒绝没有原生响应和异常", async () => {
   const tokenManager = new TokenManager();
   tokenManager.clear();
-  const { api, net } = createTestClient([axpAuth({ tokenManager, onRefresh: vi.fn(), onAccessExpired: vi.fn() })]);
+  const { api, net } = createTestClient<AxpResponse>([axpAuth({ tokenManager, onRefresh: vi.fn(), onAccessExpired: vi.fn() })]);
   const response = await api.request({ url: URL, raw: true, throws: false });
   expect(failureOf(response)?.type).toBe("auth");
-  expect(response.raw).toBeUndefined();
-  expect(response.error).toBeUndefined();
+  expect(nativeFields(response).raw).toBeUndefined();
+  expect(nativeFields(response).error).toBeUndefined();
   expect(response.request.url).toBe(URL);
   expect(net.totalStarted).toBe(0);
   api.dispose();
@@ -90,10 +91,10 @@ it("[core.req.raw] retry 多次尝试只附加最后一次传输的原始响应"
   const request = vi.spyOn(api.axios, "request").mockResolvedValueOnce(first).mockResolvedValueOnce(second).mockResolvedValueOnce(last);
   const [result] = await settleAll(api.request<AxpResponse>({ url: URL, raw: true }));
   expect(request).toHaveBeenCalledTimes(3);
-  expect(result.raw).toBe(last);
-  expect(result.raw).not.toBe(first);
-  expect(result.raw).not.toBe(second);
-  expect(result.error).toBeUndefined();
+  expect(nativeFields(result).raw).toBe(last);
+  expect(nativeFields(result).raw).not.toBe(first);
+  expect(nativeFields(result).raw).not.toBe(second);
+  expect(nativeFields(result).error).toBeUndefined();
   api.dispose();
 });
 
@@ -103,7 +104,7 @@ it.each(["refresh", "denied"] as const)("[core.req.raw] auth %s 经 fail 派生�
   const onRefresh = vi.fn(/** 明确刷新失败。 */ () => false);
   const onAccessExpired = vi.fn();
   const onAccessDenied = vi.fn();
-  const { api } = createTestClient([
+  const { api } = createTestClient<AxpResponse>([
     axpAuth({
       tokenManager,
       onRefresh,
@@ -116,8 +117,8 @@ it.each(["refresh", "denied"] as const)("[core.req.raw] auth %s 经 fail 派生�
   const raw = rawResponse(401);
   const request = vi.spyOn(api.axios, "request").mockResolvedValue(raw);
   const result = await api.request({ url: URL, raw: true, throws: false });
-  expect(result.raw).toBe(raw);
-  expect(result.error).toBeUndefined();
+  expect(nativeFields(result).raw).toBe(raw);
+  expect(nativeFields(result).error).toBeUndefined();
   expect(failureOf(result)).toEqual({ type: "auth", reason: route === "denied" ? "denied" : "expired" });
   expect(request).toHaveBeenCalledTimes(1);
   expect(onRefresh).toHaveBeenCalledTimes(route === "refresh" ? 1 : 0);
@@ -132,11 +133,11 @@ it("[core.req.raw] 缓存未命中并 clone 后保留本次传输配对，命中
   const raw = rawResponse();
   const request = vi.spyOn(api.axios, "request").mockResolvedValue(raw);
   const result = await api.request<AxpResponse>({ url: URL, cache: true, raw: true });
-  expect(result.raw).toBe(raw);
+  expect(nativeFields(result).raw).toBe(raw);
   expect(result.data).toEqual(raw.data);
   expect(result.data).not.toBe(raw.data);
   const cached = await api.request<AxpResponse>({ url: URL, cache: true, raw: true });
-  expect(cached.raw).toBeUndefined();
+  expect(nativeFields(cached).raw).toBeUndefined();
   expect(cached.data).toEqual(result.data);
   expect(cached.data).not.toBe(result.data);
   expect(request).toHaveBeenCalledTimes(1);
@@ -181,10 +182,10 @@ it.each(["end", "race"] as const)("[core.req.raw] share %s 共享结果先到时
   const [result, own] = await Promise.all([first, second]);
   expect(request).toHaveBeenCalledTimes(2);
   expect(completed).toHaveLength(1);
-  expect(result.raw).toBeUndefined();
-  expect(own.raw).toBe(winner);
+  expect(nativeFields(result).raw).toBeUndefined();
+  expect(nativeFields(own).raw).toBe(winner);
   expect(result.data).toBe(own.data);
-  expect(result.raw).not.toBe(late);
+  expect(nativeFields(result).raw).not.toBe(late);
   for (const ctx of contexts) expect(ctx.native).toEqual(EMPTY_NATIVE);
   release(late);
   await vi.advanceTimersByTimeAsync(0);
@@ -193,8 +194,8 @@ it.each(["end", "race"] as const)("[core.req.raw] share %s 共享结果先到时
     expect(ctx.native).toEqual(EMPTY_NATIVE);
     expect(ctx.nativeFor(completed[1])).toBeUndefined();
   }
-  expect(result.raw).toBeUndefined();
-  expect(own.raw).toBe(winner);
+  expect(nativeFields(result).raw).toBeUndefined();
+  expect(nativeFields(own).raw).toBe(winner);
   api.dispose();
 });
 
@@ -213,16 +214,17 @@ it.each(["aborted", "replay"] as const)("[core.req.raw] 传输前 %s 提前返�
   expect(request).toHaveBeenCalledTimes(1);
   expect(ctx.native.response).toBe(raw);
   expect(ctx.nativeFor(response)).toBeUndefined();
-  expect(response.raw).toBeUndefined();
+  expect(nativeFields(response).raw).toBeUndefined();
   if (path === "aborted") {
     const result = settle(response, ctx, {});
     assert(isAxpResponse(result));
-    expect(result.raw).toBeUndefined();
+    expect(nativeFields(result).raw).toBeUndefined();
     expect(failureOf(result)?.type).toBe("cancel");
   } else {
     expect(failureOf(response)?.type).toBe("internal");
-    assert(response.error instanceof Error);
-    expect(() => settle(response, ctx, {})).toThrow(response.error);
+    const error = failureOf(response)?.error;
+    assert(error instanceof Error);
+    expect(() => settle(response, ctx, {})).toThrow(error);
   }
   expect(ctx.native).toEqual(EMPTY_NATIVE);
 });
@@ -253,9 +255,9 @@ it.each([false, true])("[core.req.raw] share 跟随者不继承领导者 native�
   }
   const [first, second] = await settleAll(leader, follower);
   expect(first).not.toBe(second);
-  expect(first.raw?.config.url).toBe(cancel ? undefined : URL);
-  expect(second.raw).toBeUndefined();
-  expect(second.error).toBeUndefined();
+  expect(nativeFields(first).raw?.config.url).toBe(cancel ? undefined : URL);
+  expect(nativeFields(second).raw).toBeUndefined();
+  expect(nativeFields(second).error).toBeUndefined();
   expect(second.ok).toBe(true);
   expect(net.calls("get", URL)).toBe(1);
   expect(contexts).toHaveLength(2);

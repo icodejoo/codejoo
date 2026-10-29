@@ -2,9 +2,9 @@
 import { cancelIfAborted, type AxpContext } from "../context";
 import { methodSet, normalizeMethod } from "../methods";
 import { resolveOption, resolveRequestOption, type AxpOption, type IPluginSwitch } from "../options";
-import { failureOf, AXP_FAILURES, type AxpFailureType, type AxpResponse, type IAxpResponse } from "../response";
+import { failureOf, retryAfterOf, AXP_FAILURES, type AxpFailureType, type AxpResponse, type IAxpResponse } from "../response";
 import type { AxpPlugin } from "../types";
-import { applyJitter, computeDelay, defaultDelay, DEFAULT_AFTER_STATUS_CODES, DEFAULT_DELAY_MAX, retryAfterMs, waitFor, type IRetryAfterHeaders, type TRetryDelay as TimingDelay, type TRetryJitter } from "./retry-timing";
+import { applyJitter, computeDelay, defaultDelay, DEFAULT_AFTER_STATUS_CODES, DEFAULT_DELAY_MAX, parseRetryAfter, waitFor, type TRetryDelay as TimingDelay, type TRetryJitter } from "./retry-timing";
 
 /** 内置重试插件名。 */
 const NAME = "axp:retry";
@@ -90,7 +90,7 @@ export default function axpRetry<R extends IAxpResponse<unknown, string | number
         if (!retry) return response;
         if (!ctx.canReplay()) return response;
         const respect = typeof config.respectRetryAfter === "function" ? config.respectRetryAfter(response) : config.respectRetryAfter && config.afterStatusCodes.includes(response.status);
-        const after = respect ? retryAfterMs(response.raw?.headers as IRetryAfterHeaders | undefined, config.retryAfterMax) : undefined;
+        const after = respect ? parseRetryAfter(retryAfterOf(response), config.retryAfterMax) : undefined;
         if (after === null) return response;
         const ms = after ?? applyJitter(computeDelay(config.delay, attempt, config.max, response), config.jitter, config.delayMax);
         await waitFor(ms, ctx.signal);

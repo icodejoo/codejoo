@@ -1,3 +1,4 @@
+import { UI_OBSERVER } from "../helpers/ui";
 import { create as createAxios, type AxiosRequestConfig } from "axios";
 import { expect, expectTypeOf, it, vi } from "vitest";
 import { createAxp } from "../../src/client";
@@ -109,7 +110,7 @@ it("[mock.prop.stage][share.prop.stage][cache.prop.stage] source 阶段固定次
   const pre = requestRecorder("pre");
   const post = requestRecorder("post");
   const h = sourceClient([axpCache(), post.plugin, axpShare(), pre.plugin, axpMock({ enable: true })]);
-  expect(h.api.inspect()).toEqual([
+  expect(h.api.inspect().filter(/** 排除夹具自身的上下文观测层。 */ (item) => item.name !== UI_OBSERVER)).toEqual([
     { stage: "source", name: "recorder-pre" },
     { stage: "source", name: "axp:mock" },
     { stage: "source", name: "axp:share" },
@@ -133,7 +134,7 @@ it("[cache.method.lifecycle][share.method.lifecycle] 同一个插件对象装到
   expect(first.net.calls("get", URL)).toBe(1);
   expect(second.net.calls("get", URL)).toBe(1);
   const child = first.api.extend();
-  expect(child.inspect()).toEqual(first.api.inspect());
+  expect(child.inspect().filter(/** 排除夹具自身的上下文观测层。 */ (item) => item.name !== UI_OBSERVER)).toEqual(first.api.inspect().filter(/** 排除夹具自身的上下文观测层。 */ (item) => item.name !== UI_OBSERVER));
   expect(clearCache(child)).toBe(0);
   expect(removeCache(first.api, "none")).toBe(false);
   expect(clearCache(first.api)).toBe(1);
@@ -204,6 +205,6 @@ it("[share.method.lifecycle][cache.method.lifecycle] 任意顺序卸载：剩余
     await burst();
     // 全部卸载：两个请求各自直达网络，缓存与共享都没有复活。
     expect(h.net.calls("get", URL) - before).toBe(2);
-    expect(h.api.inspect()).toEqual([]);
+    expect(h.api.inspect().filter(/** 排除夹具自身的上下文观测层。 */ (item) => item.name !== UI_OBSERVER)).toEqual([]);
   }
 });

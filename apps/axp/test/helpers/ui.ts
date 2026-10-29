@@ -1,3 +1,4 @@
+import { AsyncLocalStorage } from "node:async_hooks";
 import { afterEach, vi } from "vitest";
 import { assertInvariants, createTestClient, recordEvents, type ITestEvents } from "./client";
 import type { AxpClient, AxpOptions, AxpPlugin, AxpRequestConfig } from "../../src/types";
@@ -6,6 +7,10 @@ import type { TLoadingFunc } from "../../src/plugins/loading";
 
 /** 使用 UI 事件不变量的测试客户端。 */
 type Fixture<R extends IAxpResponse> = ReturnType<typeof createTestClient<R>>;
+/** 夹具的逻辑请求观测层名称。 */
+export const UI_OBSERVER = "ui-context-observer";
+/** 测试异步调用链上的逻辑信号，避免共享响应身份混淆计数。 */
+const noticeSignals = new AsyncLocalStorage<AbortSignal>();
 /** 当前用例建立的客户端与事件记录。 */
 const fixtures: {
   /** 待回收客户端。 */ api: Pick<AxpClient, "pending" | "dispose">;
@@ -31,9 +36,22 @@ export function uiClient<R extends IAxpResponse = AxpResponse>(plugins: readonly
 export function observeUi<R extends IAxpResponse>(fixture: Fixture<R>) {
   const { api, events } = fixture;
   fixtures.push({ api, events });
+  const requests: Readonly<AxpRequestConfig>[] = [];
+  api.eject(UI_OBSERVER);
+  api.use({
+    name: UI_OBSERVER,
+    stage: "outer",
+    enforce: "pre",
+    /** 从最外层绑定逻辑信号，重试与共享的回调各自隔离。 */
+    handle(ctx, next) {
+      requests.push(ctx.request);
+      return noticeSignals.run(ctx.signal, next);
+    },
+  });
   let sequence = 0;
   return {
     ...fixture,
+    requests,
     /** 每次调用独立记录真实的落定和用户 signal 监听净数。 */
     async send(config: AxpRequestConfig = {}) {
       const id = ++sequence;
@@ -87,8 +105,8 @@ export function loadingRecorder(events: ITestEvents, key = "main"): TLoadingFunc
  */
 export function notifyRecorder(events: ITestEvents) {
   const ids = new WeakMap<AbortSignal, number>();
-  return /** 同一逻辑 signal 重复通知会触发 I4。 */ (_message: string, response: AxpResponse) => {
-    const signal = response.request.signal!;
+  return /** 同一逻辑 signal 重复通知会触发 I4。 */ (_message: string, _response: AxpResponse) => {
+    const signal = noticeSignals.getStore()!;
     const id = ids.get(signal);
     // 逻辑 signal 在各次尝试间保持身份，不能按中间响应分别计数。
     const key = id ?? events.notify.size + 1;

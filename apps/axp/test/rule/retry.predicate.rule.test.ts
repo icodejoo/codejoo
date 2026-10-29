@@ -1,9 +1,13 @@
+import { AxiosError } from "axios";
 import { beforeEach, expect, it, vi } from "vitest";
 import axpRetry from "../../src/plugins/retry";
+import { AXP_FAILURE, failureOf } from "../../src/response";
 import { b3Client, REQUEST_URL } from "../helpers/b3";
 
 /** 服务端要求等待的毫秒数。 */
 const REMOTE_DELAY = 2000;
+/** 十秒头对应的实际等待毫秒数。 */
+const TEN_SECONDS = 10_000;
 /** 每个请求独立使用假时钟。 */
 beforeEach(() => {
   vi.useFakeTimers();
@@ -63,3 +67,47 @@ it("[retry.opt.statusCodes] 未配置 shouldRetry 时业务码 500 不参与默�
   expect(await pending).toMatchObject({ status: 200, code: 500, ok: false });
   expect(h.net.totalStarted).toBe(1);
 });
+
+it.each([
+  { header: "100", cap: 50_000, wait: false },
+  { header: "10", cap: 50_000, wait: true },
+  { header: "100", cap: 50, wait: false },
+  { header: "10", cap: 50, wait: false },
+])(
+  "[retry.opt.respectRetryAfter][retry.opt.retryAfterMax] 拦截器抛出的 network 响应携带头 $header，上限 $cap 毫秒",
+  /** 上限仍以毫秒计；50 秒允许十秒头，字面值 50 则两种头都超限。 */ async ({ header, cap, wait }) => {
+    const respect = vi.fn(/** 函数式采信不受 HTTP 状态表限制。 */ () => true);
+    const delay = vi.fn(/** 有服务端头时不得使用本地退避。 */ () => 0);
+    const h = b3Client([axpRetry({ max: 1, respectRetryAfter: respect, retryAfterMax: cap, afterStatusCodes: [], delay })]);
+    h.net.fallback(/** 实际 HTTP 请求成功，第一轮由响应拦截器抛错。 */ () => ({ status: 200, headers: { "Retry-After": header } }));
+    let first = true;
+    h.api.axios.interceptors.response.use(
+      /** 首轮抛带 response 的 AxiosError，后续允许成功落定。 */ (response) => {
+        if (first) {
+          first = false;
+          throw new AxiosError("interceptor network", AxiosError.ERR_NETWORK, response.config, undefined, response);
+        }
+        return response;
+      },
+    );
+    const pending = h.send({ url: REQUEST_URL });
+    await vi.advanceTimersByTimeAsync(0);
+    expect(h.net.totalStarted).toBe(1);
+    expect(respect).toHaveBeenCalledExactlyOnceWith(expect.objectContaining({ [AXP_FAILURE]: { type: "network" } }));
+    if (wait) {
+      await vi.advanceTimersByTimeAsync(TEN_SECONDS - 1);
+      expect(h.net.totalStarted).toBe(1);
+      await vi.advanceTimersByTimeAsync(1);
+      expect(h.net.totalStarted).toBe(2);
+      // 十秒到期只保证第二次请求已发出；假网络还通过 setTimeout(0) 交付响应。
+      await vi.runAllTimersAsync();
+      expect((await pending).ok).toBe(true);
+      expect(h.net.totalStarted).toBe(2);
+    } else {
+      expect(failureOf(await pending)?.type).toBe("network");
+      expect(h.net.totalStarted).toBe(1);
+    }
+    expect(delay).not.toHaveBeenCalled();
+    expect(vi.getTimerCount()).toBe(0);
+  },
+);

@@ -2,17 +2,18 @@ import { expect, it } from "vitest";
 import axpCache from "../../src/plugins/cache";
 import axpFilter from "../../src/plugins/filter";
 import axpRepath from "../../src/plugins/repath";
-import { envelope, sourceClient } from "../helpers/source";
+import { envelope, requestRecorder, sourceClient } from "../helpers/source";
 
 /** 带路径变量的接口。 */
 const URL = "/pet/{id}";
 
 /** 按 repath → filter → cache 装配；路由按路径返回命中序号。 */
 function client() {
-  const h = sourceClient([axpCache(), axpFilter(), axpRepath()]);
+  const prepared = requestRecorder("pre");
+  const h = sourceClient([axpCache(), axpFilter(), axpRepath(), prepared.plugin]);
   h.net.on("get", "/pet/1", (_config, hit) => envelope(`one-${hit}`));
   h.net.on("get", "/pet/2", (_config, hit) => envelope(`two-${hit}`));
-  return h;
+  return { ...h, prepared: prepared.seen };
 }
 
 it("[repath.fn.axpRepath × filter.fn.axpFilter × cache.req.cache] prepare 先整形再算 key：空字段被剥离后 key 相同，路径变量不同则不串缓存", async () => {
@@ -22,7 +23,7 @@ it("[repath.fn.axpRepath × filter.fn.axpFilter × cache.req.cache] prepare 先�
   const other = await h.send({ url: URL, params: { id: 2 }, cache: true });
   expect(withEmpty).not.toBe(plain);
   expect(withEmpty.data).toEqual(plain.data);
-  expect(withEmpty.request).toMatchObject({ url: "/pet/1", params: {} });
+  expect(h.prepared[1]).toMatchObject({ url: "/pet/1", params: {} });
   expect(other.data).toBe("two-1");
   expect(h.net.calls("get", "/pet/1")).toBe(1);
   expect(h.net.calls("get", "/pet/2")).toBe(1);

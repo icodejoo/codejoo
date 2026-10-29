@@ -13,40 +13,41 @@ it("[filter.req.invalid] 非法请求选项按省略，函数绝不求值", /** 
       throw new Error("not called");
     },
   );
-  const { api } = preparedClient([axpFilter()]);
+  const { api, request } = preparedClient([axpFilter()]);
   for (const filter of [callback, "", " ", NONEMPTY_TEXT, 0, [], { enable: undefined }]) {
-    const r = await api.request({
+    await api.request({
       params: { nil: null },
       filter,
       throws: false,
     } as AxpRequestConfig & { throws: false });
-    expect(r.request.params).toEqual({});
+    expect(request().params).toEqual({});
   }
   expect(callback).not.toHaveBeenCalled();
   api.dispose();
 });
 it("[filter.req.body] 非纯对象 params/data 保持身份，无原型字典生成新对象", /** 只处理纯对象。 */ async () => {
-  const { api } = preparedClient([axpFilter()], {
+  const { api, request } = preparedClient([axpFilter()], {
     transformRequest: /** 不让 axios 序列化特殊数据。 */ (value) => value,
   });
   for (const value of [undefined, null, [], NONEMPTY_TEXT, 0, new FormData(), new Blob([NONEMPTY_TEXT]), new Date(), new URLSearchParams("a=1")]) {
-    const r = await api.request({ params: value, data: value, throws: false });
-    if (Array.isArray(value)) expect(r.request.params).toEqual(value);
-    else expect(r.request.params).toBe(value);
-    if (Array.isArray(value)) expect(r.request.data).toEqual(value);
-    else expect(r.request.data).toBe(value);
+    await api.request({ params: value, data: value, throws: false });
+    if (Array.isArray(value)) expect(request().params).toEqual(value);
+    else expect(request().params).toBe(value);
+    if (Array.isArray(value)) expect(request().data).toEqual(value);
+    else expect(request().data).toBe(value);
   }
   const source = Object.assign(Object.create(null), { nil: null, n: 0 });
-  const r = await api.request({ data: source, throws: false });
-  expect(r.request.data).toEqual({ n: 0 });
+  await api.request({ data: source, throws: false });
+  expect(request().data).toEqual({ n: 0 });
   expect(source).toEqual({ nil: null, n: 0 });
   api.dispose();
 });
 it("[filter.cb.error][filter.method.lifecycle][filter.opt.enable] 总开关、重名拒绝、重装、判定异常不触网", /** 判定异常保留原始身份。 */ async () => {
   const bug = new Error("predicate bug");
-  const { api, net } = preparedClient([axpFilter({ enable: false })]);
+  const { api, net, request } = preparedClient([axpFilter({ enable: false })]);
   expect(api.inspect()).toEqual([]);
-  expect((await api.request({ filter: true, params: { nil: null }, throws: false })).request.params).toEqual({ nil: null });
+  await api.request({ filter: true, params: { nil: null }, throws: false });
+  expect(request().params).toEqual({ nil: null });
   api.eject("axp:filter");
   const plugin = axpFilter({
     predicate: /** 判定故障。 */ () => {
@@ -61,6 +62,7 @@ it("[filter.cb.error][filter.method.lifecycle][filter.opt.enable] 总开关、�
   expect(api.eject(plugin.name)).toBe(true);
   expect(api.eject(plugin.name)).toBe(false);
   api.use(axpFilter());
-  expect((await api.request({ params: { nil: null }, throws: false })).request.params).toEqual({});
+  await api.request({ params: { nil: null }, throws: false });
+  expect(request().params).toEqual({});
   api.dispose();
 });

@@ -1,5 +1,7 @@
 import { beforeEach, expect, it, vi } from "vitest";
 import axpRetry from "../../src/plugins/retry";
+import axpShare from "../../src/plugins/share";
+import { retryAfterOf, type AxpResponse } from "../../src/response";
 import type { AxpContext } from "../../src/context";
 import { b3Client } from "../helpers/b3";
 
@@ -9,6 +11,12 @@ const HEADER = "retry-after";
 const HOUR = 3_600_000;
 /** 三十秒，验证正常采信及自定义上限。 */
 const HALF_MINUTE = 30_000;
+/** 共享场景的固定地址。 */
+const SHARED_URL = "/retry-after-share";
+/** 共享首轮的传输延迟，保证跟随者先订阅。 */
+const LATENCY = 10;
+/** 共享响应要求等待三十秒。 */
+const SHARED_AFTER = "30";
 
 beforeEach(/** 所有服务端等待通过假时钟推进。 */ () => vi.useFakeTimers());
 
@@ -85,3 +93,41 @@ it("[core.method.canReplay][retry.opt.delay] 重试等待期间请求体被其�
   expect(inner).toHaveBeenCalledTimes(1);
   expect(h.net.totalStarted).toBe(0);
 });
+
+it.each([HALF_MINUTE, HALF_MINUTE - 1])(
+  "[retry.opt.retryAfterMax][share.req.share] 领导者落定后，只有跟随者按服务端时间重试，cap=%s",
+  /** 跟随者没有 native，也必须遵守超限不重试。 */ async (cap) => {
+    const delay = vi.fn(/** 服务端等待有效时不能回退本地延迟。 */ () => 0);
+    let shared: AxpResponse | undefined;
+    const shouldRetry = vi.fn(
+      /** 验证事实与共享身份，不借用领导者上下文。 */ (response: AxpResponse, _attempt: number, ctx: AxpContext) => {
+        shared = response;
+        expect(ctx.native.response).toBeUndefined();
+        expect(retryAfterOf(response)).toBe(SHARED_AFTER);
+        expect(response).not.toHaveProperty("raw");
+        return true;
+      },
+    );
+    const h = b3Client([axpRetry({ max: 1, retryAfterMax: cap, delay, shouldRetry }), axpShare()]);
+    h.net.on("get", SHARED_URL, /** 首轮共享失败，后续跟随者独自成功。 */ (_config, hit) => ({ status: hit === 1 ? 503 : 200, headers: { [HEADER]: SHARED_AFTER } }));
+    const config = { url: SHARED_URL, share: true, latency: LATENCY };
+    const leader = h.send({ ...config, retry: false });
+    const follower = h.send(config);
+    await vi.advanceTimersByTimeAsync(LATENCY);
+    expect(shared).toBe(await leader);
+    expect(h.net.totalStarted).toBe(1);
+    if (cap < HALF_MINUTE) {
+      expect(await follower).toBe(shared);
+      expect(vi.getTimerCount()).toBe(0);
+    } else {
+      await vi.advanceTimersByTimeAsync(HALF_MINUTE - 1);
+      expect(h.net.totalStarted).toBe(1);
+      await vi.advanceTimersByTimeAsync(1);
+      expect(h.net.totalStarted).toBe(2);
+      await vi.advanceTimersByTimeAsync(LATENCY);
+      expect((await follower).ok).toBe(true);
+    }
+    expect(shouldRetry).toHaveBeenCalledOnce();
+    expect(delay).not.toHaveBeenCalled();
+  },
+);

@@ -16,8 +16,8 @@ function raw(data: unknown, status = OK, headers = {}): AxiosResponse {
 
 describe("响应判定", /** 默认响应的基础契约。 */ () => {
   it("[core.fn.axpResponse] 传输异常保留实际请求，构造字段和状态边界", /** 验证默认字段、空数据和状态边界。 */ () => {
-    const request = { url: "/actual", headers: new AxiosHeaders() };
-    expect(axpResponse().fromError(new AxiosError("offline", undefined, request), testContext()).request).toBe(request);
+    const request = { method: "get", url: "/actual", headers: new AxiosHeaders() };
+    expect(axpResponse().fromError(new AxiosError("offline", undefined, request), testContext()).request).toEqual({ method: request.method, url: request.url });
     for (const status of [NaN, -1, 65_536, 199, 300]) expect(new AxpResponse({ status }).ok).toBe(false);
     expect(new AxpResponse({ status: 299 }).ok).toBe(true);
     for (const code of ["0", "", -1]) expect(new AxpResponse({ status: OK, code }).ok).toBe(false);
@@ -71,7 +71,7 @@ describe("响应判定", /** 默认响应的基础契约。 */ () => {
     "[core.fn.axpResponse] 分类 %s → %s",
     /** 分类由内核规则决定。 */ (error, type) => {
       const response = axpResponse().fromError(error, testContext());
-      expect([response.ok, response.status, response.code, response.data, response.error]).toEqual([false, 0, 0, null, error]);
+      expect([response.ok, response.status, response.code, response.data, failureOf(response)?.error]).toEqual([false, 0, 0, null, type === "internal" ? error : undefined]);
       expect(failureOf(response)?.type).toBe(type);
       expect(Object.getOwnPropertyDescriptor(response, AXP_FAILURE)?.enumerable).toBe(false);
     },
@@ -118,7 +118,8 @@ describe("响应判定", /** 默认响应的基础契约。 */ () => {
   it("[core.cb.create][core.fn.isAxpResponse][core.const.AXP_RESPONSE] 普通对象补不可枚举品牌，跨副本品牌有效", /** 接口工厂也支持缺省业务字段。 */ () => {
     const factory = axpResponse({ create: /** 模拟未填充业务字段的使用者。 */ () => ({ ok: true, status: OK }) as AxpResponse });
     const response = factory.fail({ failure: "auth" }, testContext());
-    expect(response).toMatchObject({ code: 0, data: null, message: "", ok: false });
+    expect(response).toMatchObject({ code: 0, data: null, ok: false });
+    expect(response).not.toHaveProperty("message");
     expect(isAxpResponse(response)).toBe(true);
     expect(Object.getOwnPropertyDescriptor(response, AXP_RESPONSE)?.enumerable).toBe(false);
     expect(isAxpResponse({ [Symbol.for("axp.response")]: true })).toBe(true);
@@ -142,8 +143,8 @@ describe("响应判定", /** 默认响应的基础契约。 */ () => {
     const failed = factory.fail({ failure: "cancel", reason: "stop", message: "stop", error: "reason" }, testContext());
     expect(factory.fail({ from: failed }, testContext()).toJSON()).toMatchObject({ failure: { type: "cancel", reason: "stop" }, message: "stop" });
     expect(failureOf(factory.fail({ from: failed, reason: "other" }, testContext()))).toEqual({ type: "cancel", reason: "other" });
-    expect(factory.fail({ from: failed, error: undefined }, testContext()).error).toBeUndefined();
-    expect(factory.fail({ from: failed, error: "other" }, testContext()).error).toBe("other");
+    expect(failureOf(factory.fail({ from: failed, error: undefined }, testContext()))?.error).toBeUndefined();
+    expect(failureOf(factory.fail({ from: failed, error: "other" }, testContext()))?.error).toBeUndefined();
     expect(new AxpResponse({ from: original }).data).toBe(1);
   });
 });

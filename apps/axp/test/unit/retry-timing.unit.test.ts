@@ -1,5 +1,5 @@
 import { expect, it, vi } from "vitest";
-import { applyJitter, computeDelay, defaultDelay, DEFAULT_DELAY_MAX, DEFAULT_AFTER_STATUS_CODES, retryAfterMs } from "../../src/plugins/retry-timing";
+import { applyJitter, computeDelay, defaultDelay, DEFAULT_DELAY_MAX, DEFAULT_AFTER_STATUS_CODES, parseRetryAfter, retryAfterMs } from "../../src/plugins/retry-timing";
 
 /** 限流逻辑状态。 */
 const RATE_LIMIT_STATUS = 429;
@@ -67,4 +67,17 @@ it("[retry.fn.retryAfterMs] HTTP-date 使用注入时钟或默认 Date.now", () 
   } finally {
     vi.useRealTimers();
   }
+});
+
+it("[retry.fn.parseRetryAfter] 数字和非法头不读时钟，日期在解析时才读一次时钟", /** 字符串入口保留兼容转换和独立上限。 */ () => {
+  const now = vi.fn(/** 日期相对于调用时的时钟计算。 */ () => Date.parse(DATE) - CAP);
+  expect(parseRetryAfter(undefined, CAP, now)).toBeUndefined();
+  expect(parseRetryAfter("invalid", CAP, now)).toBeUndefined();
+  expect(parseRetryAfter("", CAP, now)).toBe(0);
+  expect(parseRetryAfter("0x1", CAP, now)).toBe(CAP);
+  expect(parseRetryAfter("-1", CAP, now)).toBe(0);
+  expect(parseRetryAfter("1.5", CAP, now)).toBeNull();
+  expect(now).not.toHaveBeenCalled();
+  expect(parseRetryAfter(DATE, CAP, now)).toBe(CAP);
+  expect(now).toHaveBeenCalledOnce();
 });

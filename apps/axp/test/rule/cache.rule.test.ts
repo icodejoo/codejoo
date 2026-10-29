@@ -1,3 +1,4 @@
+import { UI_OBSERVER } from "../helpers/ui";
 import { failureOf } from "../../src/response";
 import { beforeEach, expect, it, vi } from "vitest";
 import axpCache, { clearCache, removeCache, type ICacheOptions, type IAxpCacheEntry, type IAxpCacheStore } from "../../src/plugins/cache";
@@ -36,11 +37,15 @@ it("[cache.prop.name][cache.opt.enable] 名称为 axp:cache（不随选项变化
     expect(axpCache(options).name).toBe(NAME);
   }
   const off = cachedClient({ enable: false });
-  expect(off.api.inspect()).toEqual([]);
+  expect(off.api.inspect().filter(/** 排除夹具自身的上下文观测层。 */ (item) => item.name !== UI_OBSERVER)).toEqual([]);
   await call(off, { cache: true });
   await call(off, { cache: true });
   expect(off.net.calls("get", URL)).toBe(2);
-  expect(cachedClient().api.inspect()).toEqual([{ stage: "source", name: NAME }]);
+  expect(
+    cachedClient()
+      .api.inspect()
+      .filter(/** 排除夹具自身的上下文观测层。 */ (item) => item.name !== UI_OBSERVER),
+  ).toEqual([{ stage: "source", name: NAME }]);
 });
 
 it("[cache.req.cache] 首发未命中打网络，二发命中不触网并重建 R（data 共享引用）", async () => {
@@ -319,11 +324,11 @@ it("[cache.req.cache][cache.fn.axpCache] 不修改调用方的请求对象，选
   const snapshot = JSON.stringify(config);
   const missing = h.api.request(config);
   await vi.runAllTimersAsync();
-  const miss = await missing;
-  const hit = await h.api.request(config);
+  await missing;
+  await h.api.request(config);
   expect(JSON.stringify(config)).toBe(snapshot);
-  expect(miss.request.cache).toEqual(config.cache);
-  expect(hit.request.cache).toEqual(config.cache);
+  expect(h.requests[0].cache).toEqual(config.cache);
+  expect(h.requests[1].cache).toEqual(config.cache);
 });
 
 it("[cache.opt.storage][cache.opt.memory] 已删除的 storage、memory 选项不再有任何作用，持久化走 store", async () => {

@@ -1,3 +1,4 @@
+import { UI_OBSERVER } from "../helpers/ui";
 /* eslint-disable no-await-in-loop -- 同一客户端依次核对请求选项和生命周期，避免引入额外并发语义。 */
 import { beforeEach, expect, it, vi } from "vitest";
 import axpLoading from "../../src/plugins/loading";
@@ -36,7 +37,7 @@ it("[loading.opt.enable] 插件关闭不可被请求回调重新开启", /** 总
   await pending;
   expect(fn).not.toHaveBeenCalled();
   expect(setup).not.toHaveBeenCalled();
-  expect(h.api.inspect()).toEqual([]);
+  expect(h.api.inspect().filter(/** 排除夹具自身的上下文观测层。 */ (item) => item.name !== UI_OBSERVER)).toEqual([]);
 });
 
 it.each([SYNC_FAILURE, "reject"])(

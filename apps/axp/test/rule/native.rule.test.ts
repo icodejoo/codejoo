@@ -1,7 +1,8 @@
+import { nativeFields } from "../helpers/native";
 import { AxiosError, AxiosHeaders, type AxiosResponse } from "axios";
 import { assert, expect, it, vi } from "vitest";
 import type { AxpContext } from "../../src/context";
-import { axpResponse, type AxpResponse } from "../../src/response";
+import { axpResponse, type AxpResponse, type IAxpResponse } from "../../src/response";
 import { createTestClient } from "../helpers/client";
 
 /** 原生数据规则使用的地址。 */
@@ -41,10 +42,10 @@ it.each([undefined, false, true])("[core.req.raw] 仅请求级 true 开启原生
     assert(api.isResponse(result));
     const response = result;
     expect(response).not.toBe(original);
-    expect(response.raw).toBe(native);
+    expect(nativeFields(response).raw).toBe(native);
     expect(response.request).toBe(native.config);
     expect(response.data).toBe(DATA);
-    expect(response.error).toBeUndefined();
+    expect(nativeFields(response).error).toBeUndefined();
     for (const key of ["raw", "error", "request"]) {
       expect(Object.getOwnPropertyDescriptor(response, key)?.enumerable).toBe(false);
       expect(Object.keys(response)).not.toContain(key);
@@ -103,8 +104,8 @@ it.each([false, true])("[core.req.raw][core.req.throws] 传输失败原生数据
   const pending = api.request<AxpResponse>({ url: URL, raw: true, throws });
   const result = throws ? await pending.catch(/** 捕获可预期失败。 */ (failure: AxpResponse) => failure) : await pending;
   expect(result).not.toBe(original);
-  expect(result.raw).toBe(raw);
-  expect(result.error).toBe(error);
+  expect(nativeFields(result).raw).toBe(raw);
+  expect(nativeFields(result).error).toBe(error);
   expect(result.request).toBe(config);
   expect(result.ok).toBe(false);
   expect(fail).toHaveBeenCalledTimes(1);
@@ -132,21 +133,21 @@ it.each([false, true])("[core.req.raw] 内层补丁不改变原始请求的 raw 
   const result = await api.request<AxpResponse | null>({ url: URL, raw });
   if (raw) {
     assert(api.isResponse(result));
-    expect(result.raw).toBeDefined();
+    expect(nativeFields(result).raw).toBeDefined();
   } else expect(result).toBeNull();
   api.dispose();
 });
 
 it("[core.req.raw] 普通接口响应的原生字段在工厂完成后覆盖，JSON 不含三个字段", async () => {
-  const factory = axpResponse({
-    /** 有意断言不含类方法的普通对象，验证工厂补齐字段与落定附加原生字段。 */
-    create: (init) => ({ ok: true, status: init.status ?? 200, code: 0, data: init.data ?? DATA }) as AxpResponse,
+  const factory = axpResponse<IAxpResponse>({
+    /** 接口实现不含类方法，验证工厂补齐字段与落定附加原生字段。 */
+    create: (init) => ({ ok: true, status: init.status ?? 200, code: 0, data: init.data ?? DATA }),
   });
-  const { api } = createTestClient([], { response: factory });
-  const result = await api.request<AxpResponse>({ url: URL, raw: true });
-  expect(result.raw).toBeDefined();
-  expect(result.request).toBe(result.raw!.config);
-  expect(Object.keys(result)).toEqual(["ok", "status", "code", "data", "message"]);
+  const { api } = createTestClient<IAxpResponse>([], { response: factory });
+  const result = await api.request<IAxpResponse>({ url: URL, raw: true });
+  expect(nativeFields(result).raw).toBeDefined();
+  expect(Reflect.get(result, "request")).toBe(nativeFields(result).raw!.config);
+  expect(Object.keys(result)).toEqual(["ok", "status", "code", "data"]);
   const json: unknown = JSON.parse(JSON.stringify(result));
   expect(json).not.toHaveProperty("raw");
   expect(json).not.toHaveProperty("error");
