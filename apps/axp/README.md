@@ -50,16 +50,18 @@ If you use a custom response type `R`, write both `S` and `R` explicitly: TypeSc
 
 Three per-request switches decide what a call returns: `wrap`, `throws` and `raw`.
 
-| Call                | Success                                                                                                 | Failure                                                       |
-| ------------------- | ------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------- |
-| default             | returns `data`                                                                                          | `throw r`, where `r` is an `IAxpResponse`                     |
-| `{ wrap: true }`    | returns `WithData<R, D>`: the same shape as the response, with `data` typed as the business type        | same, thrown                                                  |
-| `{ throws: false }` | returns `WithData<R, D>`                                                                                | nothing is thrown; resolves with an `R` whose `ok` is `false` |
-| `{ raw: true }`     | returns `WithNative<WithData<R, D>>`: a wrap-shaped copy that also carries `raw`, `error` and `request` | the same copy, thrown (or resolved with `throws: false`)      |
+| Call                | Success                                                                                                 | Failure                                                                            |
+| ------------------- | ------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------- |
+| default             | returns `data`                                                                                          | `throw r`, where `r` is an `IAxpResponse`                                          |
+| `{ wrap: true }`    | returns `WithData<R, D>`: the same shape as the response, with `data` typed as the business type        | same, thrown                                                                       |
+| `{ throws: false }` | returns `AxpResult<R, D>`, a union discriminated by `ok`                                                | nothing is thrown; resolves with the `ok: false` branch, whose `data` is `unknown` |
+| `{ raw: true }`     | returns `WithNative<WithData<R, D>>`: a wrap-shaped copy that also carries `raw`, `error` and `request` | the same copy, thrown (or resolved with `throws: false`)                           |
 
 `raw: true` implies `wrap: true`; if `raw` and `wrap: false` show up together, `raw` wins. All three are per-request only (there is no client-level default), and `raw` is read from the request you actually passed, so `axios.defaults.raw` does nothing. The return type follows the effective `raw`, `wrap` and `throws` values; a wide `boolean` gives you the union of the possible shapes. One limit: if you pass a variable typed as `AxpRequestConfig` at the method level, TypeScript can't tell it apart from "not set", so the call is still typed as plain data.
 
 A failure is thrown as a plain object, not an `Error`. By default it has no `stack`; turn on `debug` to attach the call site. Program bugs (an exception from middleware, a user callback, or an interceptor that isn't an axios error) are not treated as request failures: they are rethrown as-is, and `throws: false` doesn't swallow them.
+
+With `throws: false`, narrow with `if (r.ok)` before reading `r.data`. Writing `<unknown>` or `<any>` explicitly overrides the schema inference. Request options merge in three layers, method-level < payload < call-level, and `wrap`, `throws` and `raw` read only the caller's `originRequest`.
 
 ```ts
 // Default: a failure you catch is an IAxpResponse; real bugs are rethrown
@@ -201,10 +203,14 @@ Also:
 
 - `null` and `undefined` are both treated as "omitted". Other values with undeclared types are an error; at runtime they are treated as omitted.
 - Every plugin factory accepts `enable?: boolean`, default `true` (`axpMock` defaults to `false`). With `enable: false`, the plugin is not added to the chain, its `setup` doesn't run, and `api.inspect()` doesn't list it. A per-request option can't turn it back on.
+- The transport does not clone the request body. Don't mutate `data` in place in transformers or interceptors (it pollutes replays and the caller); return a new object instead. With `debug: true`, in-place mutation of a request body or cached data logs a warning, and so does passing a per-request option whose plugin isn't installed (e.g. `retry: 2` without axpRetry).
 - Per-request options don't accept function forms. The exception is options that are callbacks themselves, such as the per-request callback of `axpLoading`.
 - The request each layer sees has already been merged with the axios instance's `defaults` (`baseURL`, `params`, `headers`, ...), just as the old interceptors saw it. So `repath` and `filter` can work on values from `defaults.params`, and those values are part of the key. If a layer drops a default `params` or `headers` field, axios's own second merge won't bring it back.
 - A plugin's options are fixed when the plugin is created. Changing the options object afterwards has no effect; use per-request options, or create the plugin again.
 - Plugins add their own per-request options by augmenting `AxpRequestOptions` through `declare module '@codejoo/axp'`, so axios's own types stay clean. The kernel's built-in per-request options are `wrap`, `throws`, `raw`, `silent`, `key` and `signal`.
+- Helpers for custom plugins are exported from the root entry: `cancelIfAborted`, `waitAbortable`, `fireNotice`, `resolveOption`, `resolveRequestOption`, `isEnabled`, plus the types `AxpOption` and `IPluginSwitch`. The package declares `sideEffects: false`, so it tree-shakes.
+- State is shared by the resource it represents: cache and share per client; auth per `TokenManager`; loading per callback function. A client made with `extend()` therefore shares the auth session and loading counts with its parent.
+- For business-style responses (HTTP 200 plus a business code), set `createAxp({ statusOf })` to return the effective status. Retry's and auth's default rules read `ctx.statusOf(r)`; `r.status` stays the HTTP status.
 
 How errors thrown by callbacks are handled, in two groups:
 
@@ -228,7 +234,7 @@ Per request: `false`, `true`, a function (the callback for this call), or `{ ena
 
 - The show starts with the logical request, including any time spent waiting for a token refresh.
 - Retries and auth replays stay inside the same show/hide pair, so there is no flicker.
-- Each callback is counted separately, so every callback sees matched `true` and `false` calls.
+- Counts are shared per callback function: when a parent and child client (or several clients) use the same spinner callback, it is shown and hidden only once. Every callback sees matched `true` and `false` calls.
 - If neither the plugin nor the request provides a callback, this request is not counted.
 - For one callback, `delay` comes from the request that takes the count from 0 to 1, and `delayClose` from the request that takes it from 1 to 0.
 - Removing the plugin (`eject` or `dispose`) cancels any pending delayed callbacks. If the UI is already showing, its callback gets one `false` right away, and requests still in flight won't call it again.
@@ -319,19 +325,19 @@ Stage: `attempt`. Active as soon as it is installed; retries up to 2 times by de
 | ------------------------------ | ------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `max`                          | `2`                                   | Maximum number of retries                                                                                                                                                                                           |
 | `methods`                      | `get put head delete options trace`   | Hard veto: a method not in this list is never retried, even if `shouldRetry` says yes                                                                                                                               |
-| `statusCodes`                  | `[408, 429, 500, 502, 503, 504]`      | Checked against `r.status` (HTTP status)                                                                                                                                                                            |
+| `statusCodes`                  | `[408, 429, 500, 502, 503, 504]`      | Checked against `ctx.statusOf(r)` (effective status, HTTP by default)                                                                                                                                               |
 | `shouldRetry(r, attempt, ctx)` | —                                     | A boolean is final; any other return value (including `undefined`) falls through to the next check                                                                                                                  |
 | `delay`                        | `attempt => 300 * 2 ** (attempt - 1)` | A number, or a function `(attempt, max, r, ctx) => number`; a non-number result counts as 0                                                                                                                         |
 | `jitter`                       | —                                     | `true` (uniform random between 0 and the delay), or `(delay) => number` (a negative, `NaN` or `Infinity` result keeps the original delay)                                                                           |
 | `delayMax`                     | `10_000`                              | Caps only the delay the plugin computes itself, applied after jitter                                                                                                                                                |
 | `respectRetryAfter`            | `true`                                | A boolean uses afterStatusCodes; `(r, ctx) => boolean` decides independently and does not consult afterStatusCodes. Missing/invalid headers fall back to local delay; no jitter or delayMax applies to server waits |
-| `afterStatusCodes`             | `[413, 429, 503]`                     | HTTP statuses; see the business-code example below                                                                                                                                                                  |
+| `afterStatusCodes`             | `[413, 429, 503]`                     | Effective statuses (`ctx.statusOf`); see the business-code example below                                                                                                                                            |
 | `retryAfterMax`                | `60_000`                              | Skip retry and return the current response when the server asks for more; `Infinity` always honors it                                                                                                               |
 
 How `Retry-After` works:
 
 - The wait is read from the response headers once, at the transport, and rides along with `R` as a small private fact, so share followers (who get the leader's very `R`) see it too. A response interceptor that throws an `AxiosError` carrying a `response` is classified as `network` with `r.status` 0, so the boolean form (which checks `afterStatusCodes.includes(r.status)`) does not honor its `Retry-After`; only a `respectRetryAfter` function, which decides on its own, will use that `error.response`'s header.
-- Retry-After is checked only after deciding to retry. A respectRetryAfter function decides whether to use it; otherwise afterStatusCodes matches the HTTP status. Business-code responses need explicit configuration, as in the complete example below.
+- Retry-After is checked only after deciding to retry. A respectRetryAfter function decides whether to use it; otherwise afterStatusCodes matches the effective status. For business-code responses configure `statusOf` or a function, as in the complete example below.
 - The value can be a number of seconds or an HTTP date (converted to a wait using the current clock). If it is missing or can't be parsed, the plugin falls back to the local `delay`.
 - When parseable, a wait above retryAfterMax stops retrying; otherwise use the exact server wait without calling delay or applying jitter/delayMax.
 - A negative value, or a date already in the past, counts as 0: the retry goes out immediately, without falling back to `delay`.
@@ -346,7 +352,7 @@ Decision order. Each step can end the decision early:
 3. `failureOf(r)?.type` is `cancel`, `auth`, `internal` or `parse`: no retry.
 4. `shouldRetry` returns a boolean: use it.
 5. `failureOf(r)?.type` is `network` or `timeout`: retry.
-6. Otherwise: `statusCodes.includes(r.status)`.
+6. Otherwise: `statusCodes.includes(ctx.statusOf(r))`.
 
 There is no `r.ok` step in this order: successful responses are passed to `shouldRetry` too. Under the default rules a success is not retried; if a custom `shouldRetry` returns `true`, a successful response is retried, for example a success that your business logic treats as an error.
 
@@ -368,17 +374,17 @@ api.get("/flaky")(undefined, { retry: false }); // no retry for this call
 
 Stage: `credential`. Handles token guarding, single-flight refresh on HTTP 401, and replay.
 
-| Option                        | Default                           | Description                                                                                                                                         |
-| ----------------------------- | --------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `tokenManager`                | **required**                      | An `ITokenManager` instance                                                                                                                         |
-| `onRefresh(r, tm, ctx)`       | **required**                      | Return `false` or throw to fail the refresh. Only one refresh runs at a time                                                                        |
-| `refreshTimeout`              | `30_000`                          | Refresh wait limit in ms; 0 or Infinity disables it; expiry counts as refresh failure                                                               |
-| `onAccessExpired(r, tm, ctx)` | **required**                      | The session has expired. On the 401 / refresh-failure path, notified once per round                                                                 |
-| `onAccessDenied(r, tm, ctx)`  | same as `onAccessExpired`         | Forbidden (403), or no token locally. With no token locally, called once for every protected request, with no de-duplication                        |
-| `onFailure(r, tm, ctx)`       | `defaultAuthFailure`              | Returns one of the `AuthFailureAction` values                                                                                                       |
-| `methods` / `urlPattern`      | `'*'`                             | Decides whether a request is protected. `urlPattern` only matches the pathname, uses URLPattern syntax; `!` negates                                 |
-| `isProtected(request)`        | —                                 | A boolean is the final answer. Evaluated once at the start of each attempt: every retry round evaluates it again, a replay after a refresh does not |
-| `ready(tm, request)`          | writes the `Authorization` header | Returns an `AxpRequestPatch`                                                                                                                        |
+| Option                        | Default                           | Description                                                                                                                                           |
+| ----------------------------- | --------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `tokenManager`                | **required**                      | An `ITokenManager` instance                                                                                                                           |
+| `onRefresh(r, tm, ctx)`       | **required**                      | Return `false` or throw to fail the refresh. Only one refresh runs at a time                                                                          |
+| `refreshTimeout`              | `30_000`                          | Refresh wait limit in ms; 0 or Infinity disables it; expiry counts as refresh failure                                                                 |
+| `onAccessExpired(r, tm, ctx)` | **required**                      | The session has expired. On the 401 / refresh-failure path, notified once per round                                                                   |
+| `onAccessDenied(r, tm, ctx)`  | same as `onAccessExpired`         | Forbidden (403), or no token locally. With no token locally, notified at most once per session round; the count restarts after a new token is written |
+| `onFailure(r, tm, ctx)`       | `defaultAuthFailure`              | Returns one of the `AuthFailureAction` values                                                                                                         |
+| `methods` / `urlPattern`      | `'*'`                             | Decides whether a request is protected. `urlPattern` only matches the pathname, uses URLPattern syntax; `!` negates                                   |
+| `isProtected(request)`        | —                                 | A boolean is the final answer. Evaluated once at the start of each attempt: every retry round evaluates it again, a replay after a refresh does not   |
+| `ready(tm, request)`          | writes the `Authorization` header | Returns an `AxpRequestPatch`                                                                                                                          |
 
 `AuthFailureAction` is a constant object with five actions: `Refresh` (`'refresh'`), `Replay` (`'replay'`), `Deny` (`'deny'`), `Expired` (`'expired'`) and `Others` (`'others'`, a failure unrelated to auth, returned as-is). If `onFailure` returns `null`, `undefined` or an unknown value, it behaves like `Others`.
 
@@ -388,24 +394,26 @@ Main flow:
 
 1. An unprotected request goes straight through.
 2. A refresh is already running: wait for its result. If it fails, treat the session as expired and return `failureOf(r)?.reason === 'expired'`. If the caller cancels while waiting, only that caller ends.
-3. No token locally: call `onAccessDenied` and return a result with `failureOf(r)` equal to `{ type: 'auth', reason: 'unauthenticated' }`. Every protected request goes through this, with no de-duplication. If `onAccessDenied` isn't set, `onAccessExpired` is what gets called, so between expiry and the next login, every protected request notifies once.
+3. No token locally: call `onAccessDenied` and return a result with `failureOf(r)` equal to `{ type: 'auth', reason: 'unauthenticated' }`. Every protected request is still rejected locally, but the notification fires at most once per session round (it restarts after a new token is written). If `onAccessDenied` isn't set, `onAccessExpired` is what gets called, still at most once per round.
 4. Inject the token and send the request. On success, return it; `internal` (a programming error) and `cancel` results also skip `onFailure` and are returned as-is.
 5. On failure, `onFailure` decides: `refresh` refreshes and replays once; `replay` replays once with the current token; `deny` calls `onAccessDenied` and returns `failureOf(r)?.reason === 'denied'`; `expired` clears the token, calls `onAccessExpired` and returns `failureOf(r)?.reason === 'expired'`; anything else is returned as-is. `onFailure` may be async; if the caller cancels while it is running, the call settles as cancelled and nothing is notified.
-6. If the replay still asks for a refresh or a replay, treat the session as expired. This prevents loops.
+6. If the replay still asks for a refresh or a replay, treat the session as expired. This prevents loops. For a 401 you don't want treated as expiry, return `Others` from `onFailure`.
 
-The default `defaultAuthFailure` only looks at the HTTP status:
+The default `defaultAuthFailure` reads `ctx.statusOf(r)` (HTTP status by default):
 
-- `status === 401`: `expired` if there is no token locally; `replay` if the token injected for this request differs from the current one (another request already refreshed it); otherwise `refresh`.
-- `status === 403`: `deny`.
+- status 401: `expired` if there is no token locally; `replay` if the token injected for this request differs from the current one (another request already refreshed it); otherwise `refresh`.
+- status 403: `deny`.
 - Anything else: returned as-is.
 
 For business-code auth routing, see [Usage warnings and business responses](#usage-warnings-and-business-responses).
 
 You don't have to manage refresh availability yourself. When an expiry is detected, the plugin clears the token and records the cleared state. Until that state changes, it won't refresh or re-notify about expiry. Writing a new token on login re-enables everything automatically, so the login flow doesn't need to flip any flag.
 
+Session state (single-flight refresh, the expired mark and the no-token notice mark) is shared per `TokenManager`: a child client from `extend()` and any other client using the same tm refresh single-flight and notify once together.
+
 Refresh is single-flight: only one runs at a time, and other requests queue for its result. The `ctx` that `onRefresh` and `onAccessExpired` receive in that case belongs to the first request that triggered the refresh, so don't use its `ctx.signal` to abort the shared refresh: other requests are waiting on it. Cancelling only ends the request that started or queued, and the refresh itself runs to completion. If `onRefresh` throws, it counts as a failed refresh and is not rethrown; a warning is logged only when `debug` is on.
 
-`ITokenManager` requires `accessToken` (getter), `refreshToken` (getter), `set(access?, refresh?)` and `clear()`. The default `TokenManager` returns `Bearer <token>` from `accessToken` (or `undefined` when there is no token); `set` takes the bare token without the `Bearer ` prefix, and omitting a value or passing an empty one clears it. It persists to `localStorage` and restores the previous session when constructed; if storage is unavailable it works in memory only and doesn't throw.
+`ITokenManager` requires `accessToken` (getter), `refreshToken` (getter), `set(access?, refresh?)` and `clear()`. The default `TokenManager` returns `Bearer <token>` from `accessToken` (or `undefined` when there is no token); `set` takes the bare token without the `Bearer ` prefix, and omitting a value or passing an empty one clears it. It persists to `localStorage` and restores the previous session when constructed; if storage is unavailable it works in memory only and doesn't throw. Storage is probed on first read or write, so importing the module has no side effects.
 
 ```ts
 axpAuth({
@@ -417,7 +425,7 @@ axpAuth({
 api.get("/public/banner")(undefined, { protected: false }); // no auth for this call
 ```
 
-`ready`, `onFailure` and refresh queueing are cancellable; cancellation is rechecked after async waits. If login/logout replaces the token during refresh, an old failed refresh cannot clear the new session or notify expiry. If the user logs out while an async `ready` is still running, the request is rejected locally as unauthenticated and no credential-less request goes out. After `dispose()`, a refresh that was in flight and fails late no longer clears the session or calls `onAccessExpired`. A refresh timeout does not stop the callback itself; callers own any late session writes.
+`ready`, `onFailure` and refresh queueing are cancellable; cancellation is rechecked after async waits. If login/logout replaces the token during refresh, an old failed refresh cannot clear the new session or notify expiry. If the user logs out while an async `ready` is still running, the request is rejected locally as unauthenticated and no credential-less request goes out. After the last client holding that tm calls `dispose()`, a refresh that was in flight and fails late no longer clears the session or calls `onAccessExpired`. A refresh timeout does not stop the callback itself; callers own any late session writes.
 
 ### `axpMock(options?)`
 
@@ -696,12 +704,23 @@ const plain = api.extend({ baseURL: "/v2" }, { plugins: [axpCache()] }); // only
 
   Do not pass the parent's `api.axios` to `extend`: `overrides` (such as `baseURL`) are written into that same instance after plugin setup, changing the parent client's configuration too.
 
-- HTTP 200 with business codes 401, 403, 5xx or 429 does not automatically refresh or retry. Configure onFailure, shouldRetry and the respectRetryAfter predicate, or write a subclass. Overriding ok alone does not change the plugins' HTTP defaults. A complete example follows.
+- HTTP 200 with business codes 401, 403, 5xx or 429 does not automatically refresh or retry. The simplest fix is `statusOf`, which maps the business code to an effective status (first example below); you can also configure onFailure, shouldRetry and respectRetryAfter, or write a subclass. Overriding ok alone does not change the plugins' defaults. A complete example follows.
 - One-shot bodies (Node streams, ReadableStream, async iterables) are not automatically replayed after sending. Retry/auth/mock return the original response. Custom plugins must check `ctx.canReplay()` before replaying; forcing a replay rethrows the original Error when settling.
 - A thrown failure is often kept for a long time by error reporters and query caches. By default it is light (no AxiosError, no raw response, no request body), so that's safe. A `raw: true` copy keeps all of those alive; use it for the calls that need it, not as a global habit.
 - If defaults change during an in-flight request, key fields method, baseURL and plain-object params use the entry view plus plugin patches. Other fields without explicit overrides use send-time defaults. The params guarantee applies when defaults.params is a plain object.
 
 This example assumes `{ code, data, message }` business responses with success code 0. The refresh endpoint returns both tokens directly; bare axios sends it outside the axp pipeline.
+
+Simplest form: map the business code to an effective status with `statusOf`, and retry's and auth's default rules just work; `r.status` stays the HTTP status.
+
+```ts
+const api = createAxp({
+  statusOf: (r) => (r.status === 200 && Number(r.code) !== 0 ? Number(r.code) : r.status),
+  plugins: [axpAuth({ tokenManager, onRefresh, onAccessExpired }), axpRetry()],
+});
+```
+
+To customize each decision, write it out like this:
 
 ```ts
 import axios from "axios";

@@ -108,27 +108,31 @@ describe("单飞刷新与排队", () => {
     expect(h.settings.onAccessExpired).toHaveBeenCalledTimes(1);
   });
 
-  it("[auth.state.singleFlight] 同一个插件对象装到两个客户端：状态各自独立，互不阻塞，各自刷新一次", /** 单飞状态建在 setup 里。 */ async () => {
-    const { gate, onRefresh } = gatedRefresh();
-    const settings = authSettings({ onRefresh });
-    const plugin = axpAuth(settings);
-    const first = b3Client([plugin]);
-    const second = b3Client([plugin]);
-    for (const h of [first, second])
-      h.net.on(
-        "get",
-        REQUEST_URL,
-        guarded(() => TOKEN_NEW),
-      );
-    const a = first.send({ url: REQUEST_URL });
-    const b = second.send({ url: REQUEST_URL });
-    await settle();
-    expect(settings.onRefresh).toHaveBeenCalledTimes(2);
-    gate.resolve(true);
-    await settle();
-    expect((await a).ok).toBe(true);
-    expect((await b).ok).toBe(true);
-  });
+  it.each([false, true])(
+    "[auth.state.singleFlight] 两客户端共用 tm，共享一次刷新并都成功（分别创建插件=%s）",
+    /** 共享由 tm 身份决定。 */ async (separate) => {
+      const { gate, onRefresh } = gatedRefresh();
+      const settings = authSettings({ onRefresh });
+      const plugin = axpAuth(settings);
+      const first = b3Client([plugin]);
+      const second = b3Client([separate ? axpAuth(settings) : plugin]);
+      for (const h of [first, second])
+        h.net.on(
+          "get",
+          REQUEST_URL,
+          guarded(() => TOKEN_NEW),
+        );
+      const a = first.send({ url: REQUEST_URL });
+      const b = second.send({ url: REQUEST_URL });
+      await settle();
+      expect(settings.onRefresh).toHaveBeenCalledTimes(1);
+      gate.resolve(true);
+      await settle();
+      expect((await a).ok).toBe(true);
+      expect((await b).ok).toBe(true);
+      expect(settings.onAccessExpired).not.toHaveBeenCalled();
+    },
+  );
 });
 
 describe("刷新期间取消", () => {

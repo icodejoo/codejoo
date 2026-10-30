@@ -105,6 +105,7 @@ function guardLayer<R extends IAxpResponse<unknown, string | number>>(handle: Ax
       let target = ctx;
       try {
         if (patch) target = requestContext(ctx, mergePatch(ctx.request, patch), patch);
+        if (target.signal.aborted) return Promise.resolve(target.fail({ failure: AXP_FAILURES.CANCEL }));
       } catch (error) {
         return Promise.resolve(ctx.fail({ failure: AXP_FAILURES.INTERNAL, error }));
       }

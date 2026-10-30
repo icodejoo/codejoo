@@ -123,3 +123,50 @@ it("[core.method.canReplay][core.fn.createTransport] 自定义插件直接重放
   expect((failure as Error).message).toBe("一次性请求体已发送，不能重放；重放前请先检查 ctx.canReplay()");
   expect(h.received).toEqual([{ url: REAL_PATH, body: PAYLOAD }]);
 });
+
+it("[core.fn.classifyError][retry.opt.statusCodes] 真实 Node http 响应断流归 network 并重试成功", /** 首次响应头和半段 body 已收到后再断连接。 */ async () => {
+  let calls = 0;
+  const failures: unknown[] = [];
+  const server = createServer(
+    /** 首发断流，第二次完整响应。 */ (_request, response) => {
+      calls++;
+      response.setHeader("content-type", "application/json");
+      if (calls === 1) {
+        response.write('{"code":0,"data":');
+        setTimeout(/** 留出客户端接收首段的时间。 */ () => response.destroy(), 20);
+      } else response.end('{"code":0,"data":"recovered"}');
+    },
+  );
+  server.listen(0, "127.0.0.1");
+  await once(server, "listening");
+  onTestFinished(
+    /** 关闭真实网络连接。 */ async () => {
+      const closed = once(server, "close");
+      server.close();
+      server.closeAllConnections();
+      await closed;
+    },
+  );
+  const address = server.address();
+  if (!address || typeof address === "string") throw new Error("Missing TCP address");
+  const { api } = createTestClient(
+    [
+      axpRetry({ max: 1, delay: 0 }),
+      {
+        name: "observe-stream",
+        stage: "source",
+        /** 记录每次传输分类。 */ async handle(_ctx, next) {
+          const r = await next();
+          failures.push(failureOf(r)?.type);
+          return r;
+        },
+      },
+    ],
+    {},
+    { adapter: "http", proxy: false },
+  );
+  onTestFinished(/** 回收客户端。 */ () => api.dispose());
+  expect(await api.get(`http://127.0.0.1:${address.port}/stream`)()).toBe("recovered");
+  expect(calls).toBe(2);
+  expect(failures).toEqual(["network", undefined]);
+});

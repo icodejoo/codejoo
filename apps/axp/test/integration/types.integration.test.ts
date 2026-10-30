@@ -10,9 +10,9 @@ import axpAuth from "../../src/plugins/auth";
 import axpCache, { type ICacheRequestOptions } from "../../src/plugins/cache";
 import axpMock from "../../src/plugins/mock";
 import axpRetry, { type IRetryOptions } from "../../src/plugins/retry";
-import type { AxpOption } from "../../src/options";
+import type { AxpOption } from "../../src/index";
 import { AxpResponse, axpResponse, isAxpResponse, type IAxpResponse, type IAxpResponseFactory } from "../../src/response";
-import type { AxpClient, AxpPlugin, AxpRequestConfig, AxpRequestOptions, WithData, WithNative } from "../../src/types";
+import type { AxpClient, AxpPlugin, AxpRequestConfig, AxpRequestOptions, AxpResult, WithData, WithNative } from "../../src/types";
 import { customResponse, TestResponse } from "../helpers/client";
 
 it("[core.method.extend][cache.type.options] 指定 axios、异步仓与管理 API 的类型契约", () => {
@@ -84,11 +84,11 @@ it("[core.fn.createAxp][core.req.wrap][core.req.throws] Schema/响应泛型/插�
     expectTypeOf(api.get("/empty")()).toEqualTypeOf<Promise<number>>();
     expectTypeOf(api.post("/pet")("body")).toEqualTypeOf<Promise<boolean>>();
     expectTypeOf(api.get("/pet")({ id: 1 }, { wrap: true })).toEqualTypeOf<Promise<WithData<TestResponse, { /** name 字段。 */ name: string }>>>();
-    expectTypeOf(api.get("/pet")({ id: 1 }, { throws: false })).toEqualTypeOf<Promise<WithData<TestResponse, { /** name 字段。 */ name: string }>>>();
+    expectTypeOf(api.get("/pet")({ id: 1 }, { throws: false })).toEqualTypeOf<Promise<AxpResult<TestResponse, { /** name 字段。 */ name: string }>>>();
     expectTypeOf(api.get("/empty", { wrap: true })()).toEqualTypeOf<Promise<WithData<TestResponse, number>>>();
     expectTypeOf(api.request<number>({ url: "/escape" })).toEqualTypeOf<Promise<number>>();
     expectTypeOf(api.request<number>({ wrap: true })).toEqualTypeOf<Promise<WithData<TestResponse, number>>>();
-    expectTypeOf(api.request<number>({ throws: false })).toEqualTypeOf<Promise<WithData<TestResponse, number>>>();
+    expectTypeOf(api.request<number>({ throws: false })).toEqualTypeOf<Promise<AxpResult<TestResponse, number>>>();
     void api.get("/pet")({ id: 1 }, { retry: 2, cache: true });
     // @ts-expect-error 扩展字段仍校验值类型。
     void api.get("/pet")({ id: 1 }, { retry: "twice" });
@@ -154,7 +154,7 @@ it("[core.req.wrap] 分派类型按调用级覆盖方法级：有无选项四组
     expectTypeOf(api.get("/x", { wrap: true })<number>(undefined, { wrap: false })).toEqualTypeOf<Promise<number>>();
     expectTypeOf(api.get("/x", { wrap: false })<number>(undefined, { wrap: true })).toEqualTypeOf<Promise<WithData<TestResponse, number>>>();
     expectTypeOf(api.get("/x", { wrap: true })<number>(undefined, { wrap: undefined })).toEqualTypeOf<Promise<WithData<TestResponse, number>>>();
-    expectTypeOf(api.get("/x", { throws: false })<number>(undefined, { wrap: false })).toEqualTypeOf<Promise<WithData<TestResponse, number>>>();
+    expectTypeOf(api.get("/x", { throws: false })<number>(undefined, { wrap: false })).toEqualTypeOf<Promise<AxpResult<TestResponse, number>>>();
     expectTypeOf(
       api.get("/x", { wrap: true, throws: false })<number>(undefined, {
         wrap: false,
@@ -169,11 +169,11 @@ it("[core.req.throws] 分派类型按调用级覆盖方法级：有无选项四�
   function contracts() {
     const api = createAxp<unknown, TestResponse>({ response: customResponse() });
     expectTypeOf(api.get("/x")<number>()).toEqualTypeOf<Promise<number>>();
-    expectTypeOf(api.get("/x")<number>(undefined, { throws: false })).toEqualTypeOf<Promise<WithData<TestResponse, number>>>();
-    expectTypeOf(api.get("/x", { throws: false })<number>()).toEqualTypeOf<Promise<WithData<TestResponse, number>>>();
+    expectTypeOf(api.get("/x")<number>(undefined, { throws: false })).toEqualTypeOf<Promise<AxpResult<TestResponse, number>>>();
+    expectTypeOf(api.get("/x", { throws: false })<number>()).toEqualTypeOf<Promise<AxpResult<TestResponse, number>>>();
     expectTypeOf(api.get("/x", { throws: false })<number>(undefined, { throws: true })).toEqualTypeOf<Promise<number>>();
-    expectTypeOf(api.get("/x", { throws: true })<number>(undefined, { throws: false })).toEqualTypeOf<Promise<WithData<TestResponse, number>>>();
-    expectTypeOf(api.get("/x", { throws: false })<number>(undefined, { throws: undefined })).toEqualTypeOf<Promise<WithData<TestResponse, number>>>();
+    expectTypeOf(api.get("/x", { throws: true })<number>(undefined, { throws: false })).toEqualTypeOf<Promise<AxpResult<TestResponse, number>>>();
+    expectTypeOf(api.get("/x", { throws: false })<number>(undefined, { throws: undefined })).toEqualTypeOf<Promise<AxpResult<TestResponse, number>>>();
     expectTypeOf(api.get("/x", { wrap: true })<number>(undefined, { throws: true })).toEqualTypeOf<Promise<WithData<TestResponse, number>>>();
   }
   expect(contracts).toBeTypeOf("function");
@@ -369,16 +369,16 @@ it("[core.req.raw] raw:true 返回带原生数据的响应副本，未写时没�
     expectTypeOf(api.get("/x")<number>(undefined, { raw: true, wrap: false, throws: true })).toEqualTypeOf<Promise<Native<number>>>();
     expectTypeOf(api.get("/x", { raw: true, wrap: false })<number>()).toEqualTypeOf<Promise<Native<number>>>();
     // throws:false 与 raw 组合。
-    expectTypeOf(api.get("/x")<number>(undefined, { raw: true, throws: false })).toEqualTypeOf<Promise<Native<number>>>();
-    expectTypeOf(api.get("/x", { throws: false })<number>(undefined, { raw: true })).toEqualTypeOf<Promise<Native<number>>>();
+    expectTypeOf(api.get("/x")<number>(undefined, { raw: true, throws: false })).toEqualTypeOf<Promise<WithNative<AxpResult<TestResponse, number>>>>();
+    expectTypeOf(api.get("/x", { throws: false })<number>(undefined, { raw: true })).toEqualTypeOf<Promise<WithNative<AxpResult<TestResponse, number>>>>();
     // 方法级 raw 与调用级覆盖。
     expectTypeOf(api.get("/x", { raw: true })<number>()).toEqualTypeOf<Promise<Native<number>>>();
     expectTypeOf(api.get("/x", { raw: true })<number>(undefined, { wrap: false })).toEqualTypeOf<Promise<Native<number>>>();
-    expectTypeOf(api.get("/x", { raw: true })<number>(undefined, { throws: false })).toEqualTypeOf<Promise<Native<number>>>();
+    expectTypeOf(api.get("/x", { raw: true })<number>(undefined, { throws: false })).toEqualTypeOf<Promise<WithNative<AxpResult<TestResponse, number>>>>();
     expectTypeOf(api.get("/x", { raw: true })<number>(undefined, { wrap: true })).toEqualTypeOf<Promise<Native<number>>>();
     expectTypeOf(api.get("/x", { raw: true })<number>(undefined, { raw: false })).toEqualTypeOf<Promise<number>>();
     expectTypeOf(api.get("/x", { raw: true })<number>(undefined, { raw: false, wrap: true })).toEqualTypeOf<Promise<WithData<TestResponse, number>>>();
-    expectTypeOf(api.get("/x", { raw: true })<number>(undefined, { raw: false, throws: false })).toEqualTypeOf<Promise<WithData<TestResponse, number>>>();
+    expectTypeOf(api.get("/x", { raw: true })<number>(undefined, { raw: false, throws: false })).toEqualTypeOf<Promise<AxpResult<TestResponse, number>>>();
     expectTypeOf(api.get("/x", { raw: true })<number>(undefined, { raw: false, wrap: false, throws: true })).toEqualTypeOf<Promise<number>>();
     expectTypeOf(api.get("/x", { raw: true })<number>(undefined, { raw: undefined })).toEqualTypeOf<Promise<Native<number>>>();
     expectTypeOf(api.get("/x", { raw: false })<number>(undefined, { raw: true })).toEqualTypeOf<Promise<Native<number>>>();
@@ -388,7 +388,7 @@ it("[core.req.raw] raw:true 返回带原生数据的响应副本，未写时没�
     const flag = Math.random() > 0.5;
     // 宽 raw 与同次调用的 wrap/throws 一起计算。
     expectTypeOf(api.get("/x")<number>(undefined, { raw: flag, wrap: true })).toEqualTypeOf<Promise<Native<number> | WithData<TestResponse, number>>>();
-    expectTypeOf(api.get("/x")<number>(undefined, { raw: flag, throws: false })).toEqualTypeOf<Promise<Native<number> | WithData<TestResponse, number>>>();
+    expectTypeOf(api.get("/x")<number>(undefined, { raw: flag, throws: false })).toEqualTypeOf<Promise<WithNative<AxpResult<TestResponse, number>> | AxpResult<TestResponse, number>>>();
     expectTypeOf(api.get("/x", { throws: false })<number>(undefined, { raw: flag, throws: true })).toEqualTypeOf<Promise<Native<number> | number>>();
     expectTypeOf(api.get("/x")<number>(undefined, { raw: flag, wrap: false, throws: true })).toEqualTypeOf<Promise<Native<number> | number>>();
     // 方法级宽 raw 不再推成纯数据。
@@ -398,11 +398,11 @@ it("[core.req.raw] raw:true 返回带原生数据的响应副本，未写时没�
     expectTypeOf(api.get("/x", { raw: flag })<number>(undefined, { raw: true })).toEqualTypeOf<Promise<Native<number>>>();
     // 宽 wrap/throws 返回联合。
     expectTypeOf(api.get("/x")<number>(undefined, { wrap: flag })).toEqualTypeOf<Promise<WithData<TestResponse, number> | number>>();
-    expectTypeOf(api.get("/x")<number>(undefined, { throws: flag })).toEqualTypeOf<Promise<WithData<TestResponse, number> | number>>();
-    expectTypeOf(api.get("/x", { wrap: true })<number>(undefined, { throws: flag })).toEqualTypeOf<Promise<WithData<TestResponse, number>>>();
-    expectTypeOf(api.get("/x")<number>(undefined, { wrap: flag, throws: flag })).toEqualTypeOf<Promise<WithData<TestResponse, number> | number>>();
+    expectTypeOf(api.get("/x")<number>(undefined, { throws: flag })).toEqualTypeOf<Promise<AxpResult<TestResponse, number> | number>>();
+    expectTypeOf(api.get("/x", { wrap: true })<number>(undefined, { throws: flag })).toEqualTypeOf<Promise<AxpResult<TestResponse, number> | WithData<TestResponse, number>>>();
+    expectTypeOf(api.get("/x")<number>(undefined, { wrap: flag, throws: flag })).toEqualTypeOf<Promise<AxpResult<TestResponse, number> | number>>();
     expectTypeOf(api.request<number>({ wrap: flag })).toEqualTypeOf<Promise<WithData<TestResponse, number> | number>>();
-    expectTypeOf(api.request<number>({ throws: flag })).toEqualTypeOf<Promise<WithData<TestResponse, number> | number>>();
+    expectTypeOf(api.request<number>({ throws: flag })).toEqualTypeOf<Promise<AxpResult<TestResponse, number> | number>>();
     expectTypeOf(api.get("/x")<number>(undefined, { raw: flag })).toEqualTypeOf<Promise<Native<number> | number>>();
     const config: AxpRequestConfig = {};
     expectTypeOf(api.get("/x")<number>(undefined, config)).toEqualTypeOf<Promise<Native<number> | number>>();
@@ -410,7 +410,7 @@ it("[core.req.raw] raw:true 返回带原生数据的响应副本，未写时没�
     // request() 的 raw 重载。
     expectTypeOf(api.request<number>({ raw: true })).toEqualTypeOf<Promise<Native<number>>>();
     expectTypeOf(api.request<number>({ raw: true, wrap: false })).toEqualTypeOf<Promise<Native<number>>>();
-    expectTypeOf(api.request<number>({ raw: true, throws: false })).toEqualTypeOf<Promise<Native<number>>>();
+    expectTypeOf(api.request<number>({ raw: true, throws: false })).toEqualTypeOf<Promise<WithNative<AxpResult<TestResponse, number>>>>();
     expectTypeOf(api.request<number>({ raw: false })).toEqualTypeOf<Promise<number>>();
     expectTypeOf(api.request<number>({ raw: false, wrap: true })).toEqualTypeOf<Promise<WithData<TestResponse, number>>>();
     expectTypeOf(api.request<number>({ raw: flag })).toEqualTypeOf<Promise<Native<number> | number>>();
@@ -432,6 +432,100 @@ it("[core.req.raw] WithNative 替换同名业务字段而不是交叉成 never",
     expectTypeOf(native.data).toEqualTypeOf<number>();
     const wrapped = await biz.request<number>({ wrap: true });
     expectTypeOf(wrapped.error).toEqualTypeOf<string>();
+  }
+  expect(contracts).toBeTypeOf("function");
+});
+
+it("[core.req.throws][core.req.raw][core.opt.statusOf] ok 收窄失败数据且保留自定义响应字段", /** 只编译不发送网络请求。 */ () => {
+  /** 校验字面量、宽开关与派生上下文类型。 */
+  async function contracts(flag: boolean) {
+    const api = createAxp<ISchema, TestResponse>({
+      response: customResponse(),
+      statusOf: /** 回调只接收自定义 R。 */ (r) => {
+        expectTypeOf(r).toEqualTypeOf<TestResponse>();
+        return r.status;
+      },
+    });
+    const result = await api.get("/pet")({ id: 1 }, { throws: false });
+    expectTypeOf(result.traceId).toEqualTypeOf<string>();
+    if (result.ok) expectTypeOf(result.data).toEqualTypeOf<{ /** 名称。 */ name: string }>();
+    else {
+      expectTypeOf(result.data).toEqualTypeOf<unknown>();
+      // @ts-expect-error 失败数据不可当作成功模型读取。
+      void result.data.name;
+    }
+    const raw = await api.get("/pet", { throws: false })({ id: 1 }, { raw: true });
+    expectTypeOf(raw.raw).toEqualTypeOf<AxiosResponse | undefined>();
+    if (raw.ok) expectTypeOf(raw.data).toEqualTypeOf<{ /** 名称。 */ name: string }>();
+    else expectTypeOf(raw.data).toEqualTypeOf<unknown>();
+    expectTypeOf(api.request<number>({ raw: true, throws: true })).toEqualTypeOf<Promise<WithNative<WithData<TestResponse, number>>>>();
+    expectTypeOf(api.request<number>({ wrap: true, throws: true })).toEqualTypeOf<Promise<WithData<TestResponse, number>>>();
+    expectTypeOf(api.request<number>({ throws: true })).toEqualTypeOf<Promise<number>>();
+    const escape = await api.request<{ /** 名称。 */ name: string }>({ raw: true, throws: false });
+    if (escape.ok) expectTypeOf(escape.data).toEqualTypeOf<{ /** 名称。 */ name: string }>();
+    else expectTypeOf(escape.data).toEqualTypeOf<unknown>();
+    expectTypeOf(api.request<number>({ throws: false, raw: flag })).toEqualTypeOf<Promise<AxpResult<TestResponse, number> | WithNative<AxpResult<TestResponse, number>>>>();
+    expectTypeOf(api.request<number>({ raw: true, throws: flag })).toEqualTypeOf<Promise<WithNative<AxpResult<TestResponse, number> | WithData<TestResponse, number>>>>();
+    expectTypeOf(api.get("/empty")(undefined, { raw: true, throws: flag })).toEqualTypeOf<Promise<WithNative<AxpResult<TestResponse, number> | WithData<TestResponse, number>>>>();
+    expectTypeOf(api.get("/empty", { throws: false })(undefined, { wrap: true })).toEqualTypeOf<Promise<AxpResult<TestResponse, number>>>();
+  }
+  expect(contracts).toBeTypeOf("function");
+});
+
+it("[core.req.wrap][core.req.throws] Schema 默认泛型只解析一次，显式数据与请求体泛型优先", /** 只编译泛型边界。 */ () => {
+  /** 校验显式 unknown/any、请求体必填性以及错误实参不会反推泛型。 */
+  function contracts() {
+    const api = createAxp<ISchema, TestResponse>({ response: customResponse() });
+    expectTypeOf(api.get("/pet")<number>({ id: 1 })).toEqualTypeOf<Promise<number>>();
+    expectTypeOf(api.get("/pet")<number, string>("body")).toEqualTypeOf<Promise<number>>();
+    expectTypeOf(api.get("/pet")<unknown>({ id: 1 })).toEqualTypeOf<Promise<unknown>>();
+    expectTypeOf(api.get("/pet")<any>({ id: 1 })).toEqualTypeOf<Promise<any>>();
+    expectTypeOf(api.get("/pet")<number, unknown>()).toEqualTypeOf<Promise<number>>();
+    expectTypeOf(api.get("/pet")<number, undefined>()).toEqualTypeOf<Promise<number>>();
+    expectTypeOf(api.get("/pet")<number, any>({ arbitrary: true })).toEqualTypeOf<Promise<number>>();
+    expectTypeOf(api.get("/pet")<number, string>("body", { throws: false })).toEqualTypeOf<Promise<AxpResult<TestResponse, number>>>();
+    // @ts-expect-error 显式请求体泛型仍校验参数。
+    void api.get("/pet")<number, string>({ id: 1 });
+    // @ts-expect-error any 请求体沿用必须占位的契约。
+    void api.get("/pet")<number, any>();
+    // @ts-expect-error 显式响应泛型不能绕过 schema 请求体校验。
+    void api.get("/pet")<number>({ id: "wrong" });
+    // @ts-expect-error 普通调用优先的签名不能吞掉非法配置。
+    void api.get("/pet")({ id: 1 }, { throws: "false" });
+  }
+  expect(contracts).toBeTypeOf("function");
+});
+
+it("[core.req.throws][core.req.raw] 合并 raw 缺省与 false 后仍保留继承、覆盖和失败收窄", /** 只编译开关边界。 */ () => {
+  /** 校验普通、原生、方法级继承以及 request 的宽开关。 */
+  async function contracts(flag: boolean) {
+    const api = createAxp<ISchema, TestResponse>({ response: customResponse() });
+    expectTypeOf(api.get("/empty", { raw: false, throws: false })()).toEqualTypeOf<Promise<AxpResult<TestResponse, number>>>();
+    expectTypeOf(api.get("/empty", { raw: false, throws: false })(undefined, { throws: true })).toEqualTypeOf<Promise<number>>();
+    expectTypeOf(api.get("/empty", { raw: true, throws: false })(undefined, { raw: false })).toEqualTypeOf<Promise<AxpResult<TestResponse, number>>>();
+    expectTypeOf(api.get("/empty", { raw: true, throws: false })(undefined, { raw: false, throws: true })).toEqualTypeOf<Promise<number>>();
+    expectTypeOf(api.get("/empty", { raw: flag, throws: false })(undefined, { raw: false })).toEqualTypeOf<Promise<AxpResult<TestResponse, number>>>();
+    expectTypeOf(api.get("/empty", { raw: true, throws: false })(undefined, { throws: true })).toEqualTypeOf<Promise<Native<number>>>();
+    expectTypeOf(api.get("/empty", { throws: flag })(undefined, { wrap: true })).toEqualTypeOf<Promise<AxpResult<TestResponse, number> | WithData<TestResponse, number>>>();
+    expectTypeOf(api.request<number>({ raw: false, wrap: true, throws: flag })).toEqualTypeOf<Promise<AxpResult<TestResponse, number> | WithData<TestResponse, number>>>();
+    expectTypeOf(api.request<number>({ raw: flag, wrap: true, throws: flag })).toEqualTypeOf<
+      Promise<AxpResult<TestResponse, number> | WithData<TestResponse, number> | WithNative<AxpResult<TestResponse, number> | WithData<TestResponse, number>>>
+    >();
+    const inherited = await api.get("/pet", { throws: false })({ id: 1 });
+    if (inherited.ok) expectTypeOf(inherited.data).toEqualTypeOf<{ /** 名称。 */ name: string }>();
+    else expectTypeOf(inherited.data).toEqualTypeOf<unknown>();
+    const native = await api.get("/pet", { raw: true, throws: false })({ id: 1 });
+    if (native.ok) {
+      expectTypeOf(native.data).toEqualTypeOf<{ /** 名称。 */ name: string }>();
+      expectTypeOf(native.request).toEqualTypeOf<Readonly<AxpRequestConfig>>();
+    } else {
+      expectTypeOf(native.data).toEqualTypeOf<unknown>();
+      expectTypeOf(native.raw).toEqualTypeOf<AxiosResponse | undefined>();
+      // @ts-expect-error 原生失败分支也不能读取成功模型。
+      void native.data.name;
+    }
+    const methodConfig: AxpRequestConfig = { raw: true, throws: false };
+    expectTypeOf(api.get("/empty", methodConfig)()).toEqualTypeOf<Promise<number>>();
   }
   expect(contracts).toBeTypeOf("function");
 });

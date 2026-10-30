@@ -297,3 +297,84 @@ describe("方法级与调用级合并", /** 调用级覆盖方法级，undefined
     expect(seen[1].data).toEqual({ id: 2 });
   });
 });
+
+it.each(["get", "post"] as const)(
+  "[core.req.merge] %s 的 payload 按方法级、payload、调用级合并纯对象",
+  /** 两类动词共用合并契约。 */ async (method) => {
+    const field = method === "post" ? "data" : "params";
+    const seen: unknown[] = [];
+    const { api } = createTestClient([
+      {
+        name: "capture",
+        /** 记录合并后的字段。 */ async handle(ctx, next) {
+          seen.push(ctx.originRequest[field]);
+          return next();
+        },
+      },
+    ]);
+    const base = { lang: "en", page: 0 };
+    const payload = { page: 1, limit: 10 };
+    await api[method](URL, { [field]: base })(payload);
+    await api[method](URL, { [field]: base })(payload, { [field]: { page: 2 } });
+    await api[method](URL)();
+    expect(seen).toEqual([{ lang: "en", page: 1, limit: 10 }, { lang: "en", page: 2, limit: 10 }, undefined]);
+    expect(base).toEqual({ lang: "en", page: 0 });
+    expect(payload).toEqual({ page: 1, limit: 10 });
+  },
+);
+
+it.each((["get", "post"] as const).flatMap(/** 两种 payload 字段均验证特殊容器。 */ (method) => [new FormData(), new URLSearchParams("a=1"), [1]].map(/** 保留容器引用。 */ (payload) => ({ method, payload }))))(
+  "[core.req.merge] $method 非纯对象 payload $payload 整体替换，调用级也可整体替换",
+  /** 观察传输前视图避免 axios 对容器的转换。 */ async ({ method, payload }) => {
+    const field = method === "post" ? "data" : "params";
+    const seen: unknown[] = [];
+    const { api } = createTestClient([
+      {
+        name: "capture",
+        /** 短路以观察原始容器身份。 */ async handle(ctx) {
+          seen.push(ctx.originRequest[field]);
+          return ctx.fail({ status: 200 });
+        },
+      },
+    ]);
+    await api[method](URL, { [field]: { a: 0 } })(payload);
+    await api[method](URL, { [field]: payload })({ b: 1 });
+    await api[method](URL)({ b: 1 }, { [field]: payload });
+    expect(seen[0]).toBe(payload);
+    expect(seen[1]).toEqual({ b: 1 });
+    expect(seen[2]).toBe(payload);
+  },
+);
+
+it("[core.req.wrap][core.req.throws] axios defaults 上的开关不影响返回与抛错", /** 返回形态只取调用方配置。 */ async () => {
+  const { api, net } = createTestClient();
+  Object.assign(api.axios.defaults, { wrap: true, throws: false });
+  net.fallback(/** 回显成功数据。 */ () => ({ data: { code: 0, data: 1 } }));
+  expect(await api.get(URL)()).toBe(1);
+  net.fallback(/** 默认 throws:false 不能吞失败。 */ () => ({ status: 500 }));
+  await expect(api.get(URL)()).rejects.toMatchObject({ status: 500 });
+  Object.assign(api.axios.defaults, { throws: true });
+  expect(await api.get(URL)(undefined, { throws: false })).toMatchObject({ ok: false });
+});
+
+it("[core.opt.debug] 未安装或禁用的内置选项每客户端每键只警告一次", /** 映射含 auth 的 protected 例外，关闭与空值不提示。 */ async () => {
+  const log = { log: vi.fn(), warn: vi.fn(), error: vi.fn() };
+  const { api } = createTestClient([{ name: "axp:retry", enable: false }], { debug: log });
+  await api.get(URL, { cache: true })(undefined, { protected: true, retry: 1 });
+  await api.get(URL)(undefined, { cache: true, protected: true, retry: 1 });
+  expect(log.warn.mock.calls.map(/** 取告警文字。 */ ([message]) => message)).toEqual([
+    '[axp] 请求选项 "retry" 未生效：未安装或启用 axp:retry',
+    '[axp] 请求选项 "protected" 未生效：未安装或启用 axp:auth',
+    '[axp] 请求选项 "cache" 未生效：未安装或启用 axp:cache',
+  ]);
+  await api.get(URL)(undefined, { share: false, cache: null, mock: { enable: false } });
+  expect(log.warn).toHaveBeenCalledTimes(3);
+  const child = api.extend();
+  await child.get(URL)(undefined, { cache: 0 });
+  expect(log.warn).toHaveBeenCalledTimes(4);
+  api.use({ name: "axp:cache", taps: [{ stage: "source" }] });
+  await api.get(URL)(undefined, { cache: true });
+  expect(log.warn).toHaveBeenCalledTimes(4);
+  child.dispose();
+  api.dispose();
+});

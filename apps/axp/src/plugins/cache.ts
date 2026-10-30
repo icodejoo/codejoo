@@ -1,4 +1,5 @@
 import { cancelIfAborted, type AxpContext } from "../context";
+import { fingerprintOf } from "../key";
 import { methodSet, normalizeMethod, SAFE_METHODS } from "../methods";
 import { resolveOption, resolveRequestOption, type AxpOption, type IPluginSwitch } from "../options";
 import { failureOf, messageOf, AXP_FAILURES, type AxpFailureType, type AxpResponse, type AxpResponseInit, type IAxpResponse } from "../response";
@@ -179,6 +180,7 @@ export default function axpCache<R extends IAxpResponse<unknown, string | number
       const owned = options.store === undefined;
       const store = options.store ?? createMemoryStore({ max: options.max });
       const barrier = createFreshnessBarrier();
+      let fingerprints: WeakMap<IAxpCacheEntry, string> | undefined;
       const writes = new Map<string, Promise<void>>();
       /** 存储故障只记录，不改变本次请求结果；同步仓不增加微任务。 */
       function operate<T>(method: string, action: () => MaybePromise<T>, fallback: T): MaybePromise<T> {
@@ -242,7 +244,12 @@ export default function axpCache<R extends IAxpResponse<unknown, string | number
           response = await next();
           const failedType = failureOf(response)?.type;
           if (barrier.canWrite(key, ticket) && !(failedType && NEVER_CACHED.has(failedType)) && config.shouldCache(response, ctx)) {
-            const written = write(key, { snapshot: snapshotResponse(response), expiresAt: Date.now() + config.expires }, ticket);
+            const entry = { snapshot: snapshotResponse(response), expiresAt: Date.now() + config.expires };
+            if (ctx.debug) {
+              const fingerprint = fingerprintOf(entry.snapshot.data);
+              if (fingerprint !== null) (fingerprints ||= new WeakMap()).set(entry, fingerprint);
+            }
+            const written = write(key, entry, ticket);
             if (isPending(written)) {
               await waitAbortable(written, ctx.signal);
               const cancelled = cancelIfAborted(ctx);
@@ -262,6 +269,11 @@ export default function axpCache<R extends IAxpResponse<unknown, string | number
         const cancelled = cancelIfAborted(ctx);
         if (cancelled) return Promise.resolve(cancelled);
         const snapshot = hit.snapshot;
+        const before = ctx.debug && fingerprints && fingerprints.get(hit);
+        if (before && before !== fingerprintOf(snapshot.data)) {
+          fingerprints!.delete(hit);
+          ctx.log.warn("[axp:cache] 调用方已原地修改缓存数据，命中将返回修改值；请开 clone 或先拷贝");
+        }
         const fields = {
           code: snapshot.code,
           message: snapshot.message,

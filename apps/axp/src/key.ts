@@ -41,6 +41,8 @@ const CC_CLOSE_OBJECT = "}".charCodeAt(0);
 const CC_PARAMS = "p".charCodeAt(0);
 /** 请求体片段标记。 */
 const CC_DATA = "d".charCodeAt(0);
+/** 响应类型片段标记。 */
+const CC_RESPONSE_TYPE = "r".charCodeAt(0);
 /** 长度分帧结束标记。 */
 const CC_QUOTE = '"'.charCodeAt(0);
 /** 日期值标记。 */
@@ -108,6 +110,10 @@ export function requestKey(request: Readonly<AxpRequestConfig>, options: IKeyOpt
     try {
       hashText(method, state);
       hashText(url ?? "", state);
+      if (request.responseType) {
+        hashByte(CC_RESPONSE_TYPE, state);
+        hashText(request.responseType, state);
+      }
       if (request.params != null) {
         hashByte(CC_PARAMS, state);
         deepHash(request.params, state);
@@ -234,5 +240,21 @@ function hashSpecial(target: any, state: HashState): void {
     for (let index = 0; index < length; index++) hashByte(bytes[index], state);
   } else {
     throw KEY_UNSUPPORTED;
+  }
+}
+
+/** 复用深哈希检查数据是否发生变化；不可哈希时跳过检查。
+ * @internal
+ * @param value 待检查的数据。
+ * @returns 指纹或不可哈希时的 null。
+ * @example `const before = fingerprintOf(data)`
+ */
+export function fingerprintOf(value: unknown): string | null {
+  const state: HashState = { h1: FNV_OFFSET, h2: FNV_OFFSET_2, ancestors: [] };
+  try {
+    deepHash(value, state);
+    return state.h1 + "-" + state.h2;
+  } catch {
+    return null;
   }
 }

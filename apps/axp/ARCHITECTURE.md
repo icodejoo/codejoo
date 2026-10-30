@@ -23,7 +23,7 @@
 | `pipeline.ts`             | 插件排序、taps 编译、链组合、`next(patch)`、异常兜底                                                                                                 |
 | `stages.ts`               | `STAGE_BUILTINS`：阶段和内置插件固定次序的唯一来源，`AxpStage` 类型与排序都从它派生                                                                  |
 | `context.ts`              | `AxpContext`：请求视图、signal、状态键（`stateKey`）、`key()`、`fail()`、`markReplayable()`、`canReplay()`                                           |
-| `transport.ts`            | 调 `axios.request`、按需克隆请求体、交给响应工厂判定                                                                                                 |
+| `transport.ts`            | 调 `axios.request`、交给响应工厂判定；不克隆请求体，`debug` 下检测原地修改                                                                           |
 | `response.ts`             | `IAxpResponse`、`AxpResponse`、`IAxpResponseFactory`、`axpResponse()`、`isAxpResponse`                                                               |
 | `brand.ts`                | 响应品牌 `AXP_RESPONSE` 和失败常量 `AXP_FAILURE`、`AXP_FAILURES`。零导入的叶子模块，验收执行器可以直接用 Node 原生加载                               |
 | `key.ts`                  | key 服务（哈希算法从旧的 `plugins/key.ts` 迁来）                                                                                                     |
@@ -101,7 +101,7 @@ api.get('/pet/{id}')(payload, opts)        一次调用 = 一个逻辑请求
 1. **合并请求**：动词调用把 `path`、`payload`、方法级配置、调用级配置浅合并成逻辑请求 `AxpRequestConfig`，合并方式和旧版一致；内核再用 axios 公开的 `mergeConfig` 把实例 `defaults` 合并进来，补齐实际发送的 method（小写）并把默认头展平。**各层看到的都是最终生效的配置**，所以 repath、filter、key 都能处理 `defaults` 里的值，语义和旧版拦截器一致。
 2. **建上下文**：内核为这个逻辑请求分配 `id`，建 `AbortController` 并与用户传入的 `signal` 联动，登记到在途集合（`cancelAll()` / `pending()` 用）。
 3. **穿链**：按编译好的链从外到内执行中间件。每层的 `ctx.request` 是外层交给它的那一版。
-4. **到传输层**：若有层调用过 `markReplayable()`，且 `data` 是纯对象或数组，先克隆再发；然后调用**用户的 axios 实例**的 `request`（实例上的拦截器照常执行），强制 `validateStatus: () => true`，所以 4xx/5xx 也当普通响应处理。axios 自己还会再合并一次 defaults；传输固定 method、baseURL 与纯对象 params 的入口视图（含插件补丁），其余未覆盖字段以发送时为准。交给 axios 的差量：以用户原始的请求级配置为底，叠上各层改动过的字段。层删掉的默认 `params` 键写成 `null`、默认头写成 `false`，防止被二次合并带回来。
+4. **到传输层**：若有层调用过 `markReplayable()`，且 `data` 是纯对象或数组，原样发送，不克隆（`debug` 下发送前后比对指纹，被原地修改就告警）；然后调用**用户的 axios 实例**的 `request`（实例上的拦截器照常执行），强制 `validateStatus: () => true`，所以 4xx/5xx 也当普通响应处理。axios 自己还会再合并一次 defaults；传输固定 method、baseURL 与纯对象 params 的入口视图（含插件补丁），其余未覆盖字段以发送时为准。交给 axios 的差量：以用户原始的请求级配置为底，叠上各层改动过的字段。层删掉的默认 `params` 键写成 `null`、默认头写成 `false`，防止被二次合并带回来。
 5. **判定回流**：响应工厂把响应（或异常）转换成 R，内核补品牌并保护失败事实，沿原路返回。
 6. **落定**：最外层从在途集合注销，解除 signal 监听，再按 [§7](#7-落定与-bug-透传) 决定返回 data、返回 `R`、抛 `R` 还是抛原始异常。
 
@@ -141,7 +141,7 @@ api.get('/pet/{id}')(payload, opts)        一次调用 = 一个逻辑请求
 | `key()`                | 惰性计算，按 request 对象缓存；不可哈希时为 `null`                                 |
 | `get(k)` / `set(k, v)` | 逻辑请求级状态，用 `stateKey<T>()` 建的 Symbol 键，替代字符串键                    |
 | `fail(init)`           | 凭空造一个结果，必须经响应工厂，保证扩展字段齐全                                   |
-| `markReplayable()`     | 声明可能重发，传输层据此按需克隆普通请求体                                         |
+| `markReplayable()`     | 声明可能重发；传输层据此在 `debug` 下检测请求体是否被原地修改                      |
 | `canReplay()`          | 一次性请求体发出后为 false，重放前必须检查                                         |
 
 完整签名见 [核心架构 §5](docs/design/core-architecture.md#5-上下文)。
@@ -154,7 +154,7 @@ api.get('/pet/{id}')(payload, opts)        一次调用 = 一个逻辑请求
 
 R 的必需契约只有 ok、status（HTTP）、code<C>、data；无响应时 status 为 0，无业务码为 0，无数据为 null。接口不声明 message/raw/error；默认类 AxpResponse 另有 message、request（只有 `{ method, url }`）、stack、toJSON、parse。原始响应与异常默认由 `ctx.native` 短期持有、落定后释放，只有请求级 `raw: true` 才以不可枚举属性附到返回或抛出的副本上，用 `nativeOf(e)` 读取抛出对象上的这三项（见 [ADR 0003](docs/decisions/0003-native-data-on-ctx.md)）。完整字段、分类表和工厂选项见 [核心架构 §6](docs/design/core-architecture.md#6-归一化响应)。
 
-HTTP 或业务失败看 ok/status/code；取消、超时、网络、解析、鉴权、程序异常由内核写入不可枚举的 AXP_FAILURE，同时强制 ok 为 false。只读辅助函数 failureOf(r) 返回 `{ type, reason?, error? } | undefined`（error 只有 internal 有），失败常量为 AXP_FAILURES。取消用 api.isCancel(e) 或 isAxpCancel(e)。使用者不填写内核分类。
+HTTP 或业务失败看 ok/status/code；取消、超时、网络（含响应体中途断流）、解析（仅 SyntaxError、maxContentLength 超限）、鉴权、程序异常由内核写入不可枚举的 AXP_FAILURE，同时强制 ok 为 false。只读辅助函数 failureOf(r) 返回 `{ type, reason?, error? } | undefined`（error 只有 internal 有），失败常量为 AXP_FAILURES。取消用 api.isCancel(e) 或 isAxpCancel(e)。使用者不填写内核分类。
 
 默认 parse 读取 code/data/message，默认成功为 2xx 且 code 为 0 或 '0000'。子类覆盖 parse 适配协议、覆盖 ok 改成功规则，用 axpResponse({ type }) 接入；也可实现接口，用 create 返回普通对象。status 保持 HTTP 语义；业务码回调的完整配置见 [README](README.zh-CN.md#使用警告与业务风格)。
 
@@ -164,11 +164,11 @@ HTTP 或业务失败看 ok/status/code；取消、超时、网络、解析、鉴
 
 axp 没有错误类。最外层按下表落定：
 
-| 情况                                            | 默认       | `wrap: true`     | `throws: false`                         |
-| ----------------------------------------------- | ---------- | ---------------- | --------------------------------------- |
-| 成功                                            | `data`     | `WithData<R, D>` | `WithData<R, D>`                        |
-| 可预期的失败                                    | `throw r`  | `throw r`        | resolve `WithData<R, D>`（`ok: false`） |
-| 程序 bug（`failureOf(r)?.type === 'internal'`） | 抛原始异常 | 抛原始异常       | 抛原始异常                              |
+| 情况                                            | 默认       | `wrap: true`     | `throws: false`                                                         |
+| ----------------------------------------------- | ---------- | ---------------- | ----------------------------------------------------------------------- |
+| 成功                                            | `data`     | `WithData<R, D>` | `AxpResult<R, D>`（`ok: true`）                                         |
+| 可预期的失败                                    | `throw r`  | `throw r`        | resolve `AxpResult<R, D>`（按 `ok` 区分，失败分支 `data` 为 `unknown`） |
+| 程序 bug（`failureOf(r)?.type === 'internal'`） | 抛原始异常 | 抛原始异常       | 抛原始异常                                                              |
 
 `throws` 只有请求级，默认 `true`；没有客户端级默认值（`createAxp<S, R>` 显式泛型时返回类型无法如实反映客户端级开关）。
 
@@ -214,10 +214,10 @@ interface AxpPlugin<R extends IAxpResponse<unknown, string | number> = AxpRespon
 
 ### 约定
 
-1. **状态必须建在 `setup` 里**，别放在工厂闭包。这样同一个插件对象能装到多个客户端，各有一份状态；`extend()` 默认继承插件列表、各自重新 `setup`，靠的就是这条。
+1. **状态必须建在 `setup` 里**，别放在工厂闭包；同一个插件对象能装到多个客户端，`extend()` 默认继承插件列表、各自重新 `setup`，靠的就是这条。状态按它所代表的资源作用域：cache、share 按客户端各一份；auth 按 TokenManager（模块级 WeakMap 加持有者计数，子客户端和共用 tm 的客户端共享单飞刷新、过期与无 token 通知标记）；loading 按回调函数（WeakMap，父子共用同一 spinner 回调时只显示、隐藏一次）。
 2. **只透传 `R`，不构造 `R`。** 内置插件工厂写成泛型 `axpRetry<R extends IAxpResponse<unknown, string | number> = AxpResponse>(opts?)`，对任意 `R` 都成立；默认值与客户端一致。需要凭空造结果走 `ctx.fail()`，由响应工厂保证扩展字段存在。
 3. **改请求用 next(patch)**。首发前 markReplayable()，每次重放前检查 ctx.canReplay()，false 就返回原响应。强行重发已消耗的流会生成 internal，落定抛原始 Error。
-4. **判断函数的参数是 R**：默认按 HTTP status 判定，业务码显式配置；内核类别和细分原因读 failureOf。合成失败用 `ctx.fail({ failure: AXP_FAILURES.AUTH, reason: "denied", from: r })`。
+4. **判断函数的参数是 R**：retry/auth 的默认规则读 `ctx.statusOf(r)`（有效状态，默认等于 HTTP `r.status`，业务风格用 `createAxp({ statusOf })` 配置）；内核类别和细分原因读 failureOf。合成失败用 `ctx.fail({ failure: AXP_FAILURES.AUTH, reason: "denied", from: r })`。
 5. 只有 `setup`、没有中间件的插件（如 envs）不进链，只在装卸时执行。
 6. 每个内置插件工厂都接受 `enable?: boolean`（默认 true，mock 默认 false）；`false` 时不进链、不 `setup`、`inspect()` 里也看不到，请求级开关不能把它重新打开。
 7. 请求选项靠 `declare module '@codejoo/axp' { interface AxpRequestOptions { … } }` 扩展，不再往 `axios` 模块的 `AxiosRequestConfig` 里塞。
@@ -272,17 +272,17 @@ const audit: AxpPlugin = {
 
 ## 9. 性能设计要点
 
-| #   | 做法                                                                                                                                                    |
-| --- | ------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| P1  | 链在增删插件时编译，请求时不排序、不查表                                                                                                                |
-| P2  | 每层是固定形状的上下文实例，逻辑请求级状态放在各层共享的同一个容器里；没有补丁时直接复用外层上下文，有补丁才新建一个带新 `request` 视图的实例           |
-| P3  | `key()` 惰性计算并按 request 对象缓存；不用 cache/share 的请求根本不算 key                                                                              |
-| P4  | 只有 `markReplayable()` 且 `data` 是纯对象/数组才 `structuredClone`；克隆失败或环境没有 `structuredClone` 时回退为原引用（debug 下 warn），不让请求失败 |
-| P5  | 传输强制 `validateStatus` 全放行，HTTP 错误不构造 AxiosError，省掉调用栈捕获                                                                            |
-| P6  | 失败直接抛 `R`，不另建错误对象；调用点 stack 只在 debug 模式记录                                                                                        |
-| P7  | 不再包装 `transformResponse`，不再拷贝尝试钩子数组                                                                                                      |
-| P8  | 缓存过期惰性删除，超容量及有限有效期写入时节流清扫；同步仓保留快路径                                                                                    |
-| P9  | 入口合并一次 defaults；传输固定 method/baseURL/纯对象 params，其他字段用差量交给 axios                                                                  |
+| #   | 做法                                                                                                                                          |
+| --- | --------------------------------------------------------------------------------------------------------------------------------------------- |
+| P1  | 链在增删插件时编译，请求时不排序、不查表                                                                                                      |
+| P2  | 每层是固定形状的上下文实例，逻辑请求级状态放在各层共享的同一个容器里；没有补丁时直接复用外层上下文，有补丁才新建一个带新 `request` 视图的实例 |
+| P3  | `key()` 惰性计算并按 request 对象缓存；不用 cache/share 的请求根本不算 key                                                                    |
+| P4  | 传输层不克隆请求体，零拷贝；约定转换器、拦截器别原地改 `data`。只有 `debug` 且 `markReplayable()` 的纯对象/数组才做指纹比对，被改就 warn      |
+| P5  | 传输强制 `validateStatus` 全放行，HTTP 错误不构造 AxiosError，省掉调用栈捕获                                                                  |
+| P6  | 失败直接抛 `R`，不另建错误对象；调用点 stack 只在 debug 模式记录                                                                              |
+| P7  | 不再包装 `transformResponse`，不再拷贝尝试钩子数组                                                                                            |
+| P8  | 缓存过期惰性删除，超容量及有限有效期写入时节流清扫；同步仓保留快路径                                                                          |
+| P9  | 入口合并一次 defaults；传输固定 method/baseURL/纯对象 params，其他字段用差量交给 axios                                                        |
 
 性能门槛和测法见 [测试方案 §8](docs/design/test-plan.md)。
 

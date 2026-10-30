@@ -63,7 +63,7 @@ describe("响应判定", /** 默认响应的基础契约。 */ () => {
     [new AxiosError("deadline", "ETIMEDOUT"), "timeout"],
     [new AxiosError("timeout exceeded", "ECONNABORTED"), "timeout"],
     [new AxiosError("aborted", "ECONNABORTED"), "network"],
-    [new AxiosError("bad", "ERR_BAD_RESPONSE"), "parse"],
+    [new AxiosError("bad", "ERR_BAD_RESPONSE"), "network"],
     [new AxiosError("offline"), "network"],
     [new TypeError("bug"), "internal"],
     ["bug", "internal"],

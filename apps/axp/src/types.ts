@@ -124,15 +124,21 @@ export type AxpRequestConfig = TAxpAxiosConfig & AxpRequestOptions;
 export type AxpRequestPatch = { [K in keyof AxpRequestConfig]?: AxpRequestConfig[K] | undefined };
 /** 保留扩展响应字段并替换接口数据类型。 */
 export type WithData<R, D> = Omit<R, "data"> & { /** 当前接口的业务数据。 */ readonly data: D };
+/** 关闭抛错时按 ok 区分成功数据与未知的失败数据。
+ * @example `if (r.ok) r.data.name`
+ */
+export type AxpResult<R, D> = (WithData<R, D> & { /** 成功判别。 */ readonly ok: true }) | (WithData<R, unknown> & { /** 失败判别。 */ readonly ok: false });
 /** 开启 raw 后响应副本上的原生数据视图；先 Omit 再交叉，避免与自定义 R 的同名业务字段冲突。
  * raw 带 undefined：缓存命中、share 跟随者、网络错误等路径没有原生响应。
  * @example `const r = await api.get('/pet', { raw: true })(); r.raw?.headers; r.request.url`
  */
-export type WithNative<R> = Omit<R, "raw" | "error" | "request"> & {
-  /** 完整原生响应，无响应时为 undefined。 */ readonly raw: AxiosResponse | undefined;
-  /** 原始异常，成功或非异常路径为 undefined。 */ readonly error: unknown;
-  /** 完整请求配置视图。 */ readonly request: Readonly<AxpRequestConfig>;
-};
+export type WithNative<R> = R extends unknown
+  ? Omit<R, "raw" | "error" | "request"> & {
+      /** 完整原生响应，无响应时为 undefined。 */ readonly raw: AxiosResponse | undefined;
+      /** 原始异常，成功或非异常路径为 undefined。 */ readonly error: unknown;
+      /** 完整请求配置视图。 */ readonly request: Readonly<AxpRequestConfig>;
+    }
+  : never;
 /** 从外到内的固定阶段。 */
 export type AxpStage = keyof typeof STAGE_BUILTINS;
 /** next 永远 resolve，程序异常临时归类为 internal。 */
@@ -190,6 +196,12 @@ interface IAxpBaseOptions<R extends IAxpResponse<unknown, string | number>> {
   key?: IKeyOptions;
   /** 仅转换即将抛出的可预期失败。 */
   reject?: (response: NoInfer<R>) => unknown;
+  /** 插件默认规则使用的有效状态，不改写响应的 HTTP status；抛错按程序 bug 处理。
+   * @param response 当前响应。
+   * @returns 供默认规则判定的状态。
+   * @example `createAxp({ statusOf: (r) => (r.status === 200 && r.code !== 0 ? Number(r.code) : r.status) })`
+   */
+  statusOf?: (response: NoInfer<R>) => number;
   /** 日志与调用点捕获。 */
   debug?: boolean | AxpLogger;
 }
@@ -202,110 +214,132 @@ export type AxpOptions<R extends IAxpResponse<unknown, string | number> = AxpRes
   (TAxpDefaultResponse<R> extends true ? { /** 默认响应工厂。 */ response?: IAxpResponseFactory<R> } : { /** 自定义响应工厂。 */ response: IAxpResponseFactory<R> });
 /** 读取选项对象上必选属性 K 的类型，缺省或可选时为 undefined。 */
 type TAxpFlag<O, K extends string> = O extends { [P in K]: infer V } ? V : undefined;
-/** 不含 raw 时按 wrap/throws 决定返回响应还是数据；任一为宽 boolean 且无法确定包装时返回联合。 */
-type TAxpPlainResult<R extends IAxpResponse<unknown, string | number>, D, O> = O extends { wrap: true } | { throws: false }
-  ? WithData<R, D>
-  : [boolean] extends [TAxpFlag<O, "wrap">]
-    ? WithData<R, D> | D
+/** 按抛错开关确定包装响应的成功/失败分支。 */
+type TAxpWrappedResult<R, D, O> = O extends { /** 失败抛错开关。 */ throws: false } ? AxpResult<R, D> : [boolean] extends [TAxpFlag<O, "throws">] ? AxpResult<R, D> | WithData<R, D> : WithData<R, D>;
+/** 不含 raw 时按 wrap/throws 决定返回响应还是数据。 */
+type TAxpPlainResult<R, D, O> = O extends { /** 失败抛错开关。 */ throws: false }
+  ? AxpResult<R, D>
+  : O extends { /** 响应包装开关。 */ wrap: true }
+    ? TAxpWrappedResult<R, D, O>
     : [boolean] extends [TAxpFlag<O, "throws">]
-      ? WithData<R, D> | D
-      : D;
-/** 根据选项决定返回形态；raw 优先于 wrap/throws，raw 为宽 boolean 时返回原生副本与其余形态的联合。
+      ? AxpResult<R, D> | D
+      : [boolean] extends [TAxpFlag<O, "wrap">]
+        ? WithData<R, D> | D
+        : D;
+/** raw 优先；宽 boolean 保留可能返回的形态。
  * 已知限制：方法级传入 `AxpRequestConfig` 类型的变量时，raw、wrap、throws 都是可选属性，与缺省 O 无法区分，仍按数据推断。
  */
-type TAxpResult<R extends IAxpResponse<unknown, string | number>, D, O> = O extends { raw: true }
-  ? WithNative<WithData<R, D>>
-  : O extends { raw: false }
+type TAxpResult<R, D, O> = O extends { /** 原生副本开关。 */ raw: true }
+  ? WithNative<TAxpWrappedResult<R, D, O>>
+  : O extends { /** 原生副本开关。 */ raw: false }
     ? TAxpPlainResult<R, D, O>
-    : O extends { raw: boolean }
-      ? WithNative<WithData<R, D>> | TAxpPlainResult<R, D, O>
+    : O extends { /** 原生副本开关。 */ raw: boolean }
+      ? WithNative<TAxpWrappedResult<R, D, O>> | TAxpPlainResult<R, D, O>
       : TAxpPlainResult<R, D, O>;
-/** 新动词的调用签名，沿用原有 Schema 查表和 NoInfer。 */
-type TAxpDispatchArgs<S, Mt extends HttpMethodLower, P, Q, C extends unknown[]> = Payload<ResolvePayload<S, Mt, P, NoInfer<Q>>, C>;
 /* oxlint-disable typescript-eslint/no-unnecessary-type-parameters -- 动词重载里的 Q 只用于 payload 推断，必须保留为类型参数。 */
 /** 调用级 raw 为 true 时返回带原生数据的响应副本。 */
-interface IAxpRawDispatch<S, Mt extends HttpMethodLower, P, R extends IAxpResponse<unknown, string | number>> {
-  /** raw 隐含包装，优先于 wrap 与 throws。 */
-  <D = unknown, Q = unknown>(...args: TAxpDispatchArgs<S, Mt, P, Q, [config: AxpRequestConfig & { raw: true }]>): Promise<WithNative<WithData<R, ResolveResponse<S, Mt, P, D>>>>;
+interface IAxpRawDispatch<RES, PL, R extends IAxpResponse<unknown, string | number>, O> {
+  /** raw 且关闭抛错时保留判别联合。 */
+  <D = RES, Q = PL>(...args: [...Payload<NoInfer<Q>, []>, config: AxpRequestConfig & { /** 原生副本开关。 */ raw: true; /** 失败抛错开关。 */ throws: false }]): Promise<WithNative<AxpResult<R, D>>>;
+  /** raw 且开启抛错时只返回成功响应。 */
+  <D = RES, Q = PL>(...args: [...Payload<NoInfer<Q>, []>, config: AxpRequestConfig & { /** 原生副本开关。 */ raw: true; /** 失败抛错开关。 */ throws: true }]): Promise<WithNative<WithData<R, D>>>;
+  /** raw 的抛错开关继承方法级。 */
+  <D = RES, Q = PL>(...args: [...Payload<NoInfer<Q>, []>, config: AxpRequestConfig & { /** 原生副本开关。 */ raw: true; /** 失败抛错开关。 */ throws?: undefined }]): Promise<WithNative<TAxpWrappedResult<R, D, O>>>;
+  /** raw 且宽抛错开关返回全部包装形态。 */
+  <D = RES, Q = PL>(...args: [...Payload<NoInfer<Q>, []>, config: AxpRequestConfig & { /** 原生副本开关。 */ raw: true; /** 失败抛错开关。 */ throws: boolean }]): Promise<WithNative<AxpResult<R, D> | WithData<R, D>>>;
 }
 /** 调用级 raw 取 Raw（缺省、显式 false 或宽 boolean）时按有效开关选择返回形态的动词签名。 */
-interface IAxpBaseDispatch<S, Mt extends HttpMethodLower, P, R extends IAxpResponse<unknown, string | number>, O, Raw extends boolean | undefined> {
-  /** 调用级明确包装或关闭抛错时返回响应。 */
-  <D = unknown, Q = unknown>(
-    ...args: TAxpDispatchArgs<S, Mt, P, Q, [config: AxpRequestConfig & { /** 调用级 raw 取值。 */ raw?: Raw } & ({ wrap: true } | { throws: false })]>
-  ): Promise<TAxpResult<R, ResolveResponse<S, Mt, P, D>, Omit<O, "wrap" | "throws"> & { /** 有效包装值。 */ wrap: true }>>;
+interface IAxpBaseDispatch<RES, PL, R extends IAxpResponse<unknown, string | number>, O, Raw extends boolean | undefined> {
+  /** 调用级关闭抛错时返回判别联合。 */
+  <D = RES, Q = PL>(
+    ...args: [...Payload<NoInfer<Q>, []>, config: AxpRequestConfig & { /** 原生副本开关。 */ raw?: Raw; /** 失败抛错开关。 */ throws: false }]
+  ): Promise<TAxpResult<R, D, Omit<O, "throws"> & { /** 失败抛错开关。 */ throws: false }>>;
+  /** 调用级包装并显式开启抛错时只返回成功响应。 */
+  <D = RES, Q = PL>(
+    ...args: [...Payload<NoInfer<Q>, []>, config: AxpRequestConfig & { /** 原生副本开关。 */ raw?: Raw; /** 响应包装开关。 */ wrap: true; /** 失败抛错开关。 */ throws: true }]
+  ): Promise<TAxpResult<R, D, Omit<O, "wrap" | "throws"> & { /** 响应包装开关。 */ wrap: true; /** 失败抛错开关。 */ throws: true }>>;
+  /** 调用级包装且继承抛错开关。 */
+  <D = RES, Q = PL>(
+    ...args: [...Payload<NoInfer<Q>, []>, config: AxpRequestConfig & { /** 原生副本开关。 */ raw?: Raw; /** 响应包装开关。 */ wrap: true; /** 失败抛错开关。 */ throws?: undefined }]
+  ): Promise<TAxpResult<R, D, Omit<O, "wrap"> & { /** 响应包装开关。 */ wrap: true }>>;
+  /** 调用级包装且宽抛错开关保留全部响应分支。 */
+  <D = RES, Q = PL>(
+    ...args: [...Payload<NoInfer<Q>, []>, config: AxpRequestConfig & { /** 原生副本开关。 */ raw?: Raw; /** 响应包装开关。 */ wrap: true; /** 失败抛错开关。 */ throws: boolean }]
+  ): Promise<TAxpResult<R, D, Omit<O, "wrap" | "throws"> & { /** 响应包装开关。 */ wrap: true; /** 失败抛错开关。 */ throws: boolean }>>;
   /** 调用级同时关闭包装并开启抛错时返回数据。 */
-  <D = unknown, Q = unknown>(
-    ...args: TAxpDispatchArgs<
-      S,
-      Mt,
-      P,
-      Q,
-      [
-        config: AxpRequestConfig & {
-          /** 调用级 raw 取值。 */ raw?: Raw;
-          /** 调用级关闭包装。 */ wrap: false;
-          /** 调用级开启抛错。 */ throws: true;
-        },
-      ]
-    >
-  ): Promise<TAxpResult<R, ResolveResponse<S, Mt, P, D>, Omit<O, "wrap" | "throws"> & { /** 有效包装值。 */ wrap: false; /** 有效抛错值。 */ throws: true }>>;
+  <D = RES, Q = PL>(
+    ...args: [
+      ...Payload<NoInfer<Q>, []>,
+      config: AxpRequestConfig & {
+        /** 调用级 raw 取值。 */ raw?: Raw;
+        /** 调用级关闭包装。 */ wrap: false;
+        /** 调用级开启抛错。 */ throws: true;
+      },
+    ]
+  ): Promise<TAxpResult<R, D, Omit<O, "wrap" | "throws"> & { /** 有效包装值。 */ wrap: false; /** 有效抛错值。 */ throws: true }>>;
   /** 调用级覆盖包装，抛错开关继承方法配置。 */
-  <D = unknown, Q = unknown>(
-    ...args: TAxpDispatchArgs<
-      S,
-      Mt,
-      P,
-      Q,
-      [
-        config: AxpRequestConfig & {
-          /** 调用级 raw 取值。 */ raw?: Raw;
-          /** 调用级关闭包装。 */ wrap: false;
-          /** 缺省时继承方法级。 */ throws?: undefined;
-        },
-      ]
-    >
-  ): Promise<TAxpResult<R, ResolveResponse<S, Mt, P, D>, Omit<O, "wrap"> & { /** 有效包装值。 */ wrap: false }>>;
+  <D = RES, Q = PL>(
+    ...args: [
+      ...Payload<NoInfer<Q>, []>,
+      config: AxpRequestConfig & {
+        /** 调用级 raw 取值。 */ raw?: Raw;
+        /** 调用级关闭包装。 */ wrap: false;
+        /** 缺省时继承方法级。 */ throws?: undefined;
+      },
+    ]
+  ): Promise<TAxpResult<R, D, Omit<O, "wrap"> & { /** 有效包装值。 */ wrap: false }>>;
   /** 调用级覆盖抛错，包装开关继承方法配置。 */
-  <D = unknown, Q = unknown>(
-    ...args: TAxpDispatchArgs<
-      S,
-      Mt,
-      P,
-      Q,
-      [
-        config: AxpRequestConfig & {
-          /** 调用级 raw 取值。 */ raw?: Raw;
-          /** 缺省时继承方法级。 */ wrap?: undefined;
-          /** 调用级开启抛错。 */ throws: true;
-        },
-      ]
-    >
-  ): Promise<TAxpResult<R, ResolveResponse<S, Mt, P, D>, Omit<O, "throws"> & { /** 有效抛错值。 */ throws: true }>>;
+  <D = RES, Q = PL>(
+    ...args: [
+      ...Payload<NoInfer<Q>, []>,
+      config: AxpRequestConfig & {
+        /** 调用级 raw 取值。 */ raw?: Raw;
+        /** 缺省时继承方法级。 */ wrap?: undefined;
+        /** 调用级开启抛错。 */ throws: true;
+      },
+    ]
+  ): Promise<TAxpResult<R, D, Omit<O, "throws"> & { /** 有效抛错值。 */ throws: true }>>;
   /** 调用级 wrap 为宽 boolean，抛错开关继承方法配置。 */
-  <D = unknown, Q = unknown>(
-    ...args: TAxpDispatchArgs<S, Mt, P, Q, [config: AxpRequestConfig & { /** 调用级 raw 取值。 */ raw?: Raw; /** 宽 boolean。 */ wrap: boolean; /** 缺省时继承方法级。 */ throws?: undefined }]>
-  ): Promise<TAxpResult<R, ResolveResponse<S, Mt, P, D>, Omit<O, "wrap"> & { /** 宽包装值。 */ wrap: boolean }>>;
+  <D = RES, Q = PL>(
+    ...args: [...Payload<NoInfer<Q>, []>, config: AxpRequestConfig & { /** 调用级 raw 取值。 */ raw?: Raw; /** 宽 boolean。 */ wrap: boolean; /** 缺省时继承方法级。 */ throws?: undefined }]
+  ): Promise<TAxpResult<R, D, Omit<O, "wrap"> & { /** 宽包装值。 */ wrap: boolean }>>;
   /** 调用级 wrap 与 throws 都不是确定字面量。 */
-  <D = unknown, Q = unknown>(
-    ...args: TAxpDispatchArgs<S, Mt, P, Q, [config: AxpRequestConfig & { /** 调用级 raw 取值。 */ raw?: Raw; /** 宽 boolean。 */ wrap: boolean; /** 宽 boolean。 */ throws: boolean }]>
-  ): Promise<TAxpResult<R, ResolveResponse<S, Mt, P, D>, Omit<O, "wrap" | "throws"> & { /** 宽包装值。 */ wrap: boolean; /** 宽抛错值。 */ throws: boolean }>>;
+  <D = RES, Q = PL>(
+    ...args: [...Payload<NoInfer<Q>, []>, config: AxpRequestConfig & { /** 调用级 raw 取值。 */ raw?: Raw; /** 宽 boolean。 */ wrap: boolean; /** 宽 boolean。 */ throws: boolean }]
+  ): Promise<TAxpResult<R, D, Omit<O, "wrap" | "throws"> & { /** 宽包装值。 */ wrap: boolean; /** 宽抛错值。 */ throws: boolean }>>;
   /** 调用级 throws 为宽 boolean，包装开关继承方法配置。 */
-  <D = unknown, Q = unknown>(
-    ...args: TAxpDispatchArgs<S, Mt, P, Q, [config: AxpRequestConfig & { /** 调用级 raw 取值。 */ raw?: Raw; /** 缺省时继承方法级。 */ wrap?: undefined; /** 宽 boolean。 */ throws: boolean }]>
-  ): Promise<TAxpResult<R, ResolveResponse<S, Mt, P, D>, Omit<O, "throws"> & { /** 宽抛错值。 */ throws: boolean }>>;
-  /** 未覆盖开关时根据方法配置决定返回形态。 */
-  <D = unknown, Q = unknown>(...args: TAxpDispatchArgs<S, Mt, P, Q, [config?: AxpRequestConfig & { /** 调用级 raw 取值。 */ raw?: Raw }]>): Promise<TAxpResult<R, ResolveResponse<S, Mt, P, D>, O>>;
+  <D = RES, Q = PL>(
+    ...args: [...Payload<NoInfer<Q>, []>, config: AxpRequestConfig & { /** 调用级 raw 取值。 */ raw?: Raw; /** 缺省时继承方法级。 */ wrap?: undefined; /** 宽 boolean。 */ throws: boolean }]
+  ): Promise<TAxpResult<R, D, Omit<O, "throws"> & { /** 宽抛错值。 */ throws: boolean }>>;
 }
 /* oxlint-enable typescript-eslint/no-unnecessary-type-parameters */
 /** 按调用级有效开关（raw、wrap、throws）选择返回形态的动词签名。 */
-type IAxpDispatch<S, Mt extends HttpMethodLower, P, R extends IAxpResponse<unknown, string | number>, O> = IAxpRawDispatch<S, Mt, P, R> &
-  IAxpBaseDispatch<S, Mt, P, R, O, undefined> &
-  IAxpBaseDispatch<S, Mt, P, R, Omit<O, "raw">, false> &
-  IAxpBaseDispatch<S, Mt, P, R, Omit<O, "raw"> & { /** 调用级宽 boolean。 */ raw: boolean }, boolean>;
-/** axios 的十个小写动词与柯里化 Schema 分派。 */
+type IAxpDispatch<RES, PL, R extends IAxpResponse<unknown, string | number>, O> = IAxpInheritedRawDispatch<RES, PL, R, O> &
+  IAxpRawDispatch<RES, PL, R, O> &
+  IAxpBaseDispatch<RES, PL, R, Omit<O, "raw"> & { /** 调用级宽 boolean。 */ raw: boolean }, boolean> &
+  IAxpConfigDispatch<RES, PL, R, O>;
+/** 方法未开启 raw 时，缺省与 false 共用签名；其余情况保留覆盖分支。 */
+type IAxpInheritedRawDispatch<RES, PL, R extends IAxpResponse<unknown, string | number>, O> =
+  true extends TAxpFlag<O, "raw"> ? IAxpMethodDispatch<RES, PL, R, O, undefined> & IAxpMethodDispatch<RES, PL, R, Omit<O, "raw">, false> : IAxpMethodDispatch<RES, PL, R, O, false | undefined>;
+/** 普通调用优先，后续签名处理调用级覆盖。 */
+type IAxpMethodDispatch<RES, PL, R extends IAxpResponse<unknown, string | number>, O, Raw extends boolean | undefined> = IAxpDefaultDispatch<RES, PL, R, O, Raw> & IAxpBaseDispatch<RES, PL, R, O, Raw>;
+/** 未覆盖包装与抛错开关时继承方法配置。 */
+interface IAxpDefaultDispatch<RES, PL, R, O, Raw extends boolean | undefined> {
+  /** 请求体元组先独立解析，再拼接配置，避免在条件类型每个分支展开配置。 */
+  <D = RES, Q = PL>(
+    ...args: [...Payload<NoInfer<Q>, []>, config?: AxpRequestConfig & { /** 调用级 raw 取值。 */ raw?: Raw; /** 继承方法包装值。 */ wrap?: undefined; /** 继承方法抛错值。 */ throws?: undefined }]
+  ): Promise<TAxpResult<R, D, O>>;
+}
+/** 宽配置变量沿用原契约：可选开关无法辨识，raw 保留两种可能，其他开关按方法级推断。 */
+interface IAxpConfigDispatch<RES, PL, R, O> {
+  /** 最后匹配宽配置变量，避免吞掉前面的字面量开关。 */
+  <D = RES, Q = PL>(...args: [...Payload<NoInfer<Q>, []>, config: AxpRequestConfig]): Promise<TAxpResult<R, D, Omit<O, "raw"> & { /** 原生开关可能开启。 */ raw: boolean }>>;
+}
+/** axios 的十个小写动词与柯里化 Schema 分派；路径捕获后只解析一次响应和请求体。
+ * 显式 D/Q 原样使用；显式 unknown/any 也覆盖 schema，不再当作省略泛型。
+ */
 export type HttpVerbs<S, R extends IAxpResponse<unknown, string | number>> = {
-  [Mt in HttpMethodLower]: <P extends LoosePath<S, Mt>, O extends AxpRequestConfig = AxpRequestConfig>(path: P, config?: O) => IAxpDispatch<S, Mt, P, R, O>;
+  [Mt in HttpMethodLower]: <P extends LoosePath<S, Mt>, O extends AxpRequestConfig = AxpRequestConfig>(path: P, config?: O) => IAxpDispatch<ResolveResponse<S, Mt, P, unknown>, ResolvePayload<S, Mt, P, unknown>, R, O>;
 };
 /** 编译后的可观测挂载项。 */
 export interface IAxpInspection {
@@ -320,40 +354,108 @@ export interface IAxpInspection {
 export interface AxpClient<S = unknown, R extends IAxpResponse<unknown, string | number> = AxpResponse> extends HttpVerbs<S, R> {
   /** 底层传输实例。 */
   readonly axios: AxiosInstance;
-  /** 逃生口，raw 为 true 时返回带原生数据的响应副本。
-   * @param config 含 raw:true 的请求配置，优先于 wrap 与 throws。
-   * @returns 保留 R 扩展字段、附带 raw/error/request 的响应。
-   * @example `const r = await api.request<Pet>({ url: '/pet', raw: true }); r.raw?.status`
+  /** 逃生口，raw:true 且关闭抛错；internal 始终抛原始异常。
+   * @param config axios 请求配置与返回形态开关。
+   * @returns 按开关决定的数据或响应；关闭抛错时失败 data 为 unknown。
+   * @example `api.request<Pet>({ url: "/pet", raw: true, throws: false })`
    */
-  request<D = unknown>(config: AxpRequestConfig & { raw: true }): Promise<WithNative<WithData<R, D>>>;
-  /** 逃生口，明确请求返回响应。
-   * @param config 包含 wrap:true 或 throws:false 的请求配置。
-   * @returns 保留 R 扩展字段且 data 为 D 的响应。
-   * @example `api.request<Pet>({ url: '/pet', wrap: true })`
+  request<D = unknown>(config: AxpRequestConfig & { /** 原生副本开关。 */ raw: true; /** 失败抛错开关。 */ throws: false }): Promise<WithNative<AxpResult<R, D>>>;
+  /** 逃生口，关闭抛错且不取原生副本；internal 始终抛原始异常。
+   * @param config axios 请求配置与返回形态开关。
+   * @returns 按开关决定的数据或响应；关闭抛错时失败 data 为 unknown。
+   * @example `api.request<Pet>({ url: "/pet", throws: false })`
    */
-  request<D = unknown>(config: AxpRequestConfig & { /** 未开启 raw。 */ raw?: false | undefined } & ({ wrap: true } | { throws: false })): Promise<WithData<R, D>>;
-  /** 逃生口，包装但 raw 为非字面量 boolean 时返回响应或带原生数据的副本的联合。
-   * @param config 含 wrap:true 或 throws:false 且 raw 宽 boolean 的请求配置。
-   * @returns 响应或带原生数据的响应副本。
-   * @example `api.request<Pet>({ url: '/pet', wrap: true, raw: flag })`
+  request<D = unknown>(config: AxpRequestConfig & { /** 原生副本开关。 */ raw?: false | undefined; /** 失败抛错开关。 */ throws: false }): Promise<AxpResult<R, D>>;
+  /** 逃生口，关闭抛错且原生开关不确定；internal 始终抛原始异常。
+   * @param config axios 请求配置与返回形态开关。
+   * @returns 按开关决定的数据或响应；关闭抛错时失败 data 为 unknown。
+   * @example `api.request<Pet>({ url: "/pet", throws: false })`
    */
-  request<D = unknown>(config: AxpRequestConfig & ({ wrap: true } | { throws: false })): Promise<WithData<R, D> | WithNative<WithData<R, D>>>;
-  /** 逃生口，wrap 或 throws 为宽 boolean 时无法静态判定，返回响应或数据的联合。
-   * @param config 含宽 boolean wrap 或 throws 的请求配置。
-   * @returns 响应或业务数据。
-   * @example `api.request<Pet>({ url: '/pet', wrap: flag })`
+  request<D = unknown>(config: AxpRequestConfig & { /** 失败抛错开关。 */ throws: false }): Promise<AxpResult<R, D> | WithNative<AxpResult<R, D>>>;
+  /** 逃生口，raw:true 且抛错开启或缺省；internal 始终抛原始异常。
+   * @param config axios 请求配置与返回形态开关。
+   * @returns 按开关决定的数据或响应；关闭抛错时失败 data 为 unknown。
+   * @example `api.request<Pet>({ url: "/pet", raw: true })`
    */
-  request<D = unknown>(config: AxpRequestConfig & { /** 未开启 raw。 */ raw?: false | undefined } & ({ wrap: boolean } | { throws: boolean })): Promise<WithData<R, D> | D>;
+  request<D = unknown>(config: AxpRequestConfig & { /** 原生副本开关。 */ raw: true; /** 失败抛错开关。 */ throws?: true | undefined }): Promise<WithNative<WithData<R, D>>>;
+  /** 逃生口，raw:true 且抛错开关不确定；internal 始终抛原始异常。
+   * @param config axios 请求配置与返回形态开关。
+   * @returns 按开关决定的数据或响应；关闭抛错时失败 data 为 unknown。
+   * @example `api.request<Pet>({ url: "/pet", raw: true })`
+   */
+  request<D = unknown>(config: AxpRequestConfig & { /** 原生副本开关。 */ raw: true; /** 失败抛错开关。 */ throws: boolean }): Promise<WithNative<AxpResult<R, D> | WithData<R, D>>>;
+  /** 逃生口，包装且抛错开启或缺省；internal 始终抛原始异常。
+   * @param config axios 请求配置与返回形态开关。
+   * @returns 按开关决定的数据或响应；关闭抛错时失败 data 为 unknown。
+   * @example `api.request<Pet>({ url: "/pet", wrap: true })`
+   */
+  request<D = unknown>(config: AxpRequestConfig & { /** 原生副本开关。 */ raw?: false | undefined; /** 响应包装开关。 */ wrap: true; /** 失败抛错开关。 */ throws?: true | undefined }): Promise<WithData<R, D>>;
+  /** 逃生口，包装且原生开关不确定，抛错开启或缺省；internal 始终抛原始异常。
+   * @param config axios 请求配置与返回形态开关。
+   * @returns 按开关决定的数据或响应；关闭抛错时失败 data 为 unknown。
+   * @example `api.request<Pet>({ url: "/pet", wrap: true })`
+   */
+  request<D = unknown>(config: AxpRequestConfig & { /** 响应包装开关。 */ wrap: true; /** 失败抛错开关。 */ throws?: true | undefined }): Promise<WithData<R, D> | WithNative<WithData<R, D>>>;
+  /** 逃生口，包装且抛错开关不确定；internal 始终抛原始异常。
+   * @param config axios 请求配置与返回形态开关。
+   * @returns 按开关决定的数据或响应；关闭抛错时失败 data 为 unknown。
+   * @example `api.request<Pet>({ url: "/pet", wrap: true })`
+   */
+  request<D = unknown>(config: AxpRequestConfig & { /** 原生副本开关。 */ raw?: false | undefined; /** 响应包装开关。 */ wrap: true; /** 失败抛错开关。 */ throws: boolean }): Promise<AxpResult<R, D> | WithData<R, D>>;
+  /** 逃生口，包装且原生与抛错开关不确定；internal 始终抛原始异常。
+   * @param config axios 请求配置与返回形态开关。
+   * @returns 按开关决定的数据或响应；关闭抛错时失败 data 为 unknown。
+   * @example `api.request<Pet>({ url: "/pet", wrap: true })`
+   */
+  request<D = unknown>(config: AxpRequestConfig & { /** 响应包装开关。 */ wrap: true; /** 失败抛错开关。 */ throws: boolean }): Promise<AxpResult<R, D> | WithData<R, D> | WithNative<AxpResult<R, D> | WithData<R, D>>>;
+  /** 逃生口，包装开关不确定，抛错开启或缺省；internal 始终抛原始异常。
+   * @param config axios 请求配置与返回形态开关。
+   * @returns 按开关决定的数据或响应；关闭抛错时失败 data 为 unknown。
+   * @example `api.request<Pet>({ url: "/pet", throws: true })`
+   */
+  request<D = unknown>(config: AxpRequestConfig & { /** 原生副本开关。 */ raw?: false | undefined; /** 响应包装开关。 */ wrap: boolean; /** 失败抛错开关。 */ throws?: true | undefined }): Promise<WithData<R, D> | D>;
+  /** 逃生口，包装与抛错开关不确定；internal 始终抛原始异常。
+   * @param config axios 请求配置与返回形态开关。
+   * @returns 按开关决定的数据或响应；关闭抛错时失败 data 为 unknown。
+   * @example `api.request<Pet>({ url: "/pet", throws: true })`
+   */
+  request<D = unknown>(
+    config: AxpRequestConfig & { /** 原生副本开关。 */ raw?: false | undefined; /** 响应包装开关。 */ wrap: boolean; /** 失败抛错开关。 */ throws: boolean },
+  ): Promise<AxpResult<R, D> | WithData<R, D> | D>;
+  /** 逃生口，明确解包且抛错开启；internal 始终抛原始异常。
+   * @param config axios 请求配置与返回形态开关。
+   * @returns 按开关决定的数据或响应；关闭抛错时失败 data 为 unknown。
+   * @example `api.request<Pet>({ url: "/pet", throws: true })`
+   */
+  request<D = unknown>(config: AxpRequestConfig & { /** 原生副本开关。 */ raw?: false | undefined; /** 响应包装开关。 */ wrap?: false | undefined; /** 失败抛错开关。 */ throws: true }): Promise<D>;
+  /** 逃生口，不取原生副本，抛错开关不确定；internal 始终抛原始异常。
+   * @param config axios 请求配置与返回形态开关。
+   * @returns 按开关决定的数据或响应；关闭抛错时失败 data 为 unknown。
+   * @example `api.request<Pet>({ url: "/pet", throws: true })`
+   */
+  request<D = unknown>(config: AxpRequestConfig & { /** 原生副本开关。 */ raw?: false | undefined; /** 失败抛错开关。 */ throws: boolean }): Promise<AxpResult<R, D> | D>;
+  /** 逃生口，原生与包装开关不确定，抛错开启；internal 始终抛原始异常。
+   * @param config axios 请求配置与返回形态开关。
+   * @returns 按开关决定的数据或响应；关闭抛错时失败 data 为 unknown。
+   * @example `api.request<Pet>({ url: "/pet", throws: true })`
+   */
+  request<D = unknown>(config: AxpRequestConfig & { /** 失败抛错开关。 */ throws: true }): Promise<WithData<R, D> | WithNative<WithData<R, D>> | D>;
+  /** 逃生口，原生与抛错开关不确定；internal 始终抛原始异常。
+   * @param config axios 请求配置与返回形态开关。
+   * @returns 按开关决定的数据或响应；关闭抛错时失败 data 为 unknown。
+   * @example `api.request<Pet>({ url: "/pet", throws: true })`
+   */
+  request<D = unknown>(config: AxpRequestConfig & { /** 失败抛错开关。 */ throws: boolean }): Promise<AxpResult<R, D> | WithNative<AxpResult<R, D> | WithData<R, D>> | D>;
   /** 逃生口，默认解包业务数据；internal 始终抛原始异常。
-   * @param config axios 原生字段及可扩展请求选项。
-   * @returns 接口业务数据，失败按请求 throws 和客户端 reject 约定落定。
-   * @example `api.request<Pet>({ url: '/pet' })`
+   * @param config axios 请求配置与返回形态开关。
+   * @returns 按开关决定的数据或响应；关闭抛错时失败 data 为 unknown。
+   * @example `api.request<Pet>({ url: "/pet", throws: true })`
    */
-  request<D = unknown>(config: AxpRequestConfig & { /** 未开启 raw。 */ raw?: false | undefined }): Promise<D>;
-  /** 逃生口，raw 为非字面量 boolean 时无法静态判定，返回联合。
-   * @param config 含宽 boolean raw 的请求配置。
-   * @returns 带原生数据的响应副本或业务数据。
-   * @example `const r = await api.request<Pet>({ url: '/pet', raw: flag })`
+  request<D = unknown>(config: AxpRequestConfig & { /** 原生副本开关。 */ raw?: false | undefined }): Promise<D>;
+  /** 逃生口，原生开关不确定；internal 始终抛原始异常。
+   * @param config axios 请求配置与返回形态开关。
+   * @returns 按开关决定的数据或响应；关闭抛错时失败 data 为 unknown。
+   * @example `api.request<Pet>({ url: "/pet", throws: true })`
    */
   request<D = unknown>(config: AxpRequestConfig): Promise<WithNative<WithData<R, D>> | D>;
   /** 默认克隆 defaults（不复制拦截器），继承插件并重新 setup；指定 axios 时原样使用该实例。

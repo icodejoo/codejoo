@@ -30,6 +30,9 @@ summary: 10 个内置插件和 4 项内核服务在洋葱管线下的阶段、�
 - **插件级 `enable`**：每个插件工厂都接受 `enable?: boolean`（默认 true，mock 默认 false）。`false` 时插件不进链、不调用 `setup`、`inspect()` 不列出；请求级开关不能把它重新打开。
 - 插件只读请求选项，不 `delete`；需要给内层改请求时用 `next(patch)`。
 - 请求选项类型通过 `declare module '@codejoo/axp' { interface AxpRequestOptions {…} }` 扩展。
+- 有效状态：客户端选项 `statusOf(r) => number`（默认 `r.status`）经 `ctx.statusOf(r)` 提供；retry 的 `statusCodes`、`afterStatusCodes` 与 auth 的 `defaultAuthFailure` 读它，`r.status` 始终是 HTTP 状态。回调抛错按程序 bug 处理。
+- 插件工具从根入口导出：`cancelIfAborted`、`waitAbortable`、`fireNotice`、`resolveOption`、`resolveRequestOption`、`isEnabled`，类型 `AxpOption`、`IPluginSwitch`。
+- 状态按所代表的资源作用域：cache、share 按客户端，auth 按 TokenManager，loading 按回调。
 - 内核自带的请求选项：`raw`、`wrap`、`throws`、`silent`、`key`、`signal`。其中 `raw: true` 隐含 `wrap: true`，只有请求级，读 `ctx.originRequest`，`axios.defaults.raw` 不生效；它让落定的副本（成功返回、失败抛出都算）带上不可枚举的 `raw`、`error`、`request`，类型是 `WithNative<WithData<R, D>>`，读取抛出对象上的三项用 `nativeOf(e)`。详见 [核心架构 §7](core-architecture.md#7-落定与错误)。
 
 **响应类回调的末位 `ctx`**：下列回调在原参数之后多一个 `ctx: AxpContext<R>`，旧的少参数写法仍然可用（多出的实参被忽略）：retry 的 `respectRetryAfter`（函数形态）与 `delay`，auth 的 `TAuthFunc`（`onRefresh`、`onAccessExpired`、`onAccessDenied`），cache 的 `shouldCache`（插件级与请求级），mock 的 `fallbackWhen`（notify 的 `stringify` 本来就是 `(r, ctx)`，不在新增之列）。`R.request` 只剩 `{ method, url }`，要完整请求就读 `ctx.request`（本层视图）或 `ctx.originRequest`（调用方原始请求）。
@@ -86,8 +89,8 @@ summary: 10 个内置插件和 4 项内核服务在洋葱管线下的阶段、�
 
 - 请求级：`false` / `true` / 函数（作为本次回调）/ `{ enable, loading, delay, delayClose }`。
 - 行为：进入时计数 +1，`next()` 返回后在 `finally` 里 -1；一个逻辑请求恰好一对显示/隐藏，重试和重放都在里面。
-- 计数按回调分开：请求级换了回调的请求，计入它自己那个回调的计数，所以每个回调都看到成对的 true/false（旧版可能出现"A 显示、B 隐藏"）。
-- 卸载（`dispose`）取消未触发的定时器，并对已显示的回调立即发一次 `false`，避免页面上的 loading 卡住。
+- 计数按回调函数共享（模块级 `WeakMap<回调, 状态>`）：请求级换了回调的请求，计入它自己那个回调的计数，所以每个回调都看到成对的 true/false；父子客户端或多个客户端共用同一个回调时只显示、隐藏一次。每个客户端另记自己对各回调的占用，卸载时只撤回自己的份额，共享计数归零才清理 UI 与定时器。
+- 卸载（`dispose`）撤回本客户端的占用；某回调的共享计数因此归零时，取消未触发的定时器，并对已显示的回调立即发一次 `false`，避免页面上的 loading 卡住。仍有其它客户端占用时不动 UI。
 - 变化：显示从逻辑请求开始算，包括等待 token 刷新的时间（N10）；`guardTransform`、`COMPLETE` 层键、`logical` 参数全部删除（R2-3、R2-4 的问题不再存在）。
 
 ### 2.2 notify（outer，内置次序 2）
@@ -136,13 +139,13 @@ axpNotify({
 | ------------------------------ | ------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `max`                          | **2**（旧 0）                                    | 最大重试次数                                                                                                                                         |
 | `methods`                      | `get put head delete options trace`              | 硬否决：方法不在表里一律不重试                                                                                                                       |
-| `statusCodes`                  | `[408, 429, 500, 502, 503, 504]`                 | 对照 `r.status`（HTTP 状态）                                                                                                                         |
+| `statusCodes`                  | `[408, 429, 500, 502, 503, 504]`                 | 对照 `ctx.statusOf(r)`（有效状态）                                                                                                                   |
 | `shouldRetry(r, attempt, ctx)` | —                                                | 返回 true/false 即采用，undefined 继续往下判                                                                                                         |
 | `delay`                        | `attempt => 300 * 2 ** (attempt - 1)`（旧 3000） | 数字或函数 `(attempt, max, r, ctx) => number`                                                                                                        |
 | `jitter`                       | —                                                | `true` 或 `(delay) => number`                                                                                                                        |
 | `delayMax`                     | 10_000（旧 Infinity）                            | 只封顶自己算出的 delay                                                                                                                               |
 | `respectRetryAfter`            | true                                             | 布尔值按 afterStatusCodes；函数 `(r, ctx) => boolean` 独立判定并忽略 afterStatusCodes。头缺失或非法回退本地 delay，不叠加 jitter、不受 delayMax 限制 |
-| `afterStatusCodes`             | `[413, 429, 503]`                                | 对照 `r.status`；仅按 HTTP 状态匹配                                                                                                                  |
+| `afterStatusCodes`             | `[413, 429, 503]`                                | 对照 `ctx.statusOf(r)`；业务码用 `statusOf` 映射                                                                                                     |
 | `retryAfterMax`                | 60_000                                           | 服务端要求超过上限时不重试，返回本次响应；Infinity 表示永远照办                                                                                      |
 
 **判定顺序**（每级都能提前结束）：
@@ -152,7 +155,7 @@ axpNotify({
 3. `failureOf(r)?.type` 为 `cancel` / `auth` / `internal` / `parse` → 不重试；
 4. `shouldRetry` 返回布尔值 → 采用；
 5. `failureOf(r)?.type` 为 `network` / `timeout` → 重试；
-6. 否则 `statusCodes.includes(r.status)`。
+6. 否则 `statusCodes.includes(ctx.statusOf(r))`。
 
 **成功响应也进判定**：判定顺序里没有 `r.ok` 这一级，`shouldRetry` 会收到成功响应（`r.ok` 为真时同样调用）。默认规则下成功不重试：既不是 `network` / `timeout`，状态也不在 `statusCodes` 里。自定义的 `shouldRetry` 返回 `true`，就会对成功响应重试，例如业务上判为异常的成功。旧版有这个能力，保留。
 
@@ -170,22 +173,22 @@ axpNotify({
 
 - 删除 `axp:retry:share`、`axp:retry:cache` 保活键、`captureRawRequest`、`runAttempt`（O1）。
 - 默认值变化（N6）：`max` 0→2、`delay` 3000→指数退避、`delayMax` Infinity→10_000。
-- statusCodes/afterStatusCodes 只读 HTTP 状态；业务码配置见 [README 示例](../../README.zh-CN.md#使用警告与业务风格)。
+- statusCodes/afterStatusCodes 读有效状态 `ctx.statusOf(r)`（默认即 HTTP 状态）；业务码配置见 [README 示例](../../README.zh-CN.md#使用警告与业务风格)。
 - `shouldRetry` 签名从 `(response?, err?)` 改为 `(r, attempt, ctx)`；`delay` 函数与 `respectRetryAfter` 函数末位同样带 `ctx`，旧少参数写法可用。
 
 ## 5. credential 阶段：auth
 
-| 选项                          | 默认                  | 说明                                                                          |
-| ----------------------------- | --------------------- | ----------------------------------------------------------------------------- |
-| `tokenManager`                | **必填**              | `ITokenManager`（不再有 `canRefresh`）                                        |
-| `onRefresh(r, tm, ctx)`       | **必填**              | 返回 `false` 或抛错算失败；同一时刻只跑一个                                   |
-| `refreshTimeout`              | 30_000                | ms；0 或 Infinity 不限时，超时按刷新失败处理                                  |
-| `onAccessExpired(r, tm, ctx)` | **必填**              | 会话过期；401 / 刷新失败那条路径每轮只通知一次（见下「本地无 token 的通知」） |
-| `onAccessDenied(r, tm, ctx)`  | → `onAccessExpired`   | 越权或本地无 token；本地无 token 时每个受保护请求调一次，不去重               |
-| `onFailure(r, tm, ctx)`       | `defaultAuthFailure`  | 返回 `AuthFailureAction` 五动作之一                                           |
-| `methods` / `urlPattern`      | `'*'`                 | 受保护判定，语义不变（URLPattern，`!` 否定）                                  |
-| `isProtected(request)`        | —                     | 布尔即终值                                                                    |
-| `ready(tm, request)`          | 写 `Authorization` 头 | 返回 `AxpRequestPatch`                                                        |
+| 选项                          | 默认                  | 说明                                                                             |
+| ----------------------------- | --------------------- | -------------------------------------------------------------------------------- |
+| `tokenManager`                | **必填**              | `ITokenManager`（不再有 `canRefresh`）                                           |
+| `onRefresh(r, tm, ctx)`       | **必填**              | 返回 `false` 或抛错算失败；同一时刻只跑一个                                      |
+| `refreshTimeout`              | 30_000                | ms；0 或 Infinity 不限时，超时按刷新失败处理                                     |
+| `onAccessExpired(r, tm, ctx)` | **必填**              | 会话过期；401 / 刷新失败那条路径每轮只通知一次（见下「本地无 token 的通知」）    |
+| `onAccessDenied(r, tm, ctx)`  | → `onAccessExpired`   | 越权或本地无 token；本地无 token 时每轮会话最多通知一次，写入新 token 后重新计数 |
+| `onFailure(r, tm, ctx)`       | `defaultAuthFailure`  | 返回 `AuthFailureAction` 五动作之一                                              |
+| `methods` / `urlPattern`      | `'*'`                 | 受保护判定，语义不变（URLPattern，`!` 否定）                                     |
+| `isProtected(request)`        | —                     | 布尔即终值                                                                       |
+| `ready(tm, request)`          | 写 `Authorization` 头 | 返回 `AxpRequestPatch`                                                           |
 
 **主流程**：
 
@@ -205,18 +208,18 @@ switch action:
   deny    → onAccessDenied；返回 fail({ failure: 'auth', reason: 'denied', from: r })
   expired → tm.clear()；onAccessExpired；返回 fail({ failure: 'auth', reason: 'expired', from: r })
   others  → return r
-重放后仍判 refresh / replay → 按 expired 处理（防循环，沿用现有规则）
+重放后仍判 refresh / replay → 按 expired 处理（防循环，沿用现有规则；不想被判过期的 401，在 onFailure 里返回 others）
 ```
 
-**本地无 token 的通知**：本地无 token 被拒绝时，每个受保护请求都会调用一次 `onAccessDenied`（缺省回退 `onAccessExpired`），不去重。所以没配 `onAccessDenied` 的使用方，在会话过期之后、重新登录之前，每发一个受保护请求就会再触发一次 `onAccessExpired`。"每轮只通知一次"只约束 401 / 刷新失败那条路径（过期状态的去重）。这与旧版一致；要对本地拒绝也去重，需要先改规格。
+**本地无 token 的通知**：本地无 token 时每个受保护请求都会被本地拒绝，但 `onAccessDenied`（缺省回退 `onAccessExpired`）每轮会话最多通知一次：通知过就记入会话的 `notified` 标记，已处于过期状态时不再重复通知；tm 重新有 token 后标记复位。会话按 TokenManager 共享，所以并发的多个客户端也只通知一次。这是对旧版“每个请求通知一次”的有意收紧。
 
 **默认路由 `defaultAuthFailure`**：
 
-- `r.status === 401`：tm 无 token → expired；本次注入的 token ≠ 当前 token → replay（已被并发刷新）；否则 → refresh。
-- `r.status === 403` → deny。
+- 有效状态（`ctx.statusOf(r)`，默认等于 `r.status`）为 401：tm 无 token → expired；本次注入的 token ≠ 当前 token → replay（已被并发刷新）；否则 → refresh。
+- 有效状态为 403 → deny。
 - 其它 → others。
 
-业务风格通过 onFailure 配置，见 [README 的完整示例与刷新重入警告](../../README.zh-CN.md#使用警告与业务风格)。
+业务风格优先配 `createAxp({ statusOf })`，把业务码映射成有效状态；也可通过 onFailure 配置，见 [README 的完整示例与刷新重入警告](../../README.zh-CN.md#使用警告与业务风格)。
 
 ready、onFailure、刷新排队支持取消，每次异步等待后重查。刷新期间 token 被重新登录或登出替换时，旧刷新失败不清会话、不发过期通知。refreshTimeout 不会停止回调自身，迟到的会话写入由使用者处理。
 
@@ -229,7 +232,7 @@ ready、onFailure、刷新排队支持取消，每次异步等待后重查。刷
 - `canRefresh` 从 `ITokenManager` 删除，收进插件状态。
 - 判定过期时先 `tm.clear()`，再记下清空后的 token 状态作为快照；这个状态没变之前不再刷新、不再重复通知过期；登录写入新 token 后自动恢复，登录流程不用再手动改 `canRefresh = true`。
 
-**单飞刷新**：状态建在 `setup` 里（每个客户端一份），不再挂 `WeakMap<AxiosInstance>`。
+**会话共享**：单飞刷新、过期标记、无 token 通知标记收进 `IAuthSession`，按 `TokenManager` 放在模块级 `WeakMap<ITokenManager, IAuthSession>`，并带持有者计数 `owners`（`setup` 加一，卸载减一）。`extend()` 出的子客户端、共用同一个 tm 的客户端共享这份会话；最后一个持有者卸载后，迟到的刷新失败不再清会话、不通知。
 
 **请求级**：`protected?: boolean`。
 
@@ -331,7 +334,7 @@ interface IAxpCacheSnapshot {
 ## 8. TokenManager
 
 - `ITokenManager`：`accessToken`、`refreshToken`、`set(access?, refresh?)`、`clear()`；删除 `canRefresh`（O4）。
-- 默认实现 `TokenManager` 行为不变，仍持久化到 `localStorage`。
+- 默认实现 `TokenManager` 仍持久化到 `localStorage`，但存储改为首次读写时才探测（不在模块加载时），导入模块无副作用；存储不可用时只在内存里生效。
 
 ## 9. 行为变化汇总（发版写进 CHANGELOG）
 

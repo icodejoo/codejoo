@@ -113,10 +113,10 @@ export function assignAxiosDefaults(target: object, config: AxiosRequestConfig |
 }
 
 /** 隔离通知回调的同步异常和异步拒绝，始终报告故障。
- * @internal
  * @param fn 通知回调。
  * @param label 控制台故障说明。
  * @param args 回调参数。
+ * @returns 无返回值，通知异常经 console.error 报告。
  * @example `fireNotice(loading, '[axp:loading] loading 回调失败', true)`
  */
 export function fireNotice<A extends unknown[]>(fn: (...args: A) => unknown, label: string, ...args: A): void {
@@ -129,7 +129,6 @@ export function fireNotice<A extends unknown[]>(fn: (...args: A) => unknown, lab
 
 /** 等待 promise，但 signal 中止或超时就提前返回；无论哪种结局都会解绑监听并清掉计时器。
  * 调用时 signal 已中止则立即返回，不挂监听也不起计时器。
- * @internal
  * @param pending 被等待的 promise；省略时只等超时或中止。拒绝原样传出。
  * @param signal 取消信号。
  * @param timeout 超时毫秒数，超过 setTimeout 上限按上限计；省略不计时。

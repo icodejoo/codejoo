@@ -1,6 +1,9 @@
 import { defineConfig } from "vite-plus";
 import type { Rolldown } from "vite-plus";
 
+/** 产物语法目标：ES2015（ADR 0003 定的约束，改它要先和用户确认）；运行时 API 底线另按 ES2019。 */
+const TARGET = "es2015";
+
 /** 对外公开的插件子路径名，与 package.json 的 exports 一一对应；新增插件需同步两处。 */
 const PLUGIN_NAMES = ["auth", "cache", "envs", "filter", "loading", "mock", "notify", "repath", "retry", "share"] as const;
 
@@ -74,7 +77,7 @@ export default defineConfig({
       entry: "src/index.ts",
       format: "esm",
       platform: "browser",
-      target: "es2015",
+      target: TARGET,
       minify: true,
       dts: false,
       // 只清理自己的旧产物，别误删并行构建的 dist/esm
@@ -92,7 +95,7 @@ export default defineConfig({
       entry: ["src/index.ts", ...PLUGIN_ENTRIES],
       format: "esm",
       platform: "browser",
-      target: "es2015",
+      target: TARGET,
       fixedExtension: true,
       unbundle: true,
       outDir: "dist/esm",

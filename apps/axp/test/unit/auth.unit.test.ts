@@ -7,9 +7,12 @@ import { memoryTokens } from "../helpers/b3";
 /** 受保护请求注入过的 token 与会话当前 token 的对照夹具。 */
 const INJECTED = "injected";
 const OTHER = "other";
-/** 只提供状态读取的上下文替身，defaultAuthFailure 只会 get 注入快照。 */
+/** 提供有效状态与注入快照的上下文替身。 */
 function ctxWith(injected: string | undefined): AxpContext<AxpResponse> {
-  return { get: vi.fn(/** 只读注入快照。 */ () => injected) } as unknown as AxpContext<AxpResponse>;
+  return {
+    get: vi.fn(/** 只读注入快照。 */ () => injected),
+    statusOf: /** 默认有效状态等于 HTTP 状态。 */ (r: AxpResponse) => r.status,
+  } as unknown as AxpContext<AxpResponse>;
 }
 /** 只带逻辑状态的响应替身。 */
 function statusOf(status: number): AxpResponse {

@@ -24,7 +24,7 @@ export interface IRetryOptions<R extends IAxpResponse<unknown, string | number> 
   max?: number;
   /** 允许重试的方法，大小写不敏感；默认幂等方法。 */
   methods?: readonly string[];
-  /** 按 HTTP 状态码匹配，数组整体替换。 */
+  /** 按 ctx.statusOf 的有效状态码匹配，数组整体替换。 */
   statusCodes?: readonly number[];
   /** 布尔结果优先于默认网络与状态规则。 */
   shouldRetry?: TShouldRetry<R>;
@@ -38,7 +38,7 @@ export interface IRetryOptions<R extends IAxpResponse<unknown, string | number> 
    * @example `respectRetryAfter: (r, ctx) => ctx.request.url !== '/slow'`
    */
   respectRetryAfter?: boolean | ((response: R, ctx: AxpContext<R>) => boolean);
-  /** respectRetryAfter 为布尔值时允许采信服务端等待时间的 HTTP 状态码。 */
+  /** respectRetryAfter 为布尔值时允许采信服务端等待时间的有效状态码（由 ctx.statusOf 决定）。 */
   afterStatusCodes?: readonly number[];
   /** 服务端等待时间上限（毫秒），默认 60_000；超过就不重试，Infinity 表示永远照办。
    * 相对旧版语义变化：以前封顶后照样等待，现在超过上限直接返回本次响应。
@@ -88,10 +88,10 @@ export default function axpRetry<R extends IAxpResponse<unknown, string | number
         const failure = failureOf(response);
         if (failure && NO_RETRY_KINDS.has(failure.type)) return response;
         const decision = config.shouldRetry?.(response, attempt, ctx);
-        const retry = typeof decision === "boolean" ? decision : failureOf(response)?.type === AXP_FAILURES.NETWORK || failureOf(response)?.type === AXP_FAILURES.TIMEOUT || config.statusCodes.includes(response.status);
+        const retry = typeof decision === "boolean" ? decision : failure?.type === AXP_FAILURES.NETWORK || failure?.type === AXP_FAILURES.TIMEOUT || config.statusCodes.includes(ctx.statusOf(response));
         if (!retry) return response;
         if (!ctx.canReplay()) return response;
-        const respect = typeof config.respectRetryAfter === "function" ? config.respectRetryAfter(response, ctx) : config.respectRetryAfter && config.afterStatusCodes.includes(response.status);
+        const respect = typeof config.respectRetryAfter === "function" ? config.respectRetryAfter(response, ctx) : config.respectRetryAfter && config.afterStatusCodes.includes(ctx.statusOf(response));
         const after = respect ? parseRetryAfter(retryAfterOf(response), config.retryAfterMax) : undefined;
         if (after === null) return response;
         const ms = after ?? applyJitter(computeDelay(config.delay, attempt, config.max, response, ctx), config.jitter, config.delayMax);

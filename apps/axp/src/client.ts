@@ -3,9 +3,11 @@ import { AxpContext, cancelIfAborted, NO_LOG } from "./context";
 import { BODY_METHODS, NO_BODY_METHODS, normalizeMethod } from "./methods";
 import { composePipeline, sortPipeline, type IAxpRegistration, type IAxpLayer } from "./pipeline";
 import { failureOf, AXP_FAILURES, AxpResponse, DEFAULT_RESPONSE_FACTORY, guardFactory, isAxpCancel, isAxpResponse, type IAxpResponse, type IAxpResponseFactory } from "./response";
+import { isEnabled } from "./options";
+import { STAGE_BUILTINS } from "./stages";
 import { createTransport } from "./transport";
 import type { AxpClient, AxpOptions, AxpPlugin, AxpRequestConfig, HttpMethodLower, TAxpArgs } from "./types";
-import { ABORT_EVENT, assignAxiosDefaults, cloneAxiosDefaults, effectiveHeaders } from "./utils";
+import { ABORT_EVENT, assignAxiosDefaults, cloneAxiosDefaults, effectiveHeaders, isPlainObject } from "./utils";
 
 /** 落定时使用的客户端开关。 */
 export interface IAxpSettleOptions<R extends IAxpResponse<unknown, string | number>> {
@@ -26,8 +28,9 @@ export function settle<R extends IAxpResponse<unknown, string | number>>(respons
   try {
     const failure = failureOf(response);
     if (failure?.type === AXP_FAILURES.INTERNAL) throw failure.error;
-    const throws = ctx.request.throws ?? true;
-    const raw = ctx.originRequest.raw;
+    const request = ctx.originRequest;
+    const throws = request.throws ?? true;
+    const raw = request.raw;
     const stack = !response.ok && throws ? callsite?.stack : undefined;
     let result = response;
     if (raw) {
@@ -49,7 +52,7 @@ export function settle<R extends IAxpResponse<unknown, string | number>>(respons
     const resultFailure = failureOf(result);
     if (resultFailure?.type === AXP_FAILURES.INTERNAL) throw resultFailure.error;
     if (!result.ok && throws) throw options.reject ? options.reject(result) : result;
-    return raw || ctx.request.wrap || !throws ? result : result.data;
+    return raw || request.wrap || !throws ? result : result.data;
   } finally {
     ctx.clearNative();
   }
@@ -64,10 +67,12 @@ export function createAxp<S = unknown, R extends IAxpResponse<unknown, string | 
   const options = (args[0] ?? {}) as AxpOptions<R>;
   const axios = options.axios ?? createAxios();
   const factory = guardFactory((options.response ?? DEFAULT_RESPONSE_FACTORY) as IAxpResponseFactory<R>);
+  const debug = !!options.debug;
   const log = options.debug ? (typeof options.debug === "boolean" ? console : options.debug) : NO_LOG;
   const registrations: IAxpRegistration<R>[] = [];
   const pending = new Set<AbortController>();
   const transport = createTransport(axios, factory);
+  const warned = debug ? new Set<string>() : undefined;
   let inspection: readonly IAxpLayer<R>[] = [];
   let run = transport;
   let sequence = 0;
@@ -107,7 +112,7 @@ export function createAxp<S = unknown, R extends IAxpResponse<unknown, string | 
   async function dispatch(config: AxpRequestConfig): Promise<unknown> {
     assertActive();
     const snapshot = run;
-    const callsite = options.debug ? new Error() : undefined;
+    const callsite = debug ? new Error() : undefined;
     const controller = new AbortController();
     const signal = config.signal ?? (axios.defaults.signal as AbortSignal | undefined);
     let detach: (() => void) | undefined;
@@ -134,10 +139,22 @@ export function createAxp<S = unknown, R extends IAxpResponse<unknown, string | 
         request: view,
         signal: controller.signal,
         log,
+        debug,
+        statusOf: options.statusOf,
         factory,
         key: options.key,
         origin: config,
       });
+      if (warned) {
+        for (const name of Object.values(STAGE_BUILTINS).flat()) {
+          const key = name === "axp:auth" ? "protected" : name.slice(4);
+          const value: unknown = Reflect.get(ctx.originRequest, key);
+          if (value != null && isEnabled(value) && !warned.has(key) && !inspection.some(/** 检查当前编译链是否含对应插件。 */ (layer) => layer.name.split("#")[0] === name)) {
+            warned.add(key);
+            log.warn(`[axp] 请求选项 "${key}" 未生效：未安装或启用 ${name}`);
+          }
+        }
+      }
       response = cancelIfAborted(ctx) ?? (await snapshot(ctx));
     } finally {
       pending.delete(controller);
@@ -232,12 +249,15 @@ export function createAxp<S = unknown, R extends IAxpResponse<unknown, string | 
           const config: Record<string, unknown> = {
             url,
             method,
-            [field]: payload,
             ...methodConfig,
           };
+          delete config[field];
+          for (const value of [methodConfig && methodConfig[field], payload, callConfig && callConfig[field]]) {
+            if (value !== undefined) config[field] = isPlainObject(config[field]) && isPlainObject(value) ? { ...config[field], ...value } : value;
+          }
           // 调用级覆盖方法级，但 undefined 不覆盖，与 axios mergeConfig 对 undefined 的处理一致。
           for (const [key, value] of Object.entries(callConfig ?? {})) {
-            if (value !== undefined) config[key] = value;
+            if (key !== field && value !== undefined) config[key] = value;
           }
           return dispatch(config as AxpRequestConfig);
         };

@@ -1,6 +1,10 @@
 import { isPlainObject } from "./utils";
 
-/** 请求级空字段表示继承，数组整体替换。 */
+/** 请求级开关、简写与逐字段覆盖；空字段继承，数组整体替换。
+ * @typeParam T 完整插件选项。
+ * @typeParam S 插件识别的简写类型。
+ * @example `const retry: AxpOption<{ max: number }, number> = { max: 2 }`
+ */
 export type AxpOption<T, S = never> =
   | boolean
   | null
@@ -10,7 +14,9 @@ export type AxpOption<T, S = never> =
       [K in keyof T]?: T[K] | null;
     };
 
-/** 插件与请求共享的关闭标记。 */
+/** 插件与请求共享的关闭契约。
+ * @example `const disabled: IPluginSwitch = { enable: false }`
+ */
 export interface IPluginSwitch {
   /** 显式 false 禁用本次能力。 */
   enable?: boolean;

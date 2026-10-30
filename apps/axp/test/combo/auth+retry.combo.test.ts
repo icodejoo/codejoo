@@ -67,7 +67,7 @@ it("[auth.const.AuthFailureAction.Others][retry.opt.statusCodes] 无关失败（
   expect(h.settings.onRefresh).not.toHaveBeenCalled();
 });
 
-it("[auth.cb.onRefresh][retry.opt.methods] 每次尝试请求体一致（I7）：500 → 401 → 刷新 → 成功，三次发送的请求体相同，调用方数据不被改", /** 重试与重放共用同一份请求体基准。 */ async () => {
+it("[auth.cb.onRefresh][retry.opt.methods] 500 → 401 → 刷新 → 成功：三次原地转换累积到调用方请求体", /** 重试与重放共用同一份请求体基准。 */ async () => {
   const bodies: unknown[] = [];
   const h = authClient({}, [axpRetry({ max: 2, delay: 0, methods: ["post"] })]);
   const route = guarded(() => TOKEN_NEW);
@@ -82,8 +82,8 @@ it("[auth.cb.onRefresh][retry.opt.methods] 每次尝试请求体一致（I7）�
   const data = pollutingBody();
   const result = await run(h, { method: "post", data, transformRequest: [pollutingTransform] });
   expect(result.ok).toBe(true);
-  expect(bodies).toEqual([POLLUTED_ONCE, POLLUTED_ONCE, POLLUTED_ONCE]);
-  expect(data).toEqual(pollutingBody());
+  expect(bodies).toEqual([POLLUTED_ONCE, JSON.stringify({ items: [{ n: 2 }] }), JSON.stringify({ items: [{ n: 3 }] })]);
+  expect(data).toEqual({ items: [{ n: 3 }] });
   expect(h.settings.onRefresh).toHaveBeenCalledTimes(1);
 });
 

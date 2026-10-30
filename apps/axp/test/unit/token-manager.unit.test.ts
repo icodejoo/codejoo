@@ -110,3 +110,23 @@ describe("TokenManager — 正常持久化路径", () => {
     expect("canRefresh" in tm).toBe(false);
   });
 });
+
+it("[public.member.TokenManager.constructor] 模块加载不探测 localStorage，首次构造探测且后续复用", /** 模块导入没有浏览器存储副作用。 */ async () => {
+  const get = vi.fn(/** 存储 getter 可观测探测时机。 */ () => ({ getItem: vi.fn(), setItem: vi.fn(), removeItem: vi.fn() }));
+  const previous = Object.getOwnPropertyDescriptor(globalThis, "localStorage");
+  Object.defineProperty(globalThis, "localStorage", { configurable: true, get });
+  vi.resetModules();
+  try {
+    const { default: Manager } = await import("../../src/objects/TokenManager");
+    expect(get).not.toHaveBeenCalled();
+    const tm = new Manager();
+    const count = get.mock.calls.length;
+    expect(count).toBeGreaterThan(0);
+    tm.set("a");
+    new Manager().clear();
+    expect(get).toHaveBeenCalledTimes(count);
+  } finally {
+    if (previous) Object.defineProperty(globalThis, "localStorage", previous);
+    else delete (globalThis as { localStorage?: unknown }).localStorage;
+  }
+});

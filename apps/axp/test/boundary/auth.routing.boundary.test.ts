@@ -53,6 +53,7 @@ describe("路由与防回环边界", () => {
     expect(h.net.totalStarted).toBe(2);
     expect(h.settings.onRefresh).not.toHaveBeenCalled();
     expect(h.settings.onAccessExpired).toHaveBeenCalledTimes(1);
+    expect(h.tm.accessToken).toBeUndefined();
   });
 
   it.each([false, true])(
@@ -176,7 +177,7 @@ describe("过期后的刷新可用性（O4）", () => {
 });
 
 describe("请求体一致性（I7）", () => {
-  it("[auth.fn.axpAuth][auth.cb.onRefresh] 401 刷新重放：请求体与首发一致，不被 transformRequest 套两层，调用方数据不被改", /** 重放前克隆请求体。 */ async () => {
+  it("[auth.fn.axpAuth][auth.cb.onRefresh] 401 刷新重放：原地转换累积到重放与调用方请求体", /** 首发使用原引用，修改会随重放累积。 */ async () => {
     const h = authClient();
     const bodies: unknown[] = [];
     h.net.on(
@@ -190,8 +191,8 @@ describe("请求体一致性（I7）", () => {
     const data = pollutingBody();
     const result = await run(h, { method: "post", data, transformRequest: [pollutingTransform] });
     expect(result.ok).toBe(true);
-    expect(bodies).toEqual([POLLUTED_ONCE, POLLUTED_ONCE]);
-    expect(data).toEqual(pollutingBody());
+    expect(bodies).toEqual([POLLUTED_ONCE, JSON.stringify({ items: [{ n: 2 }] })]);
+    expect(data).toEqual({ items: [{ n: 2 }] });
     expect(h.net.log.map(/** 首发与重放的凭证。 */ (record) => record.auth)).toEqual([TOKEN_OLD, TOKEN_NEW]);
   });
 });

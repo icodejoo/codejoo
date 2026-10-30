@@ -38,7 +38,7 @@ const DIST_PROBES = ["dist/esm/index.mjs", "dist/esm/index.d.mts", "dist/index.m
 /** 影响产物内容的构建输入文件（src 目录另行递归比较）。 */
 const BUILD_INPUTS = ["vite.config.ts", "package.json", "tsconfig.build.json"];
 
-/** 运行时 API 底线是 ES2019（构建目标 es2015 只降级语法，不补 API）：产物里不得出现更新的 API 调用。
+/** 运行时 API 底线是 ES2019（构建目标 es2019 只降级语法，不补 API）：产物里不得出现更新的 API 调用。
  * 规则只匹配调用形态（`.at(`、`Object.hasOwn(` 这类），避免把同名的普通字段误当成调用。 */
 const ES2020_PLUS_APIS: ReadonlyArray<readonly [api: string, pattern: RegExp]> = [
   ["Array#toSorted / toReversed / toSpliced", /\.(?:toSorted|toReversed|toSpliced)\(/],
@@ -223,7 +223,24 @@ describe("dist 产物", () => {
 
   it("[dist.const.import] 每个子路径都能被 Node 按 exports 实际导入，且导出非空", /** 根入口导出内核，插件子路径默认导出工厂函数。 */ () => {
     for (const sub of EXPECTED_SUBPATHS.filter((name) => name !== PACKAGE_JSON_SUBPATH)) expect(probe.exports[sub], sub).not.toHaveLength(0);
-    expect(probe.exports["."]).toEqual(expect.arrayContaining(["createAxp", "isAxpResponse", "failureOf", "isAxpCancel", "AXP_FAILURE", "AXP_FAILURES", "axpRetry", "TokenManager"]));
+    expect(probe.exports["."]).toEqual(
+      expect.arrayContaining([
+        "createAxp",
+        "isAxpResponse",
+        "failureOf",
+        "isAxpCancel",
+        "AXP_FAILURE",
+        "AXP_FAILURES",
+        "axpRetry",
+        "TokenManager",
+        "cancelIfAborted",
+        "waitAbortable",
+        "fireNotice",
+        "resolveOption",
+        "resolveRequestOption",
+        "isEnabled",
+      ]),
+    );
     expect(probe.exports[MIN_SUBPATH]).toEqual(expect.arrayContaining(["createAxp", "isAxpResponse"]));
     for (const name of PLUGIN_NAMES) expect(probe.exports[`./${name}`], name).toContain("default");
   });

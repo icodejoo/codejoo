@@ -5,6 +5,9 @@ import { expect, expectTypeOf, it } from "vitest";
 import { createAxp as createAxpDirect } from "../../src/client";
 import * as entry from "../../src/index";
 import type {
+  AxpOption,
+  IPluginSwitch,
+  AxpResult,
   AxpClient,
   AxpContext,
   AxpFailureType,
@@ -91,15 +94,21 @@ const PUBLIC_VALUES = [
   "axpResponse",
   "axpRetry",
   "axpShare",
+  "cancelIfAborted",
   "clearCache",
   "createAxp",
   "defaultAuthFailure",
   "failureOf",
+  "fireNotice",
   "isAxpCancel",
   "isAxpResponse",
+  "isEnabled",
   "nativeOf",
   "removeCache",
+  "resolveOption",
+  "resolveRequestOption",
   "stateKey",
+  "waitAbortable",
 ];
 /** 已随洋葱管线删除、不得再从入口导出的旧名字。 */
 const REMOVED_NAMES = new Set(["Axp", "Core", "ApiError", "axpCancel", "axpKey", "axpLogger", "axpNormalize", "cancelAll", "pluginLog", "pluginWarn", "pluginError"]);
@@ -238,6 +247,9 @@ it("[index.const.augmentation] 带 declare module 扩展的插件文件都由入
 it("[index.type.exports] 入口的类型导出齐全，AuthFailureAction 同名值与类型并存", /** 仅编译：名字被删或漏导出会让 tsgo 报错。 */ () => {
   /** 逐个引用入口导出的类型。 */
   type Surface = [
+    AxpOption<{ /** 次数。 */ max: number }, number>,
+    IPluginSwitch,
+    AxpResult<IAxpResponse, number>,
     AxpClient,
     AxpContext,
     AxpFailureType,

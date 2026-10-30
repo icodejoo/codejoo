@@ -768,7 +768,13 @@ export const integrationFeatures: Feature[] = [
             if (i % 2 === 1) params.status = BAD_REQUEST;
             return api
               .get(ECHO)<Row>(params, { throws: false })
-              .then((r) => ({ i, ok: r.ok, idx: Number(r.data.query.idx) }));
+              .then(
+                /** 成功与失败均验证回显结构后读取索引。 */ (r) => {
+                  const data = r.data;
+                  const query = data && typeof data === "object" && "query" in data ? data.query : undefined;
+                  return { i, ok: r.ok, idx: query && typeof query === "object" && "idx" in query ? Number(query.idx) : NaN };
+                },
+              );
           }),
         );
         const mismatches = out.filter((r) => !(r.idx === r.i && r.ok === (r.i % 2 === 0)));

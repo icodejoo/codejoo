@@ -68,6 +68,10 @@ export interface IAxpContextInit<R extends IAxpResponse<unknown, string | number
   signal: AbortSignal;
   /** 当前日志器。 */
   log: AxpLogger;
+  /** 是否启用调试检查。 */
+  debug?: boolean;
+  /** 插件默认规则使用的有效状态。 */
+  statusOf?: (response: R) => number;
   /** 响应构造服务。 */
   factory: IAxpResponseFactory<R>;
   /** key 配置。 */
@@ -91,7 +95,7 @@ interface IAxpContextState<R> {
   };
   /** 类型化插件状态。 */
   values?: Map<symbol, unknown>;
-  /** 是否需要重放保护。 */
+  /** 是否声明可能重发。 */
   replayable: boolean;
   /** 已经交给传输层的一次性请求体，派生层共享。 */
   sentBodies?: WeakSet<object>;
@@ -101,28 +105,36 @@ interface IAxpContextState<R> {
   readonly origin: Readonly<AxpRequestConfig>;
 }
 
-/** 每层保持固定实例形状，逻辑请求状态通过同一容器共享。
+/** 每层保持固定实例形状，逻辑请求状态通过同一容器共享；构造函数初始化的字段不重复生成 undefined 写入。
  * @example `ctx.set(key, 1); return next({ headers: { Authorization: 'token' } })`
  */
 export class AxpContext<R extends IAxpResponse<unknown, string | number> = AxpResponse> {
   /** 逻辑请求序号。 */
-  readonly id: number;
+  declare readonly id: number;
   /** 所属客户端。 */
-  readonly client: AxpClient<unknown, R>;
+  declare readonly client: AxpClient<unknown, R>;
   /** 本层请求视图。 */
-  readonly request: Readonly<AxpRequestConfig>;
+  declare readonly request: Readonly<AxpRequestConfig>;
   /** 本层的取消信号：根层是用户取消与 cancelAll 的合并信号，派生层若被补丁换了 signal 则以补丁为准。 */
-  readonly signal: AbortSignal;
+  declare readonly signal: AbortSignal;
   /** debug 关闭时所有方法为空函数。 */
-  readonly log: AxpLogger;
+  declare readonly log: AxpLogger;
+  /** 插件可据此只在调试时做昂贵检查。 */
+  declare readonly debug: boolean;
+  /** 读取插件默认规则的有效状态；不改写响应的 HTTP status。
+   * @param response 当前响应。
+   * @returns 配置的有效状态，缺省为 HTTP status；回调抛错按程序 bug 处理。
+   * @example `createAxp({ statusOf: (r) => (r.status === 200 && r.code !== 0 ? Number(r.code) : r.status) })`
+   */
+  declare readonly statusOf: (response: R) => number;
   /** 响应工厂。 */
-  private readonly factory: IAxpResponseFactory<R>;
+  declare private readonly factory: IAxpResponseFactory<R>;
   /** 指纹配置。 */
-  private readonly keyOptions: IKeyOptions | undefined;
+  declare private readonly keyOptions: IKeyOptions | undefined;
   /** 同一逻辑请求的各层共享的可变状态。 */
-  private readonly state: IAxpContextState<R>;
+  declare private readonly state: IAxpContextState<R>;
   /** 本层请求视图的惰性指纹；undefined 表示尚未计算，null 表示不可哈希。 */
-  private keyValue: string | null | undefined;
+  declare private keyValue: string | null | undefined;
 
   /** 建立一个逻辑请求的根上下文，或从外层上下文派生请求视图不同的内层上下文。
    * @param init 请求及内核服务；传入既有上下文时沿用其服务与共享状态。
@@ -136,6 +148,8 @@ export class AxpContext<R extends IAxpResponse<unknown, string | number> = AxpRe
     this.request = request;
     this.signal = patch?.signal ?? init.signal;
     this.log = init.log;
+    this.debug = !!init.debug;
+    this.statusOf = init.statusOf || defaultStatusOf;
     if (init instanceof AxpContext) {
       this.factory = init.factory;
       this.keyOptions = init.keyOptions;
@@ -149,6 +163,7 @@ export class AxpContext<R extends IAxpResponse<unknown, string | number> = AxpRe
       this.keyOptions = init.key;
       this.state = { replayable: false, origin: init.origin ?? request, native: { for: undefined, raw: undefined, error: undefined, settled: false } };
     }
+    this.keyValue = undefined;
   }
   /** 按本层请求视图惰性缓存指纹；有补丁必派生新层，指纹随新层重算。
    * @returns 指纹或不可哈希时的 null。
@@ -233,7 +248,8 @@ export class AxpContext<R extends IAxpResponse<unknown, string | number> = AxpRe
     slot.error = undefined;
     slot.settled = true;
   }
-  /** 标记后续传输需保护可重放的 JSON 请求体。
+  /** 声明本请求可能重发；传输层不克隆请求体，debug 下内核检查发送期间的原地修改。
+   * @returns 无返回值。
    * @example `ctx.markReplayable()`
    */
   markReplayable(): void {
@@ -275,7 +291,6 @@ export class AxpContext<R extends IAxpResponse<unknown, string | number> = AxpRe
 }
 
 /** 逻辑请求已中止时派生 cancel 响应，否则返回 undefined；各层在 await 之后必须重查，别让已取消的请求继续往下走。
- * @internal
  * @param ctx 当前层上下文。
  * @returns cancel 响应；未中止为 undefined。
  * @example `const cancelled = cancelIfAborted(ctx); if (cancelled) return cancelled`
@@ -294,3 +309,6 @@ export function cancelIfAborted<R extends IAxpResponse<unknown, string | number>
 export function requestContext<R extends IAxpResponse<unknown, string | number>>(context: AxpContext<R>, request: Readonly<AxpRequestConfig>, patch: AxpRequestPatch = request): AxpContext<R> {
   return new AxpContext(context, request, patch);
 }
+
+/** 默认有效状态沿用 HTTP 状态。 */
+const defaultStatusOf = (response: IAxpResponse<unknown, string | number>): number => response.status;

@@ -1,5 +1,5 @@
 import { expect, it } from "vitest";
-import { requestKey } from "../../src/key";
+import { fingerprintOf, requestKey } from "../../src/key";
 
 /** 指纹基准请求。 */
 const BASE = { method: "get", url: "/key" };
@@ -102,4 +102,25 @@ it("[core.req.key] key: true 与省略等价，都按请求自动计算（兼容
   expect(auto).not.toBeNull();
   expect(requestKey({ ...base, key: true })).toBe(auto);
   expect(requestKey({ ...base, params: { page: 2 }, key: true })).not.toBe(auto);
+});
+
+it("[core.method.key] responseType 分隔自动键，省略时旧 key 不变且显式 key 不变", /** 固定历史摘要防止未设置的请求变键。 */ () => {
+  expect(requestKey(BASE)).toBe("1hwprai-1ga1vlq");
+  expect(requestKey({ ...BASE, responseType: undefined })).toBe(requestKey(BASE));
+  expect(requestKey({ ...BASE, responseType: "json" })).not.toBe(requestKey(BASE));
+  expect(requestKey({ ...BASE, responseType: "text" })).not.toBe(requestKey({ ...BASE, responseType: "json" }));
+  expect(requestKey({ ...BASE, key: "explicit", responseType: "text" })).toBe("explicit");
+});
+
+it("[key.fingerprintOf] 深指纹复用值语义，不透明对象与 getter 异常返回 null", /** 调试检查不会因不可哈希数据改变请求结果。 */ () => {
+  expect(fingerprintOf({ a: [1], b: 2 })).toBe(fingerprintOf({ b: 2, a: [1] }));
+  expect(fingerprintOf({ a: [1] })).not.toBe(fingerprintOf({ a: [2] }));
+  expect(fingerprintOf(new FormData())).toBeNull();
+  expect(
+    fingerprintOf({
+      /** 模拟读取失败。 */ get a() {
+        throw new Error("getter");
+      },
+    }),
+  ).toBeNull();
 });

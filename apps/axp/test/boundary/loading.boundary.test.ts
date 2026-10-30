@@ -119,19 +119,91 @@ it.each([ADAPTER_FAILURE, "transform"])(
   },
 );
 
-it("[loading.method.lifecycle] 同一定义装在父子客户端各自计数", /** extend 重新建立状态。 */ async () => {
+it("[loading.method.lifecycle] 父子请求耗时不同，共享回调只显示一次且最后请求完成才隐藏", /** extend 共享同一个 UI 资源。 */ async () => {
   const parent = uiClient();
   const shared = loadingRecorder(parent.events);
   parent.api.use(axpLoading({ loading: shared }));
   const child = observeUi({ ...parent, api: parent.api.extend(), events: recordEvents() });
-  const first = parent.send(SLOW);
-  const second = child.send(SLOW);
-  expect(parent.events.loading.get(LOADING_LABEL)).toEqual([true, true]);
+  const first = parent.send({ latency: 20 } as AxpRequestConfig);
+  const second = child.send({ latency: 100 } as AxpRequestConfig);
+  expect(parent.events.loading.get(LOADING_LABEL)).toEqual([true]);
+  await vi.advanceTimersByTimeAsync(20);
+  await first;
+  expect(child.api.pending()).toBe(1);
+  expect(parent.events.loading.get(LOADING_LABEL)).toEqual([true]);
+  await vi.advanceTimersByTimeAsync(79);
+  expect(parent.events.loading.get(LOADING_LABEL)).toEqual([true]);
   await vi.runAllTimersAsync();
   await Promise.all([first, second]);
-  // 同一 UI 回调被两个客户端各自使用，分别检查每个客户端的一对。
-  expect(parent.events.loading.get(LOADING_LABEL)).toEqual([true, true, false, false]);
-  const observed = parent.events.loading.get(LOADING_LABEL)!;
-  parent.events.loading.set(LOADING_LABEL, [observed[0], observed[2]]);
-  child.events.loading.set(LOADING_LABEL, [observed[1], observed[3]]);
+  expect(child.api.pending()).toBe(0);
+  expect(parent.events.loading.get(LOADING_LABEL)).toEqual([true, false]);
+});
+
+it("[loading.cb.concurrent] 两个独立客户端分别创建插件，共用同一回调也只显示隐藏一次", /** 共享不依赖插件定义身份。 */ async () => {
+  const first = uiClient();
+  const loading = loadingRecorder(first.events);
+  first.api.use(axpLoading({ loading }));
+  const second = uiClient([axpLoading({ loading })]);
+  const requests = [first.send(SLOW), second.send(SLOW)];
+  expect(first.events.loading.get(LOADING_LABEL)).toEqual([true]);
+  await vi.runAllTimersAsync();
+  await Promise.all(requests);
+  expect(first.events.loading.get(LOADING_LABEL)).toEqual([true, false]);
+});
+
+it.each([SHOW_WINDOW, "shown"])(
+  "[loading.method.lifecycle] 一个客户端 dispose，另一个仍在途则保持共享显示窗口（%s）",
+  /** 卸载只撤回自己的多份占用，迟到 finally 不再扣减。 */ async (window) => {
+    const first = uiClient();
+    const loading = loadingRecorder(first.events);
+    const plugin = axpLoading({ loading, delay: window === SHOW_WINDOW ? 10 : 0 });
+    const setup = vi.spyOn(plugin, "setup");
+    first.api.use(plugin);
+    const second = uiClient([axpLoading({ loading })]);
+    const requests = [first.send(SLOW), first.send(SLOW), second.send({ latency: 100 } as AxpRequestConfig)];
+    const instance = setup.mock.results[0].value!;
+    instance.dispose!();
+    instance.dispose!();
+    await vi.advanceTimersByTimeAsync(30);
+    expect(first.events.loading.get(LOADING_LABEL)).toEqual([true]);
+    expect(second.api.pending()).toBe(1);
+    await vi.runAllTimersAsync();
+    await Promise.all(requests);
+    expect(first.events.loading.get(LOADING_LABEL)).toEqual([true, false]);
+  },
+);
+
+it("[loading.opt.delay][loading.opt.delayClose] 跨客户端首个进入者安排显示，最后离开者安排隐藏", /** 后到客户端不重置显示延迟。 */ async () => {
+  const first = uiClient();
+  const loading = loadingRecorder(first.events);
+  first.api.use(axpLoading({ loading, delay: 20, delayClose: 200 }));
+  const second = uiClient([axpLoading({ loading, delay: 200, delayClose: 10 })]);
+  const a = first.send(SLOW);
+  await vi.advanceTimersByTimeAsync(10);
+  const b = second.send(SLOW);
+  await vi.advanceTimersByTimeAsync(10);
+  expect(first.events.loading.get(LOADING_LABEL)).toEqual([true]);
+  await vi.advanceTimersByTimeAsync(20);
+  await Promise.all([a, b]);
+  expect(first.events.loading.get(LOADING_LABEL)).toEqual([true]);
+  await vi.advanceTimersByTimeAsync(9);
+  expect(first.events.loading.get(LOADING_LABEL)).toEqual([true]);
+  await vi.advanceTimersByTimeAsync(1);
+  expect(first.events.loading.get(LOADING_LABEL)).toEqual([true, false]);
+});
+
+it("[loading.opt.delayClose][loading.method.lifecycle] 别的客户端接续并完成隐藏后，原隐藏窗口持有者可正常卸载", /** 被接续取消的旧窗口不会留下可重复清理的 UI。 */ async () => {
+  const first = uiClient();
+  const loading = loadingRecorder(first.events);
+  first.api.use(axpLoading({ loading, delayClose: 30 }));
+  const second = uiClient([axpLoading({ loading })]);
+  const a = first.send();
+  await vi.advanceTimersByTimeAsync(1);
+  await a;
+  const b = second.send(SLOW);
+  await vi.runAllTimersAsync();
+  await b;
+  expect(first.events.loading.get(LOADING_LABEL)).toEqual([true, false]);
+  first.api.dispose();
+  expect(first.events.loading.get(LOADING_LABEL)).toEqual([true, false]);
 });

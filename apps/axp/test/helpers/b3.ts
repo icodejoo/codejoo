@@ -184,14 +184,14 @@ export function deferred<T>() {
   );
   return { promise, resolve };
 }
-/** 带嵌套数组的请求体：axios 只浅拷贝顶层对象，嵌套元素要靠 markReplayable 触发的克隆来保护。
+/** 带嵌套数组的请求体：嵌套元素原地修改会影响重放与调用方，markReplayable 不再触发克隆。
  * @returns 每次调用得到全新的 `{ items: [{ n: 0 }] }`。
  * @example `const data = pollutingBody()`
  */
 export function pollutingBody() {
   return { items: [{ n: 0 }] };
 }
-/** 原地改动嵌套元素的转换器，模拟会污染重发的实现。
+/** 原地改动嵌套元素的转换器，模拟会累积污染重发和调用方的实现。
  * @param input 请求体。
  * @returns 序列化后的请求体。
  * @example `transformRequest: [pollutingTransform]`
@@ -200,5 +200,5 @@ export function pollutingTransform(input: ReturnType<typeof pollutingBody>): str
   input.items[0].n++;
   return JSON.stringify(input);
 }
-/** 无污染时每次发送都应得到的请求体。 */
+/** 原地转换器首发后的请求体，后续每次发送继续累积修改。 */
 export const POLLUTED_ONCE = JSON.stringify({ items: [{ n: 1 }] });

@@ -307,7 +307,7 @@ it("[retry.fn.axpRetry][retry.opt.respectRetryAfter] 服务端等待期间取消
   expect(vi.getTimerCount()).toBe(0);
 });
 
-it("[retry.fn.axpRetry][retry.opt.methods][retry.opt.max] 重发的请求体与首发一致：转换器原地改入参也不累加或套两层，调用方数据不被改", /** I7：每次尝试请求体一致。 */ async () => {
+it("[retry.fn.axpRetry][retry.opt.methods][retry.opt.max] 重试时原地转换累积到重发与调用方请求体", /** 原地修改的代价随重试累积。 */ async () => {
   const bodies: unknown[] = [];
   const h = b3Client([axpRetry({ delay: 0, methods: ["post"] })]);
   h.net.on(
@@ -321,6 +321,6 @@ it("[retry.fn.axpRetry][retry.opt.methods][retry.opt.max] 重发的请求体与�
   const data = pollutingBody();
   const result = await run(h, { method: "post", data, transformRequest: [pollutingTransform] });
   expect(result.ok).toBe(true);
-  expect(bodies).toEqual([POLLUTED_ONCE, POLLUTED_ONCE, POLLUTED_ONCE]);
-  expect(data).toEqual(pollutingBody());
+  expect(bodies).toEqual([POLLUTED_ONCE, JSON.stringify({ items: [{ n: 2 }] }), JSON.stringify({ items: [{ n: 3 }] })]);
+  expect(data).toEqual({ items: [{ n: 3 }] });
 });

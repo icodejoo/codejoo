@@ -11,6 +11,12 @@ export type { AxpContext, AxpStateKey, IAxpNative } from "./context";
 
 export type { IKeyOptions } from "./key";
 
+/* ── 插件工具 ──────────────────────────────────────────────────────────── */
+export { cancelIfAborted } from "./context";
+export { waitAbortable, fireNotice } from "./utils";
+export { resolveOption, resolveRequestOption, isEnabled } from "./options";
+export type { AxpOption, IPluginSwitch } from "./options";
+
 /* ── 令牌管理 ──────────────────────────────────────────────────────────────── */
 export { default as TokenManager } from "./objects/TokenManager";
 export type { ITokenManager } from "./objects/TokenManager";

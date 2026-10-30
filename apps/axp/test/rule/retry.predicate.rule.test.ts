@@ -1,3 +1,4 @@
+import { AxpResponse } from "../../src/response";
 import { AxiosError } from "axios";
 import { beforeEach, expect, it, vi } from "vitest";
 import axpRetry from "../../src/plugins/retry";
@@ -113,3 +114,59 @@ it.each([
     expect(vi.getTimerCount()).toBe(0);
   },
 );
+
+it.each([false, true])(
+  "[core.opt.statusOf][retry.opt.statusCodes] HTTP 200 + code 503 仅配置有效状态后重试 mapped=%s",
+  /** HTTP 状态仍保持 200，extend 继承回调。 */ async (mapped) => {
+    const statusOf = mapped ? /** 业务码作为有效状态。 */ (r: AxpResponse) => (r.status === 200 && r.code !== 0 ? Number(r.code) : r.status) : undefined;
+    const h = b3Client([axpRetry({ max: 1, delay: 0 })], { statusOf });
+    h.net.fallback(/** 持续业务 503。 */ () => ({ data: { code: 503, data: null } }));
+    const child = h.api.extend();
+    const pending = child.get(REQUEST_URL)(undefined, { throws: false });
+    await vi.runAllTimersAsync();
+    expect(await pending).toMatchObject({ status: 200, code: 503 });
+    expect(h.net.totalStarted).toBe(mapped ? 2 : 1);
+    child.dispose();
+  },
+);
+
+it("[core.opt.statusOf][retry.cb.shouldRetry] 显式判定与函数 respectRetryAfter 优先，不调用 statusOf", /** 覆盖两个默认判定的调用路径。 */ async () => {
+  const statusOf = vi.fn(
+    /** 默认回调不能执行。 */ () => {
+      throw new Error("unused status");
+    },
+  );
+  const h = b3Client([axpRetry({ max: 1, delay: 0, shouldRetry: /** 显式重试。 */ () => true, respectRetryAfter: /** 显式忽略服务端头。 */ () => false })], { statusOf });
+  h.net.fallback(/** 业务失败。 */ () => ({ data: { code: 503, data: null } }));
+  const pending = h.send();
+  await vi.runAllTimersAsync();
+  expect((await pending).status).toBe(200);
+  expect(h.net.totalStarted).toBe(2);
+  expect(statusOf).not.toHaveBeenCalled();
+});
+
+it("[core.opt.statusOf] 判定回调抛错按 internal 抛原异常", /** 沿用层异常边界。 */ async () => {
+  const bug = new Error("status bug");
+  const h = b3Client([axpRetry({ delay: 0 })], {
+    statusOf: /** 模拟程序错误。 */ () => {
+      throw bug;
+    },
+  });
+  const pending = h.send();
+  const rejected = expect(pending).rejects.toBe(bug);
+  await vi.runAllTimersAsync();
+  await rejected;
+  expect(h.net.totalStarted).toBe(1);
+});
+
+it("[core.opt.statusOf][retry.opt.respectRetryAfter] 布尔形态按有效状态采信 Retry-After", /** HTTP 200 的业务 503 也遵循服务端等待时间。 */ async () => {
+  const h = b3Client([axpRetry({ max: 1, delay: 0 })], { statusOf: /** 将业务失败映射为 503。 */ (r) => (r.code === 503 ? 503 : r.status) });
+  h.net.fallback(/** 带服务端重试时间的业务失败。 */ () => ({ data: { code: 503, data: null }, headers: { "Retry-After": "2" } }));
+  const pending = h.send();
+  await vi.advanceTimersByTimeAsync(REMOTE_DELAY - 1);
+  expect(h.net.totalStarted).toBe(1);
+  await vi.advanceTimersByTimeAsync(1);
+  expect(h.net.totalStarted).toBe(2);
+  await vi.runAllTimersAsync();
+  expect((await pending).status).toBe(200);
+});

@@ -12,6 +12,7 @@ summary: 记录终审时用户拍板的四字段响应契约、内核失败标�
 - 必需字段只留 `ok`、`status`（HTTP）、`code<C>`、`data`；message 留在默认类，原生诊断数据按 [0003](0003-native-data-on-ctx.md) 管理。
 - `kind` 改为内核私有的失败事实，使用者不能填写；读取用 `failureOf`，取消用 `api.isCancel`。
 - 不再把业务码转换为逻辑状态。业务风格由使用者配置判定回调，撤回 0001/O5 的“业务风格零适配”。
+- 业务风格用客户端选项 `statusOf(r) => number` 给出“有效状态”，`ctx.statusOf(r)` 供 retry、auth 默认规则读取；`r.status` 仍是 HTTP 状态（2026-10-30 补）。
 - 默认类通过 `parse(body, raw)` 适配响应体，工厂通过 `type` 接受子类，也保留接口实现的 `create` 路径。
 
 ## 背景与范围
@@ -40,9 +41,9 @@ HTTP 失败、业务失败通过 `ok`、`status`、`code` 表达，不再由使�
 
 ### 取消逻辑状态，显式配置业务风格
 
-HTTP 200 加业务码 401 仍是 `status === 200`。auth 默认只看 HTTP 401、403；retry 默认按 HTTP 状态及内核网络/超时失败判定。
+HTTP 200 加业务码 401 仍是 `status === 200`。`r.status` 不被改写。auth 默认读 `ctx.statusOf(r)` 的 401、403，retry 默认按 `ctx.statusOf(r)` 及内核网络/超时失败判定；未配置 `statusOf` 时有效状态等于 HTTP 状态。
 
-使用者通过 auth 的 `onFailure`、retry 的 `shouldRetry` 和 `respectRetryAfter` 判定函数适配业务码，或者写子类集中配置。只改响应的 `ok` 不会把业务码转换成插件的 HTTP 规则。完整用法放在 [README 的业务风格示例](../../README.zh-CN.md#使用警告与业务风格)。
+使用者最省事的做法是配置 `createAxp({ statusOf })`，把业务码映射成有效状态，例如 `(r) => (r.status === 200 && Number(r.code) !== 0 ? Number(r.code) : r.status)`；`statusOf` 是纯函数，抛错按程序 bug 处理。也可以用 auth 的 `onFailure`、retry 的 `shouldRetry` 和 `respectRetryAfter` 逐项适配，或者写子类集中配置。只改响应的 `ok` 不会把业务码转换成插件的规则。这一条补充而不推翻本节“不改写 status、不自动转换业务码”的决定：不配置 `statusOf` 时行为与此前一致。完整用法放在 [README 的业务风格示例](../../README.zh-CN.md#使用警告与业务风格)。
 
 ### 解析钩子与构造路径
 

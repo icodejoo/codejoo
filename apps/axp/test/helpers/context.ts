@@ -6,16 +6,18 @@ import type { AxpClient, AxpLogger, AxpRequestConfig } from "../../src/types";
  * @param request 初始请求视图。
  * @param factory 响应工厂，会像客户端装配时一样被保护。
  * @param log 日志器；需要断言日志时传独立实例，避免污染共享的 NO_LOG。
+ * @param debug 是否开启昂贵的调试检查。
  * @returns 可直接传给管线或传输的根上下文。
  * @example `const ctx = testContext({ url: '/pets' })`
  */
-export function testContext(request: AxpRequestConfig = {}, factory: IAxpResponseFactory = DEFAULT_RESPONSE_FACTORY, log: AxpLogger = NO_LOG) {
+export function testContext(request: AxpRequestConfig = {}, factory: IAxpResponseFactory = DEFAULT_RESPONSE_FACTORY, log: AxpLogger = NO_LOG, debug = false) {
   return new AxpContext({
     id: 1,
     client: {} as AxpClient,
     request,
     signal: new AbortController().signal,
     log,
+    debug,
     factory: guardFactory(factory),
   });
 }

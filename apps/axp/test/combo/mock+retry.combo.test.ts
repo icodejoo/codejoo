@@ -63,7 +63,7 @@ it("[mock.req.mock × retry.opt.max] 探测回落后真实接口失败：retry �
   expect(h.net.log.map(/** 实际发出的地址。 */ (record) => record.url)).toEqual([PROBE, REAL, PROBE, REAL]);
 });
 
-it("[mock.req.mock × retry.opt.methods] 请求体一致（I7）：探测、回落、重试共四次发送，请求体相同，调用方数据不被改", /** mock 与 retry 共用同一份请求体基准。 */ async () => {
+it("[mock.req.mock × retry.opt.methods] 探测、回落、重试共四次发送：原地转换累积到调用方请求体", /** mock 与 retry 共用同一份请求体基准。 */ async () => {
   const bodies: unknown[] = [];
   const h = sourceClient([axpRetry({ max: ONE_RETRY, delay: 0, methods: ["post"] }), axpMock({ enable: true, mock: true, mockUrl: MOCK })]);
   h.net.on(
@@ -85,6 +85,6 @@ it("[mock.req.mock × retry.opt.methods] 请求体一致（I7）：探测、回�
   const data = pollutingBody();
   const [r] = await settleAll(h.send({ url: REAL, method: "post", data, transformRequest: [pollutingTransform] }));
   expect(r.ok).toBe(true);
-  expect(bodies).toEqual([POLLUTED_ONCE, POLLUTED_ONCE, POLLUTED_ONCE, POLLUTED_ONCE]);
-  expect(data).toEqual(pollutingBody());
+  expect(bodies).toEqual([POLLUTED_ONCE, JSON.stringify({ items: [{ n: 2 }] }), JSON.stringify({ items: [{ n: 3 }] }), JSON.stringify({ items: [{ n: 4 }] })]);
+  expect(data).toEqual({ items: [{ n: 4 }] });
 });

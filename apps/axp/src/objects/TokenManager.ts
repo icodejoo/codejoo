@@ -29,11 +29,14 @@ type TokenStorage = Pick<Storage, "getItem" | "setItem" | "removeItem">;
  * module never crashes.
  */
 function getStorage(): TokenStorage | null {
-  try {
-    return typeof localStorage !== "undefined" ? localStorage : null;
-  } catch {
-    return null;
+  if (storage === undefined) {
+    try {
+      storage = typeof localStorage !== "undefined" ? localStorage : null;
+    } catch {
+      storage = null;
+    }
   }
+  return storage;
 }
 
 /** 裸 token 的内存副本 / in-memory bare tokens. */
@@ -44,8 +47,8 @@ interface ITokenState {
   refresh?: string;
 }
 
-/** 模块加载时探测一次的存储 / storage probed once at module load. */
-const storage: TokenStorage | null = getStorage();
+/** 首次读写时探测一次；undefined 表示尚未探测。 */
+let storage: TokenStorage | null | undefined;
 
 /** access token 的存储键。 */
 const ACCESS_KEY = "axp:token:access";
@@ -55,7 +58,7 @@ const REFRESH_KEY = "axp:token:refresh";
 /** 读存储，异常（配额/隐私模式等）当作无值 / reads storage; any error (quota/privacy mode, etc.) counts as no value. */
 function readItem(key: string): string | undefined {
   try {
-    return storage?.getItem(key) || undefined;
+    return getStorage()?.getItem(key) || undefined;
   } catch {
     return undefined;
   }
@@ -64,9 +67,10 @@ function readItem(key: string): string | undefined {
 /** 写/删存储，异常静默吞掉，内存态不受影响 / writes/removes a storage item, swallowing errors so the in-memory state is unaffected. */
 function writeItem(key: string, value: string | undefined | null): void {
   try {
-    if (!storage) return;
-    if (value) storage.setItem(key, value);
-    else storage.removeItem(key);
+    const target = getStorage();
+    if (!target) return;
+    if (value) target.setItem(key, value);
+    else target.removeItem(key);
   } catch {
     /* 存储不可用：仅内存生效 / storage unavailable: memory-only */
   }

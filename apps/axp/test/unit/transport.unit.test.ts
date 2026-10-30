@@ -3,7 +3,7 @@ import { failureOf } from "../../src/response";
 import { AxiosError, AxiosHeaders, type AxiosInstance, type AxiosRequestConfig } from "axios";
 import { afterEach, assert, expect, it, vi } from "vitest";
 import { axpResponse } from "../../src/response";
-import { createTransport } from "../../src/transport";
+import { classifyError, createTransport } from "../../src/transport";
 import { requestContext } from "../../src/context";
 import { testContext } from "../helpers/context";
 
@@ -46,21 +46,20 @@ it("[core.req.signal] 显式传输 signal 优先，已取消不发送", /** 显�
   expect(request).toHaveBeenCalledTimes(1);
 });
 it.each([{ a: [1] }, [1], Object.assign(Object.create(null), { a: 1 }), "data", null, new Date(), new Blob(["body"])].map(/** 把候选请求体包成 each 参数。 */ (data) => ({ data })))(
-  "[core.method.markReplayable] 标记后仅克隆数组与纯对象，原始值和特殊体保持引用：$data",
-  /** 标记后仅克隆数组与纯对象，原始值和特殊体保持引用。 */ async ({ data }) => {
+  "[core.method.markReplayable] 标记前后所有请求体均保持引用：$data",
+  /** 标记前后所有请求体均保持引用。 */ async ({ data }) => {
     const { send, request } = transport();
     const ctx = testContext({ data });
     await send(ctx);
     expect(request.mock.lastCall![0].data).toBe(data);
     ctx.markReplayable();
     await send(ctx);
-    if (Array.isArray(data) || (data && Object.getPrototypeOf(data) === Object.prototype) || (data && Object.getPrototypeOf(data) === null)) expect(request.mock.lastCall![0].data).not.toBe(data);
-    else expect(request.mock.lastCall![0].data).toBe(data);
+    expect(request.mock.lastCall![0].data).toBe(data);
   },
 );
 it.each([false, true])(
-  "[core.method.markReplayable] 克隆不可用或失败回退引用并 warn，missing=%s",
-  /** 克隆不可用或失败回退引用并 warn。 */ async (missing) => {
+  "[core.method.markReplayable] 克隆不可用或失败也不调用克隆、不 warn，missing=%s",
+  /** 克隆不可用或失败也不调用克隆、不 warn。 */ async (missing) => {
     const { send, request } = transport();
     vi.stubGlobal(
       "structuredClone",
@@ -77,7 +76,7 @@ it.each([false, true])(
     ctx.markReplayable();
     expect((await send(ctx)).ok).toBe(true);
     expect(request.mock.lastCall![0].data).toBe(data);
-    expect(log.warn).toHaveBeenCalledTimes(1);
+    expect(log.warn).not.toHaveBeenCalled();
   },
 );
 it("[core.fn.createTransport] 非 axios 的程序异常由传输自身兜底为 internal，保留原异常", /** 传输是管线最内层，自带异常边界，不依赖外层兜底。 */ async () => {
@@ -165,3 +164,57 @@ it("[core.method.canReplay] 传输记录一次性请求体，再发时返回原�
   expect(error.message).toBe("一次性请求体已发送，不能重放；重放前请先检查 ctx.canReplay()");
   expect(request).toHaveBeenCalledTimes(1);
 });
+
+it.each([
+  [Object.assign(new AxiosError("invalid JSON", AxiosError.ERR_BAD_RESPONSE), { name: "SyntaxError" }), "parse"],
+  [Object.assign(new AxiosError("invalid JSON", AxiosError.ERR_BAD_RESPONSE), { cause: new SyntaxError("json") }), "parse"],
+  [new AxiosError("maxContentLength size of 10 exceeded", AxiosError.ERR_BAD_RESPONSE), "parse"],
+  [new AxiosError("stream has been aborted", AxiosError.ERR_BAD_RESPONSE), "network"],
+  [Object.assign(new AxiosError("broken stream", AxiosError.ERR_BAD_RESPONSE), { cause: new Error("socket") }), "network"],
+] as const)(
+  "[core.fn.classifyError] ERR_BAD_RESPONSE 按具体事实分类 %s → %s",
+  /** 解析与断流不能混淆。 */ (error, type) => {
+    expect(classifyError(error)).toBe(type);
+  },
+);
+
+it.each([false, true])(
+  "[core.method.markReplayable][core.prop.debug] 发送成功或失败都检查修改，同一对象只提示一次 reject=%s",
+  /** 模拟 axios 内原地改动共享数组。 */ async (reject) => {
+    const { send, request } = transport();
+    const data = { items: [0] };
+    const log = { log: vi.fn(), warn: vi.fn(), error: vi.fn() };
+    const ctx = testContext({ data }, undefined, log, true);
+    ctx.markReplayable();
+    request.mockImplementation(
+      /** 每次发送均修改入参。 */ async (config) => {
+        config.data.items.push(1);
+        if (reject) throw new AxiosError("offline");
+        return { status: 200, statusText: "", data: 1, headers: {}, config: { ...config, headers: new AxiosHeaders() } };
+      },
+    );
+    await send(ctx);
+    await send(ctx);
+    expect(data.items).toEqual([0, 1, 1]);
+    expect(request).toHaveBeenCalledTimes(2);
+    expect(log.warn).toHaveBeenCalledExactlyOnceWith("[axp] 发送中请求体被原地修改（拦截器/transformRequest/调用方）；重放将携带修改，转换请返回新对象");
+  },
+);
+
+it.each([
+  { data: [1], replay: true },
+  { data: { a: 1 }, replay: true },
+  { data: { fn: /** 不可哈希。 */ () => 1 }, replay: true },
+  { data: "text", replay: true },
+  { data: { a: 1 }, replay: false },
+])(
+  "[core.prop.debug] 不修改、不可哈希、特殊体或未声明重发时不告警 $data replay=$replay",
+  /** debug 检查跳过不适用对象。 */ async ({ data, replay }) => {
+    const { send } = transport();
+    const log = { log: vi.fn(), warn: vi.fn(), error: vi.fn() };
+    const ctx = testContext({ data }, undefined, log, true);
+    if (replay) ctx.markReplayable();
+    expect((await send(ctx)).ok).toBe(true);
+    expect(log.warn).not.toHaveBeenCalled();
+  },
+);

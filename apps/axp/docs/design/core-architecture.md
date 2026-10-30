@@ -20,7 +20,7 @@ summary: 新内核的结构、数据流、阶段排序、上下文、归一化�
 | -------------- | ------------------------------------------------------------------------------------------------------------------------ |
 | 扩展性强       | 中间件 + 阶段 + taps；`R` 可扩展；响应工厂、缓存存储、令牌管理都是接口                                                   |
 | API 易用且灵活 | 内置插件免排序；请求级选项统一四种写法；`wrap` / `throws` 两个开关覆盖三种返回形态，`raw` 再按需附原生数据               |
-| 性能好         | 链只在增删插件时编译；key 惰性；按需克隆；HTTP 错误不构造 AxiosError；失败不额外分配错误对象                             |
+| 性能好         | 链只在增删插件时编译；key 惰性；传输层零拷贝（不克隆请求体）；HTTP 错误不构造 AxiosError；失败不额外分配错误对象         |
 | 心智负担低     | 一个对象（`R`，成功失败都是它，抛出的也是它）、一条路径（`next()` 不抛）；装上即生效，只有改变数据新鲜度的插件按请求开启 |
 
 **非目标（本轮不做）**：fetch 传输层；熔断、离线队列、分阶段超时、缓存持久化实现（只留接口）；分页、轮询。
@@ -49,7 +49,7 @@ api.get('/pet/{id}')(payload, opts)
 | `options.ts`              | `resolveOption`：请求级四种写法的统一解析（B2 实现，供所有插件使用）                                                |
 | `pipeline.ts`             | 插件排序、taps 编译、链组合、`next(patch)`、异常兜底                                                                |
 | `context.ts`              | `AxpContext`：请求视图、signal、状态键、`key()`、`fail()`、`markReplayable()`                                       |
-| `transport.ts`            | 调 `axios.request`、按需克隆请求体、交给响应工厂判定                                                                |
+| `transport.ts`            | 调 `axios.request`、交给响应工厂判定；不克隆请求体，`debug` 下检测原地修改                                          |
 | `response.ts`             | `IAxpResponse`、`AxpResponse`、`IAxpResponseFactory`、`axpResponse()`、`isAxpResponse`                              |
 | `key.ts`                  | key 服务（由 `plugins/key.ts` 的哈希算法迁来）                                                                      |
 | `brand.ts`                | 响应品牌 `Symbol.for('axp.response')` 与 `AXP_FAILURE`、`AXP_FAILURES`，`./min` 与根入口共用                        |
@@ -69,7 +69,7 @@ api.get('/pet/{id}')(payload, opts)
 1. 动词调用把 `path`、`payload`、方法级配置、调用级配置浅合并成逻辑请求 `AxpRequestConfig`（调用级值为 `undefined` 的键不覆盖方法级，与 axios `mergeConfig` 一致），再用 axios 公开的 `mergeConfig` 把实例 `defaults` 合并进来。**各层看到的都是最终生效的配置**，所以 filter、repath、key 都能处理 defaults 里的值，语义与旧版拦截器一致（B2 终审裁决，方案 A）。
 2. 内核（`client.ts` 的 `request`）建逻辑请求级上下文：分配 `id`，建 `AbortController` 并与用户 `signal` 联动，登记到在途集合（`cancelAll` / `pending()` 用）。
 3. 按编译好的链从外到内执行中间件。每层拿到的 `ctx.request` 是外层交给它的版本。
-4. 到达传输层：若有层调用过 `markReplayable()` 且 `data` 是纯对象/数组，先克隆一份再发；调用**用户的 axios 实例** `axios.request`（保留实例拦截器），强制 `validateStatus: () => true`。axios 会再合并一次 defaults：凡是 `defaults.params` 里有、但已被层删除的键，传输层显式写成 `null`（axios 拼 URL 时跳过），防止被带回；被层删除的默认 header 的处理以 B2 报告结论为准。
+4. 到达传输层：若有层调用过 `markReplayable()` 且 `data` 是纯对象/数组，原样发送，不克隆（`debug` 下发送前后比对指纹，被原地修改就告警）；调用**用户的 axios 实例** `axios.request`（保留实例拦截器），强制 `validateStatus: () => true`。axios 会再合并一次 defaults：凡是 `defaults.params` 里有、但已被层删除的键，传输层显式写成 `null`（axios 拼 URL 时跳过），防止被带回；被层删除的默认 header 的处理以 B2 报告结论为准。
 5. 响应工厂把响应（或异常）判定成 `R`，内核给它打上品牌，原路返回；每层可读、可替换、可再次调用 `next()`。传输层每次尝试同时把最新的 AxiosResponse 和原始异常记进逻辑请求的原生槽（§5 `ctx.native`），并把 `Retry-After` 头原样作为私有小事实挂在 `R` 上（§6）。
 6. 最外层先结束 dispatch：它的 finally 里从在途集合注销、解除 signal 监听；随后进入落定（settle）：先取原生数据，需要时生成 raw 副本（§7），按 §7 决定返回 data、返回 `R`、抛 `R` 或抛原始异常，并在 settle 的 finally 里清空、封闭原生槽。
 
@@ -109,7 +109,7 @@ interface AxpContext<R extends IAxpResponse<unknown, string | number> = AxpRespo
   readonly native: IAxpNative; // 最近一次传输尝试的原生数据，只读；落定后为空
   fail(init: AxpResponseInit<R>): R; // 凭空造结果，必须经响应工厂
   canReplay(): boolean; // 已发送的一次性请求体不可重放
-  markReplayable(): void; // 声明本请求可能被重发，传输层据此克隆请求体
+  markReplayable(): void; // 声明本请求可能被重发；传输层据此在 debug 下检测请求体被原地修改
 }
 interface IAxpNative {
   response?: AxiosResponse; // 最近一次传输尝试拿到的原始响应（HTTP 错误取 error.response）
@@ -169,16 +169,16 @@ create 可返回普通对象，内核补不可枚举品牌及缺失的 code/data
 
 内核在工厂返回之后挂不可枚举的 `AXP_FAILURE` 标记，同时强制 ok 为 false。`failureOf(r)` 返回只读 `{ type, reason?, error? } | undefined`，类别常量为 `AXP_FAILURES`。`error` 只有 `internal` 有，是原始异常，经 `failureOf(r)?.error` 读取；网络、超时、取消不再带 error，需要时开 `raw`。`toJSON` 里 failure 只投影 `{ type, reason }`，不序列化 raw/error。使用者只转换业务数据，不填写内核分类。取消判断用 `isAxpCancel(e)` 或 `api.isCancel(e)`。
 
-| 输入                                                           | 失败标记 type                                          | status                       |
-| -------------------------------------------------------------- | ------------------------------------------------------ | ---------------------------- |
-| axios 取消、AbortError 或发送前已取消                          | cancel                                                 | 0                            |
-| AxiosError 超时（ETIMEDOUT，或 ECONNABORTED 且消息含 timeout） | timeout                                                | 0                            |
-| AxiosError 的 ERR_BAD_RESPONSE                                 | parse                                                  | 0                            |
-| 其它 AxiosError                                                | network                                                | 0                            |
-| 非 AxiosError 的异常                                           | internal                                               | 0                            |
-| expectJson 命中的未解析文本                                    | parse                                                  | 原 HTTP 状态                 |
-| 插件 `ctx.fail({ failure, reason, from })`                     | 指定类别；auth 的原因如 expired/denied/unauthenticated | 继承 from 或显式字段，否则 0 |
-| 收到普通 HTTP 或业务响应                                       | 无；看 ok/status/code                                  | 原 HTTP 状态                 |
+| 输入                                                            | 失败标记 type                                          | status                       |
+| --------------------------------------------------------------- | ------------------------------------------------------ | ---------------------------- |
+| axios 取消、AbortError 或发送前已取消                           | cancel                                                 | 0                            |
+| AxiosError 超时（ETIMEDOUT，或 ECONNABORTED 且消息含 timeout）  | timeout                                                | 0                            |
+| ERR_BAD_RESPONSE 且为 SyntaxError 或 maxContentLength 超限      | parse                                                  | 0                            |
+| 其它 AxiosError（含断流 stream has been aborted、响应体中途断） | network                                                | 0                            |
+| 非 AxiosError 的异常                                            | internal                                               | 0                            |
+| expectJson 命中的未解析文本                                     | parse                                                  | 原 HTTP 状态                 |
+| 插件 `ctx.fail({ failure, reason, from })`                      | 指定类别；auth 的原因如 expired/denied/unauthenticated | 继承 from 或显式字段，否则 0 |
+| 收到普通 HTTP 或业务响应                                        | 无；看 ok/status/code                                  | 原 HTTP 状态                 |
 
 **Retry-After**：传输层把响应里的 Retry-After 头原样（字符串）以私有 symbol 挂在 `R` 上，retry 需要时才解析；收到的 HTTP 429/503 这类响应没有失败标记，也带这个事实。retry 读它，不再回头看 AxiosResponse。share 跟随者拿到的就是领导者的同一个 `R`，所以同样遵守等待时长，超过 `retryAfterMax` 不重试的规则（D1）不变。`fromError` 路径（如响应拦截器抛出带 response 的 AxiosError，归为 network，`R.status` 为 0）也带着 `error.response` 的 Retry-After，但只有 `respectRetryAfter` 为函数、由它独立判定时才会被采信；布尔形态要查 `afterStatusCodes.includes(r.status)`，status 为 0 所以默认配置下不采信。`ctx.fail({ from })` 派生会继承这个事实。
 
@@ -246,7 +246,7 @@ interface AxpPlugin<R extends IAxpResponse<unknown, string | number> = AxpRespon
 - 内置插件工厂写成泛型 `axpRetry<R extends IAxpResponse<unknown, string | number> = AxpResponse>(opts?: IRetryOptions<R>)`，只透传 `R`、不构造 `R`，所以对任意 `R` 都成立；默认值与客户端一致，单独定义的插件不写泛型也能装进默认客户端。
 - 插件只有 `setup` 没有中间件（如 envs）时不进链，只在装卸时执行。
 
-合成失败用 `ctx.fail({ failure: AXP_FAILURES.AUTH, reason: "denied", from: r })`，不直接构造 R。重放前先 `ctx.canReplay()`；false 时交回原响应。首发前 `markReplayable()` 只声明按需克隆，不保证流可重放。一次性体被强行重发时，传输层生成 internal，落定抛原始 Error。
+合成失败用 `ctx.fail({ failure: AXP_FAILURES.AUTH, reason: "denied", from: r })`，不直接构造 R。重放前先 `ctx.canReplay()`；false 时交回原响应。首发前 `markReplayable()` 只声明可能重发（debug 下据此检测请求体被原地修改），不保证流可重放。一次性体被强行重发时，传输层生成 internal，落定抛原始 Error。
 
 自定义插件示例：
 
@@ -304,7 +304,7 @@ interface AxpClient<S, R> extends HttpVerbs<S, R> {
 }
 ```
 
-`extend()` 默认新建 axios 并克隆父 defaults，不复制拦截器；指定 `{ axios }` 时原样使用，不复制父 defaults。插件默认继承并重新 setup，各自独立；overrides 在 setup 之后写入。完整警告见 [README](../../README.zh-CN.md#使用警告与业务风格)。
+`extend()` 默认新建 axios 并克隆父 defaults，不复制拦截器；指定 `{ axios }` 时原样使用，不复制父 defaults。插件默认继承并重新 setup；状态按所代表的资源作用域共享（cache/share 按客户端，auth 按 TokenManager，loading 按回调），不再一律各自独立；overrides 在 setup 之后写入。完整警告见 [README](../../README.zh-CN.md#使用警告与业务风格)。
 `dispose()` 先 `cancelAll()`，再按注册的逆序调用各插件实例的 `dispose`（尽力执行，最后抛第一个异常）；之后拒绝新的 `request` / `use` / `extend`，在途请求沿原链收到取消后落定。
 使用方式示例：
 
@@ -337,16 +337,16 @@ full.raw?.headers; // 完整 AxiosResponse，可能为 undefined
 
 ## 11. 性能设计
 
-| #   | 做法                                                                                                                                                  | 解决     |
-| --- | ----------------------------------------------------------------------------------------------------------------------------------------------------- | -------- |
-| P1  | 链在增删插件时编译，请求时不排序、不查表                                                                                                              | —        |
-| P2  | 每层上下文是固定形状的实例，拷贝逻辑请求级字段与共享状态引用，只换 `request` 视图；没有 patch 时直接复用外层上下文                                    | —        |
-| P3  | `key()` 惰性计算并按 request 对象缓存；不用 cache/share 的请求不算 key                                                                                | —        |
-| P4  | 只有 `markReplayable()` 且 data 是纯对象/数组时才 `structuredClone`；克隆失败或环境没有 `structuredClone` 时回退原引用（debug 下 warn），不让请求失败 | O6、R2-1 |
-| P5  | 传输强制 `validateStatus` 全放行，HTTP 错误不构造 AxiosError（省掉调用栈捕获）                                                                        | —        |
-| P6  | 失败直接抛 `R`，不另建错误对象；调用点 stack 只在 debug 模式记录                                                                                      | D6       |
-| P7  | 不再包装 `transformResponse`，不再拷贝尝试钩子数组                                                                                                    | O6、R2-3 |
-| P8  | 缓存过期惰性删除，超容量及有限有效期写入时节流清扫；同步仓保留快路径                                                                                  | O6       |
+| #   | 做法                                                                                                                                                                                               | 解决     |
+| --- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------- |
+| P1  | 链在增删插件时编译，请求时不排序、不查表                                                                                                                                                           | —        |
+| P2  | 每层上下文是固定形状的实例，拷贝逻辑请求级字段与共享状态引用，只换 `request` 视图；没有 patch 时直接复用外层上下文                                                                                 | —        |
+| P3  | `key()` 惰性计算并按 request 对象缓存；不用 cache/share 的请求不算 key                                                                                                                             | —        |
+| P4  | 传输层不克隆请求体，零拷贝；约定转换器、拦截器不原地改 `data`（会污染重放和调用方）。仅 `debug` 且 `markReplayable()` 的纯对象/数组做深哈希指纹比对，发送前后不一致就 warn（同一请求体只提示一次） | O6、R2-1 |
+| P5  | 传输强制 `validateStatus` 全放行，HTTP 错误不构造 AxiosError（省掉调用栈捕获）                                                                                                                     | —        |
+| P6  | 失败直接抛 `R`，不另建错误对象；调用点 stack 只在 debug 模式记录                                                                                                                                   | D6       |
+| P7  | 不再包装 `transformResponse`，不再拷贝尝试钩子数组                                                                                                                                                 | O6、R2-3 |
+| P8  | 缓存过期惰性删除，超容量及有限有效期写入时节流清扫；同步仓保留快路径                                                                                                                               | O6       |
 
 性能门槛和测法见 [测试方案](test-plan.md) §8。
 

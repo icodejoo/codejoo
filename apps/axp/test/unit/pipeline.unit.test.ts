@@ -316,3 +316,40 @@ describe("管线与上下文", /** 管线与上下文的用例集合。 */ () =>
     expect(ctx.replayable).toBe(true);
   });
 });
+
+it.each([false, true])(
+  "[core.req.signal] await 后取消跳过内层，换入新 signal 时仍执行 replace=%s",
+  /** 必须检查派生后的目标信号。 */ async (replace) => {
+    const controller = new AbortController();
+    const fresh = new AbortController().signal;
+    const ctx = requestContext(testContext({}, undefined, undefined, true), { signal: controller.signal });
+    let calls = 0;
+    const layers = sort([
+      {
+        name: "outer",
+        /** 模拟等待期间外部取消。 */ async handle(_ctx, next) {
+          await Promise.resolve();
+          controller.abort();
+          return next(replace ? { signal: fresh } : undefined);
+        },
+      },
+      {
+        name: "inner",
+        /** 内层执行可观测。 */ async handle(_ctx, next) {
+          calls++;
+          return next();
+        },
+      },
+    ]);
+    const response = await composePipeline(
+      layers,
+      /** 返回成功。 */ async (target) => {
+        expect(target.debug).toBe(true);
+        expect(target.statusOf).toBe(ctx.statusOf);
+        return target.fail({ status: 200 });
+      },
+    )(ctx);
+    expect(calls).toBe(replace ? 1 : 0);
+    expect(failureOf(response)?.type).toBe(replace ? undefined : "cancel");
+  },
+);

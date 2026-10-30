@@ -1,4 +1,5 @@
 import { isAxiosError, isCancel, type AxiosInstance, type AxiosResponse } from "axios";
+import { fingerprintOf } from "./key";
 import { normalizeMethod } from "./methods";
 import type { AxpContext } from "./context";
 import { AXP_FAILURES } from "./brand";
@@ -6,8 +7,8 @@ import type { AxpFailureType, IAxpResponse, IAxpResponseFactory } from "./respon
 import { effectiveHeaders, hasOwn, HEADER_GROUPS, isPlainObject } from "./utils";
 import type { AxpRequestConfig } from "./types";
 
-/** 克隆失败的 debug 提示。 */
-const CLONE_WARNING = "[axp] 请求体无法克隆，回退原引用";
+/** 已提示原地修改的请求体，跨重放和逻辑请求去重。 */
+const warnedBodies = new WeakSet<object>();
 
 /** 所有 HTTP 状态均交给归一化响应判定。 */
 const ACCEPT_HTTP_STATUS = () => true;
@@ -22,17 +23,7 @@ export function classifyError(error: unknown): AxpFailureType {
   if (isCancel(error) || (error instanceof Error && error.name === "AbortError")) return AXP_FAILURES.CANCEL;
   if (!isAxiosError(error)) return AXP_FAILURES.INTERNAL;
   if (error.code === "ETIMEDOUT" || (error.code === "ECONNABORTED" && /timeout/i.test(error.message))) return AXP_FAILURES.TIMEOUT;
-  return error.code === "ERR_BAD_RESPONSE" ? AXP_FAILURES.PARSE : AXP_FAILURES.NETWORK;
-}
-
-/** 按需复制请求体；环境没有 structuredClone（调用抛 ReferenceError）或克隆失败都回退原引用。 */
-function cloneData<R extends IAxpResponse<unknown, string | number>>(data: unknown, ctx: AxpContext<R>): unknown {
-  try {
-    return structuredClone(data);
-  } catch (error) {
-    ctx.log.warn(CLONE_WARNING, error);
-    return data;
-  }
+  return error.code === "ERR_BAD_RESPONSE" && (error.name === "SyntaxError" || error.cause instanceof SyntaxError || error.message.startsWith("maxContentLength")) ? AXP_FAILURES.PARSE : AXP_FAILURES.NETWORK;
 }
 
 /** 为已删除的默认查询键补 null 禁用标记，防止二次合并恢复；特殊参数容器按原样传递。 */
@@ -97,9 +88,17 @@ export function createTransport<R extends IAxpResponse<unknown, string | number>
       const request = toWire(ctx, axios);
       request.signal = signal;
       ctx.markBodySent(request.data);
-      if (ctx.replayable && (Array.isArray(request.data) || isPlainObject(request.data))) request.data = cloneData(request.data, ctx);
       request.validateStatus = ACCEPT_HTTP_STATUS;
-      response = await axios.request(request);
+      const data = request.data;
+      const before = ctx.debug && ctx.replayable && (Array.isArray(data) || isPlainObject(data)) ? fingerprintOf(data) : null;
+      try {
+        response = await axios.request(request);
+      } finally {
+        if (before !== null && fingerprintOf(data) !== before && !warnedBodies.has(data)) {
+          warnedBodies.add(data);
+          ctx.log.warn("[axp] 发送中请求体被原地修改（拦截器/transformRequest/调用方）；重放将携带修改，转换请返回新对象");
+        }
+      }
     } catch (error) {
       const result = factory.fromError(error, ctx);
       ctx.setNative(result, isAxiosError(error) ? error.response : undefined, error);

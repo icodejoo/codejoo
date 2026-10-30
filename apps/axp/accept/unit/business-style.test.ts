@@ -24,10 +24,10 @@ function response(code: number, style = "business", status = HTTP_OK): AxpRespon
   return new AxpResponse({ status, code, request: { headers: { [HEADER_STYLE]: style } } });
 }
 
-/** 构造只带请求风格的最小 ctx 桩；isBusiness 读用户发起的 originRequest，不依赖完整上下文。 */
+/** 构造只带请求风格的最小 ctx 桩；isBusiness 读用户发起的 originRequest，defaultAuthFailure 读 statusOf，默认等于 HTTP 状态。 */
 function styleCtx(style = "business", params?: Record<string, unknown>, extra: Record<string, unknown> = {}, members: Record<string, unknown> = {}): AxpContext {
   const request = { headers: { [HEADER_STYLE]: style }, params, ...extra };
-  return { request, originRequest: request, ...members } as unknown as AxpContext;
+  return { request, originRequest: request, statusOf: /** 默认有效状态等于 HTTP 状态。 */ (r: AxpResponse) => r.status, ...members } as unknown as AxpContext;
 }
 
 /** 创建仅装 retry 的真实客户端；测试用 axios adapter 决定每次返回值。 */
