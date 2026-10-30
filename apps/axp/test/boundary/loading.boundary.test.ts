@@ -207,3 +207,65 @@ it("[loading.opt.delayClose][loading.method.lifecycle] 别的客户端接续并�
   first.api.dispose();
   expect(first.events.loading.get(LOADING_LABEL)).toEqual([true, false]);
 });
+
+/** 假时钟下完成一次请求。 */
+async function done(client: { send(): Promise<unknown> }): Promise<void> {
+  const request = client.send();
+  await vi.advanceTimersByTimeAsync(1);
+  await request;
+}
+
+it("[loading.opt.delayClose][loading.method.lifecycle] 窗口被别的客户端接管后卸载旧持有者，不截断新窗口", /** 旧持有者不再拥有待隐藏窗口。 */ async () => {
+  const first = uiClient();
+  const loading = loadingRecorder(first.events);
+  first.api.use(axpLoading({ loading, delayClose: 100 }));
+  const second = uiClient([axpLoading({ loading, delayClose: 100 })]);
+  await done(first);
+  await vi.advanceTimersByTimeAsync(10);
+  await done(second);
+  await vi.advanceTimersByTimeAsync(10);
+  first.api.dispose();
+  expect(first.events.loading.get(LOADING_LABEL)).toEqual([true]);
+  await vi.advanceTimersByTimeAsync(50);
+  expect(first.events.loading.get(LOADING_LABEL)).toEqual([true]);
+  await vi.runAllTimersAsync();
+  expect(first.events.loading.get(LOADING_LABEL)).toEqual([true, false]);
+});
+
+it("[loading.opt.delayClose][loading.method.lifecycle] 窗口交接并走完后，旧持有者再用同一回调序列正确", /** 旧持有者没有残留占用。 */ async () => {
+  const first = uiClient();
+  const loading = loadingRecorder(first.events);
+  first.api.use(axpLoading({ loading, delayClose: 20 }));
+  const second = uiClient([axpLoading({ loading, delayClose: 20 })]);
+  await done(first);
+  await vi.advanceTimersByTimeAsync(5);
+  await done(second);
+  await vi.runAllTimersAsync();
+  expect(first.events.loading.get(LOADING_LABEL)).toEqual([true, false]);
+  await done(first);
+  expect(first.events.loading.get(LOADING_LABEL)).toEqual([true, false, true]);
+  await vi.runAllTimersAsync();
+  expect(first.events.loading.get(LOADING_LABEL)).toEqual([true, false, true, false]);
+  first.api.dispose();
+  expect(first.events.loading.get(LOADING_LABEL)).toEqual([true, false, true, false]);
+});
+
+it("[loading.opt.delayClose][loading.method.lifecycle] 窗口持有者在窗口内卸载或自己再进入", /** 归属方仍按原语义清理。 */ async () => {
+  const first = uiClient();
+  const loading = loadingRecorder(first.events);
+  first.api.use(axpLoading({ loading, delayClose: 100 }));
+  await done(first);
+  await vi.advanceTimersByTimeAsync(10);
+  const again = first.send(SLOW);
+  await vi.advanceTimersByTimeAsync(10);
+  first.api.dispose();
+  await vi.advanceTimersByTimeAsync(50);
+  await again;
+  expect(first.events.loading.get(LOADING_LABEL)).toEqual([true, false]);
+  const other = uiClient();
+  const fresh = loadingRecorder(other.events);
+  other.api.use(axpLoading({ loading: fresh, delayClose: 100 }));
+  await done(other);
+  other.api.dispose();
+  expect(other.events.loading.get(LOADING_LABEL)).toEqual([true, false]);
+});

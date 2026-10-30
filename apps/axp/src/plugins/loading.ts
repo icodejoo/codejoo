@@ -34,13 +34,17 @@ interface ILoadingState {
   shown: boolean;
   /** 当前等待显示或隐藏的定时器。 */
   timer?: ReturnType<typeof setTimeout>;
+  /** 待隐藏窗口的归属客户端占用表，其中该回调记为 0。 */
+  closer?: Map<TLoadingFunc, number>;
 }
 /** 同一 UI 回调在所有客户端间共享计数和防闪烁窗口。 */
 const states = new WeakMap<TLoadingFunc, ILoadingState>();
-/** 取消某个未触发的 UI 通知。 */
-function clearTimer(state: ILoadingState): void {
+/** 取消某个未触发的 UI 通知，并撤销归属方的待隐藏记账。 */
+function clearTimer(fn: TLoadingFunc, state: ILoadingState): void {
   clearTimeout(state.timer);
   state.timer = undefined;
+  state.closer?.delete(fn);
+  state.closer = undefined;
 }
 /** 函数简写仅作为通知回调，不动态求值；其它类型不认。 */
 function shorthand(value: unknown): Partial<ILoadingOptions> | undefined {
@@ -70,7 +74,7 @@ export default function axpLoading<R extends IAxpResponse<unknown, string | numb
         state.shown = visible;
         if (!visible) {
           states.delete(fn);
-          counts.delete(fn);
+          clearTimer(fn, state);
         }
         fireNotice(fn, CALLBACK_ERROR, visible);
       }
@@ -94,13 +98,11 @@ export default function axpLoading<R extends IAxpResponse<unknown, string | numb
           const fn = resolved.loading;
           const current = states.get(fn) ?? { count: 0, shown: false };
           states.set(fn, current);
-          counts.set(fn, (counts.get(fn) ?? 0) + 1);
           if (++current.count === 1) {
-            clearTimer(current);
-            if (!current.shown) {
-              schedule(fn, current, true, resolved.delay);
-            }
+            clearTimer(fn, current);
+            if (!current.shown) schedule(fn, current, true, resolved.delay);
           }
+          counts.set(fn, (counts.get(fn) ?? 0) + 1);
           try {
             return await next();
           } finally {
@@ -108,10 +110,11 @@ export default function axpLoading<R extends IAxpResponse<unknown, string | numb
               const remaining = counts.get(fn)! - 1;
               if (remaining) counts.set(fn, remaining);
               else counts.delete(fn);
-              if (--current.count === 0) {
-                clearTimer(current);
+              if (!--current.count) {
+                clearTimer(fn, current);
                 if (current.shown) {
                   counts.set(fn, 0);
+                  current.closer = counts;
                   schedule(fn, current, false, resolved.delayClose);
                 } else states.delete(fn);
               }
@@ -123,11 +126,10 @@ export default function axpLoading<R extends IAxpResponse<unknown, string | numb
           if (!active) return;
           active = false;
           for (const [fn, count] of counts) {
-            const state = states.get(fn);
-            if (!state) continue;
+            const state = states.get(fn)!;
             state.count -= count;
-            if (state.count === 0) {
-              clearTimer(state);
+            if (!state.count) {
+              clearTimer(fn, state);
               if (state.shown) toggle(fn, state, false);
               else states.delete(fn);
             }
