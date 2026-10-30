@@ -14,6 +14,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { parseConfig } from "./lib/config.ts";
 import type { AcceptConfig } from "./lib/config.ts";
+import { tokenHeaders } from "./lib/http.ts";
 import { analyzeDryRun, renderDryRun } from "./lib/dry-run.ts";
 import { loadScenarios, LoaderError } from "./lib/loader.ts";
 import { buildPlan } from "./lib/plan.ts";
@@ -34,15 +35,15 @@ const EXIT_ENV = 2;
 
 /** 预检：测试服务器与 netem 都可达，避免上千条运行逐条报同一个连接错误 */
 async function preflight(cfg: AcceptConfig): Promise<string | null> {
-  const probe = async (label: string, url: string): Promise<string | null> => {
+  const probe = async (label: string, url: string, headers: Record<string, string> = {}): Promise<string | null> => {
     try {
-      await fetch(url, { signal: AbortSignal.timeout(3000) });
+      await fetch(url, { headers, signal: AbortSignal.timeout(3000) });
       return null;
     } catch (e) {
       return `${label} 不可达（${url}）: ${(e as Error).message}`;
     }
   };
-  return (await probe("测试服务器", `${cfg.server}/t/ping`)) ?? (await probe("netem 控制面", `${cfg.netem}/presets`));
+  return (await probe("测试服务器", `${cfg.server}/t/ping`, tokenHeaders(cfg.token))) ?? (await probe("netem 控制面", `${cfg.netem}/presets`));
 }
 
 /** 执行全部待跑条目，边跑边输出，返回包含跳过项的完整结果 */

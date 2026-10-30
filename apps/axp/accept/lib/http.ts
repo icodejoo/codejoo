@@ -1,4 +1,14 @@
-import { BYPASS_TIMEOUT_MS } from "./constants.ts";
+import { BYPASS_TIMEOUT_MS, HEADER_TOKEN } from "./constants.ts";
+
+/**
+ * 限流绕过 token 对应的请求头；token 为空时返回空对象，调用方可直接展开。
+ * @param token TESTKIT_TOKEN 的值，可为空
+ * @example tokenHeaders("abc") // { "x-testkit-token": "abc" }
+ * @example tokenHeaders("") // {}
+ */
+export function tokenHeaders(token: string | undefined): Record<string, string> {
+  return token ? { [HEADER_TOKEN]: token } : {};
+}
 
 /**
  * 等待指定毫秒。

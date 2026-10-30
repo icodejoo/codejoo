@@ -1,5 +1,5 @@
 import { HEADER_RUN, HEADER_STYLE } from "./constants.ts";
-import { rawJson } from "./http.ts";
+import { rawJson, tokenHeaders } from "./http.ts";
 import type { Style } from "./constants.ts";
 import type { Observation } from "./matchers.ts";
 import type { LoginSpec } from "./types.ts";
@@ -35,13 +35,17 @@ export class ServerClient {
   readonly baseUrl: string;
   readonly runId: string;
   #style: Style;
+  /** 限流绕过 token，空串表示不带 */
+  readonly #token: string;
 
   /**
    * @param baseUrl 测试服务器地址，如 `http://127.0.0.1:47080`
    * @param runId 本次运行的唯一轮次 id
    * @param style 初始响应风格
+   * @param token 限流绕过 token（TESTKIT_TOKEN），缺省不带
    */
-  constructor(baseUrl: string, runId: string, style: Style) {
+  constructor(baseUrl: string, runId: string, style: Style, token = "") {
+    this.#token = token;
     this.baseUrl = baseUrl.replace(/\/+$/, "");
     this.runId = runId;
     this.#style = style;
@@ -62,7 +66,7 @@ export class ServerClient {
 
   /** 本次运行要带的公共请求头 */
   headers(): Record<string, string> {
-    return { [HEADER_RUN]: this.runId, [HEADER_STYLE]: this.#style };
+    return { [HEADER_RUN]: this.runId, [HEADER_STYLE]: this.#style, ...tokenHeaders(this.#token) };
   }
 
   /**

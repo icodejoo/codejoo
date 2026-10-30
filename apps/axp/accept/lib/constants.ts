@@ -18,6 +18,8 @@ export const ALL_ADAPTERS: readonly AdapterName[] = ["http", "fetch"];
 export const ENV_SERVER = "TESTKIT_SERVER";
 /** 环境变量名：netem 控制地址 */
 export const ENV_NETEM = "TESTKIT_NETEM";
+/** 环境变量名：服务端限流绕过 token（对应服务端 RATE_LIMIT_BYPASS_TOKEN），非空时所有发往测试服务器的请求带上它 */
+export const ENV_TOKEN = "TESTKIT_TOKEN";
 /** 环境变量名：场景目录 */
 export const ENV_SCENARIOS = "TESTKIT_SCENARIOS";
 
@@ -56,6 +58,8 @@ export const FLAP_SCHEDULE: ReadonlyArray<{ at_ms: number; profile: string }> = 
 export const HEADER_RUN = "X-Test-Run";
 /** 请求头：响应风格 */
 export const HEADER_STYLE = "X-Test-Style";
+/** 请求头：限流绕过 token */
+export const HEADER_TOKEN = "x-testkit-token";
 
 /** 受保护路径的默认前缀 */
 export const PRIVATE_PREFIX = "/t/private";

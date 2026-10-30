@@ -147,16 +147,20 @@ export function swapHost(url: string, host: string): string {
 }
 
 /**
- * 取 URL 的 host:port，作为 netem 的 upstream。
+ * 取服务器地址对应的 netem upstream：http 为 `host:port`；https 为 `https://host[:port]`，
+ * 让 netem 对上游做 TLS（正确的 SNI）并改写 Host 头，客户端自己只发明文 HTTP。
  * @param url 服务器地址
+ * @example upstreamOf('http://127.0.0.1:47080') // '127.0.0.1:47080'
+ * @example upstreamOf('https://api.example.com') // 'https://api.example.com'
  */
 export function upstreamOf(url: string): string {
   const u = new URL(url);
-  return `${u.hostname}:${u.port || (u.protocol === "https:" ? "443" : "80")}`;
+  if (u.protocol === "https:") return `https://${u.hostname}${u.port ? `:${u.port}` : ""}`;
+  return `${u.hostname}:${u.port || "80"}`;
 }
 
 /**
- * 通过 netem 创建专属代理，并返回客户端应使用的 baseURL。
+ * 通过 netem 创建专属代理，并返回客户端应使用的 baseURL（始终是 `http://`：https 的服务器由 netem 终结 TLS）。
  * flap 先以 normal 创建再下发时间表；dns 不经过 netem，不要调用本函数。
  * 分到 fetch 受限端口会删掉重建，保证 http 与 fetch 两种 adapter 用的是同一套可用端口。
  * @param netem netem 客户端
@@ -172,6 +176,5 @@ export async function openProxy(netem: NetemClient, serverUrl: string, network: 
     proxy = await netem.createProxy(upstreamOf(serverUrl), network === "flap" ? "normal" : network);
   }
   if (network === "flap") await netem.schedule(proxy.id, FLAP_SCHEDULE);
-  const u = new URL(serverUrl);
-  return { id: proxy.id, baseURL: `${u.protocol}//${new URL(netem.controlUrl).hostname}:${proxy.port}` };
+  return { id: proxy.id, baseURL: `http://${new URL(netem.controlUrl).hostname}:${proxy.port}` };
 }

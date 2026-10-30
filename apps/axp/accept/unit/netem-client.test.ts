@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { isFetchBlockedPort, NetemClient, NetemError, openProxy, OPEN_PROXY_MAX_TRIES } from "../lib/netem-client.ts";
+import { isFetchBlockedPort, NetemClient, NetemError, openProxy, OPEN_PROXY_MAX_TRIES, upstreamOf } from "../lib/netem-client.ts";
 import type { ProxyInfo } from "../lib/netem-client.ts";
 
 /** 控制地址：只用来拼 baseURL 的主机，不会真的发请求 */
@@ -16,12 +16,12 @@ function stubNetem(ports: number[]) {
   const deleted: string[] = [];
   const netem = new NetemClient(CONTROL);
   let next = 0;
-  vi.spyOn(netem, "createProxy").mockImplementation(() => Promise.resolve(created[Math.min(next++, created.length - 1)]));
+  const createSpy = vi.spyOn(netem, "createProxy").mockImplementation(() => Promise.resolve(created[Math.min(next++, created.length - 1)]));
   vi.spyOn(netem, "deleteProxy").mockImplementation((id: string) => {
     deleted.push(id);
     return Promise.resolve();
   });
-  return { netem, deleted };
+  return { netem, deleted, createSpy };
 }
 
 describe("isFetchBlockedPort", () => {
@@ -52,5 +52,25 @@ describe("openProxy", () => {
     const { netem, deleted } = stubNetem([6666]);
     await expect(openProxy(netem, SERVER, "normal")).rejects.toBeInstanceOf(NetemError);
     expect(deleted).toHaveLength(OPEN_PROXY_MAX_TRIES - 1);
+  });
+});
+
+describe("upstreamOf", () => {
+  it("http 服务器给 host:port，缺省端口 80", () => {
+    expect(upstreamOf("http://127.0.0.1:47080")).toBe("127.0.0.1:47080");
+    expect(upstreamOf("http://example.com")).toBe("example.com:80");
+  });
+  it("https 服务器给 https://host[:port]，默认端口省略", () => {
+    expect(upstreamOf("https://api-ws-demo-latest.onrender.com")).toBe("https://api-ws-demo-latest.onrender.com");
+    expect(upstreamOf("https://api.example.com:8443/")).toBe("https://api.example.com:8443");
+  });
+});
+
+describe("openProxy 对 https 服务器", () => {
+  it("以 TLS 上游创建代理，baseURL 是明文 http://127.0.0.1:port", async () => {
+    const { netem, createSpy } = stubNetem([50002]);
+    const out = await openProxy(netem, "https://api.example.com", "normal");
+    expect(createSpy.mock.calls[0]).toEqual(["https://api.example.com", "normal"]);
+    expect(out).toEqual({ id: "p0", baseURL: "http://127.0.0.1:50002" });
   });
 });

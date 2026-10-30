@@ -4,6 +4,7 @@ import { AxpResponse, axpAuth, axpCache, axpEnvs, axpFilter, axpLoading, axpMock
 import type { AxpContext, AxpPlugin, AxpRequestConfig, IAuthOptions, IRetryOptions, MaybePromise } from "@codejoo/axp";
 import { HEADER_RUN, HEADER_STYLE, MOCK_PREFIX, DEFAULT_RETRY_METHODS, DEFAULT_RETRY_STATUSES } from "./constants.ts";
 import type { AdapterName, Style } from "./constants.ts";
+import { tokenHeaders } from "./http.ts";
 import { authUrlPatterns, lowerMethods, mapCacheOptions, mapRequestOptions, withNeutralDefaults } from "./mapping.ts";
 import type { TokenStore } from "./tokens.ts";
 import type { PluginConfigs, RequestSpec } from "./types.ts";
@@ -40,6 +41,8 @@ export interface ClientOptions {
   styleChanges?: boolean;
   /** 本次运行的 X-Test-Run */
   runId: string;
+  /** 限流绕过 token（TESTKIT_TOKEN）；非空时被测客户端与刷新请求都带上，空则不带 */
+  token?: string;
 }
 
 /** 单次发送的附加信息 */
@@ -149,7 +152,7 @@ function buildAuth(opts: ClientOptions, cfg: Record<string, unknown>, getBase: (
           {
             baseURL: getBase(),
             params: refreshQuery,
-            headers: { [HEADER_RUN]: opts.runId, [HEADER_STYLE]: opts.getStyle() },
+            headers: { [HEADER_RUN]: opts.runId, [HEADER_STYLE]: opts.getStyle(), ...tokenHeaders(opts.token) },
           },
         );
         const body = res.data as { code?: unknown; data?: { access_token?: string; refresh_token?: string } } | undefined;
@@ -230,7 +233,7 @@ async function passBusinessFailure(pending: Promise<AxpResponse>): Promise<unkno
  * @throws 映射不了的配置在 plan 阶段已由 validateScenarioMapping 拦截，这里不重复校验
  */
 export function createClient(opts: ClientOptions): ClientHandle {
-  const instance = axios.create({ adapter: opts.adapter, baseURL: opts.baseURL, timeout: opts.baseTimeoutMs });
+  const instance = axios.create({ adapter: opts.adapter, baseURL: opts.baseURL, timeout: opts.baseTimeoutMs, headers: tokenHeaders(opts.token) });
   const p = opts.plugins ?? {};
   const scope = (p.key as { scope?: string } | undefined)?.scope;
   const api = createAxp({

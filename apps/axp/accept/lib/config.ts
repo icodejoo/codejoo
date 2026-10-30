@@ -1,6 +1,6 @@
 import path from "node:path";
 import { parseArgs } from "node:util";
-import { ALL_ADAPTERS, ALL_NETWORKS, ALL_STYLES, DEFAULT_NETEM, DEFAULT_SCENARIOS, DEFAULT_SERVER, ENV_NETEM, ENV_SCENARIOS, ENV_SERVER } from "./constants.ts";
+import { ALL_ADAPTERS, ALL_NETWORKS, ALL_STYLES, DEFAULT_NETEM, DEFAULT_SCENARIOS, DEFAULT_SERVER, ENV_NETEM, ENV_SCENARIOS, ENV_SERVER, ENV_TOKEN } from "./constants.ts";
 import type { AdapterName, NetworkName, Style } from "./constants.ts";
 
 /** 过滤条件：空数组表示不过滤 */
@@ -16,6 +16,8 @@ export interface Filters {
 export interface AcceptConfig {
   server: string;
   netem: string;
+  /** 限流绕过 token（TESTKIT_TOKEN），空串表示不带；不写进报告 */
+  token: string;
   /** 场景目录（绝对路径） */
   scenarios: string;
   filters: Filters;
@@ -82,6 +84,7 @@ export function parseConfig(argv: string[], env: Record<string, string | undefin
   return {
     server: (env[ENV_SERVER] || DEFAULT_SERVER).replace(/\/+$/, ""),
     netem: (env[ENV_NETEM] || DEFAULT_NETEM).replace(/\/+$/, ""),
+    token: (env[ENV_TOKEN] ?? "").trim(),
     scenarios: path.resolve(cwd, env[ENV_SCENARIOS] || DEFAULT_SCENARIOS),
     filters: {
       ids: splitList(values.id ?? env.TESTKIT_ID),

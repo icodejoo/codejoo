@@ -111,7 +111,7 @@ export async function runEntry(entry: PlanEntry, seq: number, deps: RunnerDeps):
   if (entry.issues.length) return fail(entry.issues.map((i) => `映射不了: ${i}`));
 
   const runId = makeRunId(deps.session, seq, sc.id);
-  const server = new ServerClient(deps.config.server, runId, style);
+  const server = new ServerClient(deps.config.server, runId, style, deps.config.token);
   const events = new EventLog();
   const tracker = new PendingTracker();
   const tokens = new TokenStore();
@@ -139,6 +139,7 @@ export async function runEntry(entry: PlanEntry, seq: number, deps: RunnerDeps):
     getStyle: () => server.style,
     styleChanges: usedStepKinds(sc).has("style") || collectRequests(sc.steps).some(/** 查询参数也能覆盖单次风格。 */ (req) => req.query?.style === "business"),
     runId,
+    token: deps.config.token,
   });
   const env = new RunEnvironment({
     client,

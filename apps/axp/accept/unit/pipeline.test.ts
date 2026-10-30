@@ -37,7 +37,7 @@ describeDist("流水线：对假服务器 + 假 netem 跑完整的 runEntry（ht
   let seq = 0;
   beforeAll(async () => {
     stub = await startStub();
-    config = { server: stub.url, netem: stub.netemUrl, scenarios: "", filters: { ids: [], networks: [], styles: [], adapters: [] }, dry: false, jobs: 1, reportDir: "", verbose: false };
+    config = { server: stub.url, netem: stub.netemUrl, scenarios: "", filters: { ids: [], networks: [], styles: [], adapters: [] }, token: "", dry: false, jobs: 1, reportDir: "", verbose: false };
   });
   afterAll(async () => {
     await stub.close();
