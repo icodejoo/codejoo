@@ -4,7 +4,7 @@ import { methodSet, normalizeMethod, SAFE_METHODS } from "../methods";
 import { resolveOption, resolveRequestOption, type AxpOption, type IPluginSwitch } from "../options";
 import { failureOf, messageOf, AXP_FAILURES, type AxpFailureType, type AxpResponse, type AxpResponseInit, type IAxpResponse } from "../response";
 import type { AxpClient, AxpNext, AxpPlugin } from "../types";
-import { waitAbortable } from "../utils";
+import { isObject, waitAbortable } from "../utils";
 import { createFreshnessBarrier, createMemoryStore, type IAxpCacheEntry, type IAxpCacheSnapshot, type IAxpCacheStore, type MaybePromise } from "./cache-store";
 
 export type { IAxpCacheEntry, IAxpCacheSnapshot, IAxpCacheStore, MaybePromise } from "./cache-store";
@@ -103,7 +103,7 @@ const DEFAULTS = {
  */
 export function $shallowClone(data: any): any {
   if (Array.isArray(data)) return [...data];
-  if (data && typeof data === "object") return { ...data };
+  if (isObject(data)) return { ...data };
   return data;
 }
 
@@ -126,11 +126,6 @@ export function $resolveCloneFn(clone: TCloneStrategy | undefined): TCloneFn | n
 /** 数字简写即有效期，其它类型不认。 */
 function expiresShorthand(value: unknown): { /** 有效期（毫秒）。 */ expires: number } | undefined {
   return typeof value === "number" ? { expires: value } : undefined;
-}
-
-/** 按拷贝策略派生响应，data 为拷贝，其余字段沿用来源。 */
-function cloneResponse<R extends IAxpResponse<unknown, string | number>>(ctx: AxpContext<R>, response: R, cloneFn: TCloneFn): R {
-  return ctx.fail({ from: response, data: cloneFn(response.data) });
 }
 
 /** 只在存储实际返回 thenable 时进入异步路径。 */
@@ -239,7 +234,7 @@ export default function axpCache<R extends IAxpResponse<unknown, string | number
           }
         }
         const ticket = barrier.begin(key);
-        let response!: R;
+        let response: R;
         try {
           response = await next();
           const failedType = failureOf(response)?.type;
@@ -260,7 +255,7 @@ export default function axpCache<R extends IAxpResponse<unknown, string | number
           // 该 key 没有在途请求时，屏障记录随之回收。
           barrier.end(key);
         }
-        return cloneFn && response.ok ? cloneResponse(ctx, response, cloneFn) : response;
+        return cloneFn && response.ok ? ctx.fail({ from: response, data: cloneFn(response.data) }) : response;
       }
       /** 同步命中不创建 async 包装，异步存储复用同一重建逻辑。 */
       function resolveHit(hit: IAxpCacheEntry | undefined, ctx: AxpContext<R>, next: AxpNext<R>, key: string, config: TCacheConfig<R>, cloneFn: TCloneFn | null): Promise<R> {

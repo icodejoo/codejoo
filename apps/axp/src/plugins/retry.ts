@@ -89,8 +89,7 @@ export default function axpRetry<R extends IAxpResponse<unknown, string | number
         if (failure && NO_RETRY_KINDS.has(failure.type)) return response;
         const decision = config.shouldRetry?.(response, attempt, ctx);
         const retry = typeof decision === "boolean" ? decision : failure?.type === AXP_FAILURES.NETWORK || failure?.type === AXP_FAILURES.TIMEOUT || config.statusCodes.includes(ctx.statusOf(response));
-        if (!retry) return response;
-        if (!ctx.canReplay()) return response;
+        if (!retry || !ctx.canReplay()) return response;
         const respect = typeof config.respectRetryAfter === "function" ? config.respectRetryAfter(response, ctx) : config.respectRetryAfter && config.afterStatusCodes.includes(ctx.statusOf(response));
         const after = respect ? parseRetryAfter(retryAfterOf(response), config.retryAfterMax) : undefined;
         if (after === null) return response;

@@ -95,8 +95,7 @@ export function cloneAxiosDefaults(defaults: AxiosRequestConfig): AxiosRequestCo
   for (const key of Object.keys(defaults)) {
     if (key === "headers") cloned.headers = cloneAxiosHeaders(defaults.headers);
     else if (key === "params") cloned.params = cloneParams(defaults.params);
-    else if (key === "transformRequest") cloned.transformRequest = toArray(defaults.transformRequest);
-    else if (key === "transformResponse") cloned.transformResponse = toArray(defaults.transformResponse);
+    else if (key === "transformRequest" || key === "transformResponse") cloned[key] = toArray(defaults[key]);
     else if (!(key in cloned)) Object.assign(cloned, { [key]: Reflect.get(defaults, key) });
   }
   return cloned;

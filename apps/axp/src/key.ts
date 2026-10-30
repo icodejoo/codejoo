@@ -1,6 +1,6 @@
 import type { AxpRequestConfig } from "./types";
 import { isBodyMethod, normalizeMethod } from "./methods";
-import { hasOwn as sharedHasOwn, isPlainObject, toTag as sharedToTag } from "./utils";
+import { hasOwn, isPlainObject, toTag } from "./utils";
 
 /** 请求指纹的会话分区配置。 */
 export interface IKeyOptions {
@@ -67,10 +67,6 @@ const TAG_URL_SEARCH_PARAMS = "[object URLSearchParams]";
 const TAG_ARRAY_BUFFER = "[object ArrayBuffer]";
 /** 共享缓冲区类型标签。 */
 const TAG_SHARED_ARRAY_BUFFER = "[object SharedArrayBuffer]";
-/** 热路径局部绑定，方便内联。 */
-const toTag = sharedToTag;
-/** 自有字段判断的热路径绑定。 */
-const hasOwn = sharedHasOwn;
 
 /** 请求内复用的双车道摘要和递归路径。 */
 interface HashState {

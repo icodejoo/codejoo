@@ -230,6 +230,10 @@ export function nativeOf(value: unknown): { /** 原生响应。 */ raw?: AxiosRe
 export function isAxpCancel(error: unknown): boolean {
   return failureOf(error)?.type === AXP_FAILURES.CANCEL;
 }
+/** 显式失败优先，否则继承来源的类别和未覆盖的原因。 */
+function resolveFailure<R extends IAxpResponse<unknown, string | number>>(init: AxpResponseInit<R>, inherited: IAxpFailure | undefined): IAxpFailure | undefined {
+  return init.failure ? { type: init.failure, reason: init.reason } : inherited ? { type: inherited.type, reason: init.reason ?? inherited.reason } : undefined;
+}
 /** 挂不可枚举失败事实并遮住使用者的成功 getter。 */
 function markFailure<R extends IAxpResponse<unknown, string | number>>(
   response: R,
@@ -272,7 +276,7 @@ export function axpResponse<R extends IAxpResponse<unknown, string | number> = A
     else if (options.type) response = new options.type(fields.request === undefined ? { ...fields, request: ctx.request } : fields);
     else response = new AxpResponse(fields, ctx.request) as unknown as R;
     const inherited = init.from && failureOf(init.from);
-    return markFailure(response, init.failure ? { type: init.failure, reason: init.reason } : inherited ? { type: inherited.type, reason: init.reason ?? inherited.reason } : undefined, init);
+    return markFailure(response, resolveFailure(init, inherited), init);
   }
   return {
     /** 原始响应交给 parse/create，守卫失败在构造后强制标记。 */
@@ -347,11 +351,7 @@ export function guardFactory<R extends IAxpResponse<unknown, string | number>>(f
       : /** 自定义工厂返回后补齐事实，默认快照跳过此保护层。 */ (init, ctx) => {
           try {
             const inherited = init.from && failureOf(init.from);
-            return markFailure(
-              brandResponse(factory.fail(init, ctx)),
-              init.failure ? { type: init.failure, reason: init.reason } : inherited ? { type: inherited.type, reason: init.reason ?? inherited.reason } : undefined,
-              init,
-            );
+            return markFailure(brandResponse(factory.fail(init, ctx)), resolveFailure(init, inherited), init);
           } catch (error) {
             return recover(error, ctx, init);
           }

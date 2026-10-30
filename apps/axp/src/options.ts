@@ -55,7 +55,7 @@ export function resolveOption<T extends object, D extends Partial<T>>(request: u
     if (!source) continue;
     for (const key of Object.keys(source) as (keyof T)[]) {
       const value = source[key];
-      if (value != null) resolved[key] = value as T[keyof T];
+      if (value != null) resolved[key] = value;
     }
   }
   return resolved as TResolved<T, D>;

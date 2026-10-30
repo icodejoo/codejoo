@@ -62,7 +62,7 @@ export function compileUrlPatterns(p: string | readonly string[] | undefined): T
   if (arr.length === 0) return FALSE;
   if (arr.length === 1 && arr[0] === WILDCARD) return TRUE;
 
-  const Ctor = getURLPattern();
+  const Ctor = typeof URLPattern === "function" ? URLPattern : null;
   const includes: TAuthPredicate[] = [];
   const excludes: TAuthPredicate[] = [];
   for (const raw of arr) {
@@ -129,9 +129,4 @@ function compileNative(Ctor: typeof URLPattern | null, pat: string): TAuthPredic
 export function patternToRegex(pat: string): RegExp {
   const body = pat.replace(PATTERN_TOKEN, /** 命名参数匹配单段，星号匹配任意，元字符转义。 */ (token) => (token === WILDCARD ? ".*" : token[0] === ":" ? "[^/]+" : `\\${token}`));
   return new RegExp(`^${body}/?$`);
-}
-
-/** 探测当前运行时是否提供原生 URLPattern。 */
-function getURLPattern(): typeof URLPattern | null {
-  return typeof URLPattern === "function" ? URLPattern : null;
 }

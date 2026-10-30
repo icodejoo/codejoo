@@ -107,8 +107,7 @@ export default function axpMock<R extends IAxpResponse<unknown, string | number>
         cache: false,
         share: false,
       });
-      if (!resolved.fallbackWhen(probe, ctx)) return probe;
-      if (!ctx.canReplay()) return probe;
+      if (!resolved.fallbackWhen(probe, ctx) || !ctx.canReplay()) return probe;
       ctx.log.log(`${FALLBACK_MESSAGE}${failureOf(probe)?.type} ${probe.status}`);
       return next();
     },
