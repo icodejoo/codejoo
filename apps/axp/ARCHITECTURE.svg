@@ -1,193 +1,351 @@
-<svg viewBox="0 0 1400 950" xmlns="http://www.w3.org/2000/svg">
-  <defs>
-    <style>
-      .box { fill: #FDE8D0; stroke: #333; stroke-width: 2; }
-      .box-api { fill: #E8F5E9; stroke: #333; stroke-width: 1.5; }
-      .box-plugin { fill: #FFF9C4; stroke: #333; stroke-width: 1.5; }
-      .text-title { font-size: 18px; font-weight: bold; font-family: Arial; }
-      .text-label { font-size: 13px; font-family: Arial; }
-      .text-small { font-size: 11px; font-family: Arial; }
-      .text-api { font-size: 10px; font-family: 'Courier New', monospace; }
-      .arrow { stroke: #333; stroke-width: 2; fill: none; marker-end: url(#arrowhead); }
-      .arrow-small { stroke: #666; stroke-width: 1.5; fill: none; marker-end: url(#arrowhead-small); }
-      .arrow-label { font-size: 12px; font-family: Arial; fill: #333; }
-    </style>
-    <marker id="arrowhead" markerWidth="10" markerHeight="10" refX="9" refY="3" orient="auto">
-      <polygon points="0 0, 10 3, 0 6" fill="#333"/>
-    </marker>
-    <marker id="arrowhead-small" markerWidth="8" markerHeight="8" refX="7" refY="2" orient="auto">
-      <polygon points="0 0, 8 2, 0 4" fill="#666"/>
-    </marker>
-  </defs>
-
-  <!-- 标题 -->
-  <text x="700" y="30" text-anchor="middle" class="text-title">AXP 完整架构流程图</text>
-  <text x="700" y="50" text-anchor="middle" class="text-label">Axios Plugin-based HTTP Client | 完整 API 及数据流</text>
-
-  <!-- ===== 第一层：应用代码 ===== -->
-  <rect x="50" y="80" width="200" height="120" class="box" rx="8"/>
-  <text x="150" y="110" text-anchor="middle" class="text-title">应用代码</text>
-  <text x="150" y="130" text-anchor="middle" class="text-label">App Code</text>
-  <text x="150" y="150" text-anchor="middle" class="text-api">axp.get('/api/users')</text>
-  <text x="150" y="165" text-anchor="middle" class="text-api">axp.post('/api/data')</text>
-  <text x="150" y="180" text-anchor="middle" class="text-api">axp.request(config)</text>
-
-  <!-- 箭头 -->
-  <path d="M 250 140 L 320 140" class="arrow"/>
-  <text x="280" y="125" class="arrow-label">创建实例</text>
-  <text x="280" y="140" class="arrow-label">create(config)</text>
-
-  <!-- ===== 第二层：AXP 核心 ===== -->
-  <rect x="320" y="80" width="200" height="120" class="box" rx="8"/>
-  <text x="420" y="110" text-anchor="middle" class="text-title">AXP 核心</text>
-  <text x="420" y="130" text-anchor="middle" class="text-label">AXP Core Manager</text>
-  <text x="420" y="150" text-anchor="middle" class="text-api">get/post/put/delete</text>
-  <text x="420" y="165" text-anchor="middle" class="text-api">request(config)</text>
-  <text x="420" y="180" text-anchor="middle" class="text-api">createAxp(options)</text>
-
-  <!-- 箭头到插件们 -->
-  <path d="M 420 200 L 420 260" class="arrow"/>
-
-  <!-- ===== 第三层：插件系统 ===== -->
-  <text x="50" y="260" class="text-label" font-weight="bold">📦 插件系统 | Plugin System</text>
-
-  <!-- Plugin 1: Cache -->
-  <rect x="50" y="280" width="160" height="130" class="box-plugin" rx="5"/>
-  <text x="130" y="305" text-anchor="middle" class="text-label">缓存插件</text>
-  <text x="130" y="320" text-anchor="middle" class="text-small">Cache Plugin</text>
-  <line x1="60" y1="330" x2="200" y2="330" stroke="#ccc" stroke-width="1"/>
-  <text x="130" y="348" text-anchor="middle" class="text-api">cache.get(key)</text>
-  <text x="130" y="363" text-anchor="middle" class="text-api">cache.set(key, val)</text>
-  <text x="130" y="378" text-anchor="middle" class="text-api">cache.clear()</text>
-  <text x="130" y="393" text-anchor="middle" class="text-small">缓存时间管理</text>
-
-  <!-- Plugin 2: Retry -->
-  <rect x="230" y="280" width="160" height="130" class="box-plugin" rx="5"/>
-  <text x="310" y="305" text-anchor="middle" class="text-label">重试插件</text>
-  <text x="310" y="320" text-anchor="middle" class="text-small">Retry Plugin</text>
-  <line x1="240" y1="330" x2="380" y2="330" stroke="#ccc" stroke-width="1"/>
-  <text x="310" y="348" text-anchor="middle" class="text-api">retry(maxTimes)</text>
-  <text x="310" y="363" text-anchor="middle" class="text-api">backoff(times)</text>
-  <text x="310" y="378" text-anchor="middle" class="text-api">onRetry(fn)</text>
-  <text x="310" y="393" text-anchor="middle" class="text-small">指数退避策略</text>
-
-  <!-- Plugin 3: Share -->
-  <rect x="410" y="280" width="160" height="130" class="box-plugin" rx="5"/>
-  <text x="490" y="305" text-anchor="middle" class="text-label">去重插件</text>
-  <text x="490" y="320" text-anchor="middle" class="text-small">Share Plugin</text>
-  <line x1="420" y1="330" x2="560" y2="330" stroke="#ccc" stroke-width="1"/>
-  <text x="490" y="348" text-anchor="middle" class="text-api">normalize(config)</text>
-  <text x="490" y="363" text-anchor="middle" class="text-api">share(key)</text>
-  <text x="490" y="378" text-anchor="middle" class="text-api">dedup(promise)</text>
-  <text x="490" y="393" text-anchor="middle" class="text-small">请求去重管理</text>
-
-  <!-- Plugin 4: Auth -->
-  <rect x="590" y="280" width="160" height="130" class="box-plugin" rx="5"/>
-  <text x="670" y="305" text-anchor="middle" class="text-label">认证插件</text>
-  <text x="670" y="320" text-anchor="middle" class="text-small">Auth Plugin</text>
-  <line x1="600" y1="330" x2="740" y2="330" stroke="#ccc" stroke-width="1"/>
-  <text x="670" y="348" text-anchor="middle" class="text-api">setToken(token)</text>
-  <text x="670" y="363" text-anchor="middle" class="text-api">refreshToken()</text>
-  <text x="670" y="378" text-anchor="middle" class="text-api">injectAuth(header)</text>
-  <text x="670" y="393" text-anchor="middle" class="text-small">Token 自动刷新</text>
-
-  <!-- Plugin 5: Cancel -->
-  <rect x="770" y="280" width="160" height="130" class="box-plugin" rx="5"/>
-  <text x="850" y="305" text-anchor="middle" class="text-label">取消插件</text>
-  <text x="850" y="320" text-anchor="middle" class="text-small">Cancel Plugin</text>
-  <line x1="780" y1="330" x2="920" y2="330" stroke="#ccc" stroke-width="1"/>
-  <text x="850" y="348" text-anchor="middle" class="text-api">abort(requestId)</text>
-  <text x="850" y="363" text-anchor="middle" class="text-api">timeout(ms)</text>
-  <text x="850" y="378" text-anchor="middle" class="text-api">abortController</text>
-  <text x="850" y="393" text-anchor="middle" class="text-small">请求取消管理</text>
-
-  <!-- Plugin 6: Loading -->
-  <rect x="950" y="280" width="160" height="130" class="box-plugin" rx="5"/>
-  <text x="1030" y="305" text-anchor="middle" class="text-label">加载插件</text>
-  <text x="1030" y="320" text-anchor="middle" class="text-small">Loading Plugin</text>
-  <line x1="960" y1="330" x2="1100" y2="330" stroke="#ccc" stroke-width="1"/>
-  <text x="1030" y="348" text-anchor="middle" class="text-api">setLoading(bool)</text>
-  <text x="1030" y="363" text-anchor="middle" class="text-api">getLoading()</text>
-  <text x="1030" y="378" text-anchor="middle" class="text-api">subscribe(fn)</text>
-  <text x="1030" y="393" text-anchor="middle" class="text-small">全局加载状态</text>
-
-  <!-- Plugin 7: Mock -->
-  <rect x="1130" y="280" width="160" height="130" class="box-plugin" rx="5"/>
-  <text x="1210" y="305" text-anchor="middle" class="text-label">Mock 插件</text>
-  <text x="1210" y="320" text-anchor="middle" class="text-small">Mock Plugin</text>
-  <line x1="1140" y1="330" x2="1280" y2="330" stroke="#ccc" stroke-width="1"/>
-  <text x="1210" y="348" text-anchor="middle" class="text-api">mock(url, data)</text>
-  <text x="1210" y="363" text-anchor="middle" class="text-api">mockList: {}</text>
-  <text x="1210" y="378" text-anchor="middle" class="text-api">disable/enable()</text>
-  <text x="1210" y="393" text-anchor="middle" class="text-small">模拟数据管理</text>
-
-  <!-- 所有插件的箭头到Axios -->
-  <path d="M 130 410 L 420 480" class="arrow-small"/>
-  <path d="M 310 410 L 420 480" class="arrow-small"/>
-  <path d="M 490 410 L 420 480" class="arrow-small"/>
-  <path d="M 670 410 L 420 480" class="arrow-small"/>
-  <path d="M 850 410 L 420 480" class="arrow-small"/>
-  <path d="M 1030 410 L 420 480" class="arrow-small"/>
-  <path d="M 1210 410 L 420 480" class="arrow-small"/>
-
-  <!-- ===== 第四层：拦截器 ===== -->
-  <rect x="300" y="480" width="240" height="110" class="box-api" rx="8"/>
-  <text x="420" y="510" text-anchor="middle" class="text-title">请求/响应拦截器</text>
-  <text x="420" y="530" text-anchor="middle" class="text-label">Request/Response Interceptors</text>
-  <line x1="310" y1="540" x2="530" y2="540" stroke="#999" stroke-width="1"/>
-  <text x="350" y="558" text-anchor="middle" class="text-api">onRequest(fn)</text>
-  <text x="490" y="558" text-anchor="middle" class="text-api">onResponse(fn)</text>
-  <text x="350" y="575" text-anchor="middle" class="text-api">onError(fn)</text>
-  <text x="490" y="575" text-anchor="middle" class="text-api">onComplete(fn)</text>
-
-  <!-- 箭头到Axios -->
-  <path d="M 420 480 L 420 620" class="arrow"/>
-
-  <!-- ===== 第五层：Axios 实例 ===== -->
-  <rect x="300" y="620" width="240" height="110" class="box" rx="8"/>
-  <text x="420" y="650" text-anchor="middle" class="text-title">Axios 实例</text>
-  <text x="420" y="670" text-anchor="middle" class="text-label">Axios Instance</text>
-  <line x1="310" y1="680" x2="530" y2="680" stroke="#999" stroke-width="1"/>
-  <text x="420" y="698" text-anchor="middle" class="text-api">axios.get/post/request</text>
-  <text x="420" y="715" text-anchor="middle" class="text-api">创建标准 HTTP 请求</text>
-
-  <!-- ===== 右侧：网络通信 ===== -->
-  <!-- 箭头向右 -->
-  <path d="M 650 675 L 750 675" class="arrow"/>
-  <text x="690" y="660" class="arrow-label">HTTP 请求</text>
-
-  <!-- 网络 -->
-  <rect x="750" y="620" width="240" height="110" class="box" rx="8"/>
-  <text x="870" y="650" text-anchor="middle" class="text-title">网络通信</text>
-  <text x="870" y="670" text-anchor="middle" class="text-label">Network Request</text>
-  <line x1="760" y1="680" x2="980" y2="680" stroke="#999" stroke-width="1"/>
-  <text x="870" y="698" text-anchor="middle" class="text-api">GET/POST/PUT/DELETE</text>
-  <text x="870" y="715" text-anchor="middle" class="text-api">HTTP/REST API</text>
-
-  <!-- 箭头返回 -->
-  <path d="M 750 750 L 650 750" class="arrow"/>
-  <text x="690" y="740" class="arrow-label">HTTP 响应</text>
-
-  <!-- 响应处理 -->
-  <rect x="300" y="760" width="240" height="110" class="box-api" rx="8"/>
-  <text x="420" y="790" text-anchor="middle" class="text-title">响应处理</text>
-  <text x="420" y="810" text-anchor="middle" class="text-label">Response Processing</text>
-  <line x1="310" y1="820" x2="530" y2="820" stroke="#999" stroke-width="1"/>
-  <text x="420" y="838" text-anchor="middle" class="text-api">parseResponse(data)</text>
-  <text x="420" y="855" text-anchor="middle" class="text-api">transformData(value)</text>
-
-  <!-- 箭头向右 -->
-  <path d="M 650 815 L 750 815" class="arrow"/>
-
-  <!-- 最终应用 -->
-  <rect x="750" y="760" width="240" height="110" class="box" rx="8"/>
-  <text x="870" y="790" text-anchor="middle" class="text-title">应用接收</text>
-  <text x="870" y="810" text-anchor="middle" class="text-label">App Response</text>
-  <line x1="760" y1="820" x2="980" y2="820" stroke="#999" stroke-width="1"/>
-  <text x="870" y="838" text-anchor="middle" class="text-api">Promise[T]</text>
-  <text x="870" y="855" text-anchor="middle" class="text-api">类型安全数据</text>
-
-  <!-- 底部说明 -->
-  <rect x="50" y="900" width="1300" height="40" fill="none" stroke="#ccc" stroke-width="1" rx="5"/>
-  <text x="60" y="925" class="text-small" font-weight="bold">完整流程：应用调用 → AXP 核心 → 7 个插件并行处理 → 拦截器链 → Axios 执行 → 网络通信 → 响应拦截 → 返回类型化数据</text>
-</svg>
+<svg xmlns="http://www.w3.org/2000/svg" class="axp" viewBox="0 0 1840 5545" width="1840" height="5545" role="img" aria-label="@codejoo/axp 架构图"><style>
+.axp{--bg:#f7f8fa;--fg:#1f2430;--fg2:#525a6b;--fg3:#7a8294;--line:#d5d9e2;--card:#ffffff;--code:#eef1f6;--codefg:#243044;
+--outer:#7a55c9;--prepare:#1f8a7d;--attempt:#d4741a;--credential:#c13a5a;--source:#2c6bd3;--kernel:#59627a;
+--f-outer:#efe9fb;--f-prepare:#e3f4f1;--f-attempt:#fcefdf;--f-credential:#fbe6eb;--f-source:#e4edfb;--f-kernel:#eceff4}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]) .axp{--bg:#14171f;--fg:#e6e9f0;--fg2:#aab2c3;--fg3:#7f889b;--line:#323a4b;--card:#1b202b;--code:#10131a;--codefg:#d3dbea;
+--outer:#a98bf0;--prepare:#4fc4b4;--attempt:#f0a057;--credential:#f0728f;--source:#6f9cf2;--kernel:#9aa4bc;
+--f-outer:#241d38;--f-prepare:#16302d;--f-attempt:#352414;--f-credential:#371b24;--f-source:#172640;--f-kernel:#232836}}
+:root[data-theme="dark"] .axp{--bg:#14171f;--fg:#e6e9f0;--fg2:#aab2c3;--fg3:#7f889b;--line:#323a4b;--card:#1b202b;--code:#10131a;--codefg:#d3dbea;
+--outer:#a98bf0;--prepare:#4fc4b4;--attempt:#f0a057;--credential:#f0728f;--source:#6f9cf2;--kernel:#9aa4bc;
+--f-outer:#241d38;--f-prepare:#16302d;--f-attempt:#352414;--f-credential:#371b24;--f-source:#172640;--f-kernel:#232836}
+.axp text{font-family:"PingFang SC","Microsoft YaHei","Noto Sans SC",system-ui,sans-serif}
+.bg{fill:var(--bg)}
+.h1{font-size:30px;font-weight:700;fill:var(--fg)}
+.h2{font-size:22px;font-weight:700;fill:var(--fg)}
+.sub{font-size:14px;fill:var(--fg2)}
+.legend{font-size:13px;fill:var(--fg)}
+.legend-d{font-size:12.5px;fill:var(--fg3)}
+.cap{font-size:12.5px;font-weight:700;fill:var(--fg2);letter-spacing:.3px}
+.body{font-size:12.5px;fill:var(--fg)}
+.body-b{font-size:12.5px;font-weight:700;fill:var(--fg)}
+.body-s{font-size:12px;fill:var(--fg2)}
+.out{font-size:12px;fill:var(--fg2);font-weight:600}
+.ctitle{font-size:14px;font-weight:700;fill:#fff}
+.ctag{font-size:12px;fill:#fff;opacity:.92}
+.lvt{font-size:14px;font-weight:700}
+.chipt{font-size:13px;font-family:Consolas,"SF Mono",monospace!important;fill:var(--fg)}
+.mono-b{font-size:11.5px;font-family:Consolas,"SF Mono",monospace!important;font-weight:700;fill:var(--fg)}
+.mono-d{font-size:11.5px;font-family:Consolas,"SF Mono",monospace!important;fill:var(--fg3)}
+.code{font-size:11.5px;font-family:Consolas,"SF Mono","Courier New",monospace!important;fill:var(--codefg);white-space:pre}
+.codebg{fill:var(--code)}
+.hair{stroke:var(--line);stroke-width:1}
+.hair2{stroke:var(--line);stroke-width:1.5}
+.arrow{stroke:var(--fg3);stroke-width:1.6;fill:none;marker-end:url(#ah)}
+.arrow-thick{stroke:var(--fg2);stroke-width:2.4;fill:none;marker-end:url(#ah2)}
+.arrow-thick-r{stroke:var(--fg2);stroke-width:2.4;fill:none;marker-end:url(#ah2);stroke-dasharray:7 5}
+#ah path,#ah2 path{fill:var(--fg3)}
+.card{fill:var(--card);stroke-width:1.5}
+.lvl{stroke-width:1.6}.chip{stroke-width:1.2}.transport{fill:var(--f-kernel);stroke:var(--kernel);stroke-width:2}
+.step{stroke-width:1.2}.ask{stroke-width:1.6}.endbox{fill:var(--f-kernel);stroke:var(--kernel);stroke-width:1.2}
+.thead{fill:var(--f-kernel)}
+.trow{stroke-width:0}
+.c-outer{stroke:var(--outer)}.lvl.c-outer,.chip.c-outer,.step.c-outer,.trow.c-outer{fill:var(--f-outer)}.ask.c-outer{fill:var(--f-outer);stroke-dasharray:5 3}.head-outer{fill:var(--outer)}.sw-outer{fill:var(--outer)}.dot-outer{fill:var(--outer)}.t-outer{fill:var(--outer)}
+.c-prepare{stroke:var(--prepare)}.lvl.c-prepare,.chip.c-prepare,.step.c-prepare,.trow.c-prepare{fill:var(--f-prepare)}.ask.c-prepare{fill:var(--f-prepare);stroke-dasharray:5 3}.head-prepare{fill:var(--prepare)}.sw-prepare{fill:var(--prepare)}.dot-prepare{fill:var(--prepare)}.t-prepare{fill:var(--prepare)}
+.c-attempt{stroke:var(--attempt)}.lvl.c-attempt,.chip.c-attempt,.step.c-attempt,.trow.c-attempt{fill:var(--f-attempt)}.ask.c-attempt{fill:var(--f-attempt);stroke-dasharray:5 3}.head-attempt{fill:var(--attempt)}.sw-attempt{fill:var(--attempt)}.dot-attempt{fill:var(--attempt)}.t-attempt{fill:var(--attempt)}
+.c-credential{stroke:var(--credential)}.lvl.c-credential,.chip.c-credential,.step.c-credential,.trow.c-credential{fill:var(--f-credential)}.ask.c-credential{fill:var(--f-credential);stroke-dasharray:5 3}.head-credential{fill:var(--credential)}.sw-credential{fill:var(--credential)}.dot-credential{fill:var(--credential)}.t-credential{fill:var(--credential)}
+.c-source{stroke:var(--source)}.lvl.c-source,.chip.c-source,.step.c-source,.trow.c-source{fill:var(--f-source)}.ask.c-source{fill:var(--f-source);stroke-dasharray:5 3}.head-source{fill:var(--source)}.sw-source{fill:var(--source)}.dot-source{fill:var(--source)}.t-source{fill:var(--source)}
+.c-kernel{stroke:var(--kernel)}.lvl.c-kernel,.chip.c-kernel,.step.c-kernel,.trow.c-kernel{fill:var(--f-kernel)}.ask.c-kernel{fill:var(--f-kernel);stroke-dasharray:5 3}.head-kernel{fill:var(--kernel)}.sw-kernel{fill:var(--kernel)}.dot-kernel{fill:var(--kernel)}.t-kernel{fill:var(--kernel)}
+.card.c-kernel,.card.c-outer,.card.c-prepare,.card.c-attempt,.card.c-credential,.card.c-source{fill:var(--card)}
+</style><defs><marker id="ah" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z"/></marker><marker id="ah2" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="9" markerHeight="9" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z"/></marker></defs><rect class="bg" width="1840" height="5545"/><text x="40" y="52" class="h1">@codejoo/axp 架构图</text>
+<text x="40" y="80" class="sub">基于 axios 的插件化 HTTP 客户端：一次调用 = 一个逻辑请求，穿过 5 个阶段的洋葱管线，最里层才真正发请求。读完这张图，就能知道每个模块做什么、什么顺序跑、有哪些参数可调。</text>
+<rect x="40" y="100" width="16" height="16" rx="4" class="sw-outer"/>
+<text x="64" y="113" class="legend">outer 外层</text>
+<rect x="169.68" y="100" width="16" height="16" rx="4" class="sw-prepare"/>
+<text x="193.68" y="113" class="legend">prepare 准备</text>
+<rect x="313.92" y="100" width="16" height="16" rx="4" class="sw-attempt"/>
+<text x="337.92" y="113" class="legend">attempt 尝试</text>
+<rect x="458.16" y="100" width="16" height="16" rx="4" class="sw-credential"/>
+<text x="482.16" y="113" class="legend">credential 凭证</text>
+<rect x="624.24" y="100" width="16" height="16" rx="4" class="sw-source"/>
+<text x="648.24" y="113" class="legend">source 来源</text>
+<rect x="761.2" y="100" width="16" height="16" rx="4" class="sw-kernel"/>
+<text x="785.2" y="113" class="legend">kernel 内核</text>
+<text x="908.1600000000001" y="113" class="legend-d">颜色 = 所属阶段；整张图中同色即同阶段</text>
+<text x="40" y="176" class="h2">一、一次调用的完整旅程</text>
+<text x="298" y="176" class="sub">api.get('/pet/{id}')({ id: 1 }, opts) 发生了什么</text>
+<line x1="40" x2="1800" y1="190" y2="190" class="hair2"/>
+<rect x="40" y="212" width="268.3333333333333" height="145" rx="10" class="card c-kernel"/>
+<path d="M40 246 V222 a10 10 0 0 1 10 -10 H298.3333333333333 a10 10 0 0 1 10 10 V246 Z" class="head-kernel"/>
+<text x="54" y="235" class="ctitle">1 合并请求</text>
+<text x="54" y="268" class="body">path、payload、方法级配置、调用级配置</text><text x="54" y="285" class="body">浅合并（方法级 &lt; payload &lt; 调用级），</text><text x="54" y="302" class="body">再用 axios 的 mergeConfig 并入实例</text><text x="54" y="319" class="body">defaults，补小写 method、展平默认头。</text><text x="54" y="336" class="body">各层看到的都是最终生效的配置。</text>
+<path d="M312.3333333333333 284.5 H334.3333333333333" class="arrow"/>
+<rect x="338.3333333333333" y="212" width="268.3333333333333" height="145" rx="10" class="card c-kernel"/>
+<path d="M338.3333333333333 246 V222 a10 10 0 0 1 10 -10 H596.6666666666666 a10 10 0 0 1 10 10 V246 Z" class="head-kernel"/>
+<text x="352.3333333333333" y="235" class="ctitle">2 建上下文</text>
+<text x="352.3333333333333" y="268" class="body">分配逻辑请求 id；建 AbortController</text><text x="352.3333333333333" y="285" class="body">并与用户传入的 signal 联动；登记到在</text><text x="352.3333333333333" y="302" class="body">途集合（cancelAll() / pending() 用）。</text><text x="352.3333333333333" y="319" class="body">ctx 里带 request、signal、log、</text><text x="352.3333333333333" y="336" class="body">key()、get/set 状态、fail()。</text>
+<path d="M610.6666666666666 284.5 H632.6666666666666" class="arrow"/>
+<rect x="636.6666666666666" y="212" width="268.3333333333333" height="145" rx="10" class="card c-kernel"/>
+<path d="M636.6666666666666 246 V222 a10 10 0 0 1 10 -10 H895 a10 10 0 0 1 10 10 V246 Z" class="head-kernel"/>
+<text x="650.6666666666666" y="235" class="ctitle">3 穿链</text>
+<text x="650.6666666666666" y="268" class="body">按编译好的链从外到内执行中间件 (ctx,</text><text x="650.6666666666666" y="285" class="body">next) =&gt; Promise&lt;R&gt;。中间件不改</text><text x="650.6666666666666" y="302" class="body">ctx.request，要给内层换请求就</text><text x="650.6666666666666" y="319" class="body">next(patch)；重试、鉴权重放就是“再调</text><text x="650.6666666666666" y="336" class="body">一次 next()”。</text>
+<path d="M909 284.5 H931" class="arrow"/>
+<rect x="935" y="212" width="268.3333333333333" height="145" rx="10" class="card c-kernel"/>
+<path d="M935 246 V222 a10 10 0 0 1 10 -10 H1193.3333333333333 a10 10 0 0 1 10 10 V246 Z" class="head-kernel"/>
+<text x="949" y="235" class="ctitle">4 到传输层</text>
+<text x="949" y="268" class="body">调用用户的 axios 实例 request（实例</text><text x="949" y="285" class="body">拦截器照常执行），强制</text><text x="949" y="302" class="body">validateStatus 恒为真，所以 4xx/5xx</text><text x="949" y="319" class="body">也当普通响应。请求体不克隆，debug 下</text><text x="949" y="336" class="body">比对指纹，被原地修改会告警。</text>
+<path d="M1207.3333333333333 284.5 H1229.3333333333333" class="arrow"/>
+<rect x="1233.3333333333333" y="212" width="268.3333333333333" height="145" rx="10" class="card c-kernel"/>
+<path d="M1233.3333333333333 246 V222 a10 10 0 0 1 10 -10 H1491.6666666666665 a10 10 0 0 1 10 10 V246 Z" class="head-kernel"/>
+<text x="1247.3333333333333" y="235" class="ctitle">5 判定回流</text>
+<text x="1247.3333333333333" y="268" class="body">响应工厂把响应或异常判成统一的 R（ok</text><text x="1247.3333333333333" y="285" class="body">/ status / code / data），打品牌、</text><text x="1247.3333333333333" y="302" class="body">写入内核失败标记。next() 永远不抛错，</text><text x="1247.3333333333333" y="319" class="body">R 沿原路从里往外回，每层都能读、能换、</text><text x="1247.3333333333333" y="336" class="body">能再调 next()。</text>
+<path d="M1505.6666666666665 284.5 H1527.6666666666665" class="arrow"/>
+<rect x="1531.6666666666665" y="212" width="268.3333333333333" height="145" rx="10" class="card c-kernel"/>
+<path d="M1531.6666666666665 246 V222 a10 10 0 0 1 10 -10 H1789.9999999999998 a10 10 0 0 1 10 10 V246 Z" class="head-kernel"/>
+<text x="1545.6666666666665" y="235" class="ctitle">6 落定 settle</text>
+<text x="1545.6666666666665" y="268" class="body">最外层注销在途、解除监听，再决定出口：</text><text x="1545.6666666666665" y="285" class="body">成功 → 返回 data；可预期的失败 →</text><text x="1545.6666666666665" y="302" class="body">throw R；程序 bug → 抛原始异常（保</text><text x="1545.6666666666665" y="319" class="body">留完整 stack）。wrap / throws / raw</text><text x="1545.6666666666665" y="336" class="body">可改变出口形态。</text>
+<rect x="40" y="375" width="900" height="327" rx="10" class="card c-kernel"/>
+<text x="54" y="397" class="cap">快速上手：装插件只需把工厂函数放进 plugins，顺序由阶段决定，不用手排</text>
+<rect x="52" y="407" width="876" height="266" rx="6" class="codebg"/>
+<text x="64" y="427" class="code">import { createAxp, axpRepath, axpRetry, axpAuth, axpCache, TokenManager } from "@codejoo/axp";</text>
+<text x="64" y="443" class="code"></text>
+<text x="64" y="459" class="code">const api = createAxp&lt;Schema&gt;({</text>
+<text x="64" y="475" class="code">  axios: axios.create({ baseURL: "/api" }),</text>
+<text x="64" y="491" class="code">  plugins: [</text>
+<text x="64" y="507" class="code">    axpRepath(),                    // 替换路径里的 {id}</text>
+<text x="64" y="523" class="code">    axpRetry({ max: 2 }),           // 失败自动重试</text>
+<text x="64" y="539" class="code">    axpAuth({ tokenManager: new TokenManager(),</text>
+<text x="64" y="555" class="code">      onRefresh: (r, tm) =&gt; refreshToken(tm),   // 返回 false 或抛错 = 刷新失败</text>
+<text x="64" y="571" class="code">      onAccessExpired: () =&gt; redirectToLogin() }),</text>
+<text x="64" y="587" class="code">    axpCache({ expires: 30_000 }),  // 缓存默认不开，按请求 { cache: true } 开启</text>
+<text x="64" y="603" class="code">  ],</text>
+<text x="64" y="619" class="code">});</text>
+<text x="64" y="635" class="code">const pet  = await api.get("/pet/{id}")({ id: 1 });                      // 成功直接得到 data</text>
+<text x="64" y="651" class="code">const list = await api.get("/pet/findByStatus")({ status: "x" }, { cache: true });</text>
+<rect x="970" y="375" width="830" height="327" rx="10" class="card c-kernel"/>
+<text x="984" y="397" class="cap">三条贯穿全局的规则</text>
+<circle cx="990" cy="423" r="3" class="dot-kernel"/>
+<text x="1002" y="427" class="body">请求从外往里走，R 从里往外回。每一层都能读它、换掉它，或再调一次 next()。</text>
+<circle cx="990" cy="448" r="3" class="dot-kernel"/>
+<text x="1002" y="452" class="body">next() 从不抛错，链路里只流转 R 这一种对象。取消、超时、网络、解析、鉴权、程序 bug 都由内核打上失败标记。</text>
+<circle cx="990" cy="473" r="3" class="dot-kernel"/>
+<text x="1002" y="477" class="body">程序 bug 不伪装成请求失败：中间件或用户回调抛出的非 axios 异常，链内临时包成 internal，落定时原样抛出，throws:false 也吞</text><text x="1002" y="494" class="body">不掉。</text>
+<circle cx="990" cy="515" r="3" class="dot-kernel"/>
+<text x="1002" y="519" class="body">状态建在插件 setup 里，同一个插件对象可装到多个客户端，extend() 出的子客户端各自独立或按资源共享。</text>
+<text x="984" y="550" class="cap">返回形态：由三个请求级开关 wrap / throws / raw 决定（都没有客户端级默认值）</text>
+<line x1="984" x2="1786" y1="564" y2="564" class="hair"/>
+<text x="984" y="581" class="cap">调用</text>
+<text x="1134" y="581" class="cap">成功</text>
+<text x="1384" y="581" class="cap">失败</text>
+<line x1="984" x2="1786" y1="590" y2="590" class="hair"/>
+<text x="984" y="607" class="mono-b">默认</text>
+<text x="1134" y="607" class="body-s">返回 data</text>
+<text x="1384" y="607" class="body-s">throw r（r 是 IAxpResponse）</text>
+<line x1="984" x2="1786" y1="616" y2="616" class="hair"/>
+<text x="984" y="633" class="mono-b">{ wrap: true }</text>
+<text x="1134" y="633" class="body-s">返回 WithData&lt;R, D&gt;，和响应同形</text>
+<text x="1384" y="633" class="body-s">同上，抛出</text>
+<line x1="984" x2="1786" y1="642" y2="642" class="hair"/>
+<text x="984" y="659" class="mono-b">{ throws: false }</text>
+<text x="1134" y="659" class="body-s">返回 AxpResult，按 ok 区分的联合</text>
+<text x="1384" y="659" class="body-s">不抛，resolve 出 ok:false 分支</text>
+<line x1="984" x2="1786" y1="668" y2="668" class="hair"/>
+<text x="984" y="685" class="mono-b">{ raw: true }</text>
+<text x="1134" y="685" class="body-s">wrap 形态副本 + raw / error / request</text>
+<text x="1384" y="685" class="body-s">同一份副本，抛出</text>
+<text x="40" y="772" class="h2">二、洋葱管线与执行顺序</text>
+<text x="298" y="772" class="sub">阶段固定；同阶段内：自定义 pre → 内置插件（固定次序）→ 自定义 post</text>
+<line x1="40" x2="1800" y1="786" y2="786" class="hair2"/>
+<rect x="40" y="808" width="940" height="692" rx="14" class="lvl c-kernel"/>
+<text x="58" y="832" class="lvt t-kernel">settle 落定（内核）</text>
+<text x="210.88" y="832" class="legend-d">每个逻辑请求一次：R → data | 抛 R | 抛原始异常</text>
+<rect x="66" y="886" width="888" height="588" rx="14" class="lvl c-outer"/>
+<text x="84" y="910" class="lvt t-outer">outer 外层</text>
+<text x="173.04000000000002" y="910" class="legend-d">整个逻辑请求进出一次，看到最终的 R</text>
+<rect x="84" y="920" width="133.2" height="24" rx="12" class="chip c-outer"/>
+<text x="96" y="937" class="chipt">1  axp:loading</text>
+<rect x="227.2" y="920" width="125.39999999999998" height="24" rx="12" class="chip c-outer"/>
+<text x="239.2" y="937" class="chipt">2  axp:notify</text>
+<rect x="92" y="964" width="836" height="484" rx="14" class="lvl c-prepare"/>
+<text x="110" y="988" class="lvt t-prepare">prepare 准备</text>
+<text x="214.72000000000003" y="988" class="legend-d">请求整形，只跑一次</text>
+<rect x="110" y="998" width="125.39999999999998" height="24" rx="12" class="chip c-prepare"/>
+<text x="122" y="1015" class="chipt">3  axp:repath</text>
+<rect x="245.39999999999998" y="998" width="125.39999999999998" height="24" rx="12" class="chip c-prepare"/>
+<text x="257.4" y="1015" class="chipt">4  axp:filter</text>
+<rect x="118" y="1042" width="784" height="380" rx="14" class="lvl c-attempt"/>
+<text x="136" y="1066" class="lvt t-attempt">attempt 尝试（自定义插件默认阶段）</text>
+<text x="394.72" y="1066" class="legend-d">重试边界：retry 以内的层每次尝试都重跑</text>
+<rect x="136" y="1076" width="117.59999999999998" height="24" rx="12" class="chip c-attempt"/>
+<text x="148" y="1093" class="chipt">5  axp:retry</text>
+<rect x="144" y="1120" width="732" height="276" rx="14" class="lvl c-credential"/>
+<text x="162" y="1144" class="lvt t-credential">credential 凭证</text>
+<text x="290.24" y="1144" class="legend-d">每次尝试注入 token，401 刷新后重放</text>
+<rect x="162" y="1154" width="109.79999999999998" height="24" rx="12" class="chip c-credential"/>
+<text x="174" y="1171" class="chipt">6  axp:auth</text>
+<rect x="170" y="1198" width="680" height="172" rx="14" class="lvl c-source"/>
+<text x="188" y="1222" class="lvt t-source">source 来源</text>
+<text x="284.88" y="1222" class="legend-d">结果来源，可短路不触网</text>
+<rect x="188" y="1232" width="109.79999999999998" height="24" rx="12" class="chip c-source"/>
+<text x="200" y="1249" class="chipt">7  axp:mock</text>
+<rect x="307.79999999999995" y="1232" width="117.59999999999998" height="24" rx="12" class="chip c-source"/>
+<text x="319.79999999999995" y="1249" class="chipt">8  axp:share</text>
+<rect x="435.3999999999999" y="1232" width="117.59999999999998" height="24" rx="12" class="chip c-source"/>
+<text x="447.3999999999999" y="1249" class="chipt">9  axp:cache</text>
+<rect x="196" y="1276" width="628" height="68" rx="12" class="transport"/>
+<text x="214" y="1302" class="lvt t-kernel">transport 传输（内核）  axios.request → 判定成 R，打品牌</text>
+<text x="214" y="1326" class="legend-d">validateStatus 恒真；用户的 axios 拦截器照常执行；这里是整条链唯一真正联网的地方</text>
+<path d="M994 818 V1306" class="arrow-thick"/>
+<text x="1004" y="838" class="legend">请求去程</text>
+<text x="1004" y="856" class="legend-d">从外到内</text>
+<path d="M994 1326 V818" class="arrow-thick-r"/>
+<rect x="1064" y="808" width="736" height="30" rx="6" class="thead"/>
+<text x="1072" y="828" class="cap">序</text>
+<text x="1106" y="828" class="cap">插件</text>
+<text x="1202" y="828" class="cap">去程做什么</text>
+<text x="1428" y="828" class="cap">回程做什么</text>
+<text x="1654" y="828" class="cap">能否短路</text>
+<rect x="1064" y="842" width="736" height="44" rx="4" class="trow c-outer"/>
+<rect x="1064" y="842" width="5" height="44" class="sw-outer"/>
+<text x="1076" y="861" class="mono-b">1</text>
+<text x="1106" y="861" class="mono-b">loading</text>
+<text x="1202" y="860" class="body-s">计数 +1，必要时延迟后显示 loading</text>
+<text x="1428" y="860" class="body-s">finally 里计数 −1，归零后（可延迟）</text><text x="1428" y="876" class="body-s">隐藏</text>
+<text x="1654" y="860" class="body-s">否</text>
+<rect x="1064" y="890" width="736" height="44" rx="4" class="trow c-outer"/>
+<rect x="1064" y="890" width="5" height="44" class="sw-outer"/>
+<text x="1076" y="909" class="mono-b">2</text>
+<text x="1106" y="909" class="mono-b">notify</text>
+<text x="1202" y="908" class="body-s">直接放行</text>
+<text x="1428" y="908" class="body-s">失败且非 silent：stringify 出文案，</text><text x="1428" y="924" class="body-s">调用 notify 弹一次</text>
+<text x="1654" y="908" class="body-s">否</text>
+<rect x="1064" y="938" width="736" height="44" rx="4" class="trow c-prepare"/>
+<rect x="1064" y="938" width="5" height="44" class="sw-prepare"/>
+<text x="1076" y="957" class="mono-b">3</text>
+<text x="1106" y="957" class="mono-b">repath</text>
+<text x="1202" y="956" class="body-s">把 {id} / :id / [id] 换成真实值，</text><text x="1202" y="972" class="body-s">next({ url, params, data })</text>
+<text x="1428" y="956" class="body-s">原样返回</text>
+<text x="1654" y="956" class="body-s">否</text>
+<rect x="1064" y="986" width="736" height="44" rx="4" class="trow c-prepare"/>
+<rect x="1064" y="986" width="5" height="44" class="sw-prepare"/>
+<text x="1076" y="1005" class="mono-b">4</text>
+<text x="1106" y="1005" class="mono-b">filter</text>
+<text x="1202" y="1004" class="body-s">剥掉 params / data 里的空字段，用</text><text x="1202" y="1020" class="body-s">patch 交内层</text>
+<text x="1428" y="1004" class="body-s">原样返回</text>
+<text x="1654" y="1004" class="body-s">否</text>
+<rect x="1064" y="1034" width="736" height="44" rx="4" class="trow c-attempt"/>
+<rect x="1064" y="1034" width="5" height="44" class="sw-attempt"/>
+<text x="1076" y="1053" class="mono-b">5</text>
+<text x="1106" y="1053" class="mono-b">retry</text>
+<text x="1202" y="1052" class="body-s">markReplayable，首发 next()</text>
+<text x="1428" y="1052" class="body-s">判定要重试 → 等退避 → 再 next()；</text><text x="1428" y="1068" class="body-s">用尽返回最后一个 R</text>
+<text x="1654" y="1052" class="body-s">否，但会多次调内层</text>
+<rect x="1064" y="1082" width="736" height="44" rx="4" class="trow c-credential"/>
+<rect x="1064" y="1082" width="5" height="44" class="sw-credential"/>
+<text x="1076" y="1101" class="mono-b">6</text>
+<text x="1106" y="1101" class="mono-b">auth</text>
+<text x="1202" y="1100" class="body-s">受保护则 ready() 注入</text><text x="1202" y="1116" class="body-s">Authorization，next(patch)</text>
+<text x="1428" y="1100" class="body-s">401 / 403 交 onFailure：刷新、重</text><text x="1428" y="1116" class="body-s">放、拒绝、过期、放过</text>
+<text x="1654" y="1100" class="body-s">是：本地无 token 直接</text><text x="1654" y="1116" class="body-s">拒绝</text>
+<rect x="1064" y="1130" width="736" height="44" rx="4" class="trow c-source"/>
+<rect x="1064" y="1130" width="5" height="44" class="sw-source"/>
+<text x="1076" y="1149" class="mono-b">7</text>
+<text x="1106" y="1149" class="mono-b">mock</text>
+<text x="1202" y="1148" class="body-s">开启时把 url 改写到 mockUrl 探测</text><text x="1202" y="1164" class="body-s">（不写缓存、不占共享）</text>
+<text x="1428" y="1148" class="body-s">fallbackWhen 为真（默认 404 / 网</text><text x="1428" y="1164" class="body-s">络失败）回落真实接口</text>
+<text x="1654" y="1148" class="body-s">是：探测成功即返回</text>
+<rect x="1064" y="1178" width="736" height="44" rx="4" class="trow c-source"/>
+<rect x="1064" y="1178" width="5" height="44" class="sw-source"/>
+<text x="1076" y="1197" class="mono-b">8</text>
+<text x="1106" y="1197" class="mono-b">share</text>
+<text x="1202" y="1196" class="body-s">同 key 已有在途请求 → 当跟随者，</text><text x="1202" y="1212" class="body-s">不发请求</text>
+<text x="1428" y="1196" class="body-s">首发结果分发给全部跟随者，各自可独</text><text x="1428" y="1212" class="body-s">立取消</text>
+<text x="1654" y="1196" class="body-s">是：跟随者不触网</text>
+<rect x="1064" y="1226" width="736" height="44" rx="4" class="trow c-source"/>
+<rect x="1064" y="1226" width="5" height="44" class="sw-source"/>
+<text x="1076" y="1245" class="mono-b">9</text>
+<text x="1106" y="1245" class="mono-b">cache</text>
+<text x="1202" y="1244" class="body-s">命中快照 → 用响应工厂重建新 R 直</text><text x="1202" y="1260" class="body-s">接返回</text>
+<text x="1428" y="1244" class="body-s">未命中且通过 shouldCache → 写入</text><text x="1428" y="1260" class="body-s">（旧响应不覆盖新结果）</text>
+<text x="1654" y="1244" class="body-s">是：命中不触网</text>
+<rect x="1064" y="1274" width="736" height="28" rx="4" class="trow c-kernel"/>
+<rect x="1064" y="1274" width="5" height="28" class="sw-kernel"/>
+<text x="1076" y="1293" class="mono-b">10</text>
+<text x="1106" y="1293" class="mono-b">transport</text>
+<text x="1202" y="1292" class="body-s">axios.request，不克隆请求体</text>
+<text x="1428" y="1292" class="body-s">判定成 R、打品牌、保护失败事实</text>
+<text x="1654" y="1292" class="body-s">终点</text>
+<text x="1064" y="1324" class="legend-d">回程顺序与去程相反：从 10 回到 1。短路 = 内层不再执行，外层照常拿到 R 并继续回程。</text>
+<text x="40" y="1560" class="h2">三、十个内置插件：作用、原理、参数</text>
+<text x="430" y="1560" class="sub">每个插件工厂都接受 enable?: boolean；false 时不进链、不 setup、inspect() 里也看不到</text>
+<line x1="40" x2="1800" y1="1574" y2="1574" class="hair2"/>
+<text x="40" y="1600" class="legend-d">请求级写法统一四种：false 关闭；true 或省略用插件级配置；简写（如 retry 的数字、share 的策略串）只覆盖主参数；对象按字段覆盖（请求级 ?? 插件级 ?? 默认）。</text>
+<rect x="40" y="1618" width="568" height="368" rx="10" class="card c-outer"/><path d="M40 1654 V1628 a10 10 0 0 1 10 -10 H598 a10 10 0 0 1 10 10 V1654 Z" class="head-outer"/><text x="54" y="1642" class="ctitle">axp:loading</text><text x="594" y="1642" class="ctag" text-anchor="end">outer · 次序 1</text><text x="54" y="1676" class="body">把“有请求在途”变成 loading 的开与关，用于全局 spinner。</text><text x="54" y="1704" class="cap">工作原理</text><circle cx="58" cy="1721" r="2.2" class="dot-outer"/><text x="68" y="1725" class="body">进入时计数 +1，next() 返回后在 finally 里 −1；一个逻辑请求恰好一对显示/隐藏，重</text><text x="68" y="1742" class="body">试和 token 刷新等待都算在里面。</text><circle cx="58" cy="1758" r="2.2" class="dot-outer"/><text x="68" y="1762" class="body">计数按回调函数共享（WeakMap）：父子客户端共用同一个回调时只显示、隐藏一次；dispose</text><text x="68" y="1779" class="body">时撤回自己的份额并补发一次 false。</text><text x="54" y="1807" class="cap">插件级参数</text><line x1="54" x2="594" y1="1818" y2="1818" class="hair"/><text x="54" y="1835" class="mono-b">loading(visible)</text><text x="221" y="1835" class="mono-d">—</text><text x="335" y="1835" class="body-s">显示/隐藏回调</text><line x1="54" x2="594" y1="1842" y2="1842" class="hair"/><text x="54" y="1859" class="mono-b">delay</text><text x="221" y="1859" class="mono-d">0</text><text x="335" y="1859" class="body-s">0→1 后延迟显示，期间回落到 0 就不显示（</text><text x="335" y="1875" class="body-s">防闪烁）</text><line x1="54" x2="594" y1="1882" y2="1882" class="hair"/><text x="54" y="1899" class="mono-b">delayClose</text><text x="221" y="1899" class="mono-d">0</text><text x="335" y="1899" class="body-s">1→0 后延迟隐藏，期间有新请求就不隐藏</text><line x1="54" x2="594" y1="1906" y2="1906" class="hair"/><text x="54" y="1929" class="cap">请求级</text><text x="54" y="1950" class="body">loading: false | true | 函数（作为本次回调）| { enable, loading, delay,</text><text x="54" y="1967" class="body">delayClose }</text>
+<rect x="40" y="2010" width="568" height="314" rx="10" class="card c-outer"/><path d="M40 2046 V2020 a10 10 0 0 1 10 -10 H598 a10 10 0 0 1 10 10 V2046 Z" class="head-outer"/><text x="54" y="2034" class="ctitle">axp:notify</text><text x="594" y="2034" class="ctag" text-anchor="end">outer · 次序 2</text><text x="54" y="2068" class="body">请求失败时给用户弹一次提示（toast / message）。</text><text x="54" y="2096" class="cap">工作原理</text><circle cx="58" cy="2113" r="2.2" class="dot-outer"/><text x="68" y="2117" class="body">内核先过滤成功、取消、silent 三种，不会调用 stringify，所以它只需写失败文案。</text><circle cx="58" cy="2133" r="2.2" class="dot-outer"/><text x="68" y="2137" class="body">stringify(r, ctx) 返回非空串才调用 notify(message, r)；每个逻辑请求最多一次。</text><text x="68" y="2154" class="body">internal（程序 bug）不被过滤，要不要提示由 stringify 决定。</text><circle cx="58" cy="2170" r="2.2" class="dot-outer"/><text x="68" y="2174" class="body">回调抛错被隔离，只 console.error，不影响请求结果。</text><text x="54" y="2202" class="cap">插件级参数</text><line x1="54" x2="594" y1="2213" y2="2213" class="hair"/><text x="54" y="2230" class="mono-b">notify(message, r)</text><text x="221" y="2230" class="mono-d">必填</text><text x="335" y="2230" class="body-s">拿到非空消息时调用，接 toast</text><line x1="54" x2="594" y1="2237" y2="2237" class="hair"/><text x="54" y="2254" class="mono-b">stringify(r, ctx)</text><text x="221" y="2254" class="mono-d">必填</text><text x="335" y="2254" class="body-s">返回 falsy 或空串即不通知；没有默认文案</text><line x1="54" x2="594" y1="2261" y2="2261" class="hair"/><text x="54" y="2284" class="cap">请求级</text><text x="54" y="2305" class="body">notify: false；或内核选项 silent: true（统一过滤，自定义 stringify 不必再读）。</text>
+<rect x="40" y="2348" width="568" height="314" rx="10" class="card c-prepare"/><path d="M40 2384 V2358 a10 10 0 0 1 10 -10 H598 a10 10 0 0 1 10 10 V2384 Z" class="head-prepare"/><text x="54" y="2372" class="ctitle">axp:repath</text><text x="594" y="2372" class="ctag" text-anchor="end">prepare · 次序 3</text><text x="54" y="2406" class="body">路径占位符替换：/pet/{id} + { id: 1 } → /pet/1。装上才生效。</text><text x="54" y="2434" class="cap">工作原理</text><circle cx="58" cy="2451" r="2.2" class="dot-prepare"/><text x="68" y="2455" class="body">只处理 pathname；先从 params（含实例 defaults.params）取值，再从 data 取。</text><circle cx="58" cy="2471" r="2.2" class="dot-prepare"/><text x="68" y="2475" class="body">按路径段 encodeURIComponent；同一个占位符出现多次全部替换。</text><circle cx="58" cy="2491" r="2.2" class="dot-prepare"/><text x="68" y="2495" class="body">算出新的 url / params / data 后 next({ url, params, data })，不改调用方传入的</text><text x="68" y="2512" class="body">对象。</text><text x="54" y="2540" class="cap">插件级参数</text><line x1="54" x2="594" y1="2551" y2="2551" class="hair"/><text x="54" y="2568" class="mono-b">pattern</text><text x="221" y="2568" class="mono-d">{id} :id [id]</text><text x="335" y="2568" class="body-s">占位符匹配规则（正则）</text><line x1="54" x2="594" y1="2575" y2="2575" class="hair"/><text x="54" y="2592" class="mono-b">removeKey</text><text x="221" y="2592" class="mono-d">true</text><text x="335" y="2592" class="body-s">替换后把该键从 params / data 里删掉</text><line x1="54" x2="594" y1="2599" y2="2599" class="hair"/><text x="54" y="2622" class="cap">请求级</text><text x="54" y="2643" class="body">repath: false | true | { enable, pattern, removeKey }</text>
+<rect x="40" y="2686" width="568" height="330" rx="10" class="card c-prepare"/><path d="M40 2722 V2696 a10 10 0 0 1 10 -10 H598 a10 10 0 0 1 10 10 V2722 Z" class="head-prepare"/><text x="54" y="2710" class="ctitle">axp:filter</text><text x="594" y="2710" class="ctag" text-anchor="end">prepare · 次序 4</text><text x="54" y="2744" class="body">剥离 params / data 里的空字段，避免把 null、空串发给后端。装上即生效。</text><text x="54" y="2772" class="cap">工作原理</text><circle cx="58" cy="2789" r="2.2" class="dot-prepare"/><text x="68" y="2793" class="body">只处理纯对象，生成新对象再用 patch 交给内层；params 含 defaults.params，被剥掉的</text><text x="68" y="2810" class="body">默认键不会被 axios 二次合并带回。</text><text x="54" y="2838" class="cap">插件级参数</text><line x1="54" x2="594" y1="2849" y2="2849" class="hair"/><text x="54" y="2866" class="mono-b">predicate([k, v])</text><text x="221" y="2866" class="mono-d">丢弃 null /</text><text x="221" y="2882" class="mono-d">undefined /</text><text x="221" y="2898" class="mono-d">NaN / 空白串</text><text x="335" y="2866" class="body-s">返回 true 表示丢弃该字段</text><line x1="54" x2="594" y1="2905" y2="2905" class="hair"/><text x="54" y="2922" class="mono-b">ignoreKeys</text><text x="221" y="2922" class="mono-d">—</text><text x="335" y="2922" class="body-s">这些键永不过滤</text><line x1="54" x2="594" y1="2929" y2="2929" class="hair"/><text x="54" y="2946" class="mono-b">ignoreValues</text><text x="221" y="2946" class="mono-d">—</text><text x="335" y="2946" class="body-s">这些值永不过滤</text><line x1="54" x2="594" y1="2953" y2="2953" class="hair"/><text x="54" y="2976" class="cap">请求级</text><text x="54" y="2997" class="body">filter: false | true | { enable, predicate, ignoreKeys, ignoreValues }</text>
+<rect x="636" y="1618" width="568" height="606" rx="10" class="card c-attempt"/><path d="M636 1654 V1628 a10 10 0 0 1 10 -10 H1194 a10 10 0 0 1 10 10 V1654 Z" class="head-attempt"/><text x="650" y="1642" class="ctitle">axp:retry</text><text x="1190" y="1642" class="ctag" text-anchor="end">attempt</text><text x="650" y="1676" class="body">失败自动重试，带退避、抖动、Retry-After。重试就是“再调一次 next()”。</text><text x="650" y="1704" class="cap">工作原理</text><circle cx="654" cy="1721" r="2.2" class="dot-attempt"/><text x="664" y="1725" class="body">首发前 markReplayable()；每次重放前 canReplay()，一次性请求体已消耗则返回原响应。</text><circle cx="654" cy="1741" r="2.2" class="dot-attempt"/><text x="664" y="1745" class="body">每次尝试都重新穿过 credential、source：auth 注入最新 token，mock / share /</text><text x="664" y="1762" class="body">cache 每次都参与。</text><circle cx="654" cy="1778" r="2.2" class="dot-attempt"/><text x="664" y="1782" class="body">等待期间监听 ctx.signal，取消立即结束；次数用尽返回最后一个 R，由落定决定抛不抛。</text><circle cx="654" cy="1798" r="2.2" class="dot-attempt"/><text x="664" y="1802" class="body">成功响应也进 shouldRetry，返回 true 可对“业务上判为异常的成功”重试。</text><text x="650" y="1830" class="cap">插件级参数</text><line x1="650" x2="1190" y1="1841" y2="1841" class="hair"/><text x="650" y="1858" class="mono-b">max</text><text x="817" y="1858" class="mono-d">2</text><text x="931" y="1858" class="body-s">最大重试次数</text><line x1="650" x2="1190" y1="1865" y2="1865" class="hair"/><text x="650" y="1882" class="mono-b">methods</text><text x="817" y="1882" class="mono-d">get put head</text><text x="817" y="1898" class="mono-d">delete options</text><text x="817" y="1914" class="mono-d">trace</text><text x="931" y="1882" class="body-s">硬否决：方法不在表里一律不重试（POST 默认</text><text x="931" y="1898" class="body-s">不重试）</text><line x1="650" x2="1190" y1="1921" y2="1921" class="hair"/><text x="650" y="1938" class="mono-b">statusCodes</text><text x="817" y="1938" class="mono-d">408 429 500</text><text x="817" y="1954" class="mono-d">502 503 504</text><text x="931" y="1938" class="body-s">对照 ctx.statusOf(r)（有效状态）</text><line x1="650" x2="1190" y1="1961" y2="1961" class="hair"/><text x="650" y="1978" class="mono-b">shouldRetry(r, attempt,</text><text x="650" y="1994" class="mono-b">ctx)</text><text x="817" y="1978" class="mono-d">—</text><text x="931" y="1978" class="body-s">返回 true / false 即采用，undefined 继</text><text x="931" y="1994" class="body-s">续往下判</text><line x1="650" x2="1190" y1="2001" y2="2001" class="hair"/><text x="650" y="2018" class="mono-b">delay</text><text x="817" y="2018" class="mono-d">300·2^(n−1)</text><text x="817" y="2034" class="mono-d">ms</text><text x="931" y="2018" class="body-s">数字或 (attempt, max, r, ctx) =&gt; ms</text><line x1="650" x2="1190" y1="2041" y2="2041" class="hair"/><text x="650" y="2058" class="mono-b">jitter</text><text x="817" y="2058" class="mono-d">—</text><text x="931" y="2058" class="body-s">true 或 (delay) =&gt; ms，打散同时重试</text><line x1="650" x2="1190" y1="2065" y2="2065" class="hair"/><text x="650" y="2082" class="mono-b">delayMax</text><text x="817" y="2082" class="mono-d">10000</text><text x="931" y="2082" class="body-s">只封顶自己算出的 delay</text><line x1="650" x2="1190" y1="2089" y2="2089" class="hair"/><text x="650" y="2106" class="mono-b">respectRetryAfter</text><text x="817" y="2106" class="mono-d">true</text><text x="931" y="2106" class="body-s">布尔值按 afterStatusCodes；函数独立判定</text><line x1="650" x2="1190" y1="2113" y2="2113" class="hair"/><text x="650" y="2130" class="mono-b">afterStatusCodes</text><text x="817" y="2130" class="mono-d">413 429 503</text><text x="931" y="2130" class="body-s">这些状态才读 Retry-After</text><line x1="650" x2="1190" y1="2137" y2="2137" class="hair"/><text x="650" y="2154" class="mono-b">retryAfterMax</text><text x="817" y="2154" class="mono-d">60000</text><text x="931" y="2154" class="body-s">服务端要求等得更久就不重试，直接返回</text><line x1="650" x2="1190" y1="2161" y2="2161" class="hair"/><text x="650" y="2184" class="cap">请求级</text><text x="650" y="2205" class="body">retry: 数字（= max）| false | true | 对象（按字段覆盖）。判定顺序见第四节。</text>
+<rect x="636" y="2248" width="568" height="665" rx="10" class="card c-credential"/><path d="M636 2284 V2258 a10 10 0 0 1 10 -10 H1194 a10 10 0 0 1 10 10 V2284 Z" class="head-credential"/><text x="650" y="2272" class="ctitle">axp:auth</text><text x="1190" y="2272" class="ctag" text-anchor="end">credential</text><text x="650" y="2306" class="body">给受保护请求注入 token；401 时单飞刷新并重放；刷新失败通知会话过期。</text><text x="650" y="2334" class="cap">工作原理</text><circle cx="654" cy="2351" r="2.2" class="dot-credential"/><text x="664" y="2355" class="body">ready(tm, request) 返回 patch（默认写 Authorization 头），再 next(patch)，并</text><text x="664" y="2372" class="body">记下实际注入的 token。</text><circle cx="654" cy="2388" r="2.2" class="dot-credential"/><text x="664" y="2392" class="body">失败交给 onFailure 路由成五种动作之一：refresh / replay / deny / expired /</text><text x="664" y="2409" class="body">others。</text><circle cx="654" cy="2425" r="2.2" class="dot-credential"/><text x="664" y="2429" class="body">刷新单飞：同一时刻只跑一个 onRefresh，其余请求排队等结果；会话（单飞、过期、无</text><text x="664" y="2446" class="body">token 通知标记）按 TokenManager 共享，extend() 的子客户端共用。</text><circle cx="654" cy="2462" r="2.2" class="dot-credential"/><text x="664" y="2466" class="body">本地无 token：直接本地拒绝，不发无凭证请求，onAccessDenied 每轮会话最多通知一次。</text><text x="650" y="2494" class="cap">插件级参数</text><line x1="650" x2="1190" y1="2505" y2="2505" class="hair"/><text x="650" y="2522" class="mono-b">tokenManager</text><text x="817" y="2522" class="mono-d">必填</text><text x="931" y="2522" class="body-s">ITokenManager：accessToken /</text><text x="931" y="2538" class="body-s">refreshToken / set / clear</text><line x1="650" x2="1190" y1="2545" y2="2545" class="hair"/><text x="650" y="2562" class="mono-b">onRefresh(r, tm, ctx)</text><text x="817" y="2562" class="mono-d">必填</text><text x="931" y="2562" class="body-s">刷新 token；返回 false 或抛错算失败</text><line x1="650" x2="1190" y1="2569" y2="2569" class="hair"/><text x="650" y="2586" class="mono-b">onAccessExpired(r, tm,</text><text x="650" y="2602" class="mono-b">ctx)</text><text x="817" y="2586" class="mono-d">必填</text><text x="931" y="2586" class="body-s">会话过期（刷新失败 / 401 无法恢复），每轮</text><text x="931" y="2602" class="body-s">只通知一次</text><line x1="650" x2="1190" y1="2609" y2="2609" class="hair"/><text x="650" y="2626" class="mono-b">onAccessDenied(r, tm,</text><text x="650" y="2642" class="mono-b">ctx)</text><text x="817" y="2626" class="mono-d">→ onAccessExp</text><text x="817" y="2642" class="mono-d">ired</text><text x="931" y="2626" class="body-s">越权（403）或本地无 token</text><line x1="650" x2="1190" y1="2649" y2="2649" class="hair"/><text x="650" y="2666" class="mono-b">onFailure(r, tm, ctx)</text><text x="817" y="2666" class="mono-d">defaultAuthFai</text><text x="817" y="2682" class="mono-d">lure</text><text x="931" y="2666" class="body-s">返回动作；默认：401 → refresh（已被并发</text><text x="931" y="2682" class="body-s">刷新则 replay；无 token 则 expired），</text><text x="931" y="2698" class="body-s">403 → deny</text><line x1="650" x2="1190" y1="2705" y2="2705" class="hair"/><text x="650" y="2722" class="mono-b">refreshTimeout</text><text x="817" y="2722" class="mono-d">30000</text><text x="931" y="2722" class="body-s">ms；0 或 Infinity 不限时，超时按刷新失败</text><line x1="650" x2="1190" y1="2729" y2="2729" class="hair"/><text x="650" y="2746" class="mono-b">methods / urlPattern</text><text x="817" y="2746" class="mono-d">'*'</text><text x="931" y="2746" class="body-s">受保护范围（URLPattern，! 开头表示否定）</text><line x1="650" x2="1190" y1="2753" y2="2753" class="hair"/><text x="650" y="2770" class="mono-b">isProtected(request)</text><text x="817" y="2770" class="mono-d">—</text><text x="931" y="2770" class="body-s">返回布尔，作为终值覆盖上面两项</text><line x1="650" x2="1190" y1="2777" y2="2777" class="hair"/><text x="650" y="2794" class="mono-b">ready(tm, request)</text><text x="817" y="2794" class="mono-d">写</text><text x="817" y="2810" class="mono-d">Authorization</text><text x="817" y="2826" class="mono-d">头</text><text x="931" y="2794" class="body-s">返回 AxpRequestPatch，自定义注入方式</text><line x1="650" x2="1190" y1="2833" y2="2833" class="hair"/><text x="650" y="2856" class="cap">请求级</text><text x="650" y="2877" class="body">protected?: boolean。刷新请求若走同一个 axp 客户端，必须写 protected: false，否则</text><text x="650" y="2894" class="body">会排队等它自己。</text>
+<rect x="1232" y="1618" width="568" height="379" rx="10" class="card c-source"/><path d="M1232 1654 V1628 a10 10 0 0 1 10 -10 H1790 a10 10 0 0 1 10 10 V1654 Z" class="head-source"/><text x="1246" y="1642" class="ctitle">axp:mock</text><text x="1786" y="1642" class="ctag" text-anchor="end">source · 次序 7 · 默认关</text><text x="1246" y="1676" class="body">开发期把请求先探测到 mock 服务，mock 没有再回落真实接口。</text><text x="1246" y="1704" class="cap">工作原理</text><circle cx="1250" cy="1721" r="2.2" class="dot-source"/><text x="1260" y="1725" class="body">next({ url: 改写到 mockUrl, cache: false, share: false }) 探测，不写缓存、不</text><text x="1260" y="1742" class="body">占共享条目。</text><circle cx="1250" cy="1758" r="2.2" class="dot-source"/><text x="1260" y="1762" class="body">fallbackWhen(r, ctx) 为真时再 next() 走真实接口；回落前 canReplay()，一次性体不</text><text x="1260" y="1779" class="body">能重放则返回探测响应。</text><circle cx="1250" cy="1795" r="2.2" class="dot-source"/><text x="1260" y="1799" class="body">开启了 mock 但没有 mockUrl：跳过 mock 直接走真实接口（debug 下 warn）。</text><text x="1246" y="1827" class="cap">插件级参数</text><line x1="1246" x2="1786" y1="1838" y2="1838" class="hair"/><text x="1246" y="1855" class="mono-b">enable</text><text x="1413" y="1855" class="mono-d">false</text><text x="1527" y="1855" class="body-s">通常写 import.meta.env.DEV</text><line x1="1246" x2="1786" y1="1862" y2="1862" class="hair"/><text x="1246" y="1879" class="mono-b">mock</text><text x="1413" y="1879" class="mono-d">false</text><text x="1527" y="1879" class="body-s">全部请求走 mock</text><line x1="1246" x2="1786" y1="1886" y2="1886" class="hair"/><text x="1246" y="1903" class="mono-b">mockUrl</text><text x="1413" y="1903" class="mono-d">—</text><text x="1527" y="1903" class="body-s">mock 服务器基址</text><line x1="1246" x2="1786" y1="1910" y2="1910" class="hair"/><text x="1246" y="1927" class="mono-b">fallbackWhen(r, ctx)</text><text x="1413" y="1927" class="mono-d">404 或 network</text><text x="1527" y="1927" class="body-s">判定回落到真实接口</text><line x1="1246" x2="1786" y1="1934" y2="1934" class="hair"/><text x="1246" y="1957" class="cap">请求级</text><text x="1246" y="1978" class="body">mock: false | true | { mockUrl, fallbackWhen }</text>
+<rect x="1232" y="2021" width="568" height="420" rx="10" class="card c-source"/><path d="M1232 2057 V2031 a10 10 0 0 1 10 -10 H1790 a10 10 0 0 1 10 10 V2057 Z" class="head-source"/><text x="1246" y="2045" class="ctitle">axp:share</text><text x="1786" y="2045" class="ctag" text-anchor="end">source · 次序 8</text><text x="1246" y="2079" class="body">合并同 key 的并发请求，避免重复打后端（GET 列表连点、多组件同时取同一数据）。</text><text x="1246" y="2107" class="cap">工作原理</text><circle cx="1250" cy="2124" r="2.2" class="dot-source"/><text x="1260" y="2128" class="body">key 由 method + 完整 URL + params（+ data）哈希得出；key 为 null（不可哈希）直</text><text x="1260" y="2145" class="body">接 next()。</text><circle cx="1250" cy="2161" r="2.2" class="dot-source"/><text x="1260" y="2165" class="body">跟随者拿到与首发同一个 R；各自监听自己的 signal 和 timeout，单独离开只 reject 自</text><text x="1260" y="2182" class="body">己，全部离开才中止共享请求。</text><circle cx="1250" cy="2198" r="2.2" class="dot-source"/><text x="1260" y="2202" class="body">以“一次尝试”为单位：retry 在 share 外层，每次重试都会重新合并到新一轮共享里。</text><text x="1246" y="2230" class="cap">三种策略</text><circle cx="1250" cy="2247" r="2.2" class="dot-source"/><text x="1260" y="2251" class="body">start：首发为准，只发一次网络请求，其余跟随；首发被取消不连累跟随者。</text><circle cx="1250" cy="2267" r="2.2" class="dot-source"/><text x="1260" y="2271" class="body">end：每个调用都发送，最新未撤回的调用结果落定。</text><circle cx="1250" cy="2287" r="2.2" class="dot-source"/><text x="1260" y="2291" class="body">race：每个调用都发送，第一个 r.ok 的胜出。</text><text x="1246" y="2319" class="cap">插件级参数</text><line x1="1246" x2="1786" y1="2330" y2="2330" class="hair"/><text x="1246" y="2347" class="mono-b">policy</text><text x="1413" y="2347" class="mono-d">'start'</text><text x="1527" y="2347" class="body-s">start / end / race</text><line x1="1246" x2="1786" y1="2354" y2="2354" class="hair"/><text x="1246" y="2371" class="mono-b">methods</text><text x="1413" y="2371" class="mono-d">get head</text><text x="1527" y="2371" class="body-s">其它方法即使请求级开启也不共享</text><line x1="1246" x2="1786" y1="2378" y2="2378" class="hair"/><text x="1246" y="2401" class="cap">请求级</text><text x="1246" y="2422" class="body">share: true | 'start' | 'end' | 'race' | { policy } | false（需请求级开启才生效）</text>
+<rect x="1232" y="2465" width="568" height="513" rx="10" class="card c-source"/><path d="M1232 2501 V2475 a10 10 0 0 1 10 -10 H1790 a10 10 0 0 1 10 10 V2501 Z" class="head-source"/><text x="1246" y="2489" class="ctitle">axp:cache</text><text x="1786" y="2489" class="ctag" text-anchor="end">source · 次序 9</text><text x="1246" y="2523" class="body">结果缓存：命中直接返回，不触网。需按请求开启（cache: true）。</text><text x="1246" y="2551" class="cap">工作原理</text><circle cx="1250" cy="2568" r="2.2" class="dot-source"/><text x="1260" y="2572" class="body">命中：从快照经响应工厂重建新的 R（request 是当前调用方），data 按 clone 处理，不</text><text x="1260" y="2589" class="body">重跑 transformResponse。</text><circle cx="1250" cy="2605" r="2.2" class="dot-source"/><text x="1260" y="2609" class="body">未命中：next() 后若 shouldCache(r) 为真则写入；较早发起、较晚返回的响应不覆盖较新</text><text x="1260" y="2626" class="body">结果；clear() 后在途请求返回也不写回。</text><circle cx="1250" cy="2642" r="2.2" class="dot-source"/><text x="1260" y="2646" class="body">internal 与 cancel 永远不缓存；key 不可哈希且无显式 key 时不读不写。</text><circle cx="1250" cy="2662" r="2.2" class="dot-source"/><text x="1260" y="2666" class="body">过期读时惰性删除；LRU 超容量时清扫。</text><text x="1246" y="2694" class="cap">插件级参数</text><line x1="1246" x2="1786" y1="2705" y2="2705" class="hair"/><text x="1246" y="2722" class="mono-b">expires</text><text x="1413" y="2722" class="mono-d">60000</text><text x="1527" y="2722" class="body-s">有效期，ms</text><line x1="1246" x2="1786" y1="2729" y2="2729" class="hair"/><text x="1246" y="2746" class="mono-b">max</text><text x="1413" y="2746" class="mono-d">500</text><text x="1527" y="2746" class="body-s">LRU 容量，Infinity 不限</text><line x1="1246" x2="1786" y1="2753" y2="2753" class="hair"/><text x="1246" y="2770" class="mono-b">methods</text><text x="1413" y="2770" class="mono-d">get head</text><text x="1527" y="2770" class="body-s">其它方法即使请求级开启也不缓存</text><line x1="1246" x2="1786" y1="2777" y2="2777" class="hair"/><text x="1246" y="2794" class="mono-b">clone</text><text x="1413" y="2794" class="mono-d">—</text><text x="1527" y="2794" class="body-s">'shallow' | 'deep' | (data) =&gt; data，</text><text x="1527" y="2810" class="body-s">作用于 r.data</text><line x1="1246" x2="1786" y1="2817" y2="2817" class="hair"/><text x="1246" y="2834" class="mono-b">shouldCache(r, ctx)</text><text x="1413" y="2834" class="mono-d">r.ok</text><text x="1527" y="2834" class="body-s">是否写入（请求级对象里也可配）</text><line x1="1246" x2="1786" y1="2841" y2="2841" class="hair"/><text x="1246" y="2858" class="mono-b">store</text><text x="1413" y="2858" class="mono-d">内存 LRU</text><text x="1527" y="2858" class="body-s">实现 IAxpCacheStore，可换持久化（同步/异</text><text x="1527" y="2874" class="body-s">步快照）</text><line x1="1246" x2="1786" y1="2881" y2="2881" class="hair"/><text x="1246" y="2904" class="cap">请求级与操作</text><text x="1246" y="2925" class="body">cache: true | 数字（= expires）| { expires, key, clone, shouldCache } | false。</text><text x="1246" y="2942" class="body">清缓存：api.plugin(cachePlugin).clear() / remove，或 clearCache(api) /</text><text x="1246" y="2959" class="body">removeCache(api, key)。</text>
+<rect x="40" y="3040" width="568" height="277" rx="10" class="card c-kernel"/><path d="M40 3076 V3050 a10 10 0 0 1 10 -10 H598 a10 10 0 0 1 10 10 V3076 Z" class="head-kernel"/><text x="54" y="3064" class="ctitle">axp:envs</text><text x="594" y="3064" class="ctag" text-anchor="end">无阶段 · 只在装卸时执行</text><text x="54" y="3098" class="body">按环境选配置：装上时写进 client.axios.defaults，不进中间件链。</text><text x="54" y="3126" class="cap">工作原理</text><circle cx="58" cy="3143" r="2.2" class="dot-kernel"/><text x="68" y="3147" class="body">按顺序求值规则，第一个命中的 config 写入 axios.defaults；都没命中就什么也不改；规</text><text x="68" y="3164" class="body">则函数抛错时 createAxp / use 直接抛出。</text><circle cx="58" cy="3180" r="2.2" class="dot-kernel"/><text x="68" y="3184" class="body">卸载（eject / dispose）不还原已写入的配置。</text><text x="54" y="3212" class="cap">参数</text><line x1="54" x2="594" y1="3223" y2="3223" class="hair"/><text x="54" y="3240" class="mono-b">[{ rule, config }]</text><text x="221" y="3240" class="mono-d">—</text><text x="335" y="3240" class="body-s">rule 为判断函数或条件，config 为要写入的</text><text x="335" y="3256" class="body-s">axios 默认配置</text><line x1="54" x2="594" y1="3263" y2="3263" class="hair"/><text x="54" y="3281" class="body">例：axpEnvs([{ rule: () =&gt; location.hostname === 'localhost', config: {</text><text x="54" y="3298" class="body">baseURL: '/mock' } }])</text>
+<text x="40" y="3387" class="h2">四、三条关键流程</text>
+<text x="232" y="3387" class="sub">retry 如何判定、auth 如何刷新重放、source 阶段如何短路</text>
+<line x1="40" x2="1800" y1="3401" y2="3401" class="hair2"/>
+<rect x="40" y="3423" width="568" height="597" rx="10" class="card c-attempt"/>
+<path d="M40 3459 V3433 a10 10 0 0 1 10 -10 H598 a10 10 0 0 1 10 10 V3459 Z" class="head-attempt"/>
+<text x="54" y="3447" class="ctitle">retry：要不要重试（按序判定，每级都能提前结束）</text>
+<rect x="54" y="3469" width="344" height="33" rx="8" class="step c-attempt"/><text x="68" y="3489" class="body">R 从内层回来</text><path d="M226 3502 V3518" class="arrow"/><rect x="54" y="3518" width="344" height="33" rx="8" class="ask c-attempt"/><text x="68" y="3538" class="body-b">请求级 retry: false ？</text><text x="410" y="3538.5" class="out">是 → 不重试</text><path d="M226 3551 V3567" class="arrow"/><rect x="54" y="3567" width="344" height="33" rx="8" class="ask c-attempt"/><text x="68" y="3587" class="body-b">方法不在 methods 里？</text><text x="410" y="3587.5" class="out">是 → 不重试</text><path d="M226 3600 V3616" class="arrow"/><rect x="54" y="3616" width="344" height="33" rx="8" class="ask c-attempt"/><text x="68" y="3636" class="body-b">失败类型是 cancel / auth / internal / parse？</text><text x="410" y="3636.5" class="out">是 → 不重试</text><path d="M226 3649 V3665" class="arrow"/><rect x="54" y="3665" width="344" height="33" rx="8" class="ask c-attempt"/><text x="68" y="3685" class="body-b">shouldRetry(r, attempt, ctx) 返回了布尔？</text><text x="410" y="3685.5" class="out">有 → 采用</text><path d="M226 3698 V3714" class="arrow"/><rect x="54" y="3714" width="344" height="33" rx="8" class="ask c-attempt"/><text x="68" y="3734" class="body-b">失败类型是 network / timeout？</text><text x="410" y="3734.5" class="out">是 → 重试</text><path d="M226 3747 V3763" class="arrow"/><rect x="54" y="3763" width="344" height="33" rx="8" class="ask c-attempt"/><text x="68" y="3783" class="body-b">ctx.statusOf(r) 在 statusCodes 里？</text><text x="410" y="3783.5" class="out">是 → 重试</text><path d="M226 3796 V3812" class="arrow"/><rect x="54" y="3812" width="344" height="67" rx="33.5" class="endbox"/><text x="68" y="3832" class="body">重试：等 delay（指数退避 + jitter，封顶</text><text x="68" y="3849" class="body">delayMax；服务端 Retry-After 优先，超过</text><text x="68" y="3866" class="body">retryAfterMax 则放弃）→ 再 next()</text>
+<rect x="636" y="3423" width="568" height="597" rx="10" class="card c-credential"/>
+<path d="M636 3459 V3433 a10 10 0 0 1 10 -10 H1194 a10 10 0 0 1 10 10 V3459 Z" class="head-credential"/>
+<text x="650" y="3447" class="ctitle">auth：受保护请求的主流程（401 刷新重放）</text>
+<rect x="650" y="3469" width="344" height="50" rx="8" class="ask c-credential"/><text x="664" y="3489" class="body-b">请求受保护？（methods / urlPattern /</text><text x="664" y="3506" class="body-b">isProtected）</text><text x="1006" y="3498" class="out">否 → 直接 next()</text><path d="M822 3519 V3535" class="arrow"/><rect x="650" y="3535" width="344" height="33" rx="8" class="step c-credential"/><text x="664" y="3555" class="body">markReplayable()；正在刷新则排队等结果</text><text x="1006" y="3555.5" class="out">失败 → onAccessExpired</text><path d="M822 3568 V3584" class="arrow"/><rect x="650" y="3584" width="344" height="33" rx="8" class="ask c-credential"/><text x="664" y="3604" class="body-b">本地有 token？</text><text x="1006" y="3596.5" class="out">无 → onAccessDenied，本地</text><text x="1006" y="3612.5" class="out">拒绝</text><path d="M822 3617 V3633" class="arrow"/><rect x="650" y="3633" width="344" height="50" rx="8" class="step c-credential"/><text x="664" y="3653" class="body">ready(tm, request) 生成 patch，next(patch) 发</text><text x="664" y="3670" class="body">出，记下注入的 token</text><path d="M822 3683 V3699" class="arrow"/><rect x="650" y="3699" width="344" height="33" rx="8" class="ask c-credential"/><text x="664" y="3719" class="body-b">r.ok 或 internal / cancel ？</text><text x="1006" y="3719.5" class="out">是 → 原样返回</text><path d="M822 3732 V3748" class="arrow"/><rect x="650" y="3748" width="344" height="33" rx="8" class="ask c-credential"/><text x="664" y="3768" class="body-b">onFailure(r, tm, ctx) 路由动作</text><path d="M822 3781 V3797" class="arrow"/><rect x="650" y="3797" width="344" height="50" rx="8" class="step c-credential"/><text x="664" y="3817" class="body">refresh：加入或发起单飞刷新 → 成功用新 token 再</text><text x="664" y="3834" class="body">next()　replay：带当前 token 再 next()</text><path d="M822 3847 V3863" class="arrow"/><rect x="650" y="3863" width="344" height="67" rx="8" class="step c-credential"/><text x="664" y="3883" class="body">deny：onAccessDenied，返回 auth/denied</text><text x="664" y="3900" class="body">expired：tm.clear() + onAccessExpired，返回</text><text x="664" y="3917" class="body">auth/expired　others：原样返回</text><path d="M822 3930 V3946" class="arrow"/><rect x="650" y="3946" width="344" height="50" rx="25" class="endbox"/><text x="664" y="3966" class="body">重放后仍要求 refresh / replay → 按 expired 止</text><text x="664" y="3983" class="body">损（防循环）</text>
+<rect x="1232" y="3423" width="568" height="597" rx="10" class="card c-source"/>
+<path d="M1232 3459 V3433 a10 10 0 0 1 10 -10 H1790 a10 10 0 0 1 10 10 V3459 Z" class="head-source"/>
+<text x="1246" y="3447" class="ctitle">source：结果来源如何短路（由外到内）</text>
+<rect x="1246" y="3469" width="344" height="33" rx="8" class="ask c-source"/><text x="1260" y="3489" class="body-b">mock 已启用且请求开启 mock，并配了 mockUrl？</text><text x="1602" y="3489.5" class="out">否 → 往内</text><path d="M1418 3502 V3518" class="arrow"/><rect x="1246" y="3518" width="344" height="33" rx="8" class="step c-source"/><text x="1260" y="3538" class="body">探测 mockUrl（cache:false, share:false）</text><text x="1602" y="3530.5" class="out">fallbackWhen 假 → 返回</text><text x="1602" y="3546.5" class="out">mock 结果</text><path d="M1418 3551 V3567" class="arrow"/><rect x="1246" y="3567" width="344" height="33" rx="8" class="step c-source"/><text x="1260" y="3587" class="body">fallbackWhen 为真 → 回落，走下面真实接口链路</text><path d="M1418 3600 V3616" class="arrow"/><rect x="1246" y="3616" width="344" height="33" rx="8" class="ask c-source"/><text x="1260" y="3636" class="body-b">share 开启且 ctx.key() 可哈希？</text><text x="1602" y="3636.5" class="out">否 → 往内</text><path d="M1418 3649 V3665" class="arrow"/><rect x="1246" y="3665" width="344" height="33" rx="8" class="ask c-source"/><text x="1260" y="3685" class="body-b">同 key 已有在途？</text><text x="1602" y="3677.5" class="out">有 → 跟随，等首发的 R，不</text><text x="1602" y="3693.5" class="out">触网</text><path d="M1418 3698 V3714" class="arrow"/><rect x="1246" y="3714" width="344" height="33" rx="8" class="step c-source"/><text x="1260" y="3734" class="body">成为首发，往内；结果落定后分发给全部跟随者</text><path d="M1418 3747 V3763" class="arrow"/><rect x="1246" y="3763" width="344" height="33" rx="8" class="ask c-source"/><text x="1260" y="3783" class="body-b">cache 开启且 key 可用？</text><text x="1602" y="3783.5" class="out">否 → 往内</text><path d="M1418 3796 V3812" class="arrow"/><rect x="1246" y="3812" width="344" height="33" rx="8" class="ask c-source"/><text x="1260" y="3832" class="body-b">命中且未过期？</text><text x="1602" y="3824.5" class="out">命中 → 重建 R 直接返回，不</text><text x="1602" y="3840.5" class="out">触网</text><path d="M1418 3845 V3861" class="arrow"/><rect x="1246" y="3861" width="344" height="50" rx="25" class="endbox"/><text x="1260" y="3881" class="body">未命中：transport 发请求；成功且 shouldCache 为</text><text x="1260" y="3898" class="body">真 → 写入缓存</text>
+<text x="40" y="4086" class="h2">五、内核：客户端、上下文、请求选项、失败类型</text>
+<text x="540" y="4086" class="sub">内核不是插件，用户不用装，但参数都能配</text>
+<line x1="40" x2="1800" y1="4100" y2="4100" class="hair2"/>
+<rect x="40" y="4122" width="422" height="569" rx="10" class="card c-kernel"/><path d="M40 4158 V4132 a10 10 0 0 1 10 -10 H452 a10 10 0 0 1 10 10 V4158 Z" class="head-kernel"/><text x="54" y="4146" class="ctitle">createAxp&lt;Schema, R&gt;(options)</text><text x="448" y="4146" class="ctag" text-anchor="end">客户端选项</text><line x1="54" x2="448" y1="4170" y2="4170" class="hair"/><text x="54" y="4187" class="mono-b">axios</text><text x="176" y="4187" class="mono-d">新建实例</text><text x="261" y="4187" class="body-s">底层实例；用户拦截器照常生效</text><line x1="54" x2="448" y1="4194" y2="4194" class="hair"/><text x="54" y="4211" class="mono-b">plugins</text><text x="176" y="4211" class="mono-d">[]</text><text x="261" y="4211" class="body-s">插件数组，不参与推断 R</text><line x1="54" x2="448" y1="4218" y2="4218" class="hair"/><text x="54" y="4235" class="mono-b">response</text><text x="176" y="4235" class="mono-d">默认工厂</text><text x="261" y="4235" class="body-s">响应工厂；R 不是 AxpResponse</text><text x="261" y="4251" class="body-s">时必填</text><line x1="54" x2="448" y1="4258" y2="4258" class="hair"/><text x="54" y="4275" class="mono-b">key</text><text x="176" y="4275" class="mono-d">—</text><text x="261" y="4275" class="body-s">key 服务：{ scope } 给哈希加</text><text x="261" y="4291" class="body-s">分区（如当前用户）</text><line x1="54" x2="448" y1="4298" y2="4298" class="hair"/><text x="54" y="4315" class="mono-b">reject</text><text x="176" y="4315" class="mono-d">(r) =&gt; r</text><text x="261" y="4315" class="body-s">仅转换即将抛出的可预期失败，接</text><text x="261" y="4331" class="body-s">Sentry / TanStack Query</text><line x1="54" x2="448" y1="4338" y2="4338" class="hair"/><text x="54" y="4355" class="mono-b">statusOf</text><text x="176" y="4355" class="mono-d">r.status</text><text x="261" y="4355" class="body-s">把业务码映射成“有效状态”，</text><text x="261" y="4371" class="body-s">retry / auth 默认规则读它</text><line x1="54" x2="448" y1="4378" y2="4378" class="hair"/><text x="54" y="4395" class="mono-b">debug</text><text x="176" y="4395" class="mono-d">false</text><text x="261" y="4395" class="body-s">true 用 console，或自定义 {</text><text x="261" y="4411" class="body-s">log, warn, error }；失败</text><text x="261" y="4427" class="body-s">r.stack 记调用点</text><line x1="54" x2="448" y1="4434" y2="4434" class="hair"/><text x="54" y="4457" class="cap">客户端成员</text><circle cx="58" cy="4474" r="2.2" class="dot-kernel"/><text x="68" y="4478" class="body">api.get / post / put / patch / delete …</text><text x="68" y="4495" class="body">(path)(payload, opts)：10 个动词；delete、post、put、</text><text x="68" y="4512" class="body">patch 的 payload 走 data，其余走 params</text><circle cx="58" cy="4528" r="2.2" class="dot-kernel"/><text x="68" y="4532" class="body">request(config)：无类型逃生口</text><circle cx="58" cy="4548" r="2.2" class="dot-kernel"/><text x="68" y="4552" class="body">use(plugin) / eject(name)：装卸插件，链重新编译</text><circle cx="58" cy="4568" r="2.2" class="dot-kernel"/><text x="68" y="4572" class="body">plugin(p)：取插件暴露的 api（如 cache.clear）</text><circle cx="58" cy="4588" r="2.2" class="dot-kernel"/><text x="68" y="4592" class="body">extend(overrides, { plugins, axios })：子客户端</text><circle cx="58" cy="4608" r="2.2" class="dot-kernel"/><text x="68" y="4612" class="body">cancelAll(reason) / pending()：批量取消 / 在途数</text><circle cx="58" cy="4628" r="2.2" class="dot-kernel"/><text x="68" y="4632" class="body">inspect()：解析后的完整顺序 [{ stage, name }]</text><circle cx="58" cy="4648" r="2.2" class="dot-kernel"/><text x="68" y="4652" class="body">isResponse(e) / isCancel(e)：区分异常</text><circle cx="58" cy="4668" r="2.2" class="dot-kernel"/><text x="68" y="4672" class="body">dispose()：中止全部在途并按逆序卸载插件</text>
+<rect x="486" y="4122" width="422" height="466" rx="10" class="card c-kernel"/><path d="M486 4158 V4132 a10 10 0 0 1 10 -10 H898 a10 10 0 0 1 10 10 V4158 Z" class="head-kernel"/><text x="500" y="4146" class="ctitle">请求级内核选项</text><text x="894" y="4146" class="ctag" text-anchor="end">每次调用可传</text><line x1="500" x2="894" y1="4170" y2="4170" class="hair"/><text x="500" y="4187" class="mono-b">wrap</text><text x="622" y="4187" class="mono-d">false</text><text x="707" y="4187" class="body-s">成功也返回 R 形态（</text><text x="707" y="4203" class="body-s">WithData&lt;R, D&gt;），而不只是</text><text x="707" y="4219" class="body-s">data</text><line x1="500" x2="894" y1="4226" y2="4226" class="hair"/><text x="500" y="4243" class="mono-b">throws</text><text x="622" y="4243" class="mono-d">true</text><text x="707" y="4243" class="body-s">false 时失败不抛，resolve 出</text><text x="707" y="4259" class="body-s">按 ok 区分的 AxpResult</text><line x1="500" x2="894" y1="4266" y2="4266" class="hair"/><text x="500" y="4283" class="mono-b">raw</text><text x="622" y="4283" class="mono-d">false</text><text x="707" y="4283" class="body-s">隐含 wrap；返回副本带不可枚举</text><text x="707" y="4299" class="body-s">的 raw / error / request，</text><text x="707" y="4315" class="body-s">nativeOf(e) 读抛出对象</text><line x1="500" x2="894" y1="4322" y2="4322" class="hair"/><text x="500" y="4339" class="mono-b">silent</text><text x="622" y="4339" class="mono-d">false</text><text x="707" y="4339" class="body-s">为 true 时 notify 不提示</text><line x1="500" x2="894" y1="4346" y2="4346" class="hair"/><text x="500" y="4363" class="mono-b">key</text><text x="622" y="4363" class="mono-d">自动</text><text x="707" y="4363" class="body-s">字符串 = 显式 key（仍带</text><text x="707" y="4379" class="body-s">scope）；false 关闭 cache /</text><text x="707" y="4395" class="body-s">share</text><line x1="500" x2="894" y1="4402" y2="4402" class="hair"/><text x="500" y="4419" class="mono-b">signal</text><text x="622" y="4419" class="mono-d">—</text><text x="707" y="4419" class="body-s">AbortSignal，与 cancelAll</text><text x="707" y="4435" class="body-s">合并</text><line x1="500" x2="894" y1="4442" y2="4442" class="hair"/><text x="500" y="4465" class="cap">三层合并</text><text x="500" y="4486" class="body">方法级配置 &lt; payload &lt; 调用级配置，浅合并；wrap / throws /</text><text x="500" y="4503" class="body">raw 只读调用方传入的 originRequest，没有客户端级默认值。</text><text x="500" y="4531" class="cap">插件选项扩展</text><text x="500" y="4552" class="body">通过 declare module '@codejoo/axp' { interface</text><text x="500" y="4569" class="body">AxpRequestOptions { … } } 给请求加选项，自定义插件也一样。</text>
+<rect x="932" y="4122" width="422" height="519" rx="10" class="card c-kernel"/><path d="M932 4158 V4132 a10 10 0 0 1 10 -10 H1344 a10 10 0 0 1 10 10 V4158 Z" class="head-kernel"/><text x="946" y="4146" class="ctitle">ctx 上下文</text><text x="1340" y="4146" class="ctag" text-anchor="end">(ctx, next) =&gt; Promise&lt;R&gt;</text><line x1="946" x2="1340" y1="4170" y2="4170" class="hair"/><text x="946" y="4187" class="mono-b">id / client</text><text x="1068" y="4187" class="mono-d">—</text><text x="1153" y="4187" class="body-s">逻辑请求序号 / 所属客户端</text><line x1="946" x2="1340" y1="4194" y2="4194" class="hair"/><text x="946" y="4211" class="mono-b">request</text><text x="1068" y="4211" class="mono-d">—</text><text x="1153" y="4211" class="body-s">本层看到的请求，只读</text><line x1="946" x2="1340" y1="4218" y2="4218" class="hair"/><text x="946" y="4235" class="mono-b">originRequest</text><text x="1068" y="4235" class="mono-d">—</text><text x="1153" y="4235" class="body-s">调用方原始请求（wrap /</text><text x="1153" y="4251" class="body-s">throws / raw 读它）</text><line x1="946" x2="1340" y1="4258" y2="4258" class="hair"/><text x="946" y="4275" class="mono-b">signal</text><text x="1068" y="4275" class="mono-d">—</text><text x="1153" y="4275" class="body-s">用户 signal ∪ cancelAll</text><line x1="946" x2="1340" y1="4282" y2="4282" class="hair"/><text x="946" y="4299" class="mono-b">log</text><text x="1068" y="4299" class="mono-d">空函数</text><text x="1153" y="4299" class="body-s">受 debug 控制的 { log,</text><text x="1153" y="4315" class="body-s">warn, error }</text><line x1="946" x2="1340" y1="4322" y2="4322" class="hair"/><text x="946" y="4339" class="mono-b">key()</text><text x="1068" y="4339" class="mono-d">—</text><text x="1153" y="4339" class="body-s">惰性算哈希，按 request 缓存；</text><text x="1153" y="4355" class="body-s">不可哈希为 null</text><line x1="946" x2="1340" y1="4362" y2="4362" class="hair"/><text x="946" y="4379" class="mono-b">get(k) / set(k,</text><text x="946" y="4395" class="mono-b">v)</text><text x="1068" y="4379" class="mono-d">—</text><text x="1153" y="4379" class="body-s">逻辑请求级状态，键用</text><text x="1153" y="4395" class="body-s">stateKey&lt;T&gt;() 建</text><line x1="946" x2="1340" y1="4402" y2="4402" class="hair"/><text x="946" y="4419" class="mono-b">fail(init)</text><text x="1068" y="4419" class="mono-d">—</text><text x="1153" y="4419" class="body-s">凭空造结果，必须经响应工厂</text><line x1="946" x2="1340" y1="4426" y2="4426" class="hair"/><text x="946" y="4443" class="mono-b">markReplayable()</text><text x="1068" y="4443" class="mono-d">—</text><text x="1153" y="4443" class="body-s">声明可能重发（debug 下检测原</text><text x="1153" y="4459" class="body-s">地修改）</text><line x1="946" x2="1340" y1="4466" y2="4466" class="hair"/><text x="946" y="4483" class="mono-b">canReplay()</text><text x="1068" y="4483" class="mono-d">—</text><text x="1153" y="4483" class="body-s">一次性请求体发出后为 false，</text><text x="1153" y="4499" class="body-s">重放前必查</text><line x1="946" x2="1340" y1="4506" y2="4506" class="hair"/><text x="946" y="4523" class="mono-b">statusOf(r)</text><text x="1068" y="4523" class="mono-d">r.status</text><text x="1153" y="4523" class="body-s">有效状态</text><line x1="946" x2="1340" y1="4530" y2="4530" class="hair"/><text x="946" y="4547" class="mono-b">native</text><text x="1068" y="4547" class="mono-d">—</text><text x="1153" y="4547" class="body-s">{ response?, error? }，最近</text><text x="1153" y="4563" class="body-s">一次传输结果，落定后清空</text><line x1="946" x2="1340" y1="4570" y2="4570" class="hair"/><text x="946" y="4588" class="body">next(patch) 把 patch 浅合并成新请求交内层（headers 多合并一</text><text x="946" y="4605" class="body">层，字段写 undefined 表示删掉）；同一层连调两次 next() 拿到</text><text x="946" y="4622" class="body">同一个基准请求，所以重发天然干净。</text>
+<rect x="1378" y="4122" width="422" height="524" rx="10" class="card c-kernel"/><path d="M1378 4158 V4132 a10 10 0 0 1 10 -10 H1790 a10 10 0 0 1 10 10 V4158 Z" class="head-kernel"/><text x="1392" y="4146" class="ctitle">R 与失败类型 · 落定出口</text><text x="1786" y="4146" class="ctag" text-anchor="end">IAxpResponse</text><text x="1392" y="4180" class="body">R 的必需契约只有四个：ok、status（HTTP，无响应为 0）、code（</text><text x="1392" y="4197" class="body">业务码，无为 0）、data（无为 null）。默认类 AxpResponse 另有</text><text x="1392" y="4214" class="body">message、request({method, url})、toJSON、parse。默认成功</text><text x="1392" y="4231" class="body">= 2xx 且 code 为 0 或 '0000'；子类可覆盖 parse / ok。</text><text x="1392" y="4259" class="cap">内核失败类型 failureOf(r)?.type</text><line x1="1392" x2="1786" y1="4270" y2="4270" class="hair"/><text x="1392" y="4287" class="mono-b">network</text><text x="1514" y="4287" class="mono-d"></text><text x="1599" y="4287" class="body-s">连接失败、响应断流</text><line x1="1392" x2="1786" y1="4294" y2="4294" class="hair"/><text x="1392" y="4311" class="mono-b">timeout</text><text x="1514" y="4311" class="mono-d"></text><text x="1599" y="4311" class="body-s">ETIMEDOUT 或超时的</text><text x="1599" y="4327" class="body-s">ECONNABORTED</text><line x1="1392" x2="1786" y1="4334" y2="4334" class="hair"/><text x="1392" y="4351" class="mono-b">cancel</text><text x="1514" y="4351" class="mono-d"></text><text x="1599" y="4351" class="body-s">用户取消 / cancelAll /</text><text x="1599" y="4367" class="body-s">dispose</text><line x1="1392" x2="1786" y1="4374" y2="4374" class="hair"/><text x="1392" y="4391" class="mono-b">parse</text><text x="1514" y="4391" class="mono-d"></text><text x="1599" y="4391" class="body-s">JSON 解析失败、</text><text x="1599" y="4407" class="body-s">maxContentLength 超限</text><line x1="1392" x2="1786" y1="4414" y2="4414" class="hair"/><text x="1392" y="4431" class="mono-b">auth</text><text x="1514" y="4431" class="mono-d"></text><text x="1599" y="4431" class="body-s">auth 插件主动构造（expired /</text><text x="1599" y="4447" class="body-s">denied / unauthenticated）</text><line x1="1392" x2="1786" y1="4454" y2="4454" class="hair"/><text x="1392" y="4471" class="mono-b">internal</text><text x="1514" y="4471" class="mono-d"></text><text x="1599" y="4471" class="body-s">程序 bug：非 AxiosError 的异</text><text x="1599" y="4487" class="body-s">常、用户回调抛错</text><line x1="1392" x2="1786" y1="4494" y2="4494" class="hair"/><text x="1392" y="4517" class="cap">落定出口</text><line x1="1392" x2="1786" y1="4528" y2="4528" class="hair"/><text x="1392" y="4545" class="mono-b">成功</text><text x="1514" y="4545" class="mono-d">默认 data</text><text x="1599" y="4545" class="body-s">wrap → WithData；</text><text x="1599" y="4561" class="body-s">throws:false → AxpResult</text><line x1="1392" x2="1786" y1="4568" y2="4568" class="hair"/><text x="1392" y="4585" class="mono-b">可预期失败</text><text x="1514" y="4585" class="mono-d">throw r</text><text x="1599" y="4585" class="body-s">throws:false 时 resolve 出</text><text x="1599" y="4601" class="body-s">ok:false 分支</text><line x1="1392" x2="1786" y1="4608" y2="4608" class="hair"/><text x="1392" y="4625" class="mono-b">程序 bug</text><text x="1514" y="4625" class="mono-d">抛原始异常</text><text x="1599" y="4625" class="body-s">三种形态都不吞，stack 完整</text><line x1="1392" x2="1786" y1="4632" y2="4632" class="hair"/>
+<text x="40" y="4761" class="h2">六、写自己的插件</text>
+<text x="232" y="4761" class="sub">具名对象 { name, stage, setup | handle | taps }，选个阶段挂上去</text>
+<line x1="40" x2="1800" y1="4775" y2="4775" class="hair2"/>
+<rect x="40" y="4797" width="866" height="348" rx="10" class="card c-kernel"/>
+<text x="54" y="4821" class="cap">接口（types.ts）</text>
+<rect x="52" y="4831" width="842" height="286" rx="6" class="codebg"/>
+<text x="64" y="4849" class="code">type AxpStage = "outer" | "prepare" | "attempt" | "credential" | "source";</text>
+<text x="64" y="4865" class="code">type AxpMiddleware&lt;R&gt; = (ctx: AxpContext&lt;R&gt;, next: AxpNext&lt;R&gt;) =&gt; Promise&lt;R&gt;;</text>
+<text x="64" y="4881" class="code"></text>
+<text x="64" y="4897" class="code">interface AxpTap&lt;R&gt; {                 // 分段挂载：请求侧、响应侧各挂各的阶段</text>
+<text x="64" y="4913" class="code">  stage: AxpStage;  enforce?: "pre" | "post";</text>
+<text x="64" y="4929" class="code">  onRequest?(ctx): void | AxpRequestPatch | Promise&lt;...&gt;;</text>
+<text x="64" y="4945" class="code">  onResponse?(r, ctx): void | R | Promise&lt;...&gt;;</text>
+<text x="64" y="4961" class="code">}</text>
+<text x="64" y="4977" class="code">interface AxpPlugin&lt;R, A&gt; {</text>
+<text x="64" y="4993" class="code">  name: string;                       // 客户端内唯一；axp: 前缀保留给内置</text>
+<text x="64" y="5009" class="code">  enable?: boolean;                   // false：不 setup、不进链</text>
+<text x="64" y="5025" class="code">  stage?: AxpStage;                   // 默认 'attempt'（有 taps 时忽略）</text>
+<text x="64" y="5041" class="code">  enforce?: "pre" | "post";           // 默认 'post'</text>
+<text x="64" y="5057" class="code">  setup?(client): { handle?, taps?, api?, dispose? } | void;  // 有状态：状态建在这里</text>
+<text x="64" y="5073" class="code">  handle?: AxpMiddleware&lt;R&gt;;          // 无状态：直接给</text>
+<text x="64" y="5089" class="code">  taps?: readonly AxpTap&lt;R&gt;[];</text>
+<text x="64" y="5105" class="code">}</text>
+<rect x="934" y="4797" width="866" height="348" rx="10" class="card c-kernel"/>
+<text x="948" y="4821" class="cap">两个例子</text>
+<rect x="946" y="4831" width="842" height="302" rx="6" class="codebg"/>
+<text x="958" y="4849" class="code">// 例一：记录每次尝试耗时（attempt 阶段、默认 post，落在 retry 里面）</text>
+<text x="958" y="4865" class="code">const timing: AxpPlugin = {</text>
+<text x="958" y="4881" class="code">  name: "timing",</text>
+<text x="958" y="4897" class="code">  async handle(ctx, next) {</text>
+<text x="958" y="4913" class="code">    const t = performance.now();</text>
+<text x="958" y="4929" class="code">    const r = await next();            // next() 永不抛错</text>
+<text x="958" y="4945" class="code">    ctx.log.log(`${ctx.request.url} ${r.status} ${performance.now() - t}ms`);</text>
+<text x="958" y="4961" class="code">    return r;                          // 只透传 R，不构造 R</text>
+<text x="958" y="4977" class="code">  },</text>
+<text x="958" y="4993" class="code">};</text>
+<text x="958" y="5009" class="code">// 例二：taps，请求侧和响应侧处在不同深度</text>
+<text x="958" y="5025" class="code">const audit: AxpPlugin = {</text>
+<text x="958" y="5041" class="code">  name: "audit",</text>
+<text x="958" y="5057" class="code">  taps: [</text>
+<text x="958" y="5073" class="code">    { stage: "credential", onRequest: (ctx) =&gt; report("send", ctx.request) },  // 看到注入 token 后的请求</text>
+<text x="958" y="5089" class="code">    { stage: "outer", onResponse: (r) =&gt; report("done", r.status) },          // 看到收敛后的最终 R</text>
+<text x="958" y="5105" class="code">  ],</text>
+<text x="958" y="5121" class="code">};</text>
+<rect x="40" y="5167" width="568" height="191" rx="10" class="card c-kernel"/><path d="M40 5203 V5177 a10 10 0 0 1 10 -10 H598 a10 10 0 0 1 10 10 V5203 Z" class="head-kernel"/><text x="54" y="5191" class="ctitle">排序规则</text><text x="594" y="5191" class="ctag" text-anchor="end">inspect() 查看最终顺序</text><circle cx="58" cy="5221" r="2.2" class="dot-kernel"/><text x="68" y="5225" class="body">阶段顺序固定：outer → prepare → attempt → credential → source。</text><circle cx="58" cy="5241" r="2.2" class="dot-kernel"/><text x="68" y="5245" class="body">同阶段内：enforce:'pre' 的自定义插件 → 内置插件（固定次序）→ enforce:'post'（</text><text x="68" y="5262" class="body">默认）的自定义插件；自定义之间按 plugins 数组顺序。</text><circle cx="58" cy="5278" r="2.2" class="dot-kernel"/><text x="68" y="5282" class="body">所以 attempt 阶段里，pre 落在 retry 外面（只跑一次），post 落在 retry 里面（每次</text><text x="68" y="5299" class="body">尝试重跑）。</text><circle cx="58" cy="5315" r="2.2" class="dot-kernel"/><text x="68" y="5319" class="body">插件名重复直接抛错；taps 每段独立排序，名字记作 &lt;name&gt;#&lt;序号&gt;。</text><circle cx="58" cy="5335" r="2.2" class="dot-kernel"/><text x="68" y="5339" class="body">链只在 createAxp / use / eject 时编译一次；在途请求沿用发起时的链快照。</text>
+<rect x="636" y="5167" width="568" height="231" rx="10" class="card c-kernel"/><path d="M636 5203 V5177 a10 10 0 0 1 10 -10 H1194 a10 10 0 0 1 10 10 V5203 Z" class="head-kernel"/><text x="650" y="5191" class="ctitle">编写约定</text><text x="1190" y="5191" class="ctag" text-anchor="end">7 条</text><circle cx="654" cy="5221" r="2.2" class="dot-kernel"/><text x="664" y="5225" class="body">状态必须建在 setup 里，不要放工厂闭包；同一个插件对象才能装到多个客户端。</text><circle cx="654" cy="5241" r="2.2" class="dot-kernel"/><text x="664" y="5245" class="body">只透传 R，不构造 R；要造结果走 ctx.fail({ failure, reason, from })。</text><circle cx="654" cy="5261" r="2.2" class="dot-kernel"/><text x="664" y="5265" class="body">改请求用 next(patch)，不改 ctx.request；要重放先 markReplayable()，重放前</text><text x="664" y="5282" class="body">canReplay()。</text><circle cx="654" cy="5298" r="2.2" class="dot-kernel"/><text x="664" y="5302" class="body">判断函数的参数是 R；读状态码用 ctx.statusOf(r)，读失败类型用 failureOf(r)。</text><circle cx="654" cy="5318" r="2.2" class="dot-kernel"/><text x="664" y="5322" class="body">只有 setup 没有中间件的插件（如 envs）不进链。</text><circle cx="654" cy="5338" r="2.2" class="dot-kernel"/><text x="664" y="5342" class="body">判定类回调抛错按程序 bug 处理；通知类回调（loading、notify 等）被隔离并</text><text x="664" y="5359" class="body">console.error。</text><circle cx="654" cy="5375" r="2.2" class="dot-kernel"/><text x="664" y="5379" class="body">请求选项靠 declare module '@codejoo/axp' 扩展 AxpRequestOptions。</text>
+<rect x="1232" y="5167" width="568" height="302" rx="10" class="card c-kernel"/><path d="M1232 5203 V5177 a10 10 0 0 1 10 -10 H1790 a10 10 0 0 1 10 10 V5203 Z" class="head-kernel"/><text x="1246" y="5191" class="ctitle">想扩展某处？动哪里</text><text x="1786" y="5191" class="ctag" text-anchor="end">速查</text><line x1="1246" x2="1786" y1="5215" y2="5215" class="hair"/><text x="1246" y="5232" class="mono-b">加横切逻辑</text><text x="1413" y="5232" class="mono-d"></text><text x="1527" y="5232" class="body-s">自定义插件选阶段；进出不对称用 taps</text><line x1="1246" x2="1786" y1="5239" y2="5239" class="hair"/><text x="1246" y="5256" class="mono-b">改成功判定 / 给响应加字段</text><text x="1413" y="5256" class="mono-d"></text><text x="1527" y="5256" class="body-s">子类覆盖 ok / parse，axpResponse({</text><text x="1527" y="5272" class="body-s">type })</text><line x1="1246" x2="1786" y1="5279" y2="5279" class="hair"/><text x="1246" y="5296" class="mono-b">换响应体字段名</text><text x="1413" y="5296" class="mono-d"></text><text x="1527" y="5296" class="body-s">覆盖 parse；expectJson 要求严格 JSON</text><line x1="1246" x2="1786" y1="5303" y2="5303" class="hair"/><text x="1246" y="5320" class="mono-b">缓存换成持久化</text><text x="1413" y="5320" class="mono-d"></text><text x="1527" y="5320" class="body-s">实现 IAxpCacheStore 传给 cache 的</text><text x="1527" y="5336" class="body-s">store</text><line x1="1246" x2="1786" y1="5343" y2="5343" class="hair"/><text x="1246" y="5360" class="mono-b">调整失败抛出形态</text><text x="1413" y="5360" class="mono-d"></text><text x="1527" y="5360" class="body-s">throws、wrap、createAxp({ reject })</text><line x1="1246" x2="1786" y1="5367" y2="5367" class="hair"/><text x="1246" y="5384" class="mono-b">业务码当状态码用</text><text x="1413" y="5384" class="mono-d"></text><text x="1527" y="5384" class="body-s">createAxp({ statusOf })</text><line x1="1246" x2="1786" y1="5391" y2="5391" class="hair"/><text x="1246" y="5408" class="mono-b">排查插件顺序</text><text x="1413" y="5408" class="mono-d"></text><text x="1527" y="5408" class="body-s">client.inspect()</text><line x1="1246" x2="1786" y1="5415" y2="5415" class="hair"/><text x="1246" y="5432" class="mono-b">排查谁发起了失败请求</text><text x="1413" y="5432" class="mono-d"></text><text x="1527" y="5432" class="body-s">createAxp({ debug: true })，r.stack 有</text><text x="1527" y="5448" class="body-s">调用点</text><line x1="1246" x2="1786" y1="5455" y2="5455" class="hair"/>
+<text x="40" y="5515" class="legend-d">源码位置：src/client.ts（客户端与落定）· pipeline.ts（排序、链、next(patch)）· stages.ts（阶段与内置次序的唯一来源）· transport.ts（传输）· response.ts（R）· plugins/*.ts（10 个内置插件）　详见 ARCHITECTURE.md、docs/design/plugin-spec.md</text></svg>
