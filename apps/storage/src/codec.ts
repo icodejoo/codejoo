@@ -10,28 +10,35 @@ import type { Codec } from "./interface";
 // | codecBase64 | 原生 toBase64 优先 + atob/btoa polyfill | 大体量 ASCII 吞吐最高（原生 SIMD）；体积 +33%（中文 3 倍） |
 // | codecAtob | 全程 TextEncoder + atob/btoa | 行为处处一致（无特性检测分支）；与 codecBase64 同格式可互解 |
 
+/** 缺省混淆口令。 */
 const DEFAULT_PW = "@codejoo/storage";
+/** 共用 UTF-8 编码器。 */
 const E = /*#__PURE__*/ new TextEncoder();
-const D = /*#__PURE__*/ new TextDecoder("utf-8", { ignoreBOM: true }); // 保留 BOM：明文以 U+FEFF 开头时不能被吞掉首字符
+/** 保留明文开头 BOM 的共用 UTF-8 解码器。 */
+const D = /*#__PURE__*/ new TextDecoder("utf-8", { ignoreBOM: true });
+/** 原生 base64url 转换选项。 */
 const B64 = { alphabet: "base64url", omitPadding: true } as const;
+/** 分块转换码元，避免展开参数超过调用栈上限。 */
+const CHUNK = 8192;
+/** base64url 旋转位数，编码与解码保持对称。 */
+const ROTATION = 7;
 
 /** 旋转修饰及其逆：整串旋转 7 位，按 base64url 硬解也对不齐（≤7 字符时恒等，两侧对称） */
-const rot = (t: string): string => t.slice(7) + t.slice(0, 7);
-const unrot = (t: string): string => t.slice(-7) + t.slice(0, -7);
+const rot = (t: string): string => t.slice(ROTATION) + t.slice(0, ROTATION);
+/** 撤销 base64url 旋转修饰。 */
+const unrot = (t: string): string => t.slice(-ROTATION) + t.slice(0, -ROTATION);
 
 /** 字节 → base64url（atob/btoa polyfill 路径；输出与原生 toBase64(B64) 逐字符一致） */
 const toB64Poly = (b: Uint8Array): string => {
-  let s = "";
-  for (let i = 0; i < b.length; i += 8192) s += String.fromCharCode(...b.subarray(i, i + 8192)); // 分块防参数栈溢出
-  return btoa(s).replaceAll("+", "-").replaceAll("/", "_").replace(/=+$/, "");
+  return btoa(toStr(b)).replaceAll("+", "-").replaceAll("/", "_").replace(/=+$/, "");
 };
 /**
- * Uint16Array → string，逐码元原样还原（不同 TextDecoder：不做 UTF-16 合法性校验/替换，落单代理码元也原样保留，
+ * 字节或 UTF-16 码元 → string，逐码元原样还原（不同 TextDecoder：不做 UTF-16 合法性校验/替换，落单代理码元也原样保留，
  * 因为 XOR 只保证合法输入 XOR 后仍合法，不保证输入本就合法——TextDecoder 会把不合法的落单代理换成 U+FFFD 破坏往返）
  */
-const u16ToStr = (buf: Uint16Array): string => {
+const toStr = (buf: Uint8Array | Uint16Array): string => {
   let s = "";
-  for (let i = 0; i < buf.length; i += 8192) s += String.fromCharCode(...buf.subarray(i, i + 8192)); // 分块防参数栈溢出
+  for (let i = 0; i < buf.length; i += CHUNK) s += String.fromCharCode(...buf.subarray(i, i + CHUNK));
   return s;
 };
 /** base64url → 字节（atob/btoa polyfill 路径；非法输入抛错） */
@@ -112,14 +119,14 @@ export function codec(password?: string): Codec {
       const buf = new Uint16Array(n + 1);
       buf[0] = MAGIC;
       for (let i = 0; i < n; i++) buf[i + 1] = value.charCodeAt(i) ^ k;
-      return u16ToStr(buf);
+      return toStr(buf);
     },
     decode(value) {
       const n = value.length;
       if (n < 1 || value.charCodeAt(0) !== MAGIC) return null; // 标记不符：错 password/外部数据
       const buf = new Uint16Array(n - 1);
       for (let i = 1; i < n; i++) buf[i - 1] = value.charCodeAt(i) ^ k;
-      return u16ToStr(buf);
+      return toStr(buf);
     },
   };
 }

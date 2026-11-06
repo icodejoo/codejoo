@@ -1,5 +1,6 @@
 import type { AsyncStorage, SyncStore } from "./interface";
-import { type Handlers, type Result, isPromise, SNAPSHOT } from "./proxy";
+import { type Handlers, type Result, SNAPSHOT } from "./proxy";
+import { isPromise } from "./maybe";
 
 /** 历史版本曾把快照以此键写回存储；保留常量用于跳过遗留数据，但本函数不再写入 */
 const DEBUG_KEY = "_$debug";

@@ -7,10 +7,14 @@ import { Memory } from "./memory";
 const SET = "set",
   REMOVE = "remove",
   CLEAR = "clear";
+/** 当前广播协议版本。 */
+const VERSION = 2;
+/** 可接收的广播操作，复用校验列表。 */
+const OPERATIONS = [SET, REMOVE, CLEAR];
 /** v2 使用绝对到期时间和原始落盘串，避免回放时重新计算 TTL。 */
 interface Message {
   /** 协议版本。 */
-  v: 2;
+  v: typeof VERSION;
   /** 提交类型。 */
   op: typeof SET | typeof REMOVE | typeof CLEAR;
   /** 转义后的命名空间前缀。 */
@@ -36,6 +40,8 @@ const mounted = /*#__PURE__*/ new WeakSet<object>();
 const warned = /*#__PURE__*/ new WeakSet<object>();
 /** 判断新提交是否严格晚于旧提交。 */
 const newer = (next: Stamp, old?: Stamp): boolean => !old || next.ts > old.ts || (next.ts === old.ts && next.from > old.from);
+/** 版本表只保存排序字段，避免长期持有整条消息及其落盘串。 */
+const stampOf = ({ ts, from }: Stamp): Stamp => ({ ts, from });
 /** 空操作停止函数。 */
 const noop = (): void => {};
 
@@ -81,23 +87,25 @@ export function crossTab(handler: Handlers<SyncStore>, channel = "@codejoo/stora
     const keys = versions(event.ns),
       barrier = clears.get(event.ns);
     if (!newer(event, barrier)) return;
+    const stamp = stampOf(event);
     if (event.op === CLEAR) {
       for (const key of handler.keys()) {
         if (newer(event, keys.get(key))) {
           replay({ ...event, op: REMOVE, key });
-          keys.set(key, event);
+          keys.set(key, stamp);
         }
       }
-      clears.set(event.ns, event);
+      clears.set(event.ns, stamp);
     } else if (newer(event, keys.get(event.key!))) {
       replay(event);
-      keys.set(event.key!, event);
+      keys.set(event.key!, stamp);
     }
   };
   const unsubscribe = handler[COMMIT]((event) => {
-    const msg: Message = { v: 2, op: event.op, ns: event.namespace, key: event.key, payload: event.payload ?? undefined, expireAt: event.expireAt, ts: (clock = Math.max(Date.now(), clock + 1)), from };
-    if (event.op === CLEAR) clears.set(msg.ns, msg);
-    else versions(msg.ns).set(event.key, msg);
+    const msg: Message = { v: VERSION, op: event.op, ns: event.namespace, key: event.key, payload: event.payload ?? undefined, expireAt: event.expireAt, ts: (clock = Math.max(Date.now(), clock + 1)), from };
+    const stamp = stampOf(msg);
+    if (event.op === CLEAR) clears.set(msg.ns, stamp);
+    else versions(msg.ns).set(event.key, stamp);
     try {
       bc.postMessage(msg);
     } catch (error) {
@@ -109,8 +117,8 @@ export function crossTab(handler: Handlers<SyncStore>, channel = "@codejoo/stora
       const m = event.data as Message;
       if (
         !m ||
-        m.v !== 2 ||
-        ![SET, REMOVE, CLEAR].includes(m.op) ||
+        m.v !== VERSION ||
+        !OPERATIONS.includes(m.op) ||
         m.ns !== handler.namespace ||
         typeof m.from !== "string" ||
         m.from.length === 0 ||
@@ -134,6 +142,7 @@ export function crossTab(handler: Handlers<SyncStore>, channel = "@codejoo/stora
     bc.close();
     mounted.delete(handler);
     const remaining = owners.get(channel)! - 1;
-    if (remaining) owners.set(channel, remaining); else owners.delete(channel);
+    if (remaining) owners.set(channel, remaining);
+    else owners.delete(channel);
   };
 }

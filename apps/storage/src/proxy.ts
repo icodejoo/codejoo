@@ -4,7 +4,6 @@ import { keyspace } from "./keyspace";
 import { isExpired, mkEntity, parseEntity, renewOf, typeMismatch } from "./entity";
 import { report, type StorageOperation } from "./errors";
 import { memoHub } from "./hub";
-export { isPromise } from "./maybe";
 /** 内部提交订阅键；不从公共入口导出。 */
 export const COMMIT = Symbol("storage.commit");
 /** 内部后端身份；不从公共入口导出。 */
@@ -89,13 +88,22 @@ export interface Handlers<S extends SyncStore | AsyncStorage> {
    */
   destroy(): Result<S, void>;
 }
+/** 每键操作令牌；最后一个引用完成后回收。 */
+interface OperationToken {
+  /** 在途操作引用数。 */
+  _refs: number;
+  /** 在途写操作数。 */
+  _writes: number;
+  /** 外部写入已使缓存结果失效。 */
+  _stale?: boolean;
+}
 /** 单一编排：同步后端保留同步返回，异步后端统一返回 Promise。 */
 export function proxy<S extends SyncStore | AsyncStorage>(storage: S, memo: MemoCache, opts: BaseStorageOptions = {}): Handlers<S> {
   const st = storage as SyncStore & AsyncStorage, async = typeof st.length === "function";
   const { raw = false, sliding = false, memoized = false, readonly = false, cloned = false, force = true, onError } = opts;
   const codec = opts.codeable ? opts.codec : undefined, area = st.area ?? st;
   let space = keyspace(opts.namespace, opts.enckey ? opts.codec : undefined), epoch = 0, scans = 0;
-  const versions = new Map<string, { _refs: number; _writes: number; _stale?: boolean }>(), queues = new Map<string, Promise<void>>(), strings = new WeakMap<StorageEntity, string>();
+  const versions = new Map<string, OperationToken>(), queues = new Map<string, Promise<void>>(), strings = new WeakMap<StorageEntity, string>();
   const listeners = new Set<(event: CommitEvent) => void>(), pending = new Set<Promise<unknown>>();
   /** 清除期间的读写与枚举等待扫描完成，屏障不传播清除异常。 */
   let clearing: Promise<void> | undefined;
@@ -120,7 +128,7 @@ export function proxy<S extends SyncStore | AsyncStorage>(storage: S, memo: Memo
   /** 追踪每键操作；令牌仅在最后一个引用完成后回收。 */
   const operation = <T>(key: string, write: boolean, fn: (valid: () => boolean, writable: () => boolean) => Maybe<T>, mutation = write): Maybe<T> => {
     const generation = epoch;
-    const token: { _refs: number; _writes: number; _stale?: boolean } = (!write && versions.get(key)) || { _refs: 0, _writes: 0 }; versions.set(key, token); token._refs++;
+    const token: OperationToken = (!write && versions.get(key)) || { _refs: 0, _writes: 0 }; versions.set(key, token); token._refs++;
     const cacheable = mutation || token._writes === 0; if (mutation) { token._writes++; }
     const writable = () => versions.get(key) === token;
     const valid = () => cacheable && !token._stale && epoch === generation && writable();
@@ -149,6 +157,8 @@ export function proxy<S extends SyncStore | AsyncStorage>(storage: S, memo: Memo
   };
   /** 在固定键空间内枚举，供公开键查询和快照复用。 */
   const scan = <T>(ks: typeof space, fn: (keys: string[]) => T): Maybe<T> => chain(clearing, () => chain(ownKeys(ks), fn));
+  /** 枚举并恢复固定键空间内的逻辑键。 */
+  const logicalKeys = (ks: typeof space): Result<S, string[]> => run(() => scan(ks, keys => keys.map(ks.logical)));
   /** 条件写：事务型后端检查落盘串；其他后端依赖每键版本。 */
   const change = (ks: typeof space, key: string, expected: string | null | undefined, next: string | null, valid: () => boolean, renewal = false, expireAt?: number, op: StorageOperation = "set", quiet = false, retryable = false): Maybe<boolean> => {
     if (!valid()) return false;
@@ -243,12 +253,12 @@ export function proxy<S extends SyncStore | AsyncStorage>(storage: S, memo: Memo
         evict(sk); hub.publish(sk);
       });
     }),
-    [SNAPSHOT]: () => { const ks = space, generation = epoch; return { namespace: ks.prefix, keys: () => run(() => scan(ks, keys => keys.map(ks.logical))), get: key => run(() => chain(clearing, () => read(ks, key, null, generation))) }; },
+    [SNAPSHOT]: () => { const ks = space, generation = epoch; return { namespace: ks.prefix, keys: () => logicalKeys(ks), get: key => run(() => chain(clearing, () => read(ks, key, null, generation))) }; },
     [COMMIT]: listener => { listeners.add(listener); return () => { listeners.delete(listener); }; },
     get: get as Handlers<S>["get"], set: set as Handlers<S>["set"],
     get namespace() { return space.prefix; },
     setNamespace: namespace => { evict(null); space = keyspace(namespace, opts.enckey ? opts.codec : undefined); },
-    keys: () => { const ks = space; return run(() => scan(ks, keys => keys.map(ks.logical))); },
+    keys: () => logicalKeys(space),
     key: index => { const ks = space; return run(() => chain(clearing, () => ks.plain ? st.key(Math.trunc(index) || 0) : scan(ks, keys => { const i = Math.trunc(index) || 0; return keys[i] === undefined ? null : ks.logical(keys[i]); }))); },
     get length() { const ks = space; return run(() => chain(clearing, () => ks.plain ? async ? st.length() : st.length as unknown as number : scan(ks, keys => keys.length))); },
     purge: () => { const ks = space; return run(() => chain(clearing, () => purge(ks))); },
