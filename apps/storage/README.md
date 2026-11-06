@@ -1,249 +1,261 @@
 # @codejoo/storage
 
-English | [简体中文](https://github.com/icodejoo/codejoo/tree/main/apps/storage/README.zh-CN.md)
+[简体中文](./README.zh-CN.md) · [Architecture](./ARCHITECTURE.md)
 
-A tiny, type-safe wrapper over `localStorage` / `sessionStorage` / `IndexedDB` with one unified API: TTL & absolute expiry, sliding renewal, namespaces, pluggable serialization (incl. `Date` / `Map` / `Set` / `bigint`), an optional obfuscation codec, an opt-in in-memory cache, and a key-bound shortcut helper. Sync backends return values; the async IndexedDB backend returns Promises — **decided by generics, one code path**.
+A typed ESM wrapper for localStorage, sessionStorage and explicitly configured IndexedDB. One handler API provides TTL, sliding expiry, namespaces, optional memo caching and pluggable serialization. Syntax target: es2022.
 
-- Zero deps · ESM · `sideEffects: false` · ships a per-module tree-shakeable build (`dist/esm/`).
-- Falls back to in-memory storage automatically when the native API is unavailable (privacy mode, sandboxed iframe, etc.).
-
-## Install
+## Quick start
 
 ```sh
 pnpm add @codejoo/storage
 ```
 
-## Quick start
-
-```ts
-import { factory } from "@codejoo/storage";
-
-const { ls, ss } = factory();
-
-ls.set("token", "abc"); // localStorage
-ls.get("token"); // "abc"
-ls.get("missing", "default"); // "default"
-ls.set("session", 1, 60_000); // expires in 60s (ttl ms)
-ls.remove("token");
-ls.clear();
-ls.length; // number of entries
-```
-
-With IndexedDB (async, large quota). `Idb` is **not bundled by default** — import it yourself:
-
 ```ts
 import { factory, Idb } from "@codejoo/storage";
 
-const { db } = factory({ db: new Idb() });
-
-await db.set("user", { id: 1 }); // Promise<void>
-await db.get("user"); // Promise<{ id: 1 }>
+const storage = factory({ namespace: "app", db: new Idb("app-cache") });
+const { ls, ss, db } = storage;
+ls.set("count", 1, 60_000);
+ls.get("count", 0); // number, synchronous
+ss.set("draft", "hello");
+await db.set("profile", { name: "Ada" }, { ttl: 60_000 });
+await db.get("profile");
+storage.setNamespace("u42"); // switches all three handlers; keeps old data
+await storage.destroy(); // releases memo/connections; keeps backend data
 ```
 
-## API
+`ls` and `ss` are synchronous. `db` returns Promises and requires an explicitly supplied `AsyncStorage`, usually `new Idb()`. Calling an unconfigured db fails. Native-unavailable ls and ss use separate module-level shared memory backends; Idb fallback is shared by database/store name. Sharing applies within the same module instance/realm. Each factory still has independent memo caches, strictly separate from fallback data. `destroy()` does not erase fallback data.
 
-### `factory(options?)`
+## Handler API
 
-Returns `{ ls, ss, db, destroy, setNamespace }` over `localStorage`, `sessionStorage`, and the provided IndexedDB instance respectively. `ls`/`ss` are **synchronous**; `db` is **asynchronous** (returns Promises). All three share the same option behaviors. `destroy()` releases every layer at once (clears the memo caches and disconnects `db`'s IndexedDB connection) and returns a `Promise`; it does **not** delete persisted data. `setNamespace(username?)` switches the prefix of all three layers **in place** (great for per-account isolation on login/logout) — handles you already hold keep working; it only isolates, it does not erase the previous namespace's persisted data.
-
-| Param     | Type                 | Required | Default | Description                                  |
-| --------- | -------------------- | -------- | ------- | -------------------------------------------- |
-| `options` | `BaseStorageOptions` | No       | `{}`    | Instance-level config applied to all layers. |
-
-#### `BaseStorageOptions`
-
-| Option        | Type                                                         | Required | Default          | Description                                                                                                                                                                                                                                                                                    |
-| ------------- | ------------------------------------------------------------ | -------- | ---------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `memoized`    | `boolean`                                                    | No       | `false`          | Enable in-memory read cache: writes mirror to cache, reads hit cache first, deletes are dual. Opt-in (not a full mirror), so memory grows only with use.                                                                                                                                       |
-| `cloned`      | `boolean`                                                    | No       | `false`          | Return a deep copy (`structuredClone`) for objects shared with the memo cache, isolating caller mutations. Default shares references (zero cost).                                                                                                                                              |
-| `serialize`   | `(entity: StorageEntity) => string`                          | No       | `JSON.stringify` | Custom entity → string serializer.                                                                                                                                                                                                                                                             |
-| `deserialize` | `(raw: string) => StorageEntity`                             | No       | `JSON.parse`     | Custom string → entity deserializer (must pair with `serialize`).                                                                                                                                                                                                                              |
-| `codeable`    | `boolean`                                                    | No       | `false`          | Whether to invoke `codec`. Lets you toggle encoding per environment (dev/prod).                                                                                                                                                                                                                |
-| `codec`       | `Codec`                                                      | No       | —                | Encode/decode the serialized string (obfuscation / compression). Takes effect only when `codeable` is true.                                                                                                                                                                                    |
-| `sliding`     | `boolean`                                                    | No       | `false`          | Sliding expiry: renew by original `ttl` on each read hit (good for sessions/auth). The write-back is skipped while >90% of the ttl remains, so hot reads don't amplify writes.                                                                                                                 |
-| `namespace`   | `string`                                                     | No       | `""`             | Key prefix (`namespace:key`) to isolate apps/modules sharing the same origin.                                                                                                                                                                                                                  |
-| `raw`         | `boolean`                                                    | No       | `false`          | Store the raw value directly, skipping the entity envelope (no ttl/codec). For interop with external data. `purge()` / quota cleanup do not process `raw` instances.                                                                                                                           |
-| `force`       | `boolean`                                                    | No       | `true`           | On quota error, purge expired entries and retry the write; otherwise log & give up. **Sync backends only.**                                                                                                                                                                                    |
-| `readonly`    | `boolean`                                                    | No       | `false`          | Write-once: only write when the key is empty (absent/expired); otherwise discard the write.                                                                                                                                                                                                    |
-| `enckey`      | `boolean`                                                    | No       | `false`          | Also obfuscate the **key**: when set with a `codec`, the storage key is deterministically run through the codec (hides plaintext key names). This only obfuscates key names via the codec — **not a security measure** — and requires a `codec`, else it warns and degrades to plaintext keys. |
-| `onError`     | `(info: { op: "set"; key: string; error: unknown }) => void` | No       | —                | Write-failure callback (quota exceeded, `force` retry still failing). When provided it replaces the default `console.error`, so the caller can observe failures (`set` returns `void`, so failures are otherwise invisible). Called once per failing key in a batch `set`.                     |
-| `db`          | `AsyncStorage`                                               | No       | —                | An IndexedDB instance (e.g. `new Idb()`) exposed as `factory().db`. Using `db` without it throws a helpful error.                                                                                                                                                                              |
-
-### Handler methods (`ls` / `ss` / `db`)
-
-`R<T>` is `T` for sync backends (`ls`/`ss`) and `Promise<T>` for the async backend (`db`).
-
-| Method                        | Returns           | Description                                                                                                                                                                                             |
-| ----------------------------- | ----------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `get<T>(key)`                 | `R<T \| null>`    | Read; missing → `null`.                                                                                                                                                                                 |
-| `get(key, defaultValue)`      | `R<T>`            | Read; missing/expired/undecodable → `defaultValue`.                                                                                                                                                     |
-| `set(key, value, ttl?)`       | `R<void>`         | Write; `ttl` in ms. Invalid `ttl` (`0` / negative / `NaN` / `Infinity`) is warned and ignored — the value is still persisted (never written-then-immediately-deleted nor made never-expiring).          |
-| `set(key, value, options?)`   | `R<void>`         | Write; `StorageOptions` (ttl / expireAt / memoized). Opt-in memo is now only via the object form (`set(k, v, { memoized: true })`).                                                                     |
-| `remove(key)`                 | `R<void>`         | Delete (cache + backend).                                                                                                                                                                               |
-| `get(keys, defaults?)`        | `R<tuple>`        | **Batch read**: pass an array of keys; returns a same-length tuple. `defaults` map positionally and drive per-slot types (`get(["a","b"],[1,false])` → `[number, boolean]`; `as const` keeps literals). |
-| `set(keys, values, options?)` | `R<void>`         | **Batch write**: positional pairs; the 3rd arg applies to every key. If `values` is shorter, missing slots are skipped (warned).                                                                        |
-| `remove(keys)`                | `R<void>`         | **Batch delete.** Batch `get`/`set`/`remove` are implemented by iterating the key array and reusing the single-key logic per key (on the async backend, one transaction per key).                       |
-| `keys()`                      | `R<string[]>`     | All logical keys owned by this instance (decrypted, namespace-stripped).                                                                                                                                |
-| `purge()`                     | `R<void>`         | Proactively delete expired entries (owned, written by this lib). Expiry is otherwise lazy — entries never read again stay until `purge()`/quota pressure.                                               |
-| `clear()`                     | `R<void>`         | With `namespace` or `enckey`: removes only this instance's keys (other namespaces / foreign data untouched). Otherwise clears the whole backend.                                                        |
-| `destroy()`                   | `R<void>`         | Release resources: clear the memo cache and disconnect a closeable backend (IndexedDB). **Keeps persisted data.**                                                                                       |
-| `key(index)`                  | `R<string\|null>` | The `index`-th logical key (decrypted, namespace-stripped).                                                                                                                                             |
-| `length`                      | `R<number>`       | Entry count (getter). With `namespace` or `enckey` it counts only the keys this instance owns (consistent with `keys()`/`clear()`); otherwise it returns the backend's global entry count.              |
-| `namespace`                   | `string`          | The namespace prefix (e.g. `"ns:"`, or `""`).                                                                                                                                                           |
-| `setNamespace(ns?)`           | `void`            | Switch the prefix in place (e.g. per username); clears the memo cache. Held handles keep working.                                                                                                       |
-
-#### `StorageOptions` (per-call `set` options)
-
-Only these three apply per call (everything else — codec, sliding, raw… — is instance-level, see `BaseStorageOptions`):
-
-| Option     | Type                       | Required | Default | Description                                                                                                                                                                     |
-| ---------- | -------------------------- | -------- | ------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `ttl`      | `number`                   | No       | —       | Time-to-live in ms (relative). Sets `expireAt = now + ttl`. An invalid value (`0` / negative / `NaN` / `Infinity`) is warned and ignored, so the value persists with no expiry. |
-| `expireAt` | `number \| string \| Date` | No       | —       | Absolute expiry (timestamp / date string / `Date`). If in the past (and not renewable via `sliding` + `ttl`), the write is skipped with a warning.                              |
-| `memoized` | `boolean`                  | No       | —       | Mirror this write into the memo read cache (overrides the instance-level `memoized`).                                                                                           |
-
-### `fast(target, key)`
-
-Binds a handler and a key, returning `{ get, set, remove }` so you stop repeating the key. Sync/async return type follows `target`. Specify the value type once via `fast<V>(...)`.
-
-| Param    | Type                       | Required | Default | Description                 |
-| -------- | -------------------------- | -------- | ------- | --------------------------- |
-| `target` | `ls` / `ss` / `db` handler | Yes      | —       | A handler from `factory()`. |
-| `key`    | `string`                   | Yes      | —       | The key to bind.            |
+| Member | Contract |
+| --- | --- |
+| `get(key, defaultValue?)` | Missing/expired/corrupt entries return the default; omitted or undefined defaults become null. |
+| `get(keys, defaults?)` | Tuple-based batch read, defaults apply position by position. |
+| `set(key, value, ttlOrOptions?)` | Third argument: TTL milliseconds or `StorageOptions`. |
+| `set(keys, values, ttlOrOptions?)` | Per-key writes; missing values are skipped with a warning. |
+| `remove(keyOrKeys)` | Deletes one key or an array of keys. |
+| `keys()` / `length` | Owned logical keys / count. Async length is a Promise property on the handler. |
+| `key(index)` | Deprecated; prefer `keys()`. |
+| `clear()` | Removes only keys owned by this namespace/key codec. |
+| `purge()` | Removes valid expired entities in scope; raw mode does nothing. |
+| `namespace` | Escaped namespace prefix, including trailing colon, or empty string. |
+| `setNamespace(namespace?)` | Switches scope and invalidates memo; leaves previous scope's data intact. |
+| `destroy()` | Invalidates memo and releases resources; does not delete backend data. |
 
 ```ts
-const token = fast<string>(ls, "token");
-token.set("abc"); // value must be string
-token.get(); // string | null
-token.get("def"); // string
-token.remove();
+ls.set(["count", "ready"], [1, true], { ttl: 5_000 });
+const pair = ls.get(["count", "ready"], [0, false]); // [number, boolean]
+const asserted = ls.get<[number, boolean]>(["count", "ready"]); // nullable elements
+ls.remove(["count", "ready"]);
 ```
 
-Accessor shape — `SyncAccessor<V>` (sync) / `AsyncAccessor<V>` (async):
+Defaults that are primitives or arrays enable a lightweight runtime type check: `ls.set("n", "text"); ls.get("n", 0)` returns 0 and reports `kind:"type"`, preserving the stored string. Ordinary object defaults do not validate fields; generics are not runtime schemas. With an undefined default the return type includes null (`V | null`), including fast accessors. A stored null with a primitive default (e.g. `ls.set("empty", null); ls.get("empty", 0)`) silently returns 0 without a type report and keeps the stored null. No default or an ordinary object default still returns null; an array default reports a type mismatch. A stored null is a present entry for readonly.
 
-| Method                 | Returns        | Description                           |
-| ---------------------- | -------------- | ------------------------------------- |
-| `get()`                | `R<V \| null>` | Read.                                 |
-| `get(defaultValue)`    | `R<V>`         | Read with default.                    |
-| `set(value, options?)` | `R<void>`      | Write; `options` = ttl/memoized/opts. |
-| `remove()`             | `R<void>`      | Delete.                               |
+## Options
 
-### `lazy(target, key)`
+`BaseStorageOptions` are shared by all three handlers created by a factory.
 
-Like `fast`, but returns a **getter** that builds the accessor on first call and caches it. Combined with a `/*#__PURE__*/` annotation, unused exports are tree-shaken — ideal for a central `cache.ts` registry of many keys.
+| Option | Default / behavior |
+| --- | --- |
+| `namespace` | No prefix; `%` and `:` in the namespace are escaped. |
+| `memoized` | false; cache decoded entities/raw strings after successful reads/writes. |
+| `cloned` | false; structuredClone object values in normal mode, including non-memo reads, to isolate mutations; uncloneable values may throw. |
+| `sliding` | false; renew TTL on eligible reads. Requires createdAt, ttl and expireAt; renew when remaining lifetime is <=90% of ttl. |
+| `serialize` / `deserialize` | JSON.stringify / JSON.parse; operate on the entire entity. |
+| `codeable` / `codec` | false / none; enables value encoding with the supplied Codec. |
+| `enckey` | false; encode namespace + logical key when a codec is supplied, independently of codeable. |
+| `raw` | false; true stores strings without entity serialization/value encoding/TTL; non-string writes warn and skip. |
+| `force` | true; synchronous set failure (including readonly) purges expired entries and retries once. false skips cleanup/retry; backend write failure reports through onError or console.error without throwing. |
+| `readonly` | false; write only when absent/expired/invalid. A valid stored null counts as present. |
+| `broadcast` | false; opt-in IndexedDB cross-tab memo invalidation via BroadcastChannel. |
+| `onError` | Structured error callback; see below. |
+| `db` | Explicit async backend, e.g. new Idb(); no implicit IndexedDB construction. |
+
+Per-call `StorageOptions`: `ttl?: number`, `expireAt?: number | string | Date`, `memoized?: boolean`. Other options are instance-level. Invalid nonpositive/nonfinite TTL warns and is ignored. An explicit expireAt takes precedence; invalid/past dates skip the write, except sliding + valid ttl can replace a past date with now + ttl.
+
+The default envelope is `{ value, createdAt, expireAt?, ttl? }`. A valid envelope has its own value property and finite numeric metadata when present; legacy `ttl:null` / `expireAt:null` are treated as absent, while `createdAt:null` is corrupt. Expiry requires createdAt and expireAt, and occurs at now >= expireAt. `set(k, undefined)` with default JSON omits value, so a later read reports corruption, returns the default and attempts deletion. Prefer `remove(k)` to delete and null for an intentional stored empty value.
+
+## Errors and 0.2.0 migration
+
+`StorageErrorInfo` is a discriminated union with `kind`, `op`, logical `key`, and original `error`. `StorageOperation` is `"get" | "set" | "remove" | "clear" | "purge"`; scope-wide operations can use an empty key.
+
+| kind | Meaning |
+| --- | --- |
+| `write` | A wrapped backend mutation failed. |
+| `serialize` | Entity serialization or value encoding failed. |
+| `corrupt` | Value decoding, parsing or envelope validation failed. Reported before conditional removal. |
+| `type` | Stored value differs from a checkable default; data is kept. |
+| `abort` | A wrapped transaction error has name AbortError. |
+
+Migration from the old callback shape: add a kind branch and handle the expanded op union; keep using error for the original exception.
 
 ```ts
-export const token = /*#__PURE__*/ lazy<string>(ls, "token");
-token().get(); // accessor created on first use, reused after
+import { factory, type StorageErrorInfo } from "@codejoo/storage";
+
+const onError = (info: StorageErrorInfo): void => {
+  if (info.kind === "type") {
+    console.warn(info.key, info.error);
+    return;
+  }
+  console.error(info.kind, info.op, info.key, info.error);
+};
+const { ls } = factory({ force: false, onError });
+ls.set("count", 1); // observe failures in onError instead of try/catch
 ```
 
-### `batchFast(target, keys)`
+Without a callback, wrapped read/mutation reports use console.error. Serialization exceptions still throw for sync handlers and reject for async handlers when no callback is supplied. Callback exceptions propagate unchanged. Backend reads/enumeration are not all converted to error callbacks. `force:false` controls cleanup/retry, not error propagation from callbacks or serializers.
 
-Bind several keys at once; returns an object keyed by each key, with a fast accessor per key (key names preserved via `const` generic; value type `V` shared, defaults to `unknown`).
+Migration of type checks: choose a default matching the stored type, or read without a default and validate the result yourself. Migration of readonly/null: explicitly remove an existing key before replacing null. Migration of undefined values: use null for a persistent empty value or remove the key.
+
+## Namespaces and existing data
+
+Escape namespace `%` → `%25`, then `:` → `%3A`, then append `:`. Logical keys are not escaped. `namespace:"a:b%"` uses prefix `a%3Ab%25:`. Namespaces without these two characters keep their old physical keys. Old colon-containing namespaces such as `"user:42"` cannot read their old data after upgrading. There is no automatic migration; migrate manually as below.
+
+For old localStorage keys with a special namespace, stop other writers and explicitly enumerate the logical keys to migrate. This example is **only for non-enckey storage**; it copies the stored envelope unchanged and preserves absolute expiry. Verify destination data before removing old keys. Do not migrate by a broad prefix scan: old namespace prefixes can overlap.
 
 ```ts
-const { token, user } = batchFast(ls, ["token", "user"]);
-token.set("abc");
-user.get();
+const oldNamespace = "user:42%";
+const oldPrefix = oldNamespace + ":";
+const newPrefix = oldNamespace.replaceAll("%", "%25").replaceAll(":", "%3A") + ":";
+const logicalKeys = ["token", "profile"]; // explicit application-owned allowlist
+for (const key of logicalKeys) {
+  const from = oldPrefix + key;
+  const to = newPrefix + key;
+  const payload = localStorage.getItem(from);
+  if (payload !== null && localStorage.getItem(to) === null) {
+    localStorage.setItem(to, payload);
+    if (localStorage.getItem(to) === payload) localStorage.removeItem(from);
+  }
+}
 ```
 
-### `JSONX`
+For encoded keys, use the same codec to encode each complete old/new key; for IndexedDB, read/write the physical strings through the configured backend and await each operation. A changed codec or custom format requires its own migration. Reload/recreate memoized handlers after external migration writes.
 
-`JSON`-compatible serializer that additionally round-trips `bigint` / `Date` / `Map` / `Set`. Methods don't use `this`, so they can be passed directly as `serialize`/`deserialize`.
+## Memo and backend consistency
 
-| Method                           | Returns  | Description                        |
-| -------------------------------- | -------- | ---------------------------------- |
-| `JSONX.stringify(value, space?)` | `string` | Serialize, preserving rich types.  |
-| `JSONX.parse(text)`              | `any`    | Deserialize, restoring rich types. |
+Memo is opt-in, per handler, and not a full backend mirror. Successful processor writes notify other handlers sharing the same backend area; caching handlers lazily register. Native storage events invalidate affected memo entries (clear invalidates all). localStorage can notify other tabs; sessionStorage notifications retain browser session isolation. Direct native writes in the same tab do not generate that tab's storage event and can leave memo stale.
+
+For Idb cross-tab invalidation, opt in on participating factories:
 
 ```ts
+const { db } = factory({
+  db: new Idb("shared-cache"),
+  memoized: true,
+  broadcast: true,
+});
+```
+
+The broadcast sends invalidations, not values, and requires BroadcastChannel plus matching database-name channels. Within one module/realm, Idb instances share area by database name; same-name instances automatically invalidate each other's same-tab memo without broadcast, while managing separate connections. Custom backends may provide a stable `area?: object` for a shared storage domain; optional readonly `kind?: "local" | "session" | "idb"` describes backend category. Notifications do not guarantee freshness after missed messages or out-of-band writes.
+
+Every operation captures its namespace/keyspace at start. Per-key versions and a global generation prevent stale memo refill or stale read-side renewal/deletion after intervening operations in the handler. Already-issued backend requests cannot be cancelled; cross-instance conditional writes require update support.
+
+`setNamespace()` and `destroy()` preserve initiated async writes in their starting namespace. Async destroy waits for pending work before closing the backend. With no clear barrier or readonly queue, each async set dispatches immediately in invocation order and clears stale memo at entry; `set(k,v); get(k)` and `set(k,v); keys()` observe the queued write on FIFO backends such as IDB.
+
+`clear()` removes the owned scope. With no namespace or effective key codec it calls backend clear directly, and length/key query the backend directly, consistent with 0.1.x. Otherwise it enumerates and deletes every owned key without a scope-wide transaction, reusing queued writes’ tokens. Later get/set/keys/length/key/purge on the same handler wait for the clear barrier; queued writes then run in order. A clear failure does not reject these later operations. Clear emits COMMIT only when every deletion succeeds; Hub caches are invalidated even after failure. These guarantees are not cross-instance locks.
+
+Wrapped backend failures in handler remove/clear report through onError / console.error instead of rejecting/throwing that backend error; enumeration and callback exceptions may still propagate. A resolved operation does not prove every deletion succeeded. Direct Idb backend methods retain their reject-on-failure contract.
+
+## Shortcuts and serialization
+
+```ts
+import { factory, fast, lazy, batchFast, JSONX } from "@codejoo/storage";
+
 const { ls } = factory({ serialize: JSONX.stringify, deserialize: JSONX.parse });
-ls.set("x", { when: new Date(), ids: new Set([1n, 2n]) }); // round-trips exactly
+const count = fast<number>(ls, "count");
+count.set(1);
+count.get(undefined); // number | null
+const token = /*#__PURE__*/ lazy<string>(ls, "token");
+token().get(); // accessor created on first call
+const inferred = batchFast(ls, ["token", "user"]); // value type unknown
+const keys = ["a", "b"] as const;
+const typed = batchFast<number, typeof keys>(ls, keys);
+typed.a.set(1);
+ls.set("rich", { when: new Date(), ids: new Set([1n, 2n]) });
 ```
 
-> Circular references are not supported (inherits `JSON.stringify` behavior — throws).
+**BREAKING (D12):** when explicitly supplying the batchFast value type V, also supply K (as above). Supplying only V no longer accepts nonempty keys: K defaults to readonly never[] to prevent silently losing key constraints. Inference without explicit generics still preserves keys. batchFast returns a null-prototype object.
 
-### Codecs — `codec` / `codecBase64` / `codecAtob`
+JSONX supports Date / Map / Set / bigint, reads existing rich-type tags, and escapes new ordinary objects containing `__jt__`. Circular references remain unsupported.
 
-Three lightweight **obfuscation** codecs (keep plaintext out of devtools — **not strong encryption**, the password ships in the bundle). All take an optional `password` (built-in default otherwise); changing it makes old data undecodable — `decode` returns `null` and the stale entry is cleared on read. Use with `{ codeable: true, codec: codec("pw") }`.
+## Codecs
 
-| Export                       | Scheme                                                                                                                        | Pick it for                                                                                                |
-| ---------------------------- | ----------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------- |
-| `codec(password?)` (default) | Branch-free 10-bit XOR over UTF-16 code units; output = input + 1 unit                                                        | Best size (zero inflation — CJK stores at 1/3 the quota of base64), lowest latency, no runtime requirement |
-| `codecBase64(password?)`     | Native `Uint8Array.toBase64` (base64url, no padding, rotated), auto-falls back to `atob`/`btoa` on old runtimes (same format) | Highest throughput on large ASCII payloads (native SIMD); +33% size (CJK 3×)                               |
-| `codecAtob(password?)`       | Always `TextEncoder` + `atob`/`btoa`                                                                                          | Identical behavior everywhere (no feature detection); same format as `codecBase64`, mutually decodable     |
+`codec(password?)`, `codecBase64(password?)`, and `codecAtob(password?)` implement `Codec.encode(string): string` and `Codec.decode(string): string | null`. They provide obfuscation. Use `{ codeable:true, codec:codec("pw") }` for values; add enckey for keys. The default codec transforms UTF-16 code units; base64 variants use UTF-8 and share a format.
 
-`Codec` shape:
+Passwords are not security boundaries: different passwords can collide, and the base64 variants can lose lone surrogate code units in encoded keys. Codec format changes for these limits (D11) are deferred. Decode failure is treated as corrupt data; changing a password requires a migration strategy and is not guaranteed to reject every old payload.
 
-| Method          | Returns          | Description                                                      |
-| --------------- | ---------------- | ---------------------------------------------------------------- |
-| `encode(value)` | `string`         | Obfuscate a string.                                              |
-| `decode(value)` | `string \| null` | Reverse; returns `null` on key mismatch / corruption (no throw). |
+## IndexedDB and custom backends
 
-### `Idb(name?)`
+`new Idb(name?)` defaults to `"@codejoo/storage"`. Public backend methods return Promises: `get`, `set`, `remove`, `clear`, `key`, `keys`, `length`, `update`, `destroy`. Writes resolve at transaction commit; abort rejects with an AbortError fallback if needed. Closed connections reopen on later operations. Open failures are local to the instance and trigger 1/2/4…second retry delays, capped at 30 seconds, checked on the next operation. Writes made to fallback memory are not migrated when IndexedDB recovers.
 
-An **asynchronous** `Storage`-like backend over IndexedDB. No full in-memory mirror (constant memory; data is GC-friendly). Pass it to `factory({ db })`. Falls back to in-memory automatically if IndexedDB is unavailable or `open()` fails at runtime.
+`AsyncStorage` is accepted by the db option. Its optional atomic primitive is:
 
-| Param  | Type     | Required | Default              | Description              |
-| ------ | -------- | -------- | -------------------- | ------------------------ |
-| `name` | `string` | No       | `"@codejoo/storage"` | IndexedDB database name. |
+```ts
+update?(key: string,
+  fn: (current: string | null) => string | null | undefined
+): Promise<string | null>;
+```
 
-Methods (all return Promises): `get(key)`, `set(key, value)`, `remove(key)`, `clear()`, `key(index)`, `keys()`, `length()`, `destroy()` (close the connection; keeps data). Handler-level batch ops loop over these single-key methods (one transaction per key) — there is no bulk `getMany`/`setMany`/`removeMany` primitive.
+Read and synchronously call the pure fn inside one backend transaction: string writes, null deletes, undefined preserves; resolve the final stored string/null after commit. No await or IO inside fn; exceptions must roll back/reject. Idb implements it. The handler uses it for readonly and conditional read-side mutations (renewal/expired or corrupt cleanup/purge). Without it, only same-handler version protection applies. Batch operations remain per-key operations, without an all-or-nothing transaction.
 
-### `crossTab(handler, channel?)`
+## crossTab v2
 
-Standalone plugin (tree-shakes away when unused). Only activates in **pure in-memory mode** (native storage unavailable — privacy mode, sandboxed iframe): replays `set`/`remove`/`clear` to other same-origin tabs via `BroadcastChannel` so each tab's memory stays consistent. No-op when native storage works (already shared) or when mounted twice. Local writes apply **before** broadcasting; a failed broadcast (non-cloneable value) only warns. `setNamespace` is not synchronized — switch it per tab; messages carry the sender's namespace and only tabs with the **same current namespace** replay them (unknown or malformed messages are ignored). Returns a stop function (idempotent).
+`crossTab(handler, channel?)` accepts a synchronous handler and returns an idempotent stop function. It inspects the actual backend: only this module's Memory fallback with kind local participates. Native localStorage, Idb, other backends or missing BroadcastChannel make it a no-op. Both native and fallback ss are excluded, with one warning per handler; duplicate mounting is a no-op. Different handlers on one channel warn; assign distinct channels yourself.
+
+The v2 message is `{ v:2, op, ns, key?, payload?, expireAt?, ts, from }`, with a logical key, required final payload string for set, and optional absolute expiry. Committed payloads include sliding renewals; replay does not grant a fresh TTL. Receivers validate shapes/times/current namespace and ignore malformed and self-originated messages. An expired SET replays as REMOVE with its original `(ts, from)` stamp, removing older values and recording the stamp so an older permanent value cannot remain. Per-namespace/key LWW compares `(ts, from)`; clear preserves keys known to be newer. Replay invalidates memo without rebroadcasting. Identity generation does not require randomUUID; it falls back to randomness and time when that method is unavailable.
+
+**BREAKING:** old array-protocol and v2 tabs ignore each other; update/reload every participating tab. There is no strong consistency, universal convergence, startup snapshot or offline replay guarantee. Coordinate namespace switches in the application and explicitly call stop to release the channel.
 
 ```ts
 import { factory, crossTab } from "@codejoo/storage";
 const { ls } = factory();
-const stop = crossTab(ls);
+const stop = crossTab(ls, "my-app-cache");
+stop();
 ```
 
-### `debug(handler)`
-
-Standalone helper shipped as a **separate subpath** (`@codejoo/storage/debug`) — it is not part of the main entry, so the single-file bundles (`dist/index.mjs` / `index.min.js`) physically exclude it. Reads every entry of a handler **decrypted** and returns a `{ "namespace:key": value }` snapshot (namespace **preserved**). It is a **pure read with no side effects** — it does not write the snapshot back to storage, so it never pollutes `keys()`/`length`. Use it to inspect data written with `codeable`/`enckey`.
+## Debug snapshot
 
 ```ts
-import { factory, codec } from "@codejoo/storage";
+import { factory, codec, Idb } from "@codejoo/storage";
 import { debug } from "@codejoo/storage/debug";
 
-const { ls, db } = factory({ codeable: true, codec: codec("pw"), enckey: true });
-debug(ls); // sync → { "key": value, ... }
-await debug(db); // async backend → Promise
+const { ls, db } = factory({
+  namespace: "app", db: new Idb(), codeable: true, codec: codec("pw"), enckey: true,
+});
+debug(ls); // null-prototype plaintext snapshot, e.g. { "app:key": value }
+await debug(db);
 ```
 
-## Notes
+Debug captures the starting keyspace and skips the legacy `_$debug` entry. It does not persist the snapshot or create a debug key. Its normal read path can delete expired/corrupt data and renew sliding TTL; it is not side-effect-free. It is exported only from the debug subpath.
 
-- **Sync vs async** is driven by the backend type via generics: `ls.get(k)` returns a value, `db.get(k)` returns a `Promise`. One proxy implementation serves both.
-- **`db` features**: `ttl` / `expireAt` / `codec` / `namespace` / `sliding` / `memoized` all apply to `db` too (just `await` it). `force` quota-purge currently applies to sync backends only.
-- **Memo is isolated per `factory()` instance**: each `factory()` call gets its own in-memory read cache; separate instances do not share memo (no cross-instance reads).
-- **Tree-shaking**: the package points `import` at `dist/esm/` (one file per module). With `sideEffects: false`, unused modules/exports are dropped by the bundler.
+## Runtime and output
 
-## Differences from native localStorage
+Import does not probe storage. First use of the internal supported fields probes independently, catches throwing browser getters, uses temporary random keys and caches results. No-window imports and memory fallback are supported; Worker/SSR persistence is outside scope. Expiration is lazy; keys/count can include entries not yet purged. Storage quotas remain browser-controlled.
 
-- **Values are wrapped in an entity envelope** (`{ value, createdAt, ... }`) by default, not stored as bare strings. Reading a key with the native `localStorage.getItem` (bypassing this library) yields the JSON envelope, not your raw value (except in `raw` mode).
-- **`set` does not throw on quota** (native throws `QuotaExceededError`). When storage is full it only logs / invokes `onError` and gives up the write — use `onError` if you need to observe write failures.
-- **`length` and `clear()` are namespace-scoped**: with `namespace`/`enckey` they cover only the keys this instance owns, unlike native's global semantics.
-- **Expiry is lazy**: expired entries are not read and not eagerly deleted; they are reclaimed by `purge()` or under quota pressure.
+| Output | Use |
+| --- | --- |
+| `dist/esm/*.mjs` | Per-module ESM, default import, tree-shakeable. |
+| `dist/index.mjs` | Single ESM bundle. |
+| `dist/index.min.js` | Minified ESM via the min subpath. |
 
-## Build outputs
+Build size for the pending release: `dist/index.min.js` 17,240 B (0.1.2: 11,192 B), gzip -9 6,843 B (0.1.2: 4,537 B). Only 0.2.0 is planned; see [CHANGELOG](./CHANGELOG.md) for migration; package version is changed only at release time.
 
-| Path                | Format                 | Purpose                           |
-| ------------------- | ---------------------- | --------------------------------- |
-| `dist/esm/*.mjs`    | Per-module ESM         | Default `import`, tree-shakeable. |
-| `dist/index.mjs`    | Single-file ESM bundle | Whole-library import.             |
-| `dist/index.min.js` | Minified ESM           | `./min` subpath.                  |
+## Tests and acceptance
 
-## Testing
+Run from this package directory:
 
 ```sh
-pnpm test
+pnpm test --run
+pnpm test:node
+pnpm test:cov
+pnpm accept
+pnpm gate
+pnpm lint
 ```
 
-runs the full integration suite (`test/*.browser.test.ts`) in a **real Chromium** via Playwright (vitest browser mode), against real `localStorage` / `sessionStorage` / `IndexedDB` / `BroadcastChannel` — not a jsdom simulation. This covers sync backends, async IDB transactions, and cross-tab sync as they behave in an actual browser.
+`pnpm test` runs real Chromium/Playwright browser tests (`test/*.browser.test.ts`); add --run for a single pass. test:node runs `test/*.node.test.ts`. test:cov merges browser and Node projects in one Vitest run into coverage. gate runs coverage, checks lines 100% / branches >=95%, then validates the acceptance matrix. accept performs the bidirectional test/matrix check. These commands exist; their existence does not mean the current branch passes every gate. Lint and build are separate checks.
 
-An interactive playground remains at [`test/manual.html`](./test/manual.html): run `pnpm dev` and open `/test/manual.html`.
+`test/backends.ts` supplies five backend fixtures; `test/helpers/clock.ts` controls Date. See [test/ACCEPTANCE.md](./test/ACCEPTANCE.md) for INV/BUG/API mappings and exemption rules; [test/types.check.ts](./test/types.check.ts) is checked through lint. The interactive [playground](./test/manual.html) runs with `pnpm dev` at `/test/manual.html`.
 
 ## License
 

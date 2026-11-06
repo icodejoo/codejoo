@@ -1,60 +1,88 @@
 ---
 name: codejoo-storage
-description: Use when working in apps/storage (@codejoo/storage) — a unified, type-safe wrapper over localStorage/sessionStorage/IndexedDB with TTL, sliding expiry, namespaces, pluggable serialization (Date/Map/Set/bigint), obfuscation codec, opt-in memo cache, key-bound shortcuts, batch ops, readonly, key encryption, and a debug snapshot. Covers the architecture, invariants, and how to extend/test it.
+description: Use when developing or reviewing apps/storage (@codejoo/storage). Covers the actual module boundaries, storage consistency invariants, and browser/Node acceptance workflow.
 ---
 
-# @codejoo/storage
+# @codejoo/storage development
 
-A tiny ESM library: **one unified API over three backends**. Sync backends (`localStorage`/`sessionStorage`) return values; the async IndexedDB backend returns Promises — decided by **generics, one code path**.
+Read `src/` as the authority; concurrent work can change interfaces. Public exports are in `src/index.ts`; debug has the separate `@codejoo/storage/debug` export. Detailed behavior and migration examples live in [ARCHITECTURE.md](../../../ARCHITECTURE.md) and the paired READMEs (paths relative to this skill directory).
 
-## File map (src/)
+## Module map
 
-| File | Role |
+All entries below are under `src/`.
+
+| File | Decision-relevant role |
 | --- | --- |
-| `interface.ts` | All types: `BaseStorageOptions`, `StorageOptions` (per-call), `StorageEntity`, `Codec`, `SyncStore`, `AsyncStorage`, `MemoCache`. |
-| `proxy.ts` | **Core**. `proxy<S>(storage, memo, opts)` → `Handlers<S>`. Shared helpers `settings`/`writeArgs`/`buildEntity`, sync/async combinators `chain`/`attempt`/`out`, and exported `Result<S,T>` + `Handlers<S>`. |
-| `memory.ts` | `Memory` — plain Map-based sync store (cache + native-unavailable fallback + Idb mirror). |
-| `idb.ts` | `Idb` — **async** IndexedDB backend (no full mirror; falls back to `Memory` when IDB unusable). |
-| `codec.ts` | Three variants. `codec(password?)` (default) — branch-free 10-bit XOR over UTF-16 code units: k ≤ 0x3FF only perturbs the low 10 bits so surrogates stay valid by construction (high 6 bits untouched) — no escape logic; 1 MAGIC^k header unit is the validity tag (wrong-pw deterministic null; foreign false-accept 1/65536, deserialize is the second net). Output = input + 1 unit; via `u16ToStr` (chunked `String.fromCharCode`, NOT `TextDecoder` — a UTF-16 `TextDecoder` validates surrogate pairing and replaces lone surrogates with U+FFFD, which would silently corrupt round-trip for ill-formed input even though the XOR step itself preserves surrogate category). All three variants default password via `??` (not `||`) — an explicitly-passed empty-string password must be honored, not silently swapped for `DEFAULT_PW`. Also `codecBase64` (native toBase64, atob/btoa polyfill fallback, rotated base64url) and `codecAtob` (always-polyfill, same format as codecBase64). **Obfuscation, not encryption.** decode→null is load-bearing (`load()` stale-clean + enckey `owns()`). |
-| `serialization.ts` | `JSONX` — JSON-compatible, round-trips Date/Map/Set/bigint via a `__jt__` tag. |
-| `fast.ts` | `fast`/`lazy`/`batchFast` — key-bound shortcut accessors. |
-| `debug.ts` | `debug(handler)` — decrypted snapshot. NOT exported from index.ts: shipped via the `"./debug"` subpath (`@codejoo/storage/debug`) so single-file bundles exclude it; it's a separate pack entry in vite.config's unbundle target (would otherwise be unreachable and not emitted). |
-| `core.ts` | `factory(opts?)` → `{ ls, ss, db, destroy }`; adapts native Storage to the `get/set/remove` vocabulary; `unimpl()` placeholder for unprovided `db` (any method call throws); `destroy()` releases all three layers (returns Promise; keeps persisted data) — skips `db.destroy()` entirely when `db` was never configured, since calling any `unimpl()` method throws synchronously. |
-| `helper.ts` | `supported` = `{ storage, indexedDB }` runtime feature flags (mutable; Idb flips `indexedDB` on runtime failure). |
+| `interface.ts` | `BaseStorageOptions`, per-call `StorageOptions`, `StorageEntity`, `Codec`, `SyncStore`, `AsyncStorage`, `MemoCache`. Async update is optional; readonly kind identifies local/session/idb. |
+| `maybe.ts` | `Maybe`, `isPromise`, `chain`, `attempt`, `all`: one synchronous/asynchronous orchestration path. |
+| `keyspace.ts` | `keyspace`: immutable prefix/full/owns/logical snapshot; namespace escaping and bounded forward/reverse conversion caches. |
+| `entity.ts` | `mkEntity`, `parseEntity`, `isExpired`, `renewOf`, `typeMismatch`: shape, expiry, renewal, lightweight type checks. |
+| `errors.ts` | `StorageErrorInfo`, `StorageOperation`, `report`; callback errors propagate. |
+| `hub.ts` | `memoHub`, `register`, `invalidate`: backend-identity invalidation, storage event listener and opt-in IDB broadcast. This module performs IO. |
+| `proxy.ts` | `proxy`, `Handlers`, `Result`, `MGet`; orchestration, per-key versions, global generation, memo and internal COMMIT/SNAPSHOT/STORE/APPLY hooks (STORE reads the backend; APPLY silently replays strings). Hooks are not public index exports. |
+| `core.ts` | `factory` returns ls/ss/db/destroy/setNamespace; native adapt, separate shared ls/ss fallback stores and separate per-handler memo. Unconfigured db methods fail; factory.destroy skips that db. |
+| `helper.ts` | `supported.storage`, `supported.session`, `supported.indexedDB`: independent lazy cached probes, guarded browser getters. |
+| `memory.ts` | `Memory`: Map backend used in distinct roles as memo or fallback, never both at once. |
+| `idb.ts` | `Idb`: transactions, atomic update, reconnect, instance-level backoff and database/store-scoped shared fallback. No full mirror. |
+| `codec.ts` | `codec`, `codecBase64`, `codecAtob`: obfuscation, not secure encryption. decode returns null on detected failure; password collisions remain possible. |
+| `serialization.ts` | `JSONX`: rich type tags plus ordinary __jt__ object escaping; old rich-type tags remain readable. |
+| `fast.ts` | `fast`, `lazy`, `batchFast`; sync/async accessors; explicit V requires explicit K for nonempty batch keys. |
+| `debug.ts` | `debug` uses captured SNAPSHOT; null-prototype result, skips legacy debug key, normal read side effects. |
+| `sync.ts` | `crossTab`; v2 syncs only local Memory fallback, excludes session, broadcasts successful commit strings/absolute expiry, and compares `(ts, from)` per namespace/key. Message fields are v/op/ns/key/payload/expireAt/ts/from, with optional fields defined in sync.ts. |
+| `index.ts` | Public exports, excludes debug and proxy internals. |
 
-## Key invariants & gotchas (learned the hard way — keep these)
+## Invariants
 
-- **Backend vocabulary is `get/set/remove`** (not `getItem/...`). Native localStorage is adapted in `core.ts`’s `adapt()`. The public `Handlers` API is also `get/set/remove`.
-- **`Result<S,T>` = `S extends AsyncStorage ? Promise<T> : T`.** Sync vs async is driven by generics; the proxy detects async at runtime via `typeof st.length === "function"`.
-- **`st.length()` must be called bound** (`(st as {length()}).length()`), never `const l = st.length; l()` — IdbStorage uses `this`.
-- **`keys.map(get)` leaks the array index as `get`’s `defaultValue`** — always `keys.map(k => get(k))`.
-- **`memo` is per-`factory()` instance** (`lsMemo/ssMemo/dbMemo` created inside `factory()` in core.ts): each `factory()` call gets its own `ls/ss/db` read caches and separate instances do not share memo (no cross-instance reads). Tests must isolate via `handler.clear()` (clears memo+backend), not raw `localStorage.clear()` — but note `clear()` is **scoped**: with `namespace`/`enckey` it removes only keys the instance owns (`owns()`); count-based assertions (`localStorage.length`) need a raw `localStorage.clear()` first. Also note `length` is scoped the same way: with `namespace`/`enckey` it counts only owned keys, otherwise the backend's global count.
-- **The memo `Memory` and the native-storage-unavailable fallback `Memory` must be two separate instances.** `core.ts`'s `factory()` passes `new Memory()` as the `ls`/`ss` backend when `supported.storage` is false — never the same instance as `lsMemo`/`ssMemo`. They were aliased once (same Map doubling as backend and cache); that made `destroy()`/`clear()`'s `memo.clear()` wipe the "persisted" data itself, and a `memoized` write clobber the backend's JSON string with the raw entity object. If you ever refactor `factory()`, keep this a hard two-instance invariant.
-- **`clear()`/quota-purge are scoped by `owns()`** (namespace prefix; enckey-decodable). `purgeExpired`'s dead-check and `resolve()`'s lazy-expire-on-read share one `isExpired(entity, now)` predicate that additionally requires `createdAt` in the entity, so foreign JSON that happens to have an `expireAt` field is never deleted by either path — keep them sharing the one predicate rather than re-deriving it twice.
-- **`memoized` gates memo writes** (opt-in cache; not a full mirror). Reads still check memo first (cheap if empty). The sliding-renewal memo write in `resolve()` is gated on `persist()` actually succeeding (mirrors `write()`'s `if (ok && memoized)`) — never write the renewed entity into memo before the backend write confirms, or memo and backend diverge on `expireAt` after a failed write.
-- **`enckey`** encrypts the storage key via `codec.encode` (deterministic, so the same logical key → same storage key). `fullKey`/`decKey` are the single chokepoints. `key(index)` also respects `namespace`/`enckey` scoping (goes through `ownKeys()` instead of a raw backend index) so it can't return a foreign or undecryptable key — same scoping contract as `keys()`/`length`/`clear()`.
-- **`sliding`** renews `expireAt = now + entity.ttl` on read hit — **requires a `ttl` to have been set**, else there’s nothing to renew. The write-back is **skipped while >90% of the ttl remains** (anti write-amplification); tests asserting renewal must first consume >10% of the ttl.
-- **`Idb` self-heals closed connections**: `open()` hooks `onclose`/`onversionchange` to drop the cached handle so the next op re-opens. Don't cache `req.result` elsewhere without those hooks. The in-memory fallback (`this.mem`, set when IndexedDB is unusable) must only ever be created once — `database()`'s failure path uses `this.mem ??= new Memory()`, not a plain assignment, so concurrent calls racing the same rejected `open()` don't each hand out a fresh Map and orphan one another's writes. `destroy()` must never null `this.mem` either — it's the actual data when IDB is unavailable, not a disposable handle.
-- **`debug` is a separate import** (not on the handler) to keep core small/tree-shakeable. It enumerates via `handler.keys()` (owned keys only), reads via `handler.get`, preserves namespace, and returns a `{ "namespace:key": value }` snapshot. It does **not** write the snapshot back to `"_$debug"` (a legacy `DEBUG_KEY` constant is kept only to skip stale leftover data), so it never pollutes `keys()`/`length` — but it is **not** side-effect-free in general: it calls `handler.get()`, so it inherits lazy-expiry deletion and sliding-TTL renewal writes like any other read.
-- **`onError` makes write failures observable**: `persist()` calls `opts.onError({ op:"set", key, error })` when provided, else `console.error`. `set` returns `void`, so with `force:true` (the default) a failed write is silent (no throw — unlike native localStorage) unless `onError` is wired up. With `force:false`, `persist()` re-throws instead (`if (!force) throw err`) — `set()` throws synchronously in that mode, `onError`/console.error are never reached. Batch `set` calls `onError` once per failing key (force:true path only).
-- **Sliding-renewal must not mutate a memo-shared entity in place**: `resolve()`'s renewal branch builds a `{...entity, expireAt}` copy and persists/memo-writes *that* copy — never `entity.expireAt = ...` directly, since `entity` may be the exact object living in `memo`'s Map (`Memory.get()` returns by reference). Mutating in place would corrupt memo before `persist()` even confirms success.
-- **`crossTab()` warns (not blocks) on channel collisions**: mounting two different handlers (e.g. `ls` and `ss`) on the same channel name — the default is a fixed constant — makes each replay the other's writes, since `BroadcastChannel` delivers to every same-named listener. A module-level `owners` map in `sync.ts` detects a channel already claimed by a different handler and `console.warn`s; it does not prevent the collision (BroadcastChannel has no built-in scoping), so distinct channel names per handler are still the caller's responsibility. Messages are `[op, ns, ...args]` carrying the sender's namespace; the receiver replays only when `ns === handler.namespace` and ignores unknown ops / non-array data. The stop function is idempotent.
-- **`raw` mode requires a string value at the call site**: `set()` warns and skips the write (rather than persisting) when `raw:true` and the value isn't a string — a real `Storage` backend would otherwise silently `ToString`-coerce it (e.g. to `"[object Object]"`) with no error. `raw` mode also has no entity envelope, so `purgeExpired()` returns immediately for it (quota cleanup and `purge()` never touch raw strings).
-- **`JSONX`'s `__jt__` tag shape is checked strictly** (`flag in v && "value" in v && Object.keys(v).length === 2`), not just presence — reduces (but doesn't eliminate) collision with legitimate user objects that happen to carry a `__jt__` field, and guarantees a shape-mismatch falls through untouched instead of silently dropping sibling properties.
-- **Invalid `ttl` is warned and ignored**: `mkEntity` drops a `ttl` that is `≤0` / `NaN` / `Infinity` (would otherwise expire-on-write or serialize away into never-expiring) — the value still persists, just without expiry.
-- **Runtime warnings/errors are in English** (`[storage] ...`).
+- Backend vocabulary is get/set/remove. Async detection is `typeof st.length === "function"`; call length bound to the backend. `Result<S,T>` maps AsyncStorage to Promise, sync storage to T.
+- Capture keyspace at operation start. Writes check only the per-key token before dispatch; read-side mutations and memo refill check token, generation and cacheable. Already-dispatched backend requests cannot be undone.
+- clear/setNamespace/destroy advance generation. setNamespace/destroy preserve initiated writes in their starting keyspace. Async set evicts memo and dispatches immediately without a gate; every same-key write reaches the FIFO backend in order. During clear, queued writes and get wait the same hop. Single-key evict marks tokens with pending writes stale for reads, preserving writable identity; otherwise it deletes the token. Release references and readonly queues after completion.
+- Plain clear calls backend clear, and plain length/key directly query the backend. Scoped clear deletes all owned old keys and reuses queued-write tokens. get/set/keys/length/key/purge and snapshot queries wait for the same-handler clear barrier. The barrier consumes failure; clear itself still propagates callback/enumeration errors. Sync backends retain synchronous returns.
+- Scoped clear has no per-key publish/COMMIT. Emit one clear COMMIT only if every deletion succeeds; always publish Hub null on completion, including failures. Plain clear also emits COMMIT only on success. Clear is not a transaction or cross-handler lock.
+- Hub opens an opt-in channel lazily on connect/publish and reuses it until destroy. Same-name Idb area/fallback registries retain entries for the module lifetime.
+- cloned:true clones all ordinary-mode object reads, including non-memo reads; uncloneable values may throw. Module-level Memory/Map/WeakMap/Set initializers use PURE annotations with sideEffects:false for tree-shaking; ./min remains a full entry.
+- No stale read may renew/delete a newer value. Across independent handlers this requires optional transactional update; version maps alone are not cross-instance locks.
+- Cache only after successful backend work. Renewal creates a fresh envelope, never mutates a memo-shared envelope before commit. Per-call memoized:false successful writes evict old cache; per-call memoized:true entries must also register for invalidation.
+- Fallback backends and memo must be distinct instances. ls and ss fallbacks are distinct module-level singletons; Idb fallback is shared by database/store name within the same module realm. destroy clears memo/connections, never backend fallback data.
+- Hub uses area ?? store identity. Same-tab handler writes publish; native storage events keep browser session scoping. Same-tab direct native writes can leave stale memo. Idb objects in one module/realm share area by database name and automatically invalidate same-tab peer memo; cross-tab invalidation requires broadcast:true and BroadcastChannel. Close subscriptions on destroy.
+- Envelope is a non-array object with an own value field and finite numeric metadata if present; legacy ttl:null/expireAt:null mean absent, but createdAt:null is corrupt. Default JSON drops undefined values; reading such a missing-value envelope is corrupt, even after a memoized set.
+- isExpired requires createdAt and expireAt and uses now >= expireAt. renewOf also requires positive ttl and renews at remaining lifetime <=90%. Invalid ttl warns/ignores; invalid absolute expiry skips the write except sliding+ttl can replace a past deadline.
+- Except normal expiry, only corrupt read handling deletes data; type mismatch returns the default, reports type and preserves storage. Checks cover primitive defaults/arrays, not object schemas. Stored null with a primitive default silently returns that default without a type report; an array default still reports mismatch. User onError exceptions can interrupt subsequent cleanup.
+- readonly treats a valid stored null as present. Same async handler serializes same-key readonly writes; cross-handler atomicity requires backend update.
+- AsyncStorage.update reads/calls synchronous pure fn/writes in one transaction: string writes, null deletes, undefined preserves; resolve final string/null after commit. fn must not await or perform IO; thrown exceptions reject and roll back.
+- Namespace escaping is percent first, then colon; append one colon separator. Escape namespace only, not logical keys. namespace getter is the escaped prefix. enckey encodes the entire prefix+key deterministically and does not require codeable.
+- keys/length/key/clear/purge use the same owns rule. key(index) is deprecated. raw requires string writes, skips envelopes/value encoding/TTL; purge leaves raw data alone.
+- Batch operations are per-key, not all-or-nothing. Never use keys.map(get): the array index would become a default value. Use an explicit lambda.
+- force:false skips quota cleanup/retry and reports wrapped backend failure. force:true cleanup/retry applies to synchronous set, including readonly. Renewal never performs quota cleanup/retry. Serialization without onError throws/rejects; callbacks always propagate their own exceptions.
+- onError receives kind (write/serialize/corrupt/type/abort), op, logical key, original error. Preserve error identity. Do not claim every read/enumeration error is wrapped.
+- JSONX escapes newly written ordinary __jt__ objects and preserves rich types; no circular references. batchFast/debug return null-prototype objects so __proto__ is an ordinary key.
+- debug is a separate import, captures namespace once, and does not save its snapshot. Reads may delete expired/corrupt entries and renew sliding TTL.
+- Idb resolves writes only at transaction complete. Abort needs an AbortError fallback. Open failure does not mutate supported.indexedDB; retry is operation-triggered exponential backoff capped at 30s. Restored IDB does not import memory-only writes.
+- Codec is not an isolation boundary. Keep explicitly empty passwords; base64 lone-surrogate keys and password collisions remain known limits (D11 deferred).
+- Session isolation must survive crossTab. v2 uses actual STORE identity and current-module Memory kind local only; session always skips/warns. COMMIT broadcasts successful writes including renewal; APPLY replays without rebroadcast. Validate messages; replay expired SET as REMOVE with its original stamp. randomUUID is optional with randomness/time fallback. LWW clear keeps known-newer keys; old array/v2 tabs ignore each other. There is no strong consistency or universal convergence guarantee. Call the plugin stop function explicitly to close its channel.
+- Keep runtime messages in English. Preserve es2022; lowering syntax target adds helpers without providing the required runtime APIs.
 
-## Build & test
+## Tests and gates
 
-- `pnpm build` → `vp pack` (vite-plus/tsdown) + `scripts/post-minify.mjs`. Outputs: `dist/index.mjs` (bundle), `dist/index.min.js` (min), `dist/esm/*.mjs` (per-module, tree-shakeable; the package `import` target).
-- `vite.config.ts` has 3 pack entries (bundle+dts, min, unbundled `dist/esm`), all `target: "es2022"` — don't lower it: class fields/async would get downleveled and pull `@oxc-project/runtime` helpers into `dist/esm` (~1KB+ of pure bloat). `package.json` `sideEffects: false`.
-- Type-check: `./node_modules/.bin/tsc --noEmit -p tsconfig.json` (project uses `erasableSyntaxOnly` — no enums/param-properties/namespaces).
-- **Tests run in a real browser via vitest browser-mode**: `pnpm test` (config `vitest.browser.config.ts`) runs `test/*.browser.test.ts` in headless **Chromium** (Playwright) against real `localStorage` / `sessionStorage` / `IndexedDB` / `BroadcastChannel` — not jsdom. Current suites: `sync.browser.test.ts`, `idb.browser.test.ts`, `codec.browser.test.ts`, `plugins.browser.test.ts`, `apichanges.browser.test.ts`. The old `test/index.html` + `test/suite.mjs` browser page is gone. **Always add a test for new features and run it** — the suite has caught several real bugs (unimpl throwing on property read, `st.get` vs `getItem`, length `this`-loss, mget index leak).
-- `test/manual.html` is an interactive playground (kept): `pnpm dev`, open `/test/manual.html`.
+Browser tests use real Chromium/Playwright (`vitest.browser.config.ts`, `test/*.browser.test.ts`), Node tests use `vitest.node.config.ts` / `test/*.node.test.ts`. Prefix new suites by responsibility: core- for orchestration/pure rules, platform- for browser adapters/IDB/serialization, matrix- for shared semantics, sync- for protocol. `test/core-x1.browser.test.ts` covers X1 lifecycle/clear races, historical metadata, null defaults, error/commit behavior and sharing. `test/core-types.node.test.ts` covers type-check rules; `test/core-pure.node.test.ts` covers pure helpers; `test/sync-crosstab.browser.test.ts` covers protocol cases. Do not invent a filename before checking it exists.
 
-## Adding an option (pattern)
+`test/backends.ts` exports BACKENDS and make for five backend fixtures. Await operations even for synchronous fixtures; always cleanup. Memory fallback fixtures use isolated iframe realms: test module-level sharing by creating multiple factories in the same realm. `test/helpers/clock.ts` exports clock for Date-only fake timers without disrupting IDB. `test/types.check.ts` covers type contracts through the lint/type-check chain.
 
-1. Add to `BaseStorageOptions` (instance) or `StorageOptions` (per-call) in `interface.ts`.
-2. Resolve it in `settings()` (instance) or `writeArgs()` (per-call) in `proxy.ts`.
-3. Apply in `get`/`set`/`resolve`/`buildEntity` as appropriate (mind sync+async via `chain`/`out`).
-4. Add a test in the relevant `test/*.browser.test.ts` suite; document a row in both READMEs (EN + zh-CN).
+Run from the package directory:
+
+```sh
+pnpm test --run
+pnpm test:node
+pnpm test:cov
+pnpm test:infra
+pnpm accept
+pnpm gate
+pnpm lint
+```
+
+`test:cov` uses `scripts/vitest.all.config.ts` to merge browser/Node coverage in one Vitest run. `gate` runs coverage, `scripts/coverage-gate.mjs` (lines 100%, branches >=95%), and `scripts/check-acceptance.mjs`. It does not run lint/build. Zero-denominator/empty reports and unregistered V8 ignores fail. `test/ACCEPTANCE.md` maps INV/BUG/API to fully expanded test titles; keep it aligned when adding tests. See that file for exact syntax and exemption rules.
+
+`pnpm lint` checks `test/types.check.ts`; `node scripts/check-type-chain.mjs` verifies the lint/type assertion chain. Do not run standalone type checking or vue-tsc. `pnpm build` runs vp pack and post-minify and cleans dist; in a concurrent session only the assigned build owner runs it. Outputs: dist/esm/*.mjs, dist/index.mjs, dist/index.min.js; all pack targets stay es2022. `pnpm dev` serves test/manual.html.
+
+## Extending behavior
+
+Add instance options to BaseStorageOptions or per-call options to StorageOptions. Follow the actual proxy set/get orchestration and extracted helpers (mkEntity/parseEntity/renewOf/keyspace), keeping Maybe composition. Add a regression test in the appropriate prefix/environment, update the acceptance mapping and both same-structure READMEs. Read interface.ts/proxy.ts/sync.ts again before finalizing documentation during concurrent work. Update only files authorized in the active task.
