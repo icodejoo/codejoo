@@ -10,6 +10,8 @@ via `workspace:*`, and `vue`/`vant`/`@vitejs/plugin-vue`/`vitest`/`@vitest/brows
 - **`src/`** — a Vue 3 + Vant page wired through the `/vue` composables: serial queue, `overlap`
   stacking, `replace`, `duration`, pause/resume, reactive `defaults`, and a Vant `Dialog` bound via
   the writable `model` (`v-model:show`).
+- **`vanilla/`** — the same core with **no framework at all**: plain DOM + `subscribe`/`getSnapshot` (toast, priority
+  queue, `overlap`, `replace`, route condition, pause, clear). Open `/vanilla/index.html` after `dev`.
 - **`test/overlay.browser.test.ts`** — runs in real Chromium via the shared `@vitest/browser-playwright`
   stack. Covers the **whole core API** (importing the published package directly) plus the **Vue
   adapter** (mounting the real Vant app).

@@ -12,7 +12,7 @@ the `active` list; the package is pure logic with **zero runtime dependencies**.
 
 ```bash
 pnpm add @codejoo/layerman
-# optional Vue 3 adapter is bundled under the /vue subpath (vue is an optional peer)
+# framework adapters ship as subpaths — /vue /react /svelte /solid — each framework is an optional peer
 ```
 
 ## Core quickstart
@@ -37,25 +37,9 @@ const answer = await om.open({ id: "confirm", data: { msg: "Delete?" } }).result
 om.close("welcome"); // → phase "closing"; autoRemove (default 300ms) then removes
 ```
 
-Key `open` options: `slot`, `priority`, `delay`, `duration`, `overlap`, `replace`, `affix`, `route`,
-`requiresAuth`, `when(ctx)`, `dismissWhenUnmet`, `cooldown`, `resolve(signal)`, `beforeClose`,
-`onShow/onClose/onRemove`. Push context for conditions with `om.setContext({ route, auth, ... })`.
-See the source types for the full surface.
-
-More manager methods:
-
-- **`beforeClose?: () => boolean | Promise<boolean>`** — per-overlay close guard; return (or resolve)
-  `false` to cancel a `close()` (e.g. an unsaved-changes confirm). Any other value proceeds.
-- **`dismissWhenUnmet` (default `true`)** — when a shown overlay's condition (`route`/`when`/
-  `requiresAuth`) stops holding after a `setContext`, it is auto-dismissed and the next shows. Set
-  `false` to keep it. (Pending/queued overlays are never deleted — they just wait.)
-- **`update(id, patch)`** — merge `patch` into an active overlay's `data` in place and re-render,
-  without any queue change (distinct from `replace`).
-- **`clear(select?)`** — pass `(ctx, records) => id[]` to clear exactly those (records =
-  `{id, data, slot, phase, active}[]`); return non-array ⇒ clear all. Or `clear({ closeActive })` for
-  the classic form. (This subsumes "close all overlays of group X" via `data.group` filtering.)
-- **`OverlayInstance.stackIndex` / `isTopmost`** — layer position for stacked/overlap overlays; the
-  headless core sets no z-index — use these to compute z-index and `pointer-events` in your renderer.
+`open` takes many options (`slot`, `priority`, `delay`, `duration`, `overlap`, `replace`, `affix`, `route`, `requiresAuth`, `when`,
+`cooldown`, `resolve`, `beforeClose`, hooks…); push condition context with `om.setContext({ route, auth, ... })`. Every option,
+every method and every type is documented in the [API reference](#api-reference) below.
 
 ### `overlap` vs `replace` vs the queue — and why `overlap` can "drop"
 
@@ -75,6 +59,528 @@ outcome for a not-queued overlay that isn't allowed to show right now. If you wa
 it becomes eligible"**, that's what the normal queue is for — use a normal or `replace` overlay (they
 wait). **Don't put deferrable conditions (`route`/`when`) on a `overlap` overlay** expecting it to be
 held; cooldown on `overlap` is fine (it correctly suppresses "already shown today").
+
+## Without a framework (vanilla JS)
+
+The core needs no Vue / React / anything: `subscribe` hands you the latest state and you render
+`state.active` yourself. The package decides _which overlay is active and in which phase_; you decide
+how it looks.
+
+```js
+import { createLayerman } from "@codejoo/layerman";
+
+const om = createLayerman({ gap: 200 });
+await om.ready();
+
+const root = document.getElementById("overlay-root");
+const nodes = new Map(); // instanceKey → DOM node
+
+function render(state) {
+  const alive = new Set();
+  for (const inst of state.active) {
+    alive.add(inst.instanceKey); // render key: a same-id reopen gets a new key → remounts
+    let el = nodes.get(inst.instanceKey);
+    if (!el) {
+      el = document.createElement("div");
+      el.className = "mask";
+      el.innerHTML = `<p>${inst.data.text}</p><button>OK</button>`;
+      el.querySelector("button").onclick = () => {
+        om.resolve(inst.id, true); // deliver the result (does not close)
+        om.close(inst.id); // → phase "closing"; auto-removed after 300ms
+      };
+      nodes.set(inst.instanceKey, el);
+      root.append(el);
+    }
+    el.dataset.phase = inst.phase; // "open" | "closing" — drive your exit CSS from it
+    el.style.zIndex = String(1000 + inst.stackIndex); // headless: you compute z-index
+    el.style.pointerEvents = inst.isTopmost ? "auto" : "none";
+  }
+  for (const [key, el] of nodes) {
+    if (!alive.has(key)) {
+      el.remove();
+      nodes.delete(key);
+    }
+  }
+}
+
+om.subscribe(render, { immediate: true }); // immediate: render once with the current snapshot
+
+const ok = await om.open({ id: "confirm", data: { text: "Delete?" } }).result;
+```
+
+A complete runnable page (toast, priority queue, `overlap`, `replace`, route condition, pause, clear)
+is in [`example/vanilla/`](./example/vanilla) — `pnpm --filter @codejoo/layerman-example dev`, then open
+`/vanilla/index.html`.
+
+## API reference
+
+Everything exported from `@codejoo/layerman`: the factory `createLayerman`, the runtime constants
+`DismissReason` / `OverlayPhase`, and the types below. Framework adapters are covered at the end.
+
+```ts
+import {
+  createLayerman, // factory
+  DismissReason,
+  OverlayPhase, // runtime constants
+  type Layerman,
+  type LayermanOptions,
+  type OverlayConfig,
+  type OverlayHandle,
+  type OverlayInstance,
+  type OverlayState,
+  type OverlayRecord,
+  type OverlayContext,
+  type ClearSelector,
+  type DismissResult,
+  type Cooldown,
+  type Duration,
+  type AsyncableStorage,
+} from "@codejoo/layerman";
+```
+
+### `createLayerman(options?)`
+
+Returns an independent manager (a factory, **not** a singleton — create one per app, or one per test).
+
+| Option       | Type                        | Default                                     | Meaning                                                                                                      |
+| ------------ | --------------------------- | ------------------------------------------- | ------------------------------------------------------------------------------------------------------------ |
+| `gap`        | `number`                    | `0`                                         | Global ms between one overlay ending and the next of the **same slot** starting. A per-overlay `delay` wins. |
+| `autoRemove` | `boolean \| number`         | `true`                                      | After `close()`, auto-`remove()`: `true` = 300 ms, a number = that many ms, `false` = you call `remove`.     |
+| `storage`    | `AsyncableStorage`          | `localStorage`, else in-memory              | Where persisted cooldown state lives. `get` / `set` may be sync or async.                                    |
+| `storageKey` | `string`                    | `"layerman:v1"`                             | Storage key; the cross-tab channel is named `${storageKey}:sync`.                                            |
+| `now`        | `() => number`              | `Date.now`                                  | Clock — inject a fake in tests.                                                                              |
+| `debug`      | `boolean`                   | `false`                                     | Log lifecycle transitions as `[layerman]:<id>:<pending\|resolving\|open\|closing\|closed>`.                  |
+| `logger`     | `(message: string) => void` | `console.log`                               | Where `debug` lines go. A throwing logger is swallowed.                                                      |
+| `crossTab`   | `boolean`                   | on if `window` and `BroadcastChannel` exist | Sync cooldown counts between tabs. Off in Node / SSR / Workers.                                              |
+
+```ts
+const om = createLayerman({
+  gap: 300,
+  autoRemove: 200,
+  storageKey: "myapp:overlays",
+  debug: true,
+  logger: (m) => analytics.debug(m),
+});
+await om.ready();
+```
+
+**Custom storage** (React Native `AsyncStorage`, an IndexedDB wrapper, a server-side session store…):
+
+```ts
+import AsyncStorage from "@react-native-async-storage/async-storage";
+
+const om = createLayerman({
+  storage: {
+    get: (key) => AsyncStorage.getItem(key), // string | null, sync or Promise
+    set: (key, value) => AsyncStorage.setItem(key, value),
+  },
+});
+await om.ready(); // hydration is async → wait for it (see the Cooldown notes)
+```
+
+### `OverlayConfig` — the argument of `open`
+
+All fields are optional.
+
+| Field              | Type                                              | Default           | Meaning                                                                                                                                        |
+| ------------------ | ------------------------------------------------- | ----------------- | ---------------------------------------------------------------------------------------------------------------------------------------------- |
+| `id`               | `string`                                          | auto              | Unique key. Omitted → a fresh `__layerman_auto_n` id is minted (never collides, skips the same-id rules). Also the cooldown-persistence key.   |
+| `data`             | `TData`                                           | —                 | Opaque payload for your renderer; surfaces as `instance.data`.                                                                                 |
+| `slot`             | `string`                                          | `""`              | Named serial queue. Each slot shows **one** overlay at a time, independent of other slots.                                                     |
+| `priority`         | `number`                                          | `0`               | Higher shows first among waiting entries; ties are FIFO.                                                                                       |
+| `delay`            | `number` (ms)                                     | global `gap`      | Wait this long (since the slot last freed) before showing. Overrides `gap`.                                                                    |
+| `duration`         | `number` (ms)                                     | none (persistent) | Auto-`close()` this long after it is shown (the `beforeClose` guard still applies).                                                            |
+| `autoRemove`       | `boolean \| number`                               | global            | Per-overlay override of the post-`close` auto-remove.                                                                                          |
+| `overlap`          | `boolean`                                         | `false`           | Bypass the serial queue: show **stacked, immediately** (see [overlap vs replace](#overlap-vs-replace-vs-the-queue--and-why-overlap-can-drop)). |
+| `replace`          | `boolean`                                         | `false`           | Preempt the slot's current overlay (it goes back to the queue), skipping `gap`.                                                                |
+| `affix`            | `boolean`                                         | `false`           | Cannot be displaced by `replace` (a replacer queues ahead of everyone instead). Explicit `close` / `remove` / `clear` still work.              |
+| `route`            | `string \| string[] \| RegExp`                    | —                 | Condition sugar: show only while `context.route` matches (string = equal, array = includes, RegExp = test).                                    |
+| `requiresAuth`     | `boolean`                                         | —                 | Condition sugar: `true` = only when `context.auth` is truthy, `false` = only when falsy.                                                       |
+| `when`             | `(ctx: OverlayContext) => boolean`                | —                 | Custom predicate. **Wins over** `route` / `requiresAuth` when present. Must not mutate the manager; a throw means "not met".                   |
+| `dismissWhenUnmet` | `boolean`                                         | `true`            | If the conditions stop holding after a `setContext` while it is shown, auto-remove it (`reason: "unmet"`).                                     |
+| `cooldown`         | `Cooldown`                                        | —                 | Frequency limits, see [Cooldown & Duration](#cooldown--duration).                                                                              |
+| `resolve`          | `(signal: AbortSignal) => Promise<TData \| null>` | —                 | Fetch the payload when it is its turn; `null` / `undefined` / a throw ⇒ skipped with `reason: "empty"`. Serial only (not with `overlap`).      |
+| `beforeClose`      | `() => boolean \| Promise<boolean>`               | —                 | Close guard: return / resolve `false` (or throw) to cancel a `close()`. Does **not** guard `remove` / `clear` / auto-dismiss.                  |
+| `onShow`           | `() => void`                                      | —                 | Called when the overlay becomes visible (phase `open`).                                                                                        |
+| `onClose`          | `() => void`                                      | —                 | Called when it enters `closing`.                                                                                                               |
+| `onRemove`         | `() => void`                                      | —                 | Called once when it is removed for any reason, shown or not.                                                                                   |
+
+Reserved context keys: `route` and `auth` (read by the `route` / `requiresAuth` sugar). Any other key is
+free for your own `when(ctx)` predicates.
+
+### Cooldown & Duration
+
+`cooldown` limits how often one `id` may show. Every field you set must pass (**AND**), and counts
+increment when the overlay really opens.
+
+| Field     | Type       | Persisted | Meaning                                                           |
+| --------- | ---------- | --------- | ----------------------------------------------------------------- |
+| `session` | `number`   | no        | At most N shows in this page session (memory only).               |
+| `total`   | `number`   | yes       | At most N shows ever.                                             |
+| `day`     | `number`   | yes       | At most N per **local calendar day**.                             |
+| `hour`    | `number`   | yes       | At most N per local calendar hour.                                |
+| `minute`  | `number`   | yes       | At most N per local calendar minute.                              |
+| `minGap`  | `Duration` | yes       | Minimum time since the last show (rolling, not calendar-aligned). |
+
+`Duration` = `{ days?, hours?, minutes?, seconds? }`, summed: `{ hours: 1, minutes: 30 }` = 90 min.
+
+```ts
+om.open({ id: "promo", cooldown: { day: 1 } }); // once per day
+om.open({ id: "rate-us", cooldown: { total: 3, minGap: { days: 7 } } }); // ≤3 ever, ≥7 days apart
+om.open({ id: "tip", cooldown: { session: 1 } }); // once per page load
+```
+
+`session` / `total` running out is permanent → the entry settles `{ dismissed: true, reason: "capped" }`
+immediately instead of queuing forever. `day` / `hour` / `minute` / `minGap` recover by themselves, so the
+entry just waits (cooldown expiry does not wake the scheduler — see
+[Cooldown: persistence, cross-tab and waking](#cooldown-persistence-cross-tab-and-waking)).
+
+### Manager methods
+
+| Method                                     | Purpose                                                     |
+| ------------------------------------------ | ----------------------------------------------------------- |
+| `open(config)`                             | Enqueue / show an overlay; returns `{ id, result }`.        |
+| `resolve(id, value)` / `reject(id, error)` | Deliver a success value / an error to `result`.             |
+| `update(id, patch)`                        | Patch a shown overlay's `data` in place.                    |
+| `close(id)`                                | Start the exit phase (`closing`), guarded by `beforeClose`. |
+| `remove(id)`                               | Remove entirely and advance the queue.                      |
+| `clear(select?)`                           | Remove many at once.                                        |
+| `pauseAll()` / `resumeAll()`               | Freeze / thaw the whole manager.                            |
+| `pause(id)` / `resume(id)`                 | Freeze / thaw one overlay's timers.                         |
+| `setContext(partial)`                      | Push condition context and re-evaluate.                     |
+| `subscribe(listener, options?)`            | Observe state changes.                                      |
+| `getSnapshot()` / `getServerSnapshot()`    | Read state synchronously.                                   |
+| `get(id)`                                  | Look up one active instance.                                |
+| `ready()`                                  | Wait for cooldown hydration.                                |
+| `destroy()`                                | Tear everything down.                                       |
+
+`subscribe`, `getSnapshot`, `getServerSnapshot` and `get` are bound to the instance, so you can pass them
+as bare references (e.g. to React's `useSyncExternalStore`).
+
+#### `open(config)`
+
+```ts
+open<TData = unknown, TResult = unknown>(config: OverlayConfig<TData>): OverlayHandle<TResult>
+// OverlayHandle<TResult> = { id: string; result: Promise<TResult | DismissResult> }
+```
+
+Registers an overlay and returns at once; it shows when its turn comes **and** its conditions / cooldown
+pass. `result` settles exactly once — with the value your UI passes to `resolve` / `reject`, or, for any
+passive end, with `{ dismissed: true, reason }`.
+
+```ts
+// 1. fire and forget
+om.open({ id: "welcome", data: { text: "Hi" } });
+
+// 2. await a user decision (type the result; only `=== true` counts as confirmed)
+const ok = await om.open<{ msg: string }, boolean>({ id: "del", data: { msg: "Delete?" } }).result;
+if (ok === true) doDelete();
+
+// 3. priority + slot + conditions + cooldown + hook
+om.open({
+  id: "vip-promo",
+  slot: "banner",
+  priority: 10,
+  route: ["/home", /^\/shop/],
+  requiresAuth: true,
+  cooldown: { day: 1 },
+  onShow: () => track("promo_show"),
+});
+
+// 4. backend-driven payload
+om.open<Offer>({
+  id: "offer",
+  resolve: async (signal) => (await fetch("/api/offer", { signal })).json(), // null → skipped
+});
+```
+
+Same-`id` rules: reopening an id that is **shown** discards the old instance (its `result` →
+`reason: "replaced"`) and the new one takes over with a fresh `instanceKey` (no extra cooldown count);
+reopening a **queued** id overwrites the queued entry. After `destroy()`, `open()` shows nothing and
+returns a `result` already settled with `reason: "destroyed"`.
+
+#### `resolve(id, value)` / `reject(id, error)`
+
+Deliver the imperative result. They **do not close** the overlay — closing is a separate step (`close`),
+so you can resolve first, play an exit animation, then remove. Ignored when the id is unknown, already
+settled, or **never shown yet** (queued / still resolving): deliver from the UI once it is on screen.
+
+```ts
+om.resolve("confirm", true); // result → true
+om.reject("upload", new Error("network down")); // result rejects
+try {
+  await om.open({ id: "upload" }).result;
+} catch (e) {
+  /* the Error above */
+}
+```
+
+#### `update(id, patch)`
+
+Shallow-merges `patch` into the overlay's `data` (non-object data is replaced) without touching the queue.
+Subscribers are notified only if the overlay is `open` / `closing` and some value actually changed
+(`Object.is`). A queued overlay updates silently; one in `resolve(signal)` keeps the patch and applies it
+when the data lands.
+
+```ts
+om.open({ id: "upload", data: { percent: 0 } });
+om.update("upload", { percent: 60 }); // data = { percent: 60 }; subscribers re-render
+```
+
+#### `close(id)` / `remove(id)`
+
+Two-phase close. `close` moves a **shown** overlay (`open`) to `closing` — it stays in `active`, so your UI
+can play the exit animation — then `remove` (called automatically after `autoRemove`, or by you) takes it
+out and lets the next overlay in. `close` on a queued / resolving / already-closing id is a no-op.
+
+- With `beforeClose`, the guard runs first; `false` (or a throw / rejected Promise) cancels the close. The
+  decision is awaited in a microtask, so an overlay with a guard always enters `closing` asynchronously.
+  Repeated `close()` calls while the guard is pending do not re-run it.
+- `remove` works at any phase (queued, resolving, shown) and is **not** guarded. Its `result` settles with
+  `reason: "closed"` if the overlay had reached `closing`, otherwise `"removed"`.
+
+```ts
+om.open({ id: "form", beforeClose: () => confirm("Discard changes?") });
+om.close("form"); // asks first; "closing" only if the user agrees
+om.remove("form"); // forced removal, no question asked
+
+// Sync the removal with your own leave animation:
+om.open({ id: "modal", autoRemove: false });
+// …when the CSS transition ends:
+el.addEventListener("transitionend", () => om.remove("modal"), { once: true });
+```
+
+#### `clear(select?)`
+
+```ts
+clear(arg?: ClearSelector | { closeActive?: boolean }): void
+// ClearSelector = (ctx: OverlayContext, records: OverlayRecord[]) => string[] | void
+// OverlayRecord = { id; data; slot; phase: "pending"|"resolving"|"open"|"closing"; active: boolean }
+```
+
+Every cleared overlay settles with `reason: "cleared"` and fires `onRemove`.
+
+```ts
+om.clear(); // drop everything still waiting (shown ones stay)
+om.clear({ closeActive: true }); // drop waiting AND shown
+om.clear(
+  (
+    ctx,
+    records, // precise: remove exactly these ids
+  ) => records.filter((r) => (r.data as { group?: string })?.group === "marketing").map((r) => r.id),
+);
+om.clear(() => {}); // a selector returning a non-array removes ALL
+```
+
+#### `pauseAll()` / `resumeAll()` / `pause(id)` / `resume(id)`
+
+- `pauseAll()` is a **full freeze**: nothing new becomes active (serial scheduling stops, `replace` will not
+  displace, `overlap` opens are held) and every `duration` / `autoRemove` countdown stops. `resumeAll()`
+  releases the held overlaps and landed `resolve` results, restarts the countdowns and reschedules.
+  `close` / `remove` / `clear` still work while paused. Typical use: an app-wide guided tour or a native
+  permission prompt.
+- `pause(id)` / `resume(id)` freeze only that overlay's own timers (`duration` and the post-`close`
+  auto-remove), e.g. while the user hovers a toast.
+
+```ts
+om.open({ id: "toast", duration: 3000, overlap: true });
+toastEl.onmouseenter = () => om.pause("toast");
+toastEl.onmouseleave = () => om.resume("toast");
+
+om.pauseAll(); // …tour is running…
+om.resumeAll();
+```
+
+#### `setContext(partial)`
+
+Shallow-merges `partial` into the context your conditions read, then re-evaluates: shown overlays whose
+conditions no longer hold are dismissed (unless `dismissWhenUnmet: false`; `reason: "unmet"`), and waiting
+overlays get another chance. It is the only way to feed context in — there is no `context` constructor
+option.
+
+```ts
+om.open({ id: "checkout-tip", route: "/cart", requiresAuth: true });
+om.setContext({ route: "/cart", auth: true }); // now eligible → shows
+om.setContext({ route: "/home" }); // the shown one is dismissed (unmet)
+
+om.open({ id: "beta", when: (ctx) => ctx.plan === "pro" });
+om.setContext({ plan: "pro" }); // custom keys work with `when`
+```
+
+#### `subscribe(listener, options?)`
+
+```ts
+subscribe(listener: (state: OverlayState) => void, options?: { immediate?: boolean }): () => void
+```
+
+`listener` receives the new `OverlayState` after each change; the return value unsubscribes.
+`immediate: true` also calls it once right away with the current snapshot. One public operation notifies at
+most once, and every subscriber ends up with the latest snapshot — see
+[Hooks and notifications](#hooks-and-notifications).
+
+```ts
+const unsub = om.subscribe(
+  ({ active, queued }) => {
+    console.log(
+      "visible:",
+      active.map((o) => o.id),
+      "waiting:",
+      queued,
+    );
+  },
+  { immediate: true },
+);
+unsub();
+```
+
+#### `getSnapshot()` / `getServerSnapshot()` / `get(id)`
+
+- `getSnapshot(): OverlayState` — the current state; the **same reference** until something changes (safe
+  for `useSyncExternalStore`).
+- `getServerSnapshot(): OverlayState` — a constant, frozen empty state for SSR / hydration.
+- `get(id): OverlayInstance | undefined` — the **active** (open / closing) instance with that id; queued ids
+  return `undefined`.
+
+#### `ready()`
+
+`Promise<void>` that settles once cooldown state has hydrated from storage (whether the read succeeded,
+failed, or returned bad data). `await` it before the first `open` — entries whose cooldown uses a persisted
+field wait for it anyway.
+
+#### `destroy()`
+
+Idempotent teardown: clears everything (`reason: "destroyed"`, `onRemove` for each), closes the cross-tab
+channel, delivers one final empty snapshot, then drops all subscribers. Afterwards `open()` shows nothing
+and every other mutator is a no-op.
+
+### Returned and observed types
+
+```ts
+interface OverlayState {
+  active: readonly OverlayInstance[]; // render these, in order
+  queued: readonly string[]; // ids still waiting (observability only)
+}
+
+interface OverlayInstance<TData = unknown> {
+  id: string;
+  data: TData;
+  slot: string;
+  phase: "open" | "closing"; // the only two phases you ever see
+  priority: number;
+  overlapping: boolean; // came in via `overlap`
+  stackIndex: number; // 0-based layer order of entry → your z-index
+  isTopmost: boolean; // highest stackIndex → give the others pointer-events: none
+  instanceKey: number; // bumps on every open → use as the render key
+}
+```
+
+`OverlayPhase` (`{ open, closing }`) and `DismissReason` (see the [table](#dismissresult-and-dismissreason))
+are exported as `as const` objects plus same-named union types, so you can both compare against them at
+runtime and use them in annotations.
+
+```ts
+import { OverlayPhase } from "@codejoo/layerman";
+const leaving = inst.phase === OverlayPhase.closing;
+```
+
+### Framework adapters
+
+Every adapter is a thin bridge over `subscribe` + `getSnapshot` (optional peer dependency, own subpath).
+They share one shape: the manager comes from context (or is passed as the last argument), a state bridge,
+the per-id binding `useOverlay(id, defaults?, om?)`, and a "current overlay" helper for central renderers.
+
+| Subpath                    | State                            | Per-id binding                   | Provide the manager                                                       | Current overlay                                                                           |
+| -------------------------- | -------------------------------- | -------------------------------- | ------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------- |
+| `@codejoo/layerman/vue`    | `useOverlayState`, `useOverlays` | `useOverlay(id, defaults?, om?)` | `createLayermanPlugin(om)`, `provideLayerman(om)`                         | `provideCurrentOverlay(id)` + `useCurrentOverlay(om?)`                                    |
+| `@codejoo/layerman/react`  | `useOverlayState`, `useOverlays` | `useOverlay(id, defaults?, om?)` | `<LayermanProvider manager>`, `createLayermanProvider(om)`, `useLayerman` | `<CurrentOverlayProvider id>` + `useCurrentOverlay(om?)`                                  |
+| `@codejoo/layerman/svelte` | `overlayState`, `overlays`       | `overlay(id, defaults?, om?)`    | `setLayerman(om)` / `getLayerman()`                                       | `provideCurrentOverlay(id)` + `currentOverlay(om?)`                                       |
+| `@codejoo/layerman/solid`  | `useOverlayState`, `useOverlays` | `useOverlay(id, defaults?, om?)` | `<LayermanProvider value>`, `provideLayerman(om)`                         | `<CurrentOverlayProvider value>` / `provideCurrentOverlay(id)` + `useCurrentOverlay(om?)` |
+
+All per-id bindings return `{ instance, visible, phase, open, close, remove, resolve, reject, pause, resume }`
+(reactive values are `ComputedRef`s in Vue, plain values in React, `Readable` stores in Svelte and
+accessors in Solid; Vue adds the writable `model` for `v-model`). `defaults` is the full `OverlayConfig`
+minus `id`, merged into every `open()`; `open(config)` overrides it. `useOverlays()` / `overlays()` return
+`{ active, queued }`. Vue's detailed idioms are in the [Vue 3](#vue-3) section; compact examples for the
+others:
+
+```tsx
+// React
+import { LayermanProvider, CurrentOverlayProvider, useOverlays, useOverlay, useCurrentOverlay } from "@codejoo/layerman/react";
+
+function Host() {
+  const { active } = useOverlays();
+  return active.map((o) => (
+    <CurrentOverlayProvider key={o.instanceKey} id={o.id}>
+      <Layer />
+    </CurrentOverlayProvider>
+  ));
+}
+
+function Layer() {
+  const { instance, resolve, close } = useCurrentOverlay<{ text: string }>(); // no id threading
+  return (
+    <div data-phase={instance?.phase}>
+      {instance?.data.text}
+      <button
+        onClick={() => {
+          resolve(true);
+          close();
+        }}
+      >
+        OK
+      </button>
+    </div>
+  );
+}
+
+function PromoButton() {
+  const { open, visible } = useOverlay("promo", { replace: true, cooldown: { day: 1 } });
+  return (
+    <button disabled={visible} onClick={() => open({ data: { text: "Offer!" } })}>
+      Promo
+    </button>
+  );
+}
+// <LayermanProvider manager={om}><Host /><PromoButton /></LayermanProvider>
+```
+
+```svelte
+<!-- Svelte 4 / 5: stores — prefix with $ in the template -->
+<script>
+  import { overlays, overlay, setLayerman } from "@codejoo/layerman/svelte";
+  import { om } from "./overlay";
+
+  setLayerman(om); // once, during component init
+  const { active } = overlays();
+  const promo = overlay("promo", { replace: true });
+</script>
+
+{#each $active as o (o.instanceKey)}
+  <div data-phase={o.phase}>{o.data.text}</div>
+{/each}
+<button on:click={() => promo.open({ data: { text: "Offer!" } })}>Promo</button>
+```
+
+```tsx
+// Solid: values are accessors — call them
+import { LayermanProvider, useOverlays, useOverlay } from "@codejoo/layerman/solid";
+import { For, Show } from "solid-js";
+
+function Host() {
+  const { active } = useOverlays();
+  return <For each={active()}>{(o) => <div data-phase={o.phase}>{(o.data as { text: string }).text}</div>}</For>;
+}
+
+function PromoButton() {
+  const promo = useOverlay("promo", { replace: true });
+  return (
+    <Show when={!promo.visible()}>
+      <button onClick={() => promo.open({ data: { text: "Offer!" } })}>Promo</button>
+    </Show>
+  );
+}
+// <LayermanProvider value={om}><Host /><PromoButton /></LayermanProvider>
+```
 
 ## Behavior notes
 
@@ -446,22 +952,11 @@ not stuffed into a `v-model` synchronous boolean.
 
 ## React / Svelte / Solid
 
-The same adapter shape ships for other frameworks (each an optional peer dep, thin bridge over the
-core — no framework in the zero-dep core itself):
-
-- **`@codejoo/layerman/react`** — hooks via `useSyncExternalStore` (SSR-safe): `useOverlays`,
-  `useOverlay(id, defaults?, om?)`, `LayermanProvider` / `useLayerman`, `useCurrentOverlay`. In a central
-  renderer wrap each active item with **`<CurrentOverlayProvider id={o.id}>`** (capitalised, usable in
-  JSX) so `useCurrentOverlay()` works inside it. `provideCurrentOverlay` is a **deprecated** alias —
-  its lowercase name is treated as a native tag by JSX, so don't use it as a component.
-- **`@codejoo/layerman/svelte`** — `svelte/store` readables (Svelte 4/5): `overlayState`,
-  `overlays`, `overlay(id, defaults?, om?)`, `setLayerman` / `getLayerman`.
-- **`@codejoo/layerman/solid`** — signals: `useOverlayState`, `useOverlays`,
-  `useOverlay(id, defaults?, om?)`, `provideLayerman` / `LayermanProvider`.
-
-Each exposes `{ instance, visible, phase, open, close, remove, resolve, reject, pause, resume }`
-(Vue additionally has the writable `model` for `v-model`). A Flutter port lives separately at
-`dart-labs/layerman` (embraces Flutter's `Overlay`; `show()` returns `Future<T?>`).
+The same adapter shape ships for the other frameworks — see [Framework adapters](#framework-adapters) in the API
+reference for the full table and examples. In a React central renderer wrap each active item with
+**`<CurrentOverlayProvider id={o.id}>`** (capitalised, usable in JSX); `provideCurrentOverlay` is a **deprecated**
+alias whose lowercase name JSX treats as a native tag. A Flutter port lives separately at `dart-labs/layerman`
+(embraces Flutter's `Overlay`; `show()` returns `Future<T?>`).
 
 ## License
 

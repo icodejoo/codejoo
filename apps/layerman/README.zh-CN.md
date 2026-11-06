@@ -11,7 +11,7 @@ replace / overlap / affix、按弹窗的条件与冷却、后端数据驱动的�
 
 ```bash
 pnpm add @codejoo/layerman
-# 可选的 Vue 3 接入层在 /vue 子路径(vue 为可选 peer 依赖)
+# 各框架适配层以子路径提供:/vue /react /svelte /solid,对应框架均为可选 peer 依赖
 ```
 
 ## 核心概念
@@ -56,6 +56,502 @@ const ok = await om.open({ id: "confirm", data: { msg: "确定删除?" } }).resu
 // ok 是你的 UI 传给 om.resolve("confirm", ...) 的值,或 { dismissed: true }
 
 om.close("welcome"); // → phase "closing";autoRemove(默认 300ms)后移除并推进
+```
+
+## 不用框架(纯 JS)
+
+核心不依赖 Vue / React 或任何框架:`subscribe` 把最新状态交给你,你自己渲染 `state.active`。本包只决定
+「哪个弹窗处于活跃、处于哪个阶段」,长什么样完全由你决定。
+
+```js
+import { createLayerman } from "@codejoo/layerman";
+
+const om = createLayerman({ gap: 200 });
+await om.ready();
+
+const root = document.getElementById("overlay-root");
+const nodes = new Map(); // instanceKey → DOM 节点
+
+function render(state) {
+  const alive = new Set();
+  for (const inst of state.active) {
+    alive.add(inst.instanceKey); // 当 render key:同 id 重开会换新 key → 重新挂载
+    let el = nodes.get(inst.instanceKey);
+    if (!el) {
+      el = document.createElement("div");
+      el.className = "mask";
+      el.innerHTML = `<p>${inst.data.text}</p><button>确定</button>`;
+      el.querySelector("button").onclick = () => {
+        om.resolve(inst.id, true); // 投递结果(不会关闭)
+        om.close(inst.id); // → phase "closing";300ms 后自动移除
+      };
+      nodes.set(inst.instanceKey, el);
+      root.append(el);
+    }
+    el.dataset.phase = inst.phase; // "open" | "closing",用它驱动退场 CSS
+    el.style.zIndex = String(1000 + inst.stackIndex); // headless:z-index 由你算
+    el.style.pointerEvents = inst.isTopmost ? "auto" : "none";
+  }
+  for (const [key, el] of nodes) {
+    if (!alive.has(key)) {
+      el.remove();
+      nodes.delete(key);
+    }
+  }
+}
+
+om.subscribe(render, { immediate: true }); // immediate:订阅时立刻用当前快照渲染一次
+
+const ok = await om.open({ id: "confirm", data: { text: "确定删除?" } }).result;
+```
+
+完整可运行页面(toast、优先级队列、`overlap`、`replace`、路由条件、暂停、清空)见
+[`example/vanilla/`](./example/vanilla):`pnpm --filter @codejoo/layerman-example dev`,再打开
+`/vanilla/index.html`。
+
+## API 参考
+
+`@codejoo/layerman` 的全部导出:工厂 `createLayerman`、运行时常量 `DismissReason` / `OverlayPhase`,以及下列类型。
+各框架适配层放在最后。
+
+```ts
+import {
+  createLayerman, // 工厂
+  DismissReason,
+  OverlayPhase, // 运行时常量
+  type Layerman,
+  type LayermanOptions,
+  type OverlayConfig,
+  type OverlayHandle,
+  type OverlayInstance,
+  type OverlayState,
+  type OverlayRecord,
+  type OverlayContext,
+  type ClearSelector,
+  type DismissResult,
+  type Cooldown,
+  type Duration,
+  type AsyncableStorage,
+} from "@codejoo/layerman";
+```
+
+### `createLayerman(options?)`
+
+返回一个独立的管理器(是工厂,**不是**单例——一个应用建一个,或一个测试建一个)。
+
+| 选项         | 类型                        | 默认值                                   | 含义                                                                                       |
+| ------------ | --------------------------- | ---------------------------------------- | ------------------------------------------------------------------------------------------ |
+| `gap`        | `number`                    | `0`                                      | 同一 slot 内,前一个结束到下一个开始之间的全局等待毫秒数;弹窗自己的 `delay` 优先。          |
+| `autoRemove` | `boolean \| number`         | `true`                                   | `close()` 之后自动 `remove()`:`true` = 300ms,数字 = 自定义毫秒,`false` = 由你调 `remove`。 |
+| `storage`    | `AsyncableStorage`          | 有 `localStorage` 用它,否则纯内存        | 持久化冷却状态的存储;`get` / `set` 可同步可异步。                                          |
+| `storageKey` | `string`                    | `"layerman:v1"`                          | 存储键;跨 Tab 通道名为 `${storageKey}:sync`。                                              |
+| `now`        | `() => number`              | `Date.now`                               | 时间源,测试时注入假时钟。                                                                  |
+| `debug`      | `boolean`                   | `false`                                  | 输出生命周期日志 `[layerman]:<id>:<pending\|resolving\|open\|closing\|closed>`。           |
+| `logger`     | `(message: string) => void` | `console.log`                            | `debug` 日志的去向;logger 抛错会被吞掉。                                                   |
+| `crossTab`   | `boolean`                   | 有 `window` 和 `BroadcastChannel` 时开启 | 跨标签页同步冷却计数;Node / SSR / Worker 默认关闭。                                        |
+
+```ts
+const om = createLayerman({
+  gap: 300,
+  autoRemove: 200,
+  storageKey: "myapp:overlays",
+  debug: true,
+  logger: (m) => analytics.debug(m),
+});
+await om.ready();
+```
+
+**自定义存储**(React Native 的 `AsyncStorage`、IndexedDB 封装、服务端会话存储……):
+
+```ts
+import AsyncStorage from "@react-native-async-storage/async-storage";
+
+const om = createLayerman({
+  storage: {
+    get: (key) => AsyncStorage.getItem(key), // string | null,同步或 Promise 均可
+    set: (key, value) => AsyncStorage.setItem(key, value),
+  },
+});
+await om.ready(); // hydrate 是异步的 → 等它完成(见「冷却」行为说明)
+```
+
+### `OverlayConfig` —— `open` 的入参
+
+所有字段都可选。
+
+| 字段               | 类型                                              | 默认值     | 含义                                                                                                            |
+| ------------------ | ------------------------------------------------- | ---------- | --------------------------------------------------------------------------------------------------------------- |
+| `id`               | `string`                                          | 自动生成   | 唯一键。不传则生成 `__layerman_auto_n`(必不冲突,跳过同 id 覆盖判定)。同时是冷却持久化的键。                     |
+| `data`             | `TData`                                           | —          | 给渲染层用的不透明载荷,对应 `instance.data`。                                                                   |
+| `slot`             | `string`                                          | `""`       | 命名串行队列。每个 slot 同一时刻只显示**一个**,各 slot 互不影响。                                               |
+| `priority`         | `number`                                          | `0`        | 等待中的条目里,数值大的先显示;同级 FIFO。                                                                       |
+| `delay`            | `number`(ms)                                      | 全局 `gap` | 距该 slot 上次空出后再等多久才显示,覆盖 `gap`。                                                                 |
+| `duration`         | `number`(ms)                                      | 无(常驻)   | 显示后经过这么久自动 `close()`(`beforeClose` 守卫依然生效)。                                                    |
+| `autoRemove`       | `boolean \| number`                               | 全局值     | 按弹窗覆盖 `close` 后的自动移除。                                                                               |
+| `overlap`          | `boolean`                                         | `false`    | 绕过串行队列,**立即叠加显示**(见上文 `overlap` vs `replace`)。                                                  |
+| `replace`          | `boolean`                                         | `false`    | 抢占该 slot 当前弹窗(被抢者退回队列),跳过 `gap`。                                                               |
+| `affix`            | `boolean`                                         | `false`    | 不会被 `replace` 顶掉(替换者改为排到队首);显式 `close` / `remove` / `clear` 仍然有效。                          |
+| `route`            | `string \| string[] \| RegExp`                    | —          | 条件糖:仅当 `context.route` 匹配时显示(字符串=全等,数组=包含,RegExp=test)。                                     |
+| `requiresAuth`     | `boolean`                                         | —          | 条件糖:`true` 仅 `context.auth` 为真时显示,`false` 仅为假时显示。                                               |
+| `when`             | `(ctx: OverlayContext) => boolean`                | —          | 自定义谓词,配了就**覆盖** `route` / `requiresAuth`。不得修改管理器;抛错视为「不满足」。                         |
+| `dismissWhenUnmet` | `boolean`                                         | `true`     | 已展示时,`setContext` 后条件不再满足就自动撤下(`reason: "unmet"`)。                                             |
+| `cooldown`         | `Cooldown`                                        | —          | 频次限制,见下节。                                                                                               |
+| `resolve`          | `(signal: AbortSignal) => Promise<TData \| null>` | —          | 轮到它时才去取数据;返回 `null` / `undefined` 或抛错 ⇒ 跳过,`reason: "empty"`。仅限串行(不能和 `overlap` 同用)。 |
+| `beforeClose`      | `() => boolean \| Promise<boolean>`               | —          | 关闭守卫:返回(或 resolve)`false`(或抛错)取消本次 `close()`。**不**拦 `remove` / `clear` / 自动撤下。            |
+| `onShow`           | `() => void`                                      | —          | 弹窗变为可见(phase `open`)时调用。                                                                              |
+| `onClose`          | `() => void`                                      | —          | 进入 `closing` 时调用。                                                                                         |
+| `onRemove`         | `() => void`                                      | —          | 因任何原因被移除时调用一次,无论是否展示过。                                                                     |
+
+上下文保留键:`route`、`auth`(供 `route` / `requiresAuth` 糖读取)。其他键随便用,配合你自己的 `when(ctx)`。
+
+### 冷却与时长(Cooldown / Duration)
+
+`cooldown` 限制同一个 `id` 的出现频率。你写的所有字段必须**同时**满足(AND),计数在弹窗真正打开时 +1。
+
+| 字段      | 类型       | 持久化 | 含义                                      |
+| --------- | ---------- | ------ | ----------------------------------------- |
+| `session` | `number`   | 否     | 本次页面会话最多 N 次(仅内存)。           |
+| `total`   | `number`   | 是     | 累计最多 N 次。                           |
+| `day`     | `number`   | 是     | 每个**本地自然日**最多 N 次。             |
+| `hour`    | `number`   | 是     | 每个本地自然小时最多 N 次。               |
+| `minute`  | `number`   | 是     | 每个本地自然分钟最多 N 次。               |
+| `minGap`  | `Duration` | 是     | 距上次展示的最小间隔(滚动,不按自然边界)。 |
+
+`Duration` = `{ days?, hours?, minutes?, seconds? }`,各项相加:`{ hours: 1, minutes: 30 }` = 90 分钟。
+
+```ts
+om.open({ id: "promo", cooldown: { day: 1 } }); // 每天一次
+om.open({ id: "rate-us", cooldown: { total: 3, minGap: { days: 7 } } }); // 累计 ≤3 次,间隔 ≥7 天
+om.open({ id: "tip", cooldown: { session: 1 } }); // 每次打开页面一次
+```
+
+`session` / `total` 用完是永久性的 → 该条目立即以 `{ dismissed: true, reason: "capped" }` 兑现,不会永远排队。
+`day` / `hour` / `minute` / `minGap` 会自行恢复,所以条目只是等待(冷却到期**不会**唤醒调度器,见「冷却:持久化、跨 Tab 与唤醒」)。
+
+### 管理器方法
+
+| 方法                                       | 作用                                            |
+| ------------------------------------------ | ----------------------------------------------- |
+| `open(config)`                             | 入队 / 展示弹窗,返回 `{ id, result }`。         |
+| `resolve(id, value)` / `reject(id, error)` | 向 `result` 投递成功值 / 错误。                 |
+| `update(id, patch)`                        | 就地更新已展示弹窗的 `data`。                   |
+| `close(id)`                                | 进入退场阶段(`closing`),受 `beforeClose` 守卫。 |
+| `remove(id)`                               | 彻底移除并推进队列。                            |
+| `clear(select?)`                           | 批量移除。                                      |
+| `pauseAll()` / `resumeAll()`               | 冻结 / 解冻整个管理器。                         |
+| `pause(id)` / `resume(id)`                 | 冻结 / 解冻单个弹窗的计时器。                   |
+| `setContext(partial)`                      | 推入条件上下文并重评。                          |
+| `subscribe(listener, options?)`            | 订阅状态变化。                                  |
+| `getSnapshot()` / `getServerSnapshot()`    | 同步读取状态。                                  |
+| `get(id)`                                  | 按 id 取一个活跃实例。                          |
+| `ready()`                                  | 等冷却状态 hydrate 完成。                       |
+| `destroy()`                                | 整体销毁。                                      |
+
+`subscribe`、`getSnapshot`、`getServerSnapshot`、`get` 已绑定实例,可以当裸引用传递(例如给 React 的 `useSyncExternalStore`)。
+
+#### `open(config)`
+
+```ts
+open<TData = unknown, TResult = unknown>(config: OverlayConfig<TData>): OverlayHandle<TResult>
+// OverlayHandle<TResult> = { id: string; result: Promise<TResult | DismissResult> }
+```
+
+登记弹窗并立即返回;轮到它、**且**条件 / 冷却通过时才会显示。`result` 只会兑现一次——要么是你的 UI 传给
+`resolve` / `reject` 的值,要么在任何被动结束时兑现为 `{ dismissed: true, reason }`。
+
+```ts
+// 1. 发了就不管
+om.open({ id: "welcome", data: { text: "你好" } });
+
+// 2. 等用户决定(给结果标类型;只有 `=== true` 才算确认)
+const ok = await om.open<{ msg: string }, boolean>({ id: "del", data: { msg: "确定删除?" } }).result;
+if (ok === true) doDelete();
+
+// 3. 优先级 + slot + 条件 + 冷却 + 钩子
+om.open({
+  id: "vip-promo",
+  slot: "banner",
+  priority: 10,
+  route: ["/home", /^\/shop/],
+  requiresAuth: true,
+  cooldown: { day: 1 },
+  onShow: () => track("promo_show"),
+});
+
+// 4. 后端驱动的载荷
+om.open<Offer>({
+  id: "offer",
+  resolve: async (signal) => (await fetch("/api/offer", { signal })).json(), // 返回 null → 跳过
+});
+```
+
+同 `id` 规则:重开一个**正在展示**的 id,会丢弃旧实例(其 `result` → `reason: "replaced"`),新实例用新的
+`instanceKey` 接管(不额外计冷却);重开一个**在队列中**的 id,则覆盖队列里那条。`destroy()` 之后 `open()` 什么也不显示,
+并返回已兑现 `reason: "destroyed"` 的 `result`。
+
+#### `resolve(id, value)` / `reject(id, error)`
+
+投递命令式结果。它们**不会关闭**弹窗——关闭是独立的一步(`close`),所以你可以先 resolve、播退场动画、再 remove。
+id 不存在、已兑现、或**从未展示过**(还在排队 / 还在 resolving)时被忽略:请等弹窗真正显示出来再由 UI 投递。
+
+```ts
+om.resolve("confirm", true); // result → true
+om.reject("upload", new Error("网络断了")); // result 被 reject
+try {
+  await om.open({ id: "upload" }).result;
+} catch (e) {
+  /* 就是上面那个 Error */
+}
+```
+
+#### `update(id, patch)`
+
+把 `patch` 浅合并进弹窗的 `data`(非对象数据则整体替换),不触发队列变更。只有弹窗处于 `open` / `closing`
+且确有值变化(`Object.is`)时才通知订阅者。排队中的更新是静默的;处于 `resolve(signal)` 期间的补丁会被保留,
+数据落地时再应用。
+
+```ts
+om.open({ id: "upload", data: { percent: 0 } });
+om.update("upload", { percent: 60 }); // data = { percent: 60 };订阅者重渲染
+```
+
+#### `close(id)` / `remove(id)`
+
+两阶段关闭。`close` 把**已展示**(`open`)的弹窗转入 `closing`——它仍留在 `active` 里,你的 UI 可以播退场动画——
+随后由 `remove`(`autoRemove` 到点自动调,或你手动调)把它摘掉并让下一个进场。对排队中 / resolving / 已在 closing 的
+id 调 `close` 是空操作。
+
+- 有 `beforeClose` 时先过守卫;返回 `false`(或抛错 / Promise reject)取消关闭。守卫结果在微任务里等待,
+  所以带守卫的弹窗一定是**异步**进入 `closing`。守卫未决期间重复调用 `close()` 不会再次触发守卫。
+- `remove` 在任何阶段(排队、resolving、已展示)都有效,且**不**过守卫。其 `result` 在弹窗已到 `closing` 时以
+  `reason: "closed"` 兑现,否则为 `"removed"`。
+
+```ts
+om.open({ id: "form", beforeClose: () => confirm("放弃修改?") });
+om.close("form"); // 先询问;用户同意才进入 "closing"
+om.remove("form"); // 强制移除,不会询问
+
+// 让移除与自己的退场动画对齐:
+om.open({ id: "modal", autoRemove: false });
+// ……CSS 过渡结束时:
+el.addEventListener("transitionend", () => om.remove("modal"), { once: true });
+```
+
+#### `clear(select?)`
+
+```ts
+clear(arg?: ClearSelector | { closeActive?: boolean }): void
+// ClearSelector = (ctx: OverlayContext, records: OverlayRecord[]) => string[] | void
+// OverlayRecord = { id; data; slot; phase: "pending"|"resolving"|"open"|"closing"; active: boolean }
+```
+
+每个被清理的弹窗都以 `reason: "cleared"` 兑现,并触发 `onRemove`。
+
+```ts
+om.clear(); // 清掉所有还在等待的(已展示的保留)
+om.clear({ closeActive: true }); // 等待的和已展示的一起清
+om.clear(
+  (
+    ctx,
+    records, // 精确清理:只移除返回的这些 id
+  ) => records.filter((r) => (r.data as { group?: string })?.group === "marketing").map((r) => r.id),
+);
+om.clear(() => {}); // 选择器返回非数组 = 全部清理
+```
+
+#### `pauseAll()` / `resumeAll()` / `pause(id)` / `resume(id)`
+
+- `pauseAll()` 是**全量冻结**:不会有新弹窗变成活跃(串行调度停止,`replace` 不会顶掉当前,`overlap` 被持有),
+  所有 `duration` / `autoRemove` 倒计时也停止。`resumeAll()` 放行被持有的 overlap 和已落地的 `resolve` 结果,
+  重启倒计时并重新调度。暂停期间 `close` / `remove` / `clear` 仍然有效。典型场景:全局新手引导、系统权限弹窗。
+- `pause(id)` / `resume(id)` 只冻结该弹窗自己的计时器(`duration` 与 `close` 后的自动移除),例如用户悬停 toast 时。
+
+```ts
+om.open({ id: "toast", duration: 3000, overlap: true });
+toastEl.onmouseenter = () => om.pause("toast");
+toastEl.onmouseleave = () => om.resume("toast");
+
+om.pauseAll(); // ……引导进行中……
+om.resumeAll();
+```
+
+#### `setContext(partial)`
+
+把 `partial` 浅合并进条件读取的上下文,然后重评:已展示但条件不再满足的弹窗被撤下(除非 `dismissWhenUnmet: false`,
+`reason: "unmet"`),等待中的弹窗获得新的机会。这是输入上下文的唯一途径——没有 `context` 构造参数。
+
+```ts
+om.open({ id: "checkout-tip", route: "/cart", requiresAuth: true });
+om.setContext({ route: "/cart", auth: true }); // 现在满足 → 显示
+om.setContext({ route: "/home" }); // 已展示的被撤下(unmet)
+
+om.open({ id: "beta", when: (ctx) => ctx.plan === "pro" });
+om.setContext({ plan: "pro" }); // 自定义键配合 `when` 使用
+```
+
+#### `subscribe(listener, options?)`
+
+```ts
+subscribe(listener: (state: OverlayState) => void, options?: { immediate?: boolean }): () => void
+```
+
+每次状态变化后 `listener` 收到新的 `OverlayState`;返回值用于取消订阅。`immediate: true` 会在订阅时立刻用当前快照调用一次。
+一次公共操作最多通知一次,且每个订阅者最终都拿到最新快照——见「钩子与通知」。
+
+```ts
+const unsub = om.subscribe(
+  ({ active, queued }) => {
+    console.log(
+      "可见:",
+      active.map((o) => o.id),
+      "等待:",
+      queued,
+    );
+  },
+  { immediate: true },
+);
+unsub();
+```
+
+#### `getSnapshot()` / `getServerSnapshot()` / `get(id)`
+
+- `getSnapshot(): OverlayState` —— 当前状态;变化之前返回**同一个引用**(可安全用于 `useSyncExternalStore`)。
+- `getServerSnapshot(): OverlayState` —— SSR / hydration 用的恒定冻结空状态。
+- `get(id): OverlayInstance | undefined` —— 取该 id 的**活跃**(open / closing)实例;排队中的 id 返回 `undefined`。
+
+#### `ready()`
+
+`Promise<void>`,冷却状态从存储 hydrate 完成后兑现(无论读取成功、失败还是数据损坏)。建议在第一次 `open` 之前 `await` ——
+配了持久化冷却字段的条目本来也会等它。
+
+#### `destroy()`
+
+幂等销毁:清空所有弹窗(`reason: "destroyed"`,各自触发 `onRemove`),关闭跨 Tab 通道,发出一次最终的空快照,然后丢弃所有订阅者。
+之后 `open()` 什么也不显示,其他变更方法都是空操作。
+
+### 返回与观测到的类型
+
+```ts
+interface OverlayState {
+  active: readonly OverlayInstance[]; // 照着它渲染,保持顺序
+  queued: readonly string[]; // 仍在等待的 id(仅供观测)
+}
+
+interface OverlayInstance<TData = unknown> {
+  id: string;
+  data: TData;
+  slot: string;
+  phase: "open" | "closing"; // 对外只有这两个阶段
+  priority: number;
+  overlapping: boolean; // 是否经 `overlap` 进来
+  stackIndex: number; // 入场层序(从 0 起)→ 你的 z-index
+  isTopmost: boolean; // stackIndex 最大 → 其余的加 pointer-events: none
+  instanceKey: number; // 每次 open 递增 → 当 render key
+}
+```
+
+`OverlayPhase`(`{ open, closing }`)和 `DismissReason`(见上文 `DismissResult` 表)都以 `as const` 对象加同名联合类型导出,
+既能在运行时比较,也能当类型标注。
+
+```ts
+import { OverlayPhase } from "@codejoo/layerman";
+const leaving = inst.phase === OverlayPhase.closing;
+```
+
+### 框架适配层
+
+所有适配层都是 `subscribe` + `getSnapshot` 之上的薄桥(可选 peer 依赖,各自独立子路径),形状一致:管理器来自 context(或作为最后一个参数传入)、
+状态桥、按 id 绑定的 `useOverlay(id, defaults?, om?)`,以及给中央渲染器用的「当前 overlay」助手。
+
+| 子路径                     | 状态桥                           | 按 id 绑定                       | 注入管理器                                                                | 当前 overlay                                                                              |
+| -------------------------- | -------------------------------- | -------------------------------- | ------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------- |
+| `@codejoo/layerman/vue`    | `useOverlayState`, `useOverlays` | `useOverlay(id, defaults?, om?)` | `createLayermanPlugin(om)`, `provideLayerman(om)`                         | `provideCurrentOverlay(id)` + `useCurrentOverlay(om?)`                                    |
+| `@codejoo/layerman/react`  | `useOverlayState`, `useOverlays` | `useOverlay(id, defaults?, om?)` | `<LayermanProvider manager>`, `createLayermanProvider(om)`, `useLayerman` | `<CurrentOverlayProvider id>` + `useCurrentOverlay(om?)`                                  |
+| `@codejoo/layerman/svelte` | `overlayState`, `overlays`       | `overlay(id, defaults?, om?)`    | `setLayerman(om)` / `getLayerman()`                                       | `provideCurrentOverlay(id)` + `currentOverlay(om?)`                                       |
+| `@codejoo/layerman/solid`  | `useOverlayState`, `useOverlays` | `useOverlay(id, defaults?, om?)` | `<LayermanProvider value>`, `provideLayerman(om)`                         | `<CurrentOverlayProvider value>` / `provideCurrentOverlay(id)` + `useCurrentOverlay(om?)` |
+
+所有按 id 绑定都返回 `{ instance, visible, phase, open, close, remove, resolve, reject, pause, resume }`
+(响应式值在 Vue 里是 `ComputedRef`、React 里是普通值、Svelte 里是 `Readable` store、Solid 里是 accessor;Vue 额外有给 `v-model` 用的可写 `model`)。
+`defaults` 是去掉 `id` 的完整 `OverlayConfig`,会合并进每一次 `open()`;`open(config)` 再覆盖它。`useOverlays()` / `overlays()` 返回 `{ active, queued }`。
+Vue 的详细用法见下文「Vue 3 接入」,其余框架的精简示例:
+
+```tsx
+// React
+import { LayermanProvider, CurrentOverlayProvider, useOverlays, useOverlay, useCurrentOverlay } from "@codejoo/layerman/react";
+
+function Host() {
+  const { active } = useOverlays();
+  return active.map((o) => (
+    <CurrentOverlayProvider key={o.instanceKey} id={o.id}>
+      <Layer />
+    </CurrentOverlayProvider>
+  ));
+}
+
+function Layer() {
+  const { instance, resolve, close } = useCurrentOverlay<{ text: string }>(); // 不用层层传 id
+  return (
+    <div data-phase={instance?.phase}>
+      {instance?.data.text}
+      <button
+        onClick={() => {
+          resolve(true);
+          close();
+        }}
+      >
+        确定
+      </button>
+    </div>
+  );
+}
+
+function PromoButton() {
+  const { open, visible } = useOverlay("promo", { replace: true, cooldown: { day: 1 } });
+  return (
+    <button disabled={visible} onClick={() => open({ data: { text: "优惠!" } })}>
+      促销
+    </button>
+  );
+}
+// <LayermanProvider manager={om}><Host /><PromoButton /></LayermanProvider>
+```
+
+```svelte
+<!-- Svelte 4 / 5:store,模板里加 $ 前缀 -->
+<script>
+  import { overlays, overlay, setLayerman } from "@codejoo/layerman/svelte";
+  import { om } from "./overlay";
+
+  setLayerman(om); // 组件初始化时调用一次
+  const { active } = overlays();
+  const promo = overlay("promo", { replace: true });
+</script>
+
+{#each $active as o (o.instanceKey)}
+  <div data-phase={o.phase}>{o.data.text}</div>
+{/each}
+<button on:click={() => promo.open({ data: { text: "优惠!" } })}>促销</button>
+```
+
+```tsx
+// Solid:返回值是 accessor,要调用
+import { LayermanProvider, useOverlays, useOverlay } from "@codejoo/layerman/solid";
+import { For, Show } from "solid-js";
+
+function Host() {
+  const { active } = useOverlays();
+  return <For each={active()}>{(o) => <div data-phase={o.phase}>{(o.data as { text: string }).text}</div>}</For>;
+}
+
+function PromoButton() {
+  const promo = useOverlay("promo", { replace: true });
+  return (
+    <Show when={!promo.visible()}>
+      <button onClick={() => promo.open({ data: { text: "优惠!" } })}>促销</button>
+    </Show>
+  );
+}
+// <LayermanProvider value={om}><Host /><PromoButton /></LayermanProvider>
 ```
 
 ## 行为说明
@@ -386,20 +882,16 @@ v-model 的布尔只有 true/false,**没有「我想要但被门挡着」的第�
 ## 验收 / 开发
 
 ```bash
-pnpm test    # vitest(13 文件,764 通过 | 4 预期失败:核心 + 不变量 + fuzz + 冷却存储 + Vue/React/Svelte/Solid 适配层 + 类型级)
+pnpm test    # vitest(14 文件,863 通过:核心 + 不变量 + fuzz + 冷却存储 + Vue/React/Svelte/Solid 适配层 + 类型级)
 pnpm check   # oxfmt --check + type-aware oxlint
 pnpm build   # vp pack → dist/esm(index + vue/react/svelte/solid 多入口)
 ```
 
 ## React / Svelte / Solid
 
-同样的适配层形态也提供给其他框架(各为可选 peer 依赖、核心零依赖不含任何框架):
-
-- **`@codejoo/layerman/react`** —— `useSyncExternalStore`(SSR 安全):`useOverlays`、`useOverlay(id, defaults?, om?)`、`LayermanProvider`/`useLayerman`、`useCurrentOverlay`。中央渲染器里用 **`<CurrentOverlayProvider id={o.id}>`**(首字母大写,可直接用于 JSX)包裹每个活跃项,组件内的 `useCurrentOverlay()` 才能取到自身 id;`provideCurrentOverlay` 是**已弃用**的别名——它的小写名字会被 JSX 当成原生标签,别当组件用。
-- **`@codejoo/layerman/svelte`** —— `svelte/store` readable(兼容 4/5):`overlayState`、`overlays`、`overlay(id, defaults?, om?)`、`setLayerman`/`getLayerman`。
-- **`@codejoo/layerman/solid`** —— signal:`useOverlayState`、`useOverlays`、`useOverlay(id, defaults?, om?)`、`provideLayerman`/`LayermanProvider`。
-
-各自返回 `{ instance, visible, phase, open, close, remove, resolve, reject, pause, resume }`(Vue 另有可写 `model` 供 v-model)。另有 Flutter 版在 `dart-labs/layerman`(拥抱 Flutter 的 `Overlay`,`show()` 返回 `Future<T?>`)。
+其他框架提供同样形态的适配层——完整对照表与示例见上文 API 参考的「框架适配层」。React 的中央渲染器里请用
+**`<CurrentOverlayProvider id={o.id}>`**(首字母大写,可直接用于 JSX);`provideCurrentOverlay` 是**已弃用**的别名,
+它的小写名字会被 JSX 当成原生标签。另有 Flutter 版在 `dart-labs/layerman`(拥抱 Flutter 的 `Overlay`,`show()` 返回 `Future<T?>`)。
 
 ## License
 

@@ -1,0 +1,36 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>layerman · 纯 JS（无框架）</title>
+    <style>
+      body { font-family: system-ui, sans-serif; margin: 24px; }
+      button { margin: 4px 4px 4px 0; padding: 6px 12px; }
+      #log { margin-top: 16px; padding: 8px; background: #f5f5f5; font: 12px/1.6 monospace; white-space: pre-wrap; min-height: 80px; }
+      .mask { position: fixed; inset: 0; display: grid; place-items: center; background: rgba(0, 0, 0, 0.45); transition: opacity 0.25s; }
+      .mask[data-phase="closing"] { opacity: 0; }
+      .mask[data-top="false"] { pointer-events: none; }
+      .card { background: #fff; border-radius: 8px; padding: 20px 24px; min-width: 240px; }
+      .toast { position: fixed; top: 16px; left: 50%; transform: translateX(-50%); background: #333; color: #fff; padding: 8px 16px; border-radius: 6px; transition: opacity 0.25s; }
+      .toast[data-phase="closing"] { opacity: 0; }
+    </style>
+  </head>
+  <body>
+    <h3>@codejoo/layerman · 纯 JS（无框架）</h3>
+    <div>
+      <button data-act="confirm">确认框（await 结果）</button>
+      <button data-act="queue">排 3 个（优先级）</button>
+      <button data-act="toast">toast（duration）</button>
+      <button data-act="overlap">overlap 告警</button>
+      <button data-act="replace">replace 抢占</button>
+      <button data-act="route">条件：仅 /vip</button>
+      <button data-act="goVip">setContext(/vip)</button>
+      <button data-act="pause">pauseAll / resumeAll</button>
+      <button data-act="clear">clear</button>
+    </div>
+    <pre id="log"></pre>
+    <div id="overlay-root"></div>
+    <script type="module" src="./main.js"></script>
+  </body>
+</html>
