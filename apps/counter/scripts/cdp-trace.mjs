@@ -29,8 +29,10 @@ const pend = new Map(),
   lis = new Map();
 ws.onmessage = (e) => {
   const m = JSON.parse(e.data);
-  if (m.id && pend.has(m.id)) (pend.get(m.id)(m), pend.delete(m.id));
-  else if (m.method && lis.has(m.method)) lis.get(m.method)(m.params);
+  if (m.id && pend.has(m.id)) {
+    pend.get(m.id)(m);
+    pend.delete(m.id);
+  } else if (m.method && lis.has(m.method)) lis.get(m.method)(m.params);
 };
 const cmd = (method, params = {}) => {
   const i = id++;
@@ -83,7 +85,7 @@ const layers = await (async () => {
   return Promise.race([got, sleep(1500).then(() => -1)]);
 })();
 
-console.log(`mode=${MODE}  fps=${Math.round((drawn / 3000) * 1000)}  drop%=${drawn + dropped ? Math.round((dropped / (drawn + dropped)) * 100) : 0}  layers=${layers}`);
+console.log(`mode=${MODE}  fps=${Math.round((drawn / 3000) * 1000)}  drop%=${drawn + dropped ? Math.round((dropped / (drawn + dropped)) * 100) : 0}  layers=${String(layers)}`);
 console.table(rows);
 ws.close();
 chrome.kill();

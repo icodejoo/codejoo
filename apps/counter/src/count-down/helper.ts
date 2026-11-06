@@ -78,6 +78,8 @@ export function buildHighPerfFormatter(template: string, options = { showDays: f
 
   code += "return " + (fragments.length ? fragments.join(" + ") : '""') + ";";
 
+  // 有意使用 new Function 生成热路径格式化器（见函数注释的 CSP 说明）
+  // oxlint-disable-next-line typescript-eslint/no-implied-eval
   return new Function("ms", code) as (ms: number) => string;
 }
 
@@ -158,8 +160,16 @@ export function buildDateParser(unit: TDateUnit): TDateParser {
       return Number.isNaN(ts) ? invalid(value) : ts - timeOffset;
     }
     const ts = new Date(+match[1], +(match[2] || 1) - 1, +(match[3] || 1), +(match[4] || 0), +(match[5] || 0), +(match[6] || 0), +((match[7] || "") + "000").slice(0, 3)).getTime(); // 毫秒位右补零到 3 位（等价 padEnd，避开 ES2017 API）
-    return Number.isNaN(ts) ? invalid(value) : ts - timeOffset;
+    return ts - timeOffset; // 正则只放行数字分量，构造出的日期必然有效
   };
+}
+
+/**
+ * 是否"相对时长"：内置解析器（unit 字符串）下的非负小数值（≤ 1971 年毫秒数）。
+ * 相对时长应锚在单调钟上（不受系统改时影响）；绝对时间戳 / Date / 日期字符串 / 自定义解析器则跟随墙钟。
+ */
+export function isRelativeDuration(value: TCountdownDeadline, dateParser: TDateParser | TDateUnit): boolean {
+  return typeof dateParser === "string" && typeof value === "number" && Number.isFinite(value) && value >= 0 && value <= TS_THRESHOLD;
 }
 
 function invalid(value: unknown): never {

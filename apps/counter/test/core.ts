@@ -3,6 +3,6 @@ import { counter, countup, countdown } from "../src";
 
 counter.use(countup.install());
 counter.use(countdown.install());
-counter.up(100);
-counter.down(5000, document.body);
-counter.down.group("g1", { showDays: false });
+counter.up?.(100);
+counter.down?.(5000, document.body);
+counter.down?.group("g1", { showDays: false });

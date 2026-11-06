@@ -99,6 +99,16 @@ export interface ICountdownOptions {
   observer?: IntersectionObserver;
   /** 懒任务超时回收(ms)，>0 时若元素在该时长内仍未进入视口则自动 remove；默认 0=不回收 */
   lazyTimeout?: number;
+  /**
+   * 显示更新频率上限（次/秒），仅对 showMilliseconds 任务生效；0 或缺省表示跟随每帧。
+   * 整秒任务本就只在秒位变化时更新，不受影响；归零与完成回调不受限帧影响。
+   */
+  fps?: number;
+  /**
+   * 页面隐藏或元素离开视口时静音，默认 true：不再调用 render / onUpdate，完成（onDone）仍按真实时间触发，
+   * 重新可见时立即刷新为当前值。设为 false 则始终更新。
+   */
+  muteHidden?: boolean;
   /** 倒计时归零时是否自动销毁该任务（出队 + 调用渲染器 destroy + 清引用），默认 true；false 则保留实例停在 0 */
   autoKill?: boolean;
 }
@@ -117,8 +127,22 @@ export interface ICountdownTaskOptions extends ICountdownOptions, IHooks {
 export interface ICountdownTask extends IHooks {
   /** 元素 */
   el: Element;
-  /** 截止时间戳（客户端时钟，毫秒），剩余时间 = deadline - Date.now()。lazy 未激活时为 0（占位） */
+  /** 截止时间戳，剩余时间 = deadline - 时钟。mono 为 true 时是单调钟读数，否则是客户端墙钟（Date.now）。lazy 未激活时为 0（占位） */
   deadline: number;
+  /** deadline 是否在单调钟上：相对时长（以及暂停恢复后的任务）为 true，不受系统改时影响；绝对时间为 false 跟随墙钟 */
+  mono: boolean;
+  /** 隐藏 / 离屏时是否静音 */
+  muteHidden: boolean;
+  /** 元素当前是否离开视口（由 IntersectionObserver 维护） */
+  offscreen: boolean;
+  /** 上一帧是否处于静音：解除静音时据此强制刷新一次 */
+  wasMuted: boolean;
+  /** 毫秒任务的限帧间隔(ms)，0 = 每帧 */
+  interval: number;
+  /** 毫秒任务限帧网格的下一个可显示时刻（单调钟），0 = 尚未起算 */
+  nextAt: number;
+  /** 离屏观察的取消函数 */
+  unwatch?: () => void;
   /** 是否已激活：false 表示 lazy 任务尚未进入视口，tick 会跳过它 */
   active: boolean;
   /** 是否已触发过 onStart（保证首帧只触发一次） */

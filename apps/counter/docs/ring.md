@@ -15,13 +15,13 @@ countdown(300_000, "#ring", { fmt: "mm:ss", render: createRingRender() });
 
 ## Top‑level options
 
-| option | type | default | notes |
-| --- | --- | --- | --- |
-| `redAt` / `yellowAt` | `number` | `3` / `10` | seconds thresholds for the last‑minute colour zones |
-| `clockwise` | `boolean` | `true` | direction of tick drain / inner drain / arc rotation |
-| `glow` | `boolean` | `false` | `drop-shadow` glow (GPU‑heavy; off by default — enable for a few instances only) |
-| `colors` | `Partial<IRingColors>` | — | `{ normal, green, yellow, red, off }`; also written as CSS vars `--rg-*` (options win over the stylesheet) |
-| `ticks` `arcA` `arcB` `inner` `digit` | `false \| {…}` | shown | per‑part config; `false` (or `{ display:false }`) skips generating that SVG entirely |
+| option                                | type                   | default    | notes                                                                                                      |
+| ------------------------------------- | ---------------------- | ---------- | ---------------------------------------------------------------------------------------------------------- |
+| `redAt` / `yellowAt`                  | `number`               | `3` / `10` | seconds thresholds for the last‑minute colour zones                                                        |
+| `clockwise`                           | `boolean`              | `true`     | direction of tick drain / inner drain / arc rotation                                                       |
+| `glow`                                | `boolean`              | `false`    | `drop-shadow` glow (GPU‑heavy; off by default — enable for a few instances only)                           |
+| `colors`                              | `Partial<IRingColors>` | —          | `{ normal, green, yellow, red, off }`; also written as CSS vars `--rg-*` (options win over the stylesheet) |
+| `ticks` `arcA` `arcB` `inner` `digit` | `false \| {…}`         | shown      | per‑part config; `false` (or `{ display:false }`) skips generating that SVG entirely                       |
 
 ## Per‑part config
 
@@ -42,7 +42,7 @@ createRingRender({
   glow: true,
   colors: { normal: "#22d3ee" },
   digit: { mode: "text", font: "Orbitron, monospace" },
-  arcB: false,                                   // hide the inner arc ring
+  arcB: false, // hide the inner arc ring
   inner: { colorAt: ({ index }) => palette[index] },
 });
 ```

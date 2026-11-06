@@ -1,0 +1,71 @@
+<!doctype html>
+<meta charset="utf-8" />
+<link rel="stylesheet" href="ring.css" />
+<link rel="stylesheet" href="card.css" />
+<body style="margin: 0">
+  <div id="root"></div>
+  <script>
+    // 参数：v=base|cur  s=场景  n=数量  o=各任务截止时间错开(ms)  d=done 场景的时长  m=0 关闭 muteHidden
+    const q = new URLSearchParams(location.search);
+    window.__raf = 0;
+    window.__timer = 0;
+    window.__done = [];
+    const _raf = window.requestAnimationFrame.bind(window);
+    window.requestAnimationFrame = (cb) => {
+      window.__raf++;
+      return _raf(cb);
+    };
+    const _st = window.setTimeout.bind(window);
+    window.setTimeout = (cb, ms, ...a) => {
+      window.__timer++;
+      return _st(cb, ms, ...a);
+    };
+    const s = document.createElement("script");
+    s.src = q.get("v") + ".js";
+    s.onload = () => {
+      const G = window.GTB;
+      const n = +q.get("n") || 100;
+      const sc = q.get("s");
+      const o = +q.get("o") || 0;
+      const root = document.getElementById("root");
+      const mk = (size) => {
+        const d = document.createElement("div");
+        if (size) d.style.cssText = `display:inline-block;width:${size}px;height:${size}px`;
+        else d.style.height = "20px";
+        root.appendChild(d);
+        return d;
+      };
+      const H = 3600000;
+      if (sc === "cd1s") for (let i = 0; i < n; i++) G.countdown(H + i * o, mk(), { lazy: false });
+      if (sc === "cdms") for (let i = 0; i < n; i++) G.countdown(H, mk(), { lazy: false, showMilliseconds: true, fmt: "mm:ss.sss" });
+      if (sc === "cdms-off") for (let i = 0; i < n; i++) G.countdown(H, mk(), { lazy: false, showMilliseconds: true, fmt: "mm:ss.sss" }); // 大量元素在视口外
+      if (sc === "cu") for (let i = 0; i < n; i++) G.countup({ to: 1e9, duration: H, el: mk(), lazy: false, fps: 60 });
+      if (sc === "cu-off") for (let i = 0; i < n; i++) G.countup({ to: 1e9, duration: H, el: mk(), lazy: false, fps: 60 });
+      // 渲染插件路径：40px 小格子，100 个都在视口内（不触发离屏静音）
+      // ring 与 ring-stress.html 同配置：时长 2~7 分钟、mm:ss、关发光；ring=每秒（真实用法），ringms=毫秒模式（每帧回调的最坏负载）
+      if (sc === "ring" || sc === "ringms")
+        for (let i = 0; i < n; i++) G.countdown(120000 + (i % 300) * 1000, mk(40), { lazy: false, showMilliseconds: sc === "ringms", fmt: "mm:ss", render: G.createRingRender({ clockwise: i % 2 === 0, glow: false }) });
+      if (sc === "card") for (let i = 0; i < n; i++) G.countdown(H, mk(40), { lazy: false, render: G.createCardRender() });
+      if (sc === "odo") for (let i = 0; i < n; i++) G.countup({ to: 1e9, duration: H, el: mk(40), lazy: false, fps: 60, render: G.createOdometerRender() });
+      if (sc === "done") {
+        const t0 = performance.now();
+        G.countdown(+q.get("d") || 4000, mk(), { lazy: false, muteHidden: q.get("m") !== "0", onDone: () => window.__done.push(performance.now() - t0) });
+      }
+      // 纯 tick 吞吐：关静音，直接循环调 tick
+      window.__runTick = (kind) => {
+        for (let i = 0; i < n; i++) {
+          if (kind === "cu") G.countup({ to: 1e9, duration: H, el: mk(), lazy: false, fps: 60, muteHidden: false });
+          else G.countdown(H, mk(), { lazy: false, showMilliseconds: true, fmt: "mm:ss.sss", muteHidden: false });
+        }
+        const fn = kind === "cu" ? () => G.cuTick(performance.now(), 16) : () => G.cdTick();
+        for (let i = 0; i < 30; i++) fn();
+        const N = 200;
+        const t = performance.now();
+        for (let i = 0; i < N; i++) fn();
+        return (performance.now() - t) / N;
+      };
+      window.__ready = true;
+    };
+    document.head.appendChild(s);
+  </script>
+</body>

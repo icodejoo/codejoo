@@ -1,8 +1,13 @@
-import { start } from "./core";
+import { nudge, start } from "./core";
 import { lazyStart } from "./helper";
 
 /** 分组的默认标签；该分组常驻（清空也不删除），其余分组空了即删 */
 export const defaultLabel = "default";
+
+/** 单个任务的回调（render / onUpdate / onDone 等）抛错：只上报，不影响同帧其余任务的推进与自身的收尾 */
+export function reportTaskError(err: unknown): void {
+  console.error("[GT]: task callback threw", err);
+}
 
 /** 判断 render 选项是否为有状态生命周期渲染器（含 mount 方法的对象）*/
 export function isLifecycleRenderer(r: unknown): r is { mount(...args: unknown[]): unknown } {
@@ -50,6 +55,16 @@ export function scheduleStart(active: boolean, el: Element | undefined, observer
   };
 }
 
+/**
+ * 把 defaults 原地还原为出厂快照（先删多余键再回填，保留对象引用，外部持有的 defaults 仍有效）
+ * @param target 被改过的 defaults 对象
+ * @param factory 出厂值快照
+ */
+export function restoreDefaults<T extends object>(target: T, factory: T): void {
+  for (const k of Object.keys(target)) if (!(k in factory)) delete (target as Record<string, unknown>)[k];
+  Object.assign(target, factory);
+}
+
 export interface IGroup<T, C> {
   config?: C;
   /** id → task 映射，保证按 id 删除为 O(1) */
@@ -58,9 +73,9 @@ export interface IGroup<T, C> {
 
 export interface IGroupStore<T, C> {
   groups: Map<string, IGroup<T, C>>;
-  group(label?: string, options?: C): IGroup<T, C>;
-  remove(id: number, label?: string): void;
-  clear(label?: string): void;
+  group: (label?: string, options?: C) => IGroup<T, C>;
+  remove: (id: number, label?: string) => void;
+  clear: (label?: string) => void;
 }
 
 /**
@@ -90,9 +105,11 @@ export function createGroupStore<T, C>(hooks?: { onRemove?: (task: T) => void; o
     const g = groups.get(label);
     if (!g) return;
     const t = g.queue.get(id);
-    if (!g.queue.delete(id)) return;
+    if (!t) return;
+    g.queue.delete(id);
     if (g.queue.size === 0 && label !== defaultLabel) groups.delete(label);
-    if (t) hooks?.onRemove?.(t);
+    hooks?.onRemove?.(t);
+    nudge(); // 休眠中的循环尽快重新评估：任务空了就收尾，不留定时器
   }
 
   function clear(label = defaultLabel) {
@@ -103,6 +120,7 @@ export function createGroupStore<T, C>(hooks?: { onRemove?: (task: T) => void; o
     g.queue.clear();
     if (label !== defaultLabel) groups.delete(label);
     if (tasks) tasks.forEach(each!);
+    nudge();
   }
 
   return { groups, group, remove, clear };

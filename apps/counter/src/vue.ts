@@ -12,10 +12,7 @@ import type { ICountupFullOptions } from "./count-up/type";
 type Entry = { id: number; label: string };
 
 /** 浅比较两个绑定值是否发生变化（Date 按时间戳比，其余按引用/===） */
-function shallowChanged(
-  next: unknown,
-  prev: unknown,
-): boolean {
+function shallowChanged(next: unknown, prev: unknown): boolean {
   if (next === prev) return false;
   if (prev == null) return true;
   if (next instanceof Date && prev instanceof Date) return next.getTime() !== prev.getTime();
@@ -25,7 +22,8 @@ function shallowChanged(
   const ka = Object.keys(a);
   if (ka.length !== Object.keys(b).length) return true;
   return ka.some((k) => {
-    const va = a[k], vb = b[k];
+    const va = a[k],
+      vb = b[k];
     if (va instanceof Date && vb instanceof Date) return va.getTime() !== vb.getTime();
     return va !== vb;
   });
@@ -36,9 +34,7 @@ function shallowChanged(
 // ─────────────────────────────────────────────
 
 /** v-count-down 绑定值：截止时间 或 完整配置对象 */
-export type VCountDownValue =
-  | TCountdownDeadline
-  | ({ deadline: TCountdownDeadline } & Omit<ICountdownTaskOptions, "el">);
+export type VCountDownValue = TCountdownDeadline | ({ deadline: TCountdownDeadline } & Omit<ICountdownTaskOptions, "el">);
 
 const _cdStore = new WeakMap<Element, Entry>();
 
@@ -46,10 +42,7 @@ function isCdSimple(v: VCountDownValue): v is TCountdownDeadline {
   return typeof v === "number" || typeof v === "string" || v instanceof Date;
 }
 
-function resolveCd(
-  value: VCountDownValue,
-  modifiers: Partial<Record<string, boolean>>,
-): { deadline: TCountdownDeadline; opts: ICountdownTaskOptions } {
+function resolveCd(value: VCountDownValue, modifiers: Partial<Record<string, boolean>>): { deadline: TCountdownDeadline; opts: ICountdownTaskOptions } {
   const deadline = isCdSimple(value) ? value : value.deadline;
   const config: Record<string, unknown> = isCdSimple(value) ? {} : { ...value };
   delete config.deadline;
@@ -118,10 +111,7 @@ export type VCountUpValue = number | Omit<ICountupFullOptions, "el">;
 
 const _cuStore = new WeakMap<Element, Entry>();
 
-function resolveCu(
-  value: VCountUpValue,
-  modifiers: Partial<Record<string, boolean>>,
-): Omit<ICountupFullOptions, "el"> {
+function resolveCu(value: VCountUpValue, modifiers: Partial<Record<string, boolean>>): Omit<ICountupFullOptions, "el"> {
   const config = typeof value === "number" ? { to: value } : { ...value };
   return {
     lazy: modifiers.lazy ?? false,

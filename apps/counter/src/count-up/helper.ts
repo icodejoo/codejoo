@@ -24,6 +24,8 @@ export function easeAsymmetricS(skew: number): TEasing {
  */
 export function buildCountupFormatter(formatter: Intl.NumberFormat, options: ICountupFormatterOptions = {}): TCountupFormatter {
   const { prefix = "", suffix = "" } = options;
+  // Intl.NumberFormat 的 format 是已绑定的 getter 函数，脱离实例调用安全
+  // oxlint-disable-next-line typescript-eslint/unbound-method
   const format = formatter.format;
   if (!prefix && !suffix) return format;
   return (value: number) => prefix + format(value) + suffix;
