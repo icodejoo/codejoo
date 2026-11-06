@@ -3,9 +3,18 @@ import { supported } from "./helper";
 import { Memory } from "./memory";
 import { proxy } from "./proxy";
 
+/** 原生存储不可用时共享后端；始终与每个 factory 的 memo 严格分离。 */
+const lsFallback = /*#__PURE__*/ new Memory("local");
+/** sessionStorage 兜底与 localStorage 兜底互相隔离。 */
+const ssFallback = /*#__PURE__*/ new Memory("session");
+
 /** 把原生 Storage（getItem/setItem/...）适配成内部统一的 get/set/remove 词汇 */
-function adapt(s: Storage): SyncStore {
+function adapt(s: Storage, kind: "local" | "session"): SyncStore {
   return {
+    /** 原生存储身份，供跨实例 memo 失效使用。 */
+    area: s,
+    /** 实际所属的原生存储类型。 */
+    kind,
     get: (k) => s.getItem(k),
     set: (k, v) => s.setItem(k, v),
     remove: (k) => s.removeItem(k),
@@ -53,8 +62,10 @@ export function factory(baseOptions?: BaseStorageOptions) {
   // 原生存储不可用时的兜底后端必须与上面的 memo 缓存是不同的 Memory 实例：
   // 二者若是同一个 Map，memo.clear()（destroy/clear/setNamespace 都会调）会把"落盘"数据本身一并清空，
   // 且 memoized 写入 entity 对象会与后端写入的 JSON 字符串互相覆盖同一个键。
-  const ls = proxy(supported.storage ? adapt(window.localStorage) : new Memory(), lsMemo, baseOptions);
-  const ss = proxy(supported.session ? adapt(window.sessionStorage) : new Memory(), ssMemo, baseOptions);
+  const lsStore: SyncStore = supported.storage ? adapt(window.localStorage, "local") : lsFallback;
+  const ssStore: SyncStore = supported.session ? adapt(window.sessionStorage, "session") : ssFallback;
+  const ls = proxy(lsStore, lsMemo, baseOptions);
+  const ss = proxy(ssStore, ssMemo, baseOptions);
   const dbProvided = baseOptions?.db != null;
   const db = proxy(baseOptions?.db ?? unimpl(), dbMemo, baseOptions);
 

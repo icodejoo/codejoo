@@ -1,5 +1,5 @@
 import type { AsyncStorage, SyncStore } from "./interface";
-import { type Handlers, type Result, isPromise } from "./proxy";
+import { type Handlers, type Result, isPromise, SNAPSHOT } from "./proxy";
 
 /** 历史版本曾把快照以此键写回存储；保留常量用于跳过遗留数据，但本函数不再写入 */
 const DEBUG_KEY = "_$debug";
@@ -14,17 +14,18 @@ const DEBUG_KEY = "_$debug";
  * 快照会像一次真实读取一样清掉已过期条目、续期 sliding 键，并非绝对无副作用。
  *
  * ```ts
- * import { debug } from "@codejoo/storage";
+ * import { debug } from "@codejoo/storage/debug";
  * const { ls, db } = factory({ codeable: true, codec, enckey: true });
  * debug(ls);          // 同步：{ "ns:token": "...", ... }
  * await debug(db);    // 异步后端返回 Promise
  * ```
  */
 export function debug<S extends SyncStore | AsyncStorage>(handler: Handlers<S>): Result<S, Record<string, unknown>> {
-  const ns = handler.namespace;
-  const h = handler as Handlers<SyncStore>; // 内部按宽松（同步形）签名转发，真实同步/异步由运行时判断
+  const captured = handler[SNAPSHOT]();
+  const ns = captured.namespace;
+  const h = captured as ReturnType<Handlers<SyncStore>[typeof SNAPSHOT]>; // 内部按宽松（同步形）签名转发，真实同步/异步由运行时判断
   const ks = h.keys() as string[] | Promise<string[]>;
-  const dump: Record<string, unknown> = {};
+  const dump: Record<string, unknown> = Object.create(null);
 
   if (!isPromise(ks)) {
     for (const k of ks) if (k !== DEBUG_KEY) dump[ns + k] = h.get(k); // 保留命名空间前缀；跳过遗留 _$debug

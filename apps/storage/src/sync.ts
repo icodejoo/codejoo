@@ -1,97 +1,139 @@
-import type { StorageOptions, SyncStore } from "./interface";
+import type { SyncStore } from "./interface";
 import type { Handlers } from "./proxy";
-import { supported } from "./helper";
+import { APPLY, COMMIT, STORE } from "./proxy";
+import { Memory } from "./memory";
 
-/** 插件内部的宽松方法签名（处理器方法均为闭包实现、不依赖 this，可安全取引用与替换） */
-interface Wrapped {
-  /** 当前命名空间前缀（getter，实时值） */
-  readonly namespace: string;
-  set(key: string, value: unknown, options?: number | StorageOptions): unknown;
-  remove(key: string | readonly string[]): unknown;
-  clear(): unknown;
-  /** 幂等标记：已挂载过则再次调用为空操作 */
-  __crossTab?: boolean;
+/** 复用消息操作名，保持插件体积精简。 */
+const SET = "set",
+  REMOVE = "remove",
+  CLEAR = "clear";
+/** v2 使用绝对到期时间和原始落盘串，避免回放时重新计算 TTL。 */
+interface Message {
+  /** 协议版本。 */
+  v: 2;
+  /** 提交类型。 */
+  op: typeof SET | typeof REMOVE | typeof CLEAR;
+  /** 转义后的命名空间前缀。 */
+  ns: string;
+  /** 逻辑键；clear 可以省略。 */
+  key?: string;
+  /** 原始落盘串；仅 set 必需。 */
+  payload?: string;
+  /** 绝对到期毫秒时间。 */
+  expireAt?: number;
+  /** 提交时间。 */
+  ts: number;
+  /** 当前挂载实例的随机身份。 */
+  from: string;
 }
-
-/** 回放用的键校验：字符串，或元素全为字符串的数组（批量） */
-const validKey = (k: unknown): k is string | string[] => typeof k === "string" || (Array.isArray(k) && k.every((x) => typeof x === "string"));
-
-/** 同进程内 channel 名 → 已挂载的 handler，用于识别「不同 handler 共用同一 channel」的误用（见下方 owners 检查） */
-const owners = new Map<string, Wrapped>();
+/** 同时间戳按发送方身份排序。 */
+type Stamp = Pick<Message, "ts" | "from">;
+/** 通道占用检查。 */
+const owners = /*#__PURE__*/ new Map<string, number>();
+/** 当前已挂载处理器。 */
+const mounted = /*#__PURE__*/ new WeakSet<object>();
+/** session 处理器只警告一次。 */
+const warned = /*#__PURE__*/ new WeakSet<object>();
+/** 判断新提交是否严格晚于旧提交。 */
+const newer = (next: Stamp, old?: Stamp): boolean => !old || next.ts > old.ts || (next.ts === old.ts && next.from > old.from);
+/** 空操作停止函数。 */
+const noop = (): void => {};
 
 /**
- * 跨标签页同步插件（**独立导入**、可 tree-shake，不进核心）。
- * 仅在原生 storage 不可用、退回纯内存模式时启用：此时各标签页的数据彼此隔离，
- * 本插件用 BroadcastChannel 将 set/remove/clear 广播到同源其他标签页回放，保持各标签内存数据一致。
- * 原生 storage 可用时数据本就跨标签共享，插件直接空操作；重复挂载同一 handler 也为空操作。
- *
- * 注意：
- * - 本地写入**先于**广播生效；广播经结构化克隆，值不可克隆时仅告警、不影响本地数据；
- * - `setNamespace` 不参与同步——切换命名空间（如切账号）需各标签页自行调用，
- *   且仅回放与本标签当前命名空间相同的消息（命名空间不同的标签互不影响）；
- * - 回放在远端各自构建 entity，createdAt/expireAt 与源标签可能相差毫秒级。
- *
- * ```ts
- * import { factory, crossTab } from "@codejoo/storage";
- * const { ls } = factory();
- * const stop = crossTab(ls); // 仅纯内存模式下生效
- * ```
- * @returns 停止函数：关闭通道并还原被包装的方法
+ * 同步 local 内存兜底的真实提交；原生存储与 session 不参与。
+ * @param handler 同步存储处理器
+ * @param channel 同源广播通道名
+ * @returns 幂等停止函数；再次挂载同一处理器返回空操作。
+ * @example `const stop = crossTab(ls); stop();`
  */
 export function crossTab(handler: Handlers<SyncStore>, channel = "@codejoo/storage:sync"): () => void {
-  const h = handler as unknown as Wrapped;
-  if (supported.storage || typeof BroadcastChannel === "undefined" || h.__crossTab) return () => {};
-  // 同一 channel 已被另一 handler（如 ls 和 ss）占用：两者会互相回放对方的写入——此处仅告警，不阻止（BroadcastChannel 允许多方监听）
-  const owner = owners.get(channel);
-  if (owner && owner !== h) console.warn(`[storage] crossTab: channel "${channel}" is already used by another handler; their writes will cross-replay onto each other. Pass a distinct channel per handler.`);
-  owners.set(channel, h);
-  h.__crossTab = true;
-  const bc = new BroadcastChannel(channel);
-  let stopped = false; // stop 幂等标记
-  // 原始引用：回放远端操作时直接调用，不再二次广播。处理器方法均为闭包实现、不依赖 this，取引用安全
-  // oxlint-disable-next-line typescript-eslint/unbound-method
-  const { set, remove, clear } = h;
-  /** 广播失败（值不可结构化克隆等）只告警——本地写入已先行生效，不能被广播问题破坏。消息格式 [op, ns, ...args]，ns 取发送时的实时命名空间 */
-  const cast = (op: string, ...args: unknown[]): void => {
-    try {
-      bc.postMessage([op, h.namespace, ...args]);
-    } catch (err) {
-      console.warn("[storage] crossTab broadcast failed (value not structured-cloneable?); local write is unaffected", err);
+  const store = handler[STORE];
+  if (store?.kind === "session") {
+    if (!warned.has(handler)) {
+      warned.add(handler);
+      console.warn("[storage] crossTab: sessionStorage is isolated per tab; synchronization disabled");
+    }
+    return noop;
+  }
+  if (store?.kind !== "local" || !(store instanceof Memory) || typeof BroadcastChannel === "undefined" || mounted.has(handler)) return noop;
+  const group = owners.get(channel) ?? 0;
+  if (group) console.warn(`[storage] crossTab: channel "${channel}" is already used by another handler; pass a distinct channel per handler.`);
+  const bc = new BroadcastChannel(channel),
+    from = crypto.randomUUID?.() ?? Math.random().toString(36) + Date.now().toString(36);
+  owners.set(channel, group + 1);
+  mounted.add(handler);
+  const stamps = new Map<string, Map<string, Stamp>>(),
+    clears = new Map<string, Stamp>();
+  let stopped = false,
+    clock = 0;
+  /** 每个命名空间独立保存键版本，切换命名空间不会串扰。 */
+  const versions = (ns: string): Map<string, Stamp> => {
+    let keys = stamps.get(ns);
+    if (!keys) stamps.set(ns, (keys = new Map()));
+    return keys;
+  };
+  /** 按落盘串静默回放，并使缓存失效。 */
+  const replay = (event: Message): void => {
+    handler[APPLY](event.key!, event.op === SET ? event.payload! : null, event.op === SET ? event.expireAt : undefined);
+  };
+  /** clear 按键回放，保留比 clear 更新的键。 */
+  const apply = (event: Message): void => {
+    const keys = versions(event.ns),
+      barrier = clears.get(event.ns);
+    if (!newer(event, barrier)) return;
+    if (event.op === CLEAR) {
+      for (const key of handler.keys()) {
+        if (newer(event, keys.get(key))) {
+          replay({ ...event, op: REMOVE, key });
+          keys.set(key, event);
+        }
+      }
+      clears.set(event.ns, event);
+    } else if (newer(event, keys.get(event.key!))) {
+      replay(event);
+      keys.set(event.key!, event);
     }
   };
-
-  h.set = (k, v, o) => {
-    const r = set(k, v, o);
-    cast("set", k, v, o);
-    return r;
+  const unsubscribe = handler[COMMIT]((event) => {
+    const msg: Message = { v: 2, op: event.op, ns: event.namespace, key: event.key, payload: event.payload ?? undefined, expireAt: event.expireAt, ts: (clock = Math.max(Date.now(), clock + 1)), from };
+    if (event.op === CLEAR) clears.set(msg.ns, msg);
+    else versions(msg.ns).set(event.key, msg);
+    try {
+      bc.postMessage(msg);
+    } catch (error) {
+      console.warn("[storage] crossTab broadcast failed; local write is unaffected", error);
+    }
+  });
+  bc.onmessage = (event: MessageEvent) => {
+    try {
+      const m = event.data as Message;
+      if (
+        !m ||
+        m.v !== 2 ||
+        ![SET, REMOVE, CLEAR].includes(m.op) ||
+        m.ns !== handler.namespace ||
+        typeof m.from !== "string" ||
+        m.from.length === 0 ||
+        m.from === from ||
+        !Number.isFinite(m.ts) ||
+        (m.op !== CLEAR && typeof m.key !== "string") ||
+        (m.op === SET && typeof m.payload !== "string") ||
+        (m.expireAt !== undefined && !Number.isFinite(m.expireAt))
+      )
+        return;
+      clock = Math.max(clock, m.ts);
+      apply(m.op === SET && m.expireAt !== undefined && m.expireAt <= Date.now() ? { ...m, op: REMOVE } : m);
+    } catch {
+      /* 畸形消息或后端错误不得逸出消息回调。 */
+    }
   };
-  h.remove = (k) => {
-    const r = remove(k);
-    cast("remove", k);
-    return r;
-  };
-  h.clear = () => {
-    const r = clear();
-    cast("clear");
-    return r;
-  };
-  bc.onmessage = (e: MessageEvent) => {
-    if (!Array.isArray(e.data)) return; // 非本插件消息
-    const [op, ns, k, v, o] = e.data as [string, string, string, unknown, StorageOptions | number | undefined];
-    if (ns !== h.namespace) return; // 命名空间不同的标签不回放，避免串写/误清
-    if (op === "clear") clear();
-    else if ((op === "set" || op === "remove") && validKey(k)) {
-      if (op === "set") set(k, v, o);
-      else remove(k);
-    } // 未知 op / 键不合法一律忽略
-  };
-
   return () => {
-    if (stopped) return; // 幂等：重复调用不会把后续重新挂载的包装还原掉
+    if (stopped) return;
     stopped = true;
+    unsubscribe();
     bc.close();
-    h.__crossTab = false;
-    if (owners.get(channel) === h) owners.delete(channel); // 释放占用，避免误判后续接手同 channel 的新 handler
-    Object.assign(h, { set, remove, clear });
+    mounted.delete(handler);
+    const remaining = owners.get(channel)! - 1;
+    if (remaining) owners.set(channel, remaining); else owners.delete(channel);
   };
 }

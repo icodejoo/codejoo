@@ -11,8 +11,8 @@ import type { Codec } from "./interface";
 // | codecAtob | 全程 TextEncoder + atob/btoa | 行为处处一致（无特性检测分支）；与 codecBase64 同格式可互解 |
 
 const DEFAULT_PW = "@codejoo/storage";
-const E = new TextEncoder();
-const D = new TextDecoder("utf-8", { ignoreBOM: true }); // 保留 BOM：明文以 U+FEFF 开头时不能被吞掉首字符
+const E = /*#__PURE__*/ new TextEncoder();
+const D = /*#__PURE__*/ new TextDecoder("utf-8", { ignoreBOM: true }); // 保留 BOM：明文以 U+FEFF 开头时不能被吞掉首字符
 const B64 = { alphabet: "base64url", omitPadding: true } as const;
 
 /** 旋转修饰及其逆：整串旋转 7 位，按 base64url 硬解也对不齐（≤7 字符时恒等，两侧对称） */

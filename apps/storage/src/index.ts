@@ -14,3 +14,5 @@ export { crossTab } from "./sync";
 export * from "./fast";
 
 export * from "./core";
+
+export type { StorageErrorInfo, StorageOperation } from "./errors";

@@ -5,6 +5,7 @@ const ext = {
   set: "Set",
   date: "Date",
   bigint: "bigint",
+  object: "Object",
 } as const;
 
 /** 被标记的特殊类型外壳 */
@@ -15,6 +16,7 @@ interface Tagged {
 
 // 严格外壳形状（恰好 flag+value 两键）而非仅存在性判断——降低与业务数据里恰好带同名字段的对象误撞的概率，
 // 且能保证误判命中时不会静默丢掉外壳外的兄弟字段（形状不符则整体原样返回，见 replacer/reviver 的 default 分支）
+/** 判断旧格式或新格式的严格类型外壳。 */
 function isTagged(v: unknown): v is Tagged {
   return typeof v === "object" && v !== null && flag in v && "value" in v && Object.keys(v).length === 2;
 }
@@ -35,6 +37,10 @@ function replacer(this: any, key: string, value: any) {
     case "[object Set]":
       return { [flag]: ext.set, value: [...raw] };
     default:
+      // 用键值对数组包住业务对象，避免普通 __jt__ 字段被 reviver 当成类型标签。
+      if (value && typeof value === "object" && Object.hasOwn(value, flag)) {
+        return { [flag]: ext.object, value: Object.entries(value) };
+      }
       return value;
   }
 }
@@ -47,6 +53,8 @@ function replacer(this: any, key: string, value: any) {
 function reviver(_key: string, value: any) {
   if (!isTagged(value)) return value;
   switch (value[flag]) {
+    case ext.object:
+      return Object.fromEntries(value.value as Iterable<[string, unknown]>);
     case ext.bigint:
       return BigInt(value.value as string);
     case ext.date:

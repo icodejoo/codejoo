@@ -4,7 +4,8 @@ import type { Handlers } from "./proxy";
 /** 绑定 key 的快捷访问器（同步后端） */
 export interface SyncAccessor<V> {
   get(): V | null;
-  get(defaultValue: V): V;
+  get(defaultValue: undefined): V | null;
+  get(defaultValue: V): undefined extends V ? V | null : V;
   set(value: V, options?: number | StorageOptions): void;
   remove(): void;
 }
@@ -12,7 +13,8 @@ export interface SyncAccessor<V> {
 /** 绑定 key 的快捷访问器（异步后端） */
 export interface AsyncAccessor<V> {
   get(): Promise<V | null>;
-  get(defaultValue: V): Promise<V>;
+  get(defaultValue: undefined): Promise<V | null>;
+  get(defaultValue: V): Promise<undefined extends V ? V | null : V>;
   set(value: V, options?: number | StorageOptions): Promise<void>;
   remove(): Promise<void>;
 }
@@ -62,10 +64,10 @@ export function lazy(target: Handlers<SyncStore | AsyncStorage>, key: string): (
  * ```
  * 值类型 V 对所有 key 统一；省略时为 unknown。键名通过 const 泛型保留为字面量。
  */
-export function batchFast<V = unknown, const K extends readonly string[] = readonly string[]>(target: Handlers<SyncStore>, keys: K): { [P in K[number]]: SyncAccessor<V> };
-export function batchFast<V = unknown, const K extends readonly string[] = readonly string[]>(target: Handlers<AsyncStorage>, keys: K): { [P in K[number]]: AsyncAccessor<V> };
+export function batchFast<V = unknown, const K extends readonly string[] = readonly never[]>(target: Handlers<SyncStore>, keys: K): { [P in K[number]]: SyncAccessor<V> };
+export function batchFast<V = unknown, const K extends readonly string[] = readonly never[]>(target: Handlers<AsyncStorage>, keys: K): { [P in K[number]]: AsyncAccessor<V> };
 export function batchFast(target: Handlers<SyncStore | AsyncStorage>, keys: readonly string[]) {
-  const acc: Record<string, unknown> = {};
+  const acc: Record<string, unknown> = Object.create(null);
   for (const k of keys) acc[k] = fast(target as Handlers<SyncStore>, k);
   return acc;
 }

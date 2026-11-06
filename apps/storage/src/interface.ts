@@ -1,3 +1,5 @@
+import type { StorageErrorInfo } from "./errors";
+
 /** proxy 读缓存的最小接口（Memory 满足） */
 export interface MemoCache {
   get(key: string): any;
@@ -8,6 +10,10 @@ export interface MemoCache {
 
 /** 同步键值存储后端：Memory，以及被适配后的原生 localStorage/sessionStorage */
 export interface SyncStore {
+  /** 后端身份，用于共享 memo 失效通知。 */
+  readonly area?: object;
+  /** 后端类别，供跨标签插件判断同步范围。 */
+  readonly kind?: "local" | "session" | "idb";
   get(key: string): string | null;
   set(key: string, value: string): void;
   remove(key: string): void;
@@ -20,6 +26,12 @@ export interface SyncStore {
 
 /** 异步键值存储后端（IndexedDB 持久层，Idb 实现） */
 export interface AsyncStorage {
+  /** 后端身份，用于共享 memo 失效通知。 */
+  readonly area?: object;
+  /** 后端类别，供跨标签插件判断同步范围。 */
+  readonly kind?: "local" | "session" | "idb";
+  /** 单事务条件更新：string 写入、null 删除、undefined 保持；返回最终落盘串。fn 必须同步且无 IO。 */
+  update?(key: string, fn: (current: string | null) => string | null | undefined): Promise<string | null>;
   get(key: string): Promise<string | null>;
   set(key: string, value: string): Promise<void>;
   remove(key: string): Promise<void>;
@@ -37,10 +49,13 @@ export interface Codec {
   decode(value: string): string | null;
 }
 
+/** 实例级存储选项。 */
 export interface BaseStorageOptions {
+  /** IndexedDB 跨标签 memo 失效通知；默认 false。 */
+  broadcast?: boolean;
   /** 是否同步存储到内存 */
   memoized?: boolean;
-  /** memo 命中/回填的对象返回深拷贝（structuredClone），隔离调用方修改对缓存的污染；默认 false（共享引用，零开销） */
+  /** 普通模式的对象读取返回深拷贝（structuredClone），对非 memo 读取同样深拷贝；默认 false（共享引用，零开销） */
   cloned?: boolean;
   /** 自定义序列化：entity -> 字符串，取代默认 JSON.stringify */
   serialize?: (entity: StorageEntity) => string;
@@ -63,10 +78,10 @@ export interface BaseStorageOptions {
   /** 是否对键也加密：默认 false。为 true 且配置了 codec 时，存储键经 codec 确定性加密（隐藏明文键名） */
   enckey?: boolean;
   /**
-   * 写入失败回调（配额超限、force 重试仍失败等）。提供时取代默认的 console.error，
-   * 使调用方可感知失败（set 返回 void，失败本不可见）。批量 set 下每个失败键各回调一次。
+   * 结构化错误回调，覆盖读损坏、类型不符、序列化和后端失败。
+   * error 保留原始异常；回调自身的异常原样传播。未提供时读/后端错误记入 console.error，序列化异常抛出或 reject。
    */
-  onError?: (info: { op: "set"; key: string; error: unknown }) => void;
+  onError?: (info: StorageErrorInfo) => void;
   /**
    * 额外的 IndexedDB 持久层实例（**异步** API，不常驻内存镜像，容量更大），暴露为 factory().db。
    * 需自行 `import { Idb }` 构造后传入：`db: new Idb()`（不内置，按需引入便于 tree-shaking）。
