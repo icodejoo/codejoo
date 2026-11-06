@@ -34,7 +34,7 @@ pnpm add @codejoo/layerman
 
 - **普通** `open`:进入该 slot 的串行队列;轮到它、**且**条件/冷却通过时才显示。还不满足就**在队列里等**。
 - **`replace`**:抢占该 slot 当前活跃者(仅当替换者自己够资格),立即显示、跳过 `gap`;仍一次一个。
-- **`overlap`**:**完全绕过串行队列,立即叠加显示**——用于无条件的紧急弹窗(全局错误、关键告警、阻塞 loading)。因为 overlap 弹窗**根本不入队**,它的条件/冷却只是 `open` 时的**一次性发射门**:通过 → 立即显示;**不通过 → 请求被丢弃**,`result` 兑现 `{ dismissed: true }`(不触发 `onShow`/`onClose`)。它是**「要么现在,要么不弹」**——没有队列能把它留到条件满足。
+- **`overlap`**:**完全绕过串行队列,立即叠加显示**——用于无条件的紧急弹窗(全局错误、关键告警、阻塞 loading)。因为 overlap 弹窗**根本不入队**,它的条件/冷却只是 `open` 时的**一次性发射门**:通过 → 立即显示;**不通过 → 请求被丢弃**,`result` 兑现 `{ dismissed: true, reason: 'unmet' }`(不触发 `onShow`/`onClose`)。它是**「要么现在,要么不弹」**——没有队列能把它留到条件满足。
 
 所以 `overlap` 会「丢弃」正是因为它**主动放弃了队列**:一个不排队、又不允许当下显示的弹窗,丢弃是唯一自洽的结果。若你要「**等条件满足后再显示**」,那正是队列的职责——用普通或 `replace` 弹窗(它们会等)。**别给 `overlap` 弹窗加可延迟的条件(`route`/`when`)**指望它被保留;但 `overlap` 加 cooldown 是合理的(能正确抑制「今天已弹过」)。
 
@@ -57,6 +57,135 @@ const ok = await om.open({ id: "confirm", data: { msg: "确定删除?" } }).resu
 
 om.close("welcome"); // → phase "closing";autoRemove(默认 300ms)后移除并推进
 ```
+
+## 行为说明
+
+### 判断函数(`when` 等)里不要修改管理器
+
+条件判断函数(`when(ctx)`,以及 `route` / `requiresAuth` 的求值)里**不要调用任何变更方法**(`open` / `close` /
+`remove` / `resolve` / `reject` / `update` / `clear` / `setContext` / `pause*` / `resume*` / `destroy`)。
+它会在改动任何状态**之前**抛错;而条件求值本身是防御式的,这个异常会被捕获,该弹窗按**条件不满足**处理
+(`debug: true` 时会打一行日志)。只读调用(`getSnapshot`、`get`、`subscribe`)不受限。生命周期钩子
+(`onShow` / `onClose` / `onRemove`)和订阅者里**可以**调用管理器。
+
+### 钩子与通知
+
+先提交状态,再按顺序**同步**执行 `onShow` / `onClose` / `onRemove`,且**在公开方法返回之前**完成——不会发生在
+状态迁移的中途。一次公开操作**最多通知订阅者一次**(例如一次 `clear()` 清掉多个弹窗也只通知一次);若钩子或
+订阅者在其中又修改了管理器,会在其后追加一轮通知。钩子或订阅者抛错不会破坏管理器。
+
+"在公开方法返回之前"只对**最外层**调用成立。在钩子或订阅者**里面**发起的变更会并入外层操作:它自己的钩子和快照
+要等当前回调返回后才生效,所以嵌套调用返回后立即读 `getSnapshot()` / `get()` 仍是旧状态。每个订阅者最终都会收到
+最新快照(与 `getSnapshot()` 同一引用),即使前面的订阅者又改了管理器也不会漏收,同一快照也不会重复收到。通知
+过程中新加的订阅者收不到本轮快照(订阅后自己读一次 `getSnapshot()` 即可,各适配器都是这么做的)。
+
+无变化时也不通知:`clear()` 没摘除任何条目;`update()` 作用于 open / closing 项且补丁值与现值 `Object.is` 全部相同。
+**订阅者里发起的变更必须有收敛条件**,请加变化判断。若订阅者每次通知都在改管理器(例如每次 `update()` 都给不同的值),
+会一直追加通知,直到每次最外层调用共 100 轮通知(含首轮)的上限,之后停止补发,并向每个订阅者最后投递一次最新快照(这次投递期间再发生的变更只静默改状态、不再通知),同时输出一条诊断(配置了 `logger` 走 logger,否则 `console.warn`,与 `debug` 无关)。合法但需要超过 100 轮才收敛的级联会被截断。
+
+### 冷却:持久化、跨 Tab 与唤醒
+
+- **跨 Tab 是最终一致,不提供严格的全局额度。** 冷却计数经 `BroadcastChannel` 同步给其他标签页;两个标签页在
+  广播送达**之前**同时 open 同一个弹窗,可能都会显示。
+- **`crossTab` 默认值**:浏览器里开启(`window` 与 `BroadcastChannel` 同时存在),**Node / SSR 默认关闭**。可传
+  `crossTab: true` / `false` 强制指定。
+- **关闭 `crossTab`(或环境不支持)时,多个 Tab 会互相覆盖**:每个 Tab 把自己的快照写进存储,后写者胜出,
+  其他 Tab 记下的计数可能丢失。
+- **冷却到期不会自动唤醒调度。** 只被 `minGap` / `day` / `hour` / `minute` 卡住的弹窗,窗口过去后不会自己弹出;
+  它在下一次触发(`open`、`remove`、`clear`、`setContext`、gap 计时、`resume`)时才重评。需要「到点重评」时,
+  自己调用 `om.setContext({})`。
+- **第一次 `open` 之前建议先 `await om.ready()`。** 冷却状态是异步从存储 hydrate 的。`cooldown` 里用了持久化字段
+  (`total` / `day` / `hour` / `minute` / `minGap`)的条目,若在 hydrate 完成前 open,会**先等待**(串行条目留在队列;
+  `overlap` 条目被持有、不丢弃),hydrate 结束(成功、失败或坏数据)后立即重新调度。因此不会「盲」展示,也不会少计。
+  只配 `session` 或没有冷却的条目不受影响。存储的 `get` Promise 仍必须最终 settle,否则 hydrate 永远无法完成,
+  被门控的条目会一直等。
+- 非法的持久化 / 广播记录按单条丢弃;存储写入失败被忽略。
+
+### `destroy()` 之后
+
+`destroy()` 会清空一切(每个弹窗的 `result` 兑现 `{ dismissed: true, reason: 'destroyed' }`、触发 `onRemove`)、关闭跨 Tab 通道,**先向订阅者发出一次最终的空快照**(`active` 为空;管理器本来就是空的则不通知),再丢弃订阅者。
+之后不再有任何通知,且 `open()` **不会展示任何东西**:它返回的句柄 `result` 立即兑现 `{ dismissed: true, reason: 'destroyed' }`;其余变更方法全部是空操作。
+
+### `DismissResult` 与 `DismissReason`
+
+被动结束(不是你自己调用 `resolve` / `reject`)时,`result` 兑现 `{ dismissed: true, reason }`。类型上 `reason` 是
+可选字段(所以 `{ dismissed: true }` 仍能通过类型检查),但内核总会带上它。`DismissReason` 是 `as const` 对象加同名
+联合类型,从 `@codejoo/layerman` 导出。
+
+| `reason`    | 何时                                                                      |
+| ----------- | ------------------------------------------------------------------------- |
+| `removed`   | 显式 `remove()`,条目尚未进入 `closing`                                    |
+| `closed`    | 仅「已展示条目经 `close()` 进入 `closing` 后被移除」                      |
+| `cleared`   | `clear()`,含选择器清理                                                    |
+| `replaced`  | 同 id `open()` 覆盖旧实例,或 `replace` 丢弃 `closing` 实例                |
+| `unmet`     | 上下文变化触发 `dismissWhenUnmet`;`overlap` 发射门(条件 / 时间冷却)未通过 |
+| `capped`    | `session` / `total` 永久耗尽(见下)                                        |
+| `destroyed` | `destroy()`,以及销毁期间或之后的 `open()`                                 |
+| `empty`     | `resolve(signal)` 后端返回 `null` / `undefined` 或抛错                    |
+
+```ts
+import { DismissReason } from "@codejoo/layerman";
+
+const r = await om.open<unknown, boolean>({ id: "promo", cooldown: { total: 1 } }).result;
+if (typeof r === "object" && r !== null && "dismissed" in r) {
+  switch (r.reason) {
+    case DismissReason.capped: // 展示额度已用完:不要再重试
+    case DismissReason.destroyed: // 应用正在退出
+      break;
+    case DismissReason.replaced: // 被新实例取代:忽略
+      break;
+    default: // removed / closed / cleared / unmet / empty
+      break;
+  }
+} else {
+  // r 是你的 UI 传给 om.resolve("promo", ...) 的值
+}
+```
+
+### 行为变更(本次版本)
+
+标 **breaking** 的条目可能改变既有代码观察到的行为,其余为非 breaking。
+
+1. **钩子在提交后执行,嵌套调用被延后**(对正确用法非 breaking)。先提交状态,再在最外层公开方法返回之前执行
+   `onShow` / `onClose` / `onRemove`。在钩子或订阅者里再次修改管理器,会并入外层操作:嵌套调用之后立刻读
+   `getSnapshot()` / `get()` 仍是旧状态。
+2. **通知合并并设上限**(非 breaking)。一次公开操作最多通知一次;重入的变更会追加后续轮次,每次最外层调用总共最多 `MAX_NOTIFY_ROUNDS`
+   (100)轮通知(含首轮),之后停止补发,向每个订阅者最后投递一次最新快照(其间的变更不再通知),并输出一条诊断(`logger`,否则 `console.warn`,与 `debug` 无关)。订阅者里的变更务必有收敛条件。
+3. **判断函数内不得修改管理器**(对已有此类写法的代码 **breaking**)。在 `when` / `route` / `requiresAuth` 求值中调用
+   变更方法,会在改动状态之前抛错;异常被捕获,该条目按条件不满足处理。
+4. **`destroy()` 之后**(依赖「销毁后 `open()` 仍入队」的代码 **breaking**):`open()` 立即返回
+   `{ dismissed: true, reason: 'destroyed' }`;订阅者收到一次最终的空快照(管理器本来就是空的则不通知),随后被丢弃。
+5. **`crossTab` 默认值**(仅非浏览器环境 breaking):只有 `window` 与 `BroadcastChannel` 同时存在才默认开启;
+   Node、Bun、Deno、Worker 里**默认关**。需要时传 `crossTab: true`。
+6. **`stackIndex` 按实际入场序**(非 breaking)。反映弹窗真正进入的先后(串行槽与 overlap 交错),而不是内部列表的插入序。
+7. **`update()` 对排队项不通知**(非 breaking):只有 `open` / `closing` 的弹窗才有已渲染的数据需要刷新。
+8. **`capped`(breaking)。** 串行条目因 `session` 或 `total` 永久耗尽而不可能再展示时,不再永远排队,而是在状态可能变化的每个检查点复检:提交时、hydrate 完成后、`resolve(signal)` 结果落地时、跨 Tab 更新合并后(被 `pauseAll` 持有的 `overlap` 若变为 capped,会立即兑现,不等 `resumeAll`),一旦命中就在
+   当场以 `{ dismissed: true, reason: 'capped' }` 兑现,不展示、不计数。`overlap` 条目同样带该
+   reason。`minGap` / `day` / `hour` / `minute` 到期会自行解除,**不算** capped,仍然排队(冷却到期仍不会自动唤醒调度)。
+   _迁移:_ 以前永远等不到的 `result` 现在会兑现;请处理 `reason === 'capped'`。
+9. **`DismissResult.reason`**(仅对严格相等判断 **breaking**)。运行时对象由 `{ dismissed: true }` 变为
+   `{ dismissed: true, reason }`。对结构类型是增量改动,但严格相等判断(如 `toEqual({ dismissed: true })`)需要更新;
+   推荐用 `'dismissed' in r` 或 `r.dismissed === true`。
+10. **hydrate 门控**(对旧的「提前 open 可能绕过」规避写法 **breaking**)。hydrate 完成前,带持久化冷却字段的条目会
+    先等待(见上文「冷却」),完成后立即重新调度。此前「提前 `open` 可能绕过或少计额度」的警告不再成立;仍建议
+    `await ready()` 以免等待。
+11. **`resolve` / `reject` 对从未展示过的条目无效**(对提前投递结果的代码 **breaking**)。对从未展示过的条目(排队、
+    `resolve(signal)` 仍在请求中、被暂停或 hydrate 持有的 `overlap`),`resolve(id, v)` / `reject(id, e)` 是空操作,
+    不会提前兑现 `result`。请在弹窗真正展示后再由 UI 投递结果。
+
+12. **`resolve(signal)` 期间的 `update()` 不再丢失**(非 breaking,缺陷修复)。后端请求进行中打的补丁会合并进
+    最终落地的数据,而不是被覆盖。
+13. **冷却存储加固**(非 breaking,缺陷修复)。存储与广播里的记录都会校验(坏记录只丢弃该条,不影响其他 id);
+    写入串行且总是写最新快照;hydrate 按 id 合并(旧的磁盘快照不会回退内存里更新的计数);`__proto__` 之类的 id 也能正确持久化。
+14. **诊断不再破坏状态**(非 breaking)。`logger` 抛出的异常会被吞掉;判断函数(`when` 等)抛出的异常在开启
+    `debug` 时经 `logger` 上报,并按"条件不满足"处理。
+15. **React 适配器**(非 breaking)。推荐使用 `CurrentOverlayProvider`;旧的小写导出 `provideCurrentOverlay`
+    作为 deprecated 别名保留。没有 provider 时 `useCurrentOverlay()` 的报错信息改为指向推荐组件。
+
+16. **过期的 `beforeClose` 决议被忽略**(非 breaking,缺陷修复)。守卫未决期间弹窗被顶掉、又重新展示时,
+    旧守卫迟到的结果不会再把新的这次展示关掉。
+17. **Vue `model.set(false)` 带 `beforeClose` 守卫**(非 breaking;与 Vue 小节一直承诺的一致)。守卫放行后
+    实例立即被移除,而不是停在 `closing` 等 `autoRemove` 触发。
 
 ## Vue 3 接入
 
@@ -114,11 +243,13 @@ const { active } = useOverlays(om);
 import { om } from "./overlay";
 import ConfirmDialog from "./ConfirmDialog.vue";
 
-const ok = await om.open({
+// result 是 boolean | { dismissed: true }:被动关闭(replace/clear/destroy)的 { dismissed: true } 也是真值,
+// 所以只有显式的 true 才算确认。
+const ok = await om.open<unknown, boolean>({
   id: "confirm-delete",
   data: { comp: ConfirmDialog, props: { message: "确定删除这一项?" } },
 }).result;
-if (ok) doDelete();
+if (ok === true) doDelete();
 ```
 
 `ConfirmDialog.vue` 内部 emit 结果:
@@ -161,7 +292,8 @@ defineExpose({ open }); // 父组件可 promoRef.open()
 
 ```ts
 // 调用方 —— 同样走队列/优先级/冷却规则
-const claimed = await promoRef.value.open({ priority: 10, cooldown: { day: 1 } });
+// open() 返回 OverlayHandle,结果在它的 `.result` Promise 上
+const claimed = await promoRef.value.open({ priority: 10, cooldown: { day: 1 } }).result;
 ```
 
 `useOverlay(id, defaults?, om?)` 返回 `{ instance, visible, model, phase, open, close, remove,
@@ -200,6 +332,18 @@ const { model, resolve } = useOverlay("confirm");
 `beforeClose` 守卫),关闭生效后紧跟**立即 `remove()`**;若弹窗还在排队中则直接 `remove()`。弹窗自带
 退场动画,立即移除可避免 v-model 回弹。
 
+**`set(false)` 且配了 `beforeClose` 守卫。** `model` 会订阅状态,等**同一个实例**进入 `closing` 后再 `remove`。
+守卫规则与核心一致:只有返回(或兑现)`false`、抛错、Promise 拒绝才取消本次关闭,其他值(包括 `undefined`)放行;
+取消时什么都不移除;期间若该弹窗被替换成了新实例,挂起的关闭请求会被丢弃,
+不会误伤新实例。注意:**带 `beforeClose` 的 `close()` 总是异步进入 `closing`**(守卫结果在微任务里等待——
+即使守卫同步返回 `true` 也一样),这是有意的设计取舍,所以配了守卫时,`model.value = false` 之后 getter 可能
+还会读到一个 tick 的 `true`;没有 `beforeClose` 时则立即翻转。
+
+**已知限制。** `model` 只能观测经由**本** `useOverlay` 的 `open()` / `defaults` 配置的守卫。若守卫是在别处配的
+(外部直接 `om.open()`,或另一个 `useOverlay` 实例),它拒绝了 `model = false` 的关闭时,`model` 观测不到,其监听会
+残留;之后同一实例因其他原因(`close()`、`duration`)进入 `closing`,会被立即 `remove`,跳过退场动画。
+请通过同一个 `useOverlay` 的 `open()` / `defaults` 配置守卫。
+
 **让 v-model 弹窗立即显示 / 插队。** `v-model="model"`(或 `ref = true`)只是**入队**——若被排在
 别的弹窗或 `gap` 后面,`model` 的 getter 会读回 `false`,第三方弹窗随即回弹关闭。把该 overlay 的
 **固有行为**声明在 `useOverlay` 的第二个参数 `defaults` 里(会合并进每一次 open——`model=true`、
@@ -234,7 +378,7 @@ v-model 的布尔只有 true/false,**没有「我想要但被门挡着」的第�
 建议:
 
 - **无条件、必须立即显示**(全局 alert/confirm):`v-model` + `defaults: { overlap: true }`(或 `replace`)。干净。
-- **有条件的弹窗**:别依赖 `v-model`。要么把门控算在你自己这边、绑 `v-model="wanted && canShow"`;
+- **有条件的弹窗**:别依赖 `v-model`。要么把门控算在你自己这边——写一个可写 computed:`const gated = computed({ get: () => wanted.value && canShow.value, set: (v) => (wanted.value = v) })`,再绑 `v-model="gated"`;
   要么用 `open()` 触发、用 **`visible`** 渲染(`visible` 能如实表达「已入队但还没显示」的中间态,不会回弹)。
 
 一句话:把 manager 的条件/冷却当作**队列门控**用(配 `open()` + `visible`),而不是硬塞进 v-model 的同步布尔。
@@ -242,7 +386,7 @@ v-model 的布尔只有 true/false,**没有「我想要但被门挡着」的第�
 ## 验收 / 开发
 
 ```bash
-pnpm test    # vitest(~91 用例:核心 + Vue/React/Svelte/Solid 适配层 + 类型级)
+pnpm test    # vitest(13 文件,764 通过 | 4 预期失败:核心 + 不变量 + fuzz + 冷却存储 + Vue/React/Svelte/Solid 适配层 + 类型级)
 pnpm check   # oxfmt --check + type-aware oxlint
 pnpm build   # vp pack → dist/esm(index + vue/react/svelte/solid 多入口)
 ```
@@ -251,9 +395,9 @@ pnpm build   # vp pack → dist/esm(index + vue/react/svelte/solid 多入口)
 
 同样的适配层形态也提供给其他框架(各为可选 peer 依赖、核心零依赖不含任何框架):
 
-- **`@codejoo/layerman/react`** —— `useSyncExternalStore`(SSR 安全):`useOverlays`、`useOverlay(id, defaults?, om?)`、`LayermanProvider`/`useLayerman`、`useCurrentOverlay`。
+- **`@codejoo/layerman/react`** —— `useSyncExternalStore`(SSR 安全):`useOverlays`、`useOverlay(id, defaults?, om?)`、`LayermanProvider`/`useLayerman`、`useCurrentOverlay`。中央渲染器里用 **`<CurrentOverlayProvider id={o.id}>`**(首字母大写,可直接用于 JSX)包裹每个活跃项,组件内的 `useCurrentOverlay()` 才能取到自身 id;`provideCurrentOverlay` 是**已弃用**的别名——它的小写名字会被 JSX 当成原生标签,别当组件用。
 - **`@codejoo/layerman/svelte`** —— `svelte/store` readable(兼容 4/5):`overlayState`、`overlays`、`overlay(id, defaults?, om?)`、`setLayerman`/`getLayerman`。
-- **`@codejoo/layerman/solid`** —— signal:`useOverlayState`、`useOverlays`、`useOverlay(id, defaults?, om?)`、`LayermanProvider`/`useLayerman`。
+- **`@codejoo/layerman/solid`** —— signal:`useOverlayState`、`useOverlays`、`useOverlay(id, defaults?, om?)`、`provideLayerman`/`LayermanProvider`。
 
 各自返回 `{ instance, visible, phase, open, close, remove, resolve, reject, pause, resume }`(Vue 另有可写 `model` 供 v-model)。另有 Flutter 版在 `dart-labs/layerman`(拥抱 Flutter 的 `Overlay`,`show()` 返回 `Future<T?>`)。
 

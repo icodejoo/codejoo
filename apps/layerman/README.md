@@ -67,7 +67,7 @@ More manager methods:
   unconditional urgent overlays (global error, critical alert, blocking loader). Because an overlap
   overlay is **never put in a queue**, its conditions/cooldown act as a one-shot _fire-gate_
   evaluated at `open` time: pass → show now; **fail → the request is dropped**, its `result` resolves
-  `{ dismissed: true }` (no `onShow`/`onClose`). It is **"now or never"** — there is no queue to hold
+  `{ dismissed: true, reason: 'unmet' }` (no `onShow`/`onClose`). It is **"now or never"** — there is no queue to hold
   it until it becomes eligible.
 
 So `overlap` "drops" precisely because it opted out of the queue: dropping is the only consistent
@@ -75,6 +75,166 @@ outcome for a not-queued overlay that isn't allowed to show right now. If you wa
 it becomes eligible"**, that's what the normal queue is for — use a normal or `replace` overlay (they
 wait). **Don't put deferrable conditions (`route`/`when`) on a `overlap` overlay** expecting it to be
 held; cooldown on `overlap` is fine (it correctly suppresses "already shown today").
+
+## Behavior notes
+
+### Predicates (`when` etc.) must not mutate the manager
+
+Inside a condition predicate (`when(ctx)`, and the `route` / `requiresAuth` evaluation) **do not call
+any mutating method** (`open` / `close` / `remove` / `resolve` / `reject` / `update` / `clear` /
+`setContext` / `pause*` / `resume*` / `destroy`). It throws, before touching any state, and because
+conditions are evaluated defensively the throw is caught and the overlay is simply treated as **condition
+not met** (with `debug: true` a log line is emitted). Read-only calls (`getSnapshot`, `get`, `subscribe`)
+are fine. Lifecycle hooks (`onShow` / `onClose` / `onRemove`) and subscribers **may** call the manager.
+
+### Hooks and notifications
+
+State is committed first; `onShow` / `onClose` / `onRemove` then run synchronously, in order, **before
+the public call returns** — never in the middle of a state transition. One public operation notifies
+subscribers **at most once** (e.g. `clear()` of many overlays is a single notification); if a hook or
+subscriber mutates the manager again, a follow-up round is notified after it. A throwing hook or
+subscriber never breaks the manager.
+
+"Before the public call returns" holds for the **outermost** call only. A mutation made _inside_ a hook
+or subscriber joins the outer operation: its own hooks run and its snapshot applies after the current
+callback returns, so `getSnapshot()` / `get()` read right after such a nested call still show the old
+state. Every subscriber ends up with the latest snapshot (the same reference `getSnapshot()` returns),
+even if an earlier subscriber mutated the manager, and never receives the same snapshot twice. A
+subscriber added while a notification is in flight does not get that round's snapshot (read
+`getSnapshot()` after subscribing, as the adapters do).
+
+Notifications are also skipped when nothing changed: `clear()` that removes nothing, and `update()` on an
+open / closing overlay whose patch values are all `Object.is`-equal to the current ones. **A mutation
+made from a subscriber must converge** — guard it with a change check. A subscriber that changes the
+manager on every notification (e.g. a different `update()` value each time) re-notifies until the cap of
+100 notification rounds in total per outermost call (the first round counts), after which the manager stops re-notifying, delivers the latest snapshot to every subscriber one last time (mutations made during that final delivery change state silently and trigger no further notification), and reports one diagnostic line — through `logger` if configured, otherwise `console.warn`, regardless of `debug`. A cascade that legitimately needs more than 100 rounds is truncated.
+
+### Cooldown: persistence, cross-tab and waking
+
+- **Cross-tab is eventually consistent, not a strict global quota.** Cooldown counts are synced to other
+  tabs through `BroadcastChannel`; two tabs that open the same overlay _before_ the broadcast arrives can
+  both show it.
+- **`crossTab` default**: on in browsers (when both `window` and `BroadcastChannel` exist), **off in
+  Node / SSR**. Pass `crossTab: true` / `false` to force it.
+- **With `crossTab` off (or unsupported), multiple tabs overwrite each other**: each tab writes its own
+  snapshot to storage and the last writer wins, so counts recorded by another tab can be lost.
+- **Cooldown expiry does NOT wake the scheduler.** An overlay blocked only by `minGap` / `day` / `hour` /
+  `minute` will not pop by itself when the window passes; it is re-evaluated on the next trigger (`open`,
+  `remove`, `clear`, `setContext`, a gap timer, `resume`). If you need "re-check at time T", call
+  `om.setContext({})` yourself.
+- **`await om.ready()` before the first `open` (recommended).** Cooldown state hydrates from storage
+  asynchronously. An entry whose `cooldown` uses a persisted field (`total` / `day` / `hour` / `minute` /
+  `minGap`) that is opened earlier simply **waits until hydration finishes** (a serial entry stays queued; an
+  `overlap` entry is held, not dropped), then is re-scheduled immediately, whether the read succeeded,
+  failed or returned bad data. So nothing is shown "blind" and nothing is under-counted. Entries with only
+  `session` (or no cooldown) are unaffected. The storage `get` Promise must still eventually settle,
+  otherwise hydration never finishes and gated entries wait forever.
+- Invalid persisted / broadcast records are dropped individually; storage write failures are ignored.
+
+### After `destroy()`
+
+`destroy()` clears everything (each overlay's `result` resolves `{ dismissed: true, reason: 'destroyed' }`, `onRemove` fires),
+closes the cross-tab channel, notifies subscribers **once with a final empty snapshot** (`active` empty; skipped when the manager was already empty),
+then drops them. After that no further notifications are sent, and `open()` **does not show anything**: it
+returns a handle whose `result` is immediately `{ dismissed: true, reason: 'destroyed' }`; every other
+mutating method is a no-op.
+
+### `DismissResult` and `DismissReason`
+
+A passive end (anything other than your own `resolve` / `reject`) fulfils `result` with
+`{ dismissed: true, reason }`. `reason` is optional in the type (so `{ dismissed: true }` still
+type-checks), but the core always sets it. `DismissReason` is an `as const` object plus a same-named
+union type, exported from `@codejoo/layerman`.
+
+| `reason`    | When                                                                                           |
+| ----------- | ---------------------------------------------------------------------------------------------- |
+| `removed`   | explicit `remove()` before the entry reached `closing`                                         |
+| `closed`    | only a shown entry that went through `close()` into `closing` and was then removed             |
+| `cleared`   | `clear()`, including selector clears                                                           |
+| `replaced`  | same-id `open()` overwrote it, or `replace` discarded a `closing` instance                     |
+| `unmet`     | `dismissWhenUnmet` on a context change; `overlap` fire-gate (condition / time cooldown) failed |
+| `capped`    | `session` / `total` is permanently used up (see below)                                         |
+| `destroyed` | `destroy()`, or `open()` during / after destroy                                                |
+| `empty`     | the `resolve(signal)` backend returned `null` / `undefined` or threw                           |
+
+```ts
+import { DismissReason } from "@codejoo/layerman";
+
+const r = await om.open<unknown, boolean>({ id: "promo", cooldown: { total: 1 } }).result;
+if (typeof r === "object" && r !== null && "dismissed" in r) {
+  switch (r.reason) {
+    case DismissReason.capped: // shown enough already: never retry
+    case DismissReason.destroyed: // app is shutting down
+      break;
+    case DismissReason.replaced: // superseded by a newer instance: ignore
+      break;
+    default: // removed / closed / cleared / unmet / empty
+      break;
+  }
+} else {
+  // r is the value your UI passed to om.resolve("promo", ...)
+}
+```
+
+### Behavior changes (this release)
+
+Items marked **breaking** can change what existing code observes; the rest are non-breaking.
+
+1. **Hooks run after the commit; nested calls are deferred** (non-breaking for correct code). State is
+   committed first, then `onShow` / `onClose` / `onRemove` run before the outermost public call returns. A
+   mutation made inside a hook or subscriber joins the outer operation: `getSnapshot()` / `get()` right
+   after the nested call still show the old state.
+2. **Notifications are coalesced, with a cap** (non-breaking). One public operation notifies at most once;
+   re-entrant mutations trigger follow-up rounds, at most `MAX_NOTIFY_ROUNDS` (100) rounds in total per outermost call (the first counts), after which the manager
+   stops re-notifying, gives every subscriber the latest snapshot one last time (changes made during that last delivery are silent), and logs a diagnostic (via `logger`, else `console.warn`, regardless of `debug`). Make subscriber mutations converge.
+3. **Predicates must not mutate the manager** (**breaking** for code that did). Calling a mutating method
+   from a `when` / `route` / `requiresAuth` evaluation throws before touching state; the throw is caught and
+   the entry is treated as condition-not-met.
+4. **After `destroy()`** (**breaking** for code that relied on `open()` still queueing): `open()` returns at
+   once with `{ dismissed: true, reason: 'destroyed' }`; subscribers receive one final empty snapshot (unless the manager was already empty), then
+   are dropped.
+5. **`crossTab` default** (breaking only outside browsers): on only when both `window` and
+   `BroadcastChannel` exist; **off** in Node, Bun, Deno and Workers. Pass `crossTab: true` to force it.
+6. **`stackIndex` follows actual entry order** (non-breaking). It reflects the order overlays really entered
+   (serial slots and overlaps interleaved), not the insertion order of internal lists.
+7. **`update()` on a queued entry does not notify** (non-breaking): only `open` / `closing` overlays have
+   rendered data to refresh.
+8. **`capped` (breaking).** A serial entry that can never show again because `session` or `total` is
+   permanently used up is no longer queued forever: it settles `{ dismissed: true, reason: 'capped' }`
+   immediately, and it is re-checked whenever the state can have changed: at submit time, right after hydration completes, when a `resolve(signal)` result lands, and after a cross-tab update (an `overlap` held by `pauseAll` that becomes capped settles at once, not at `resumeAll`). It is not shown and not counted. An
+   `overlap` entry gets the same reason. `minGap` / `day` / `hour` / `minute` expire on their own, so they are
+   **not** capped and still queue (and, as before, expiry does not wake the scheduler).
+   _Migration:_ code that awaited such a `result` forever now gets it; handle `reason === 'capped'`.
+9. **`DismissResult.reason`** (**breaking** only for strict equality). The runtime object changes from
+   `{ dismissed: true }` to `{ dismissed: true, reason }`. Structural types are unaffected, but
+   strict-equality checks (e.g. `toEqual({ dismissed: true })`) must be updated; prefer
+   `'dismissed' in r` or `r.dismissed === true`.
+10. **Hydration gate** (**breaking** for the old "early open may bypass" workaround). Before hydration
+    finishes, entries with persisted cooldown fields wait (see "Cooldown" above) and are re-scheduled right
+    after it. The earlier warning that an early `open` could bypass or under-count the limit no longer
+    applies; `await ready()` is still recommended to avoid the wait.
+11. **`resolve` / `reject` ignore never-shown entries** (**breaking** for code that resolved early). For an
+    entry that has never been shown (queued, `resolve(signal)` still resolving, or an `overlap` held by
+    pause / hydration), `resolve(id, v)` / `reject(id, e)` are no-ops and do not settle `result` early.
+    Deliver results from the UI once it is actually displayed.
+
+12. **A `update()` during `resolve(signal)` is kept** (non-breaking, bug fix). Patches applied while the
+    backend request is still resolving are merged into the data that lands, instead of being overwritten.
+13. **Cooldown storage is hardened** (non-breaking, bug fixes). Persisted and broadcast records are validated
+    (a bad record is dropped on its own, other ids are untouched); writes are serialized and always carry the
+    latest snapshot; hydration merges per id (a stale disk snapshot never rolls back fresher in-memory counts); ids such as `__proto__` persist correctly.
+14. **Diagnostics never break state** (non-breaking). An exception thrown by `logger` is swallowed, and an
+    exception thrown by a predicate (`when` etc.) is reported through `logger` when `debug` is on, then treated
+    as "condition not met".
+15. **React adapter** (non-breaking). Prefer `CurrentOverlayProvider`; the old lowercase `provideCurrentOverlay`
+    export stays as a deprecated alias. The error message of `useCurrentOverlay()` without a provider now names
+    the recommended component.
+
+16. **Stale `beforeClose` decisions are ignored** (non-breaking, bug fix). If a pending guard resolves after the
+    overlay was displaced and shown again, its old verdict no longer closes the new showing.
+17. **Vue `model.set(false)` with a `beforeClose` guard** (non-breaking; matches what the Vue section always
+    promised). Once the guard lets the close through, the instance is removed right away instead of lingering in
+    `closing` until `autoRemove` fires.
 
 ## Vue 3
 
@@ -129,11 +289,13 @@ const { active } = useOverlays(om);
 import { om } from "./overlay";
 import ConfirmDialog from "./ConfirmDialog.vue";
 
-const ok = await om.open({
+// result is boolean | { dismissed: true }: a passive close (replace/clear/destroy) is truthy,
+// so only an explicit `true` counts as confirmation.
+const ok = await om.open<unknown, boolean>({
   id: "confirm-delete",
   data: { comp: ConfirmDialog, props: { message: "Delete this item?" } },
 }).result;
-if (ok) doDelete();
+if (ok === true) doDelete();
 ```
 
 Inside `ConfirmDialog.vue` you emit `resolve` / `close`:
@@ -177,7 +339,8 @@ defineExpose({ open }); // parent can call promoRef.open()
 
 ```ts
 // caller — same queue/priority/cooldown rules apply
-const claimed = await promoRef.value.open({ priority: 10, cooldown: { day: 1 } });
+// open() returns an OverlayHandle; the value arrives on its `.result` promise
+const claimed = await promoRef.value.open({ priority: 10, cooldown: { day: 1 } }).result;
 ```
 
 `useOverlay(id, defaults?, om?)` returns `{ instance, visible, model, phase, open, close, remove,
@@ -221,6 +384,22 @@ configured `beforeClose` guard) followed by an **immediate `remove()`** once clo
 — or a direct `remove()` if the overlay is still queued. Either way the dialog owns its exit
 animation, so this avoids a v-model bounce.
 
+**`set(false)` with a `beforeClose` guard.** `model` subscribes to the state and waits until _that same
+instance_ enters `closing`, then removes it. The guard follows the core rule: only a return (or
+resolved) value of `false`, a throw, or a rejected Promise cancels the close; any other value (including
+`undefined`) lets it proceed. On cancel nothing is removed; if the overlay was replaced in the meantime, the pending close is
+dropped and the new instance is left alone. Note that **`close()` on an overlay with `beforeClose` always
+enters `closing` asynchronously** (the guard result is awaited in a microtask — even when the guard
+returns `true` synchronously). This is a deliberate trade-off, so right after `model.value = false` the
+getter can still read `true` for a tick when a guard is configured. Without `beforeClose` it flips at once.
+
+**Known limitation.** `model` only observes guards configured through _this_ `useOverlay`'s `open()` /
+`defaults`. If a guard set elsewhere (a direct `om.open()`, or another `useOverlay` instance) rejects a
+`model = false` close, `model` cannot see the rejection and its pending listener stays behind; when the
+same instance later enters `closing` for another reason (`close()`, `duration`), it is removed
+immediately — skipping the exit animation. Configure guards through the same `useOverlay`'s `open()` /
+`defaults`.
+
 **Making a `v-model` overlay show immediately / jump the queue.** `v-model="model"` (or `ref = true`)
 only _enqueues_ — if it gets queued behind others or a `gap`, `model`'s getter reads back `false` and
 the third-party dialog bounces shut. Declare the overlay's intrinsic behavior as `useOverlay`'s
@@ -258,7 +437,8 @@ Guidance:
 - **Unconditional, must show now** (global alert/confirm): `v-model` + `defaults: { overlap: true }` (or
   `replace`). Clean.
 - **Condition-gated overlay**: don't rely on `v-model`. Either compute the gate on your side and bind
-  `v-model="wanted && canShow"`, or drive it with `open()` and render off **`visible`** (which
+  a writable computed: `const gated = computed({ get: () => wanted.value && canShow.value, set: (v) => (wanted.value = v) })`
+  then `v-model="gated"`. Or drive it with `open()` and render off **`visible`** (which
   faithfully represents the "queued but not shown yet" middle state, so it won't bounce).
 
 Rule of thumb: use the manager's conditions/cooldown as **queue gating** (with `open()` + `visible`),
@@ -270,11 +450,14 @@ The same adapter shape ships for other frameworks (each an optional peer dep, th
 core — no framework in the zero-dep core itself):
 
 - **`@codejoo/layerman/react`** — hooks via `useSyncExternalStore` (SSR-safe): `useOverlays`,
-  `useOverlay(id, defaults?, om?)`, `LayermanProvider` / `useLayerman`, `useCurrentOverlay`.
+  `useOverlay(id, defaults?, om?)`, `LayermanProvider` / `useLayerman`, `useCurrentOverlay`. In a central
+  renderer wrap each active item with **`<CurrentOverlayProvider id={o.id}>`** (capitalised, usable in
+  JSX) so `useCurrentOverlay()` works inside it. `provideCurrentOverlay` is a **deprecated** alias —
+  its lowercase name is treated as a native tag by JSX, so don't use it as a component.
 - **`@codejoo/layerman/svelte`** — `svelte/store` readables (Svelte 4/5): `overlayState`,
   `overlays`, `overlay(id, defaults?, om?)`, `setLayerman` / `getLayerman`.
 - **`@codejoo/layerman/solid`** — signals: `useOverlayState`, `useOverlays`,
-  `useOverlay(id, defaults?, om?)`, `LayermanProvider` / `useLayerman`.
+  `useOverlay(id, defaults?, om?)`, `provideLayerman` / `LayermanProvider`.
 
 Each exposes `{ instance, visible, phase, open, close, remove, resolve, reject, pause, resume }`
 (Vue additionally has the writable `model` for `v-model`). A Flutter port lives separately at
