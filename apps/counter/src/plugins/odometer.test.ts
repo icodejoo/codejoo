@@ -6,7 +6,7 @@ import type { ICountupRenderContext } from "../count-up/type";
 const NF = new Intl.NumberFormat();
 
 /** 构造渲染上下文；默认 from=to=value、fmt 为 Intl 默认（千分位） */
-function ctx(value: number, from: number = value, to: number = value, fmt: (n: number) => string = NF.format): ICountupRenderContext {
+function ctx(value: number, from: number = value, to: number = value, fmt: (n: number) => string = (n) => NF.format(n)): ICountupRenderContext {
   return { value, from, to, fmt, id: 0, active: true, paused: false };
 }
 
@@ -177,19 +177,31 @@ for (const strip of MODES) {
       const nf2 = new Intl.NumberFormat(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
       const fmt2 = (n: number) => nf2.format(n);
       make()(host, fmt2(0.29), ctx(0.29, 0, 0.29, fmt2));
-      expect(strips(host).map((s) => s.textContent).join("")).toBe("029");
+      expect(
+        strips(host)
+          .map((s) => s.textContent)
+          .join(""),
+      ).toBe("029");
     });
 
     it("落定数字遵守 formatter 的舍入（1.9999 按 Intl 显示为 2，而非截断成 1）", () => {
       const host = document.createElement("div");
       make()(host, NF.format(1.9999), ctx(1.9999, 0, 1.9999));
-      expect(strips(host).map((s) => s.textContent).join("")).toBe("2");
+      expect(
+        strips(host)
+          .map((s) => s.textContent)
+          .join(""),
+      ).toBe("2");
     });
 
-    it("落定时 formatter 进位（9.9999 → \"10\"）：可见位数按文本算，十位不会被当成前导零隐藏", () => {
+    it('落定时 formatter 进位（9.9999 → "10"）：可见位数按文本算，十位不会被当成前导零隐藏', () => {
       const host = document.createElement("div");
       make()(host, NF.format(9.9999), ctx(9.9999, 0, 9.9999));
-      expect(visibleStrips(host).map((s) => s.textContent).join("")).toBe("10");
+      expect(
+        visibleStrips(host)
+          .map((s) => s.textContent)
+          .join(""),
+      ).toBe("10");
     });
 
     it("符号位显隐只归 updateSign：from 为负、当前值为正时 reflow 不会把符号重新显示", () => {

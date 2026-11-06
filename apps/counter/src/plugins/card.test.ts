@@ -8,7 +8,7 @@ const parser: TCountdownParser = () => [0, 0, 0, 0, 0];
 const fmt: ICountdownFormatter = (ms) => String(ms);
 // 新渲染契约：render(el, remaining, value, ctx)，formatter/parser 收敛进 ctx
 const val: TCountdownValue = [0, 0, 0, 0, 0];
-const ctx = { el: document.createElement("div"), id: 0, deadline: 0, remaining: 0, value: val, active: true, paused: false, fmt, parser } as ICountdownContext;
+const ctx = { el: document.createElement("div"), id: 0, deadline: 0, remaining: 0, value: val, active: true, paused: false, fmt, parser } as unknown as ICountdownContext;
 
 /**
  * 将 ICardRender 生命周期包装为旧式函数调用，方便单元测试直接驱动。
@@ -278,7 +278,7 @@ describe("createCardRender × countdown", () => {
     expect(its[2].classList.contains("cd-sep")).toBe(true);
     expect(its[5].classList.contains("cd-sep")).toBe(true);
 
-    vi.setSystemTime(Date.now() + 1000);
+    vi.advanceTimersByTime(1000);
     countdownTick();
     // 末位 "3"→"2" 翻页
     expect(flipping(its[7])).toBe(true);

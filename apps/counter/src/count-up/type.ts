@@ -73,6 +73,11 @@ export interface ICountupBaseOptions {
   observer?: IntersectionObserver;
   /** 懒任务超时回收(ms)，>0 时若元素在该时长内仍未进入视口则自动 remove；默认 0=不回收 */
   lazyTimeout?: number;
+  /**
+   * 页面隐藏或元素离开视口时静音，默认 true：不再调用 render / onUpdate，进度仍按真实时间推进，
+   * 到点完成（onDone）照常触发，重新可见时直接显示当前位置。设为 false 则始终更新。
+   */
+  muteHidden?: boolean;
   /** 动画到达目标时是否自动销毁该任务（出队 + 调用渲染器 destroy + 清引用），默认 true；false 则保留实例停在末值 */
   autoKill?: boolean;
 }
@@ -103,8 +108,9 @@ export interface ICountupTask extends Required<Omit<ICountupTaskOptions, "el">>,
   /** 有状态渲染器绑定（undefined=函数渲染，null=未 mount 的 lazy 生命周期，otherwise=已 mount） */
   renderBound?: { update(v: number, ctx: ICountupRenderContext): void; destroy(): void } | null;
   startAt: number;
-  accum: number;
-  /** 预算的节流间隔(ms)：fps>0 时 = (1000/fps)|0，否则 0；建任务/重定时算一次，热路径只读 */
+  /** 下个节流网格点（ms，与 tick 的 elapsed 同源），0 = 尚未起网格 */
+  nextAt: number;
+  /** 预算的节流间隔(ms)：fps>0 时 = 1000/fps，否则 0；建任务/重定时算一次，热路径只读 */
   interval: number;
   /** 是否已激活：false 表示 lazy 任务尚未进入视口，tick 会跳过它 */
   active: boolean;
@@ -118,6 +124,12 @@ export interface ICountupTask extends Required<Omit<ICountupTaskOptions, "el">>,
   cancel?: () => void;
   /** 已到达目标并保留（autoKill:false）：tick 跳过，不再重绘/重触 onDone */
   done?: boolean;
+  /** 元素当前是否离开视口（由 IntersectionObserver 维护） */
+  offscreen: boolean;
+  /** 上一帧是否处于静音：解除静音时据此立即刷新一次 */
+  wasMuted: boolean;
+  /** 离屏观察的取消函数 */
+  unwatch?: () => void;
   /** 复用的上下文（最后一个参数传给 fmt/render/on*） */
   ctx: ICountupRenderContext;
 }

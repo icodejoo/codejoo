@@ -1,14 +1,17 @@
 {
   "name": "@codejoo/counter",
-  "version": "0.1.1",
+  "version": "0.2.0",
   "files": [
     "dist",
     "src",
     "README.md",
-    "README.zh-CN.md"
+    "README.zh-CN.md",
+    "CHANGELOG.md"
   ],
   "type": "module",
-  "sideEffects": ["**/*.css"],
+  "sideEffects": [
+    "**/*.css"
+  ],
   "main": "./dist/index.mjs",
   "module": "./dist/index.mjs",
   "types": "./dist/index.d.mts",
@@ -45,9 +48,6 @@
     "./ring.css": "./dist/ring.css",
     "./package.json": "./package.json"
   },
-  "peerDependencies": {
-    "vue": ">=3.0.0"
-  },
   "publishConfig": {
     "access": "public"
   },
@@ -67,5 +67,8 @@
     "vite-plus": "catalog:",
     "vitest": "catalog:",
     "vue": "catalog:"
+  },
+  "peerDependencies": {
+    "vue": ">=3.0.0"
   }
 }

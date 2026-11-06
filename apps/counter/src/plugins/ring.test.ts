@@ -9,7 +9,7 @@ const parser: TCountdownParser = () => [0, 0, 0, 0, 0];
 
 function makeCtx(text: string): ICountdownContext {
   const fmt: ICountdownFormatter = () => text;
-  return { el: document.createElement("div"), id: 0, deadline: 0, remaining: 0, value: val, active: true, paused: false, fmt, parser } as ICountdownContext;
+  return { el: document.createElement("div"), id: 0, deadline: 0, remaining: 0, value: val, active: true, paused: false, fmt, parser } as unknown as ICountdownContext;
 }
 
 /** 将 IRingRender 生命周期包装为旧式函数调用，方便单元测试直接驱动。 */
@@ -255,16 +255,18 @@ describe("createRingRender 客制化（分组 + CSS 变量 + 回调）", () => {
   it("inner.colorAt 逐分钟上色（下发总分钟数）", () => {
     const host = document.createElement("div");
     const seen: Array<{ index: number; count: number }> = [];
-    makeRingInvoker(createRingRender({
-      inner: {
-        colorAt: ({ index, count }) => {
-          seen.push({ index, count });
-          return "#777777";
+    makeRingInvoker(
+      createRingRender({
+        inner: {
+          colorAt: ({ index, count }) => {
+            seen.push({ index, count });
+            return "#777777";
+          },
         },
-      },
-    }))(host, 180000, val, makeCtx("03:00"));
+      }),
+    )(host, 180000, val, makeCtx("03:00"));
     expect(seen.map((s) => s.count)).toEqual([3, 3]);
-    expect(seen.map((s) => s.index).sort()).toEqual([1, 2]);
+    expect(seen.map((s) => s.index).sort((a, b) => a - b)).toEqual([1, 2]);
     expect(colorOf(fills(host).find((f) => colorOf(f)) as Element)).toBe(norm("#777777"));
   });
 
@@ -290,14 +292,16 @@ describe("createRingRender 自定义 render 钩子（含算好的参数与 host�
   it("digit.render 接管数码区", () => {
     const host = document.createElement("div");
     let f: { text: string; color: string; sec: number } | undefined;
-    makeRingInvoker(createRingRender({
-      digit: {
-        render: (fr) => {
-          f = { text: fr.text, color: fr.color, sec: fr.sec };
-          fr.host.setAttribute("data-x", "1");
+    makeRingInvoker(
+      createRingRender({
+        digit: {
+          render: (fr) => {
+            f = { text: fr.text, color: fr.color, sec: fr.sec };
+            fr.host.setAttribute("data-x", "1");
+          },
         },
-      },
-    }))(host, 5000, val, makeCtx("00:05"));
+      }),
+    )(host, 5000, val, makeCtx("00:05"));
     expect(f?.text).toBe("00:05");
     expect(f?.sec).toBe(5);
     expect(segs(host).length).toBe(0);
@@ -316,10 +320,12 @@ describe("createRingRender 自定义 render 钩子（含算好的参数与 host�
     const host = document.createElement("div");
     let arcF: { rotation: number; color: string } | undefined;
     let innerF: { total: number; r0: number } | undefined;
-    makeRingInvoker(createRingRender({
-      arcA: { render: (fr) => (arcF = { rotation: fr.rotation, color: fr.color }) },
-      inner: { render: (fr) => (innerF = { total: fr.total, r0: fr.angleAt(0) }) },
-    }))(host, 290000, val, makeCtx("04:50"));
+    makeRingInvoker(
+      createRingRender({
+        arcA: { render: (fr) => (arcF = { rotation: fr.rotation, color: fr.color }) },
+        inner: { render: (fr) => (innerF = { total: fr.total, r0: fr.angleAt(0) }) },
+      }),
+    )(host, 290000, val, makeCtx("04:50"));
     expect(arcF?.rotation).toBe(-290 * 6); // -cw·secRem·6
     expect(arcF?.color).toBe("#ff6a5a"); // 分钟>0 常态
     expect(innerF?.total).toBe(290000);

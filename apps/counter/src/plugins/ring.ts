@@ -574,7 +574,8 @@ export function createRingRender(options: IRingRenderOptions = {}): IRingRender 
       const angleAt = (ms: number) => TOP - cw * (ms / total) * TAU;
       if (innerCfg.render) {
         innerCfg.render({ ...frameBase(state.innerHost), radius: innerCfg.radius, total, redAt, yellowAt, angleAt });
-      } else if (state.zones) {
+      } else {
+        const zones = state.zones!; // 非自定义 render 时 build 必建 zones
         const rem = Math.max(0, Math.min(remaining, total));
         const drawSeg = (path: TCacheEl, t0: number, t1: number) => {
           const hi = Math.min(t1, rem);
@@ -585,9 +586,9 @@ export function createRingRender(options: IRingRenderOptions = {}): IRingRender 
           path.setAttribute("d", d);
         };
         for (let i = 0; i < state.minutes.length; i++) drawSeg(state.minutes[i].el, state.minutes[i].from, state.minutes[i].to);
-        drawSeg(state.zones.red, 0, redAt * 1000);
-        drawSeg(state.zones.yellow, redAt * 1000, yellowAt * 1000);
-        drawSeg(state.zones.green, yellowAt * 1000, MINUTE);
+        drawSeg(zones.red, 0, redAt * 1000);
+        drawSeg(zones.yellow, redAt * 1000, yellowAt * 1000);
+        drawSeg(zones.green, yellowAt * 1000, MINUTE);
       }
     }
 
@@ -626,14 +627,14 @@ export function createRingRender(options: IRingRenderOptions = {}): IRingRender 
           // segment：仅文本变化时切换七段亮灭，分隔符改文本
           for (let i = 0; i < state.cells.length; i++) {
             const cell = state.cells[i];
-            const ch = text[i] ?? " ";
+            const ch = text.charAt(i); // mask 相同 → 长度相同，必不越界
             if (cell.ch === ch) continue;
             cell.ch = ch;
-            if (cell.digit && cell.segs) {
-              const bits = SEGMENTS[ch] ?? 0;
+            if (cell.segs) {
+              const bits = SEGMENTS[ch] | 0; // 数字位只会收到数字字符（mask 相同）
               for (let s = 0; s < 7; s++) cell.segs[s].classList.toggle(cls.on, !!(bits & (1 << (6 - s))));
-            } else if (cell.sep) {
-              cell.sep.textContent = ch;
+            } else {
+              (cell.sep as SVGElement).textContent = ch; // 非数字位必为分隔符
             }
           }
         }

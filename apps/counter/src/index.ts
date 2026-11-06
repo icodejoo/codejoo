@@ -4,3 +4,5 @@ export { createLazyObserver } from "./helper";
 export * from "./count-up";
 export * from "./count-down";
 export * from "./plugins";
+export { configure, resetAllDefaults } from "./config";
+export type { ISharedOptions } from "./config";

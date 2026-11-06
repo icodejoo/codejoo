@@ -36,11 +36,11 @@ interface ICell {
   /** 是否为分隔符格（: . 等非数字字符，不参与翻页动画） */
   sep: boolean;
   /** 动画开始前写入新值（写到"将翻入"的 next 面） */
-  applyPre(value: string): void;
+  applyPre?(value: string): void;
   /** 动画落定后写入新值（写到 now 面，使其复位即显示新值） */
   applyPost(value: string): void;
   /** 切换翻页状态类（加在 now/next 两个面上，驱动单层选择器的动画） */
-  setFlipping(on: boolean): void;
+  setFlipping?(on: boolean): void;
   /** 监听 transition/animation 结束的元素（now 面） */
   watch: HTMLElement;
   /** 当前展示的目标字符 */
@@ -109,9 +109,7 @@ export function createCardRender(options: ICardRenderOptions = {}): ICardRender 
       return {
         item: sep,
         sep: true,
-        applyPre: () => {},
         applyPost: (v) => (sep.textContent = v),
-        setFlipping: () => {},
         watch: sep,
         value: ch,
         busy: false,
@@ -156,7 +154,7 @@ export function createCardRender(options: ICardRenderOptions = {}): ICardRender 
 
   function finalize(cell: ICell) {
     cell.applyPost(cell.value);
-    cell.setFlipping(false);
+    cell.setFlipping?.(false);
     cell.busy = false;
   }
 
@@ -167,10 +165,10 @@ export function createCardRender(options: ICardRenderOptions = {}): ICardRender 
       finalize(cell);
       void cell.item.offsetWidth;
     }
-    cell.applyPre(ch);
+    cell.applyPre?.(ch);
     cell.value = ch;
     cell.busy = true;
-    cell.setFlipping(true);
+    cell.setFlipping?.(true);
   }
 
   function build(host: HTMLElement, text: string): ICardState {

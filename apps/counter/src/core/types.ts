@@ -7,9 +7,11 @@ export interface IPlugin {
   /**
    * 每帧回调，接收 (elapsed, dt)：elapsed 为 RAF 时间戳，dt 为距上一帧的毫秒数。
    * 返回 false 表示当前没有待处理任务；所有插件都返回 false 时核心自动停止 RAF。
-   * 返回 true 或 undefined 均视为"仍有任务"。
+   * 返回 true 或 undefined 表示"下一帧继续"。
+   * 返回正数表示"至少这么多毫秒后才需要再处理"：若所有忙碌插件都返回正数，核心不逐帧空转，
+   * 取最小值休眠后再排一帧；任何新任务/恢复触发 start() 会立即打断休眠。
    */
-  install(elapsed: number, dt: number): boolean | void;
+  install: (elapsed: number, dt: number) => boolean | number | void;
   /** 插件暴露给 gt 的 API，会以 plugin.name 作为 key 挂到 gt 上 */
   api?: unknown;
   /** 释放钩子：counter.destroy() 时调用，用于清空该插件的任务/观察者等资源 */

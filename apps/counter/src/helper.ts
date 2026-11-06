@@ -2,8 +2,9 @@
 export function $(el: string | Element): Element {
   if (typeof Element !== "undefined" && el instanceof Element) return el;
   if (typeof document === "undefined") throw new Error("[GT]: DOM unavailable (SSR?); pass an Element on the client");
-  const found = document.querySelector(el as string);
-  if (!found) throw new Error("[GT]: Invalid element value [" + el + "]");
+  const selector = el as string;
+  const found = document.querySelector(selector);
+  if (!found) throw new Error("[GT]: Invalid element value [" + selector + "]");
   return found;
 }
 
@@ -92,5 +93,42 @@ export function lazyStart(el: Element, onEnter: () => void, observer?: Intersect
     if (list.length === 0) lazyMap.delete(el);
     // 同一元素上若还有别的注册复用同一个 observer，暂不 unobserve，避免误伤它们
     if (!list.some((r) => r.io === io)) io.unobserve(el);
+  };
+}
+
+// 元素 → 视口可见性回调列表；所有"离屏静音"共用同一个持续观察的 IntersectionObserver
+// 距下次处理不超过该时长（ms）就直接逐帧，不值得挂定时器
+export const FRAME_WINDOW = 20;
+const offscreenCbs = new WeakMap<Element, ((offscreen: boolean) => void)[]>();
+let offscreenObserver: IntersectionObserver | undefined;
+
+/**
+ * 持续观察 el 是否离开视口（含 display:none），状态变化时回调 offscreen。
+ * 与一次性的 lazyStart 不同，进入后不会摘除。无 IntersectionObserver 环境（SSR / jsdom）视为永不离屏。
+ * 返回取消函数。
+ */
+export function watchOffscreen(el: Element, cb: (offscreen: boolean) => void): () => void {
+  if (typeof IntersectionObserver === "undefined") return () => {};
+  if (!offscreenObserver) {
+    offscreenObserver = new IntersectionObserver((entries) => {
+      for (let i = 0; i < entries.length; i++) {
+        const list = offscreenCbs.get(entries[i].target);
+        if (list) list.slice().forEach((f) => f(!entries[i].isIntersecting));
+      }
+    });
+  }
+  const list = offscreenCbs.get(el);
+  if (list) list.push(cb);
+  else offscreenCbs.set(el, [cb]);
+  offscreenObserver.observe(el);
+  return () => {
+    const cur = offscreenCbs.get(el);
+    if (!cur) return;
+    const idx = cur.indexOf(cb);
+    if (idx !== -1) cur.splice(idx, 1);
+    if (cur.length === 0) {
+      offscreenCbs.delete(el);
+      offscreenObserver?.unobserve(el);
+    }
   };
 }
