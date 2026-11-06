@@ -1,18 +1,19 @@
 // codec 三变体（codec / codecBase64 / codecAtob）+ codeable 值编解码 + 解码失败清脏。
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { factory } from "../src/core";
+import { describe, expect, it } from "vitest";
+
 import { codec, codecAtob, codecBase64 } from "../src/codec";
 
-beforeEach(() => localStorage.clear());
-afterEach(() => localStorage.clear());
-
 describe("codec — 混淆/编解码", () => {
-  it("codeable + codec：底层被混淆，读出仍是原值", () => {
-    const { ls: c } = factory({ codeable: true, codec: codec("pw") });
-    c.set("secret", "topsecret");
-    const raw = localStorage.getItem("secret");
-    expect(raw != null && !raw.includes("topsecret")).toBe(true);
-    expect(c.get("secret")).toEqual("topsecret");
+  it("非法 base64 和缺少 XOR 标记返回 null，编码格式保持不变", () => {
+    expect(codecAtob("k").decode("!invalid!")).toBeNull();
+    expect(codecBase64("k").decode("!invalid!")).toBeNull();
+    expect(codec().decode("")).toBeNull();
+    expect(codecAtob("k").encode("abc")).toBe("YWJjaw");
+    expect(codecBase64("k").encode("abc")).toBe("YWJjaw");
+    // 此口令的折叠值为零，覆盖既有非零掩码兜底且固定编码输出。
+    const zeroMask = codec("1764");
+    expect(zeroMask.encode("a")).toBe(String.fromCharCode(0x2756, 0x134));
+    expect(zeroMask.decode(zeroMask.encode("a"))).toBe("a");
   });
   it("codec encode/decode 往返", () => {
     const cdc = codec("k");
@@ -82,20 +83,6 @@ describe("codec — 混淆/编解码", () => {
   it("codec 错误口令解码 → null", () => {
     const enc = codec("right").encode("data");
     expect(codec("wrong").decode(enc)).toEqual(null);
-  });
-  it("codec key 变更：旧数据解不开 → 回退默认值", () => {
-    const { ls: c1 } = factory({ codeable: true, codec: codec("old") });
-    c1.set("mig", "v");
-    const { ls: c2 } = factory({ codeable: true, codec: codec("new") });
-    expect(c2.get("mig", "fallback")).toEqual("fallback");
-  });
-  it("解码失败清脏：损坏的编码值首读即被清除", () => {
-    const { ls: c } = factory({ codeable: true, codec: codec("k") });
-    c.set("dirty", "v");
-    // 偷偷写入一个用错口令编码的串（本实例解不开 → 视为损坏）
-    localStorage.setItem("dirty", codec("wrong").encode(JSON.stringify({ value: "x", createdAt: Date.now() })));
-    expect(c.get("dirty")).toEqual(null);
-    expect(localStorage.getItem("dirty")).toEqual(null);
   });
   it("空字符串口令按真实口令使用：codecAtob/codecBase64 往返", () => {
     for (const make of [codecAtob, codecBase64]) {

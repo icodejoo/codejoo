@@ -10,8 +10,19 @@ import { playwright } from "@vitest/browser-playwright";
  */
 export default defineConfig({
   test: {
+    name: "browser",
+    // 多路进程使用独立端口；限制并发以免大量真实页面抢占浏览器会话。
+    fileParallelism: false,
     include: ["test/**/*.browser.test.ts"],
+    coverage: {
+      // 由 run-coverage 统一清理，普通测试和 accept 不删除刚生成的门禁报告。
+      clean: false,
+      provider: "v8",
+      include: ["src/**"],
+      reporter: ["text", "json-summary", "json"],
+    },
     browser: {
+      api: { port: 20000 + (process.pid % 40000) },
       enabled: true,
       provider: playwright(),
       headless: true,

@@ -22,3 +22,7 @@ dist-ssr
 *.sw?
 
 *.tsbuildinfo
+
+# 测试与校验生成物
+coverage*/
+scripts/*-lint-results.json
