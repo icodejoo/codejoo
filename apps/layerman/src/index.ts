@@ -6,31 +6,12 @@
  * `getSnapshot` + `get`），宿主据此渲染 `active` 列表即可。零运行时依赖。
  */
 
+import { CooldownStore, defaultStorage } from "./cooldown.ts";
+import type { AsyncableStorage, Cooldown, CooldownRecord } from "./cooldown.ts";
+
+export type { AsyncableStorage, Cooldown, Duration } from "./cooldown.ts";
+
 /* ────────────────────────────── 公共类型 ────────────────────────────── */
-
-/** 时长（天/时/分/秒，四者可选，叠加求和）。例：`{ days: 1, hours: 1 }` = 1 天 1 小时。 */
-export interface Duration {
-  days?: number;
-  hours?: number;
-  minutes?: number;
-  seconds?: number;
-}
-
-/**
- * 冷却配置。出现的字段全部 **AND**（同时满足才允许显示），计数在真正 open 时 +1。
- * - `session`：本会话最多 N 次（仅内存，不持久化）。
- * - `total`：累计最多 N 次（持久化）。
- * - `day`/`hour`/`minute`：每自然日/时/分最多 N 次（按本地自然边界对齐，持久化）。
- * - `minGap`：距上次展示的最小间隔（滚动，持久化 lastShownAt）。
- */
-export interface Cooldown {
-  session?: number;
-  total?: number;
-  day?: number;
-  hour?: number;
-  minute?: number;
-  minGap?: Duration;
-}
 
 /** 条件谓词上下文。保留键 `route`/`auth` 供内置糖使用，其余键自由，由宿主经 `setContext` 推入。 */
 export interface OverlayContext {
@@ -57,8 +38,8 @@ export interface OverlayConfig<TData = unknown> {
   autoRemove?: boolean | number;
   /**
    * 叠加(overlap)显示：**不遵守「一次只显示一个」的规则**——绕过串行队列与 gap，立即与当前弹窗
-   * 重叠显示。因为它不入队，条件/冷却在 open 时作一次性发射门：当下不满足则**直接丢弃**（result
-   * 兑现 `{ dismissed: true }`），不会被保留到条件满足（「要么现在，要么不弹」；见 README）。
+   * 重叠显示。暂停或持久化冷却尚未 hydrate 时先持有；放行时条件/冷却不满足即丢弃，reason 为
+   * 'unmet'；session/total 永久耗尽则以 'capped' 兑现，不等待条件或额度恢复（见 README）。
    */
   overlap?: boolean;
   /** 替换本 slot 当前活跃者（被替换者退回队列），跳过 gap。 */
@@ -130,22 +111,31 @@ export interface OverlayState {
   queued: readonly string[];
 }
 
+/** 被动结束原因；对象值与同名联合类型供宿主共用。 */
+export const DismissReason = {
+  removed: "removed",
+  closed: "closed",
+  cleared: "cleared",
+  replaced: "replaced",
+  unmet: "unmet",
+  capped: "capped",
+  destroyed: "destroyed",
+  empty: "empty",
+} as const;
+export type DismissReason = (typeof DismissReason)[keyof typeof DismissReason];
+
 /** 被动关闭（未经 `resolve`/`reject`）时 result 的兑现值。 */
 export interface DismissResult {
   dismissed: true;
+  /** 被动关闭的原因；各路径取值见 `DismissReason`，旧代码只判断 `dismissed` 不受影响。 */
+  reason?: DismissReason;
 }
 
 /** `open` 的返回句柄。 */
 export interface OverlayHandle<TResult = unknown> {
   id: string;
-  /** await 拿结果；宿主经 `resolve(id, v)` 投递；被动关闭则以 `{ dismissed: true }` 兑现。 */
+  /** await 拿结果；宿主经 `resolve(id, v)` 投递；被动关闭则以 `{ dismissed: true, reason }` 兑现（reason 见 `DismissReason`）。 */
   result: Promise<TResult | DismissResult>;
-}
-
-/** 可注入存储（get/set 可同步可异步，兼容 localStorage 与 RN AsyncStorage）。 */
-export interface AsyncableStorage {
-  get(key: string): string | null | Promise<string | null>;
-  set(key: string, value: string): void | Promise<void>;
 }
 
 /** `createLayerman` 配置。 */
@@ -164,20 +154,20 @@ export interface LayermanOptions {
   debug?: boolean;
   /** 自定义日志输出，默认 `console.log`。 */
   logger?: (message: string) => void;
-  /** 跨标签页同步冷却计数；浏览器有 `BroadcastChannel` 时默认 `true`。 */
+  /** 跨标签页同步冷却计数；具有 window 与 BroadcastChannel 的环境默认开启。 */
   crossTab?: boolean;
 }
 
 /** 管理器实例接口。 */
 export interface Layerman {
   open<TData = unknown, TResult = unknown>(config: OverlayConfig<TData>): OverlayHandle<TResult>;
-  /** 向 result 投递成功值（已兑现则忽略）。 */
+  /** 向曾展示的条目投递成功值；未展示或已兑现时忽略。 */
   resolve(id: string, value: unknown): void;
-  /** 让 result 以错误 reject（已兑现则忽略）。 */
+  /** 拒绝曾展示条目的结果；未展示或已兑现时忽略。 */
   reject(id: string, error: unknown): void;
   /** 就地更新某条目 data（对象浅合并，否则替换），不触发队列变更。 */
   update(id: string, patch: unknown): void;
-  /** 请求关闭（open → closing）；有 beforeClose 守卫时先过守卫。 */
+  /** 仅 open 项请求进入 closing；有 beforeClose 时先过守卫，其余阶段无操作。 */
   close(id: string): void;
   remove(id: string): void;
   /** 清空。传选择器 `(ctx, records) => id[]` 精确清理（非数组=全部）；或 `{ closeActive }` 传统清队列。 */
@@ -214,17 +204,8 @@ type LogState = (typeof LOG_STATE)[keyof typeof LOG_STATE];
 
 type Timer = ReturnType<typeof setTimeout>;
 
-/** 冷却持久化记录（每 id 一条）。 */
-interface CooldownRecord {
-  total: number;
-  dayBucket: string;
-  dayCount: number;
-  hourBucket: string;
-  hourCount: number;
-  minuteBucket: string;
-  minuteCount: number;
-  lastShownAt: number;
-}
+/** 内部资格判断结果；永久耗尽与暂时等待分开。 */
+const ELIGIBILITY = { pass: "pass", wait: "wait", drop: "drop" } as const;
 
 /** 内部队列/活跃条目。 */
 interface Entry {
@@ -234,6 +215,10 @@ interface Entry {
   priority: number;
   instanceKey: number;
   seq: number;
+  /** 最近一次真正入场的顺序，与实例标识独立。 */
+  enteredSeq: number;
+  /** 当前展示或请求的代次。 */
+  epoch: number;
   overlapping: boolean;
   affix: boolean;
   /** 因 affix 被拦而入队的 replace 项，整体排在普通项之前。 */
@@ -242,27 +227,49 @@ interface Entry {
   skipGap: boolean;
   /** 本次 open 是否豁免冷却计数（被 replace 从 open 态退回后重开）。 */
   exemptCooldown: boolean;
-  /** resolve() 在 pauseAll 期间落地：结果先记在这，resumeAll 时再处理（避免暂停期间变活跃）。 */
-  hasPendingResolve: boolean;
-  pendingResolveData?: unknown;
   phase: LogState;
   /** result 是否已兑现（resolve/reject/dismiss 任一）。 */
   settled: boolean;
   settle: (value: unknown) => void;
   fail: (error: unknown) => void;
-  durationTimer?: Timer;
-  durationEndsAt?: number;
-  durationRemaining?: number;
-  autoRemoveTimer?: Timer;
-  autoRemoveEndsAt?: number;
-  autoRemoveRemaining?: number;
-  paused: boolean;
-  /** beforeClose 守卫正在等待（异步决议中），避免同一 close() 请求被重复触发守卫。 */
-  closePending: boolean;
-  abort?: AbortController;
+  /** 条目倒计时及单条暂停状态。 */
+  timers: {
+    /** 展示时长计时器。 */
+    durationTimer?: Timer;
+    /** 展示倒计时截止时间。 */
+    durationEndsAt?: number;
+    /** 暂停时保留的展示剩余时长。 */
+    durationRemaining?: number;
+    /** 关闭后的自动移除计时器。 */
+    autoRemoveTimer?: Timer;
+    /** 自动移除截止时间。 */
+    autoRemoveEndsAt?: number;
+    /** 暂停时保留的自动移除剩余时长。 */
+    autoRemoveRemaining?: number;
+    /** 是否单独冻结该条目的倒计时。 */
+    paused: boolean;
+  };
+  /** 本轮请求、中止身份与暂停期间的缓存。 */
+  resolveState: {
+    /** 暂停期间是否已有请求结果等待落地。 */
+    hasPendingResolve: boolean;
+    /** 暂停期间缓存的请求结果。 */
+    pendingResolveData?: unknown;
+    /** 本轮请求期间的数据补丁，落地时依次应用。 */
+    resolvePatches: unknown[];
+    /** 当前请求的中止身份。 */
+    abort?: AbortController;
+  };
+  /** 关闭守卫状态，决议代次由 epoch 校验。 */
+  close: {
+    /** 是否正在等待守卫决议，避免重复调用。 */
+    pending: boolean;
+  };
 }
 
 const DEFAULT_AUTO_REMOVE_MS = 300;
+/** 单次最外层批次最多发布的通知轮数，防止订阅者不收敛重入阻塞主线程。 */
+const MAX_NOTIFY_ROUNDS = 100;
 const EMPTY_STATE: OverlayState = Object.freeze({ active: Object.freeze([]) as readonly OverlayInstance[], queued: Object.freeze([]) as readonly string[] });
 
 /** 队列排序：先判 replace(jumped)，再比 priority(降序)，最后 FIFO(seq)。 */
@@ -272,188 +279,81 @@ function cmpEntry(a: Entry, b: Entry): number {
   return a.seq - b.seq;
 }
 
-/** 把 Duration 折算成毫秒。 */
-function durationToMs(d: Duration): number {
-  return ((d.days ?? 0) * 24 * 60 * 60 + (d.hours ?? 0) * 60 * 60 + (d.minutes ?? 0) * 60 + (d.seconds ?? 0)) * 1000;
-}
-
-/** 个位数补前导 0。 */
-function pad(n: number): string {
-  return n < 10 ? `0${n}` : `${n}`;
-}
-
-/** 本地自然日/时/分的桶标识。 */
-function dayBucketOf(t: number): string {
-  const d = new Date(t);
-  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
-}
-/** 本地自然小时桶，如 `2026-01-02T03`。 */
-function hourBucketOf(t: number): string {
-  return `${dayBucketOf(t)}T${pad(new Date(t).getHours())}`;
-}
-/** 本地自然分钟桶，如 `2026-01-02T03:04`。 */
-function minuteBucketOf(t: number): string {
-  return `${hourBucketOf(t)}:${pad(new Date(t).getMinutes())}`;
-}
-
-/** 默认存储：有 localStorage 就用，拿不到（SSR/隐私模式）返回 undefined 退化为内存。 */
-function defaultStorage(): AsyncableStorage | undefined {
-  try {
-    if (typeof localStorage !== "undefined") {
-      return {
-        get: (k) => localStorage.getItem(k),
-        set: (k, v) => {
-          localStorage.setItem(k, v);
-        },
-      };
-    }
-  } catch {
-    /* 访问 localStorage 可能抛（隐私模式等）——退化为内存 */
-  }
-  return undefined;
-}
-
-/** 冷却存储：hydrate 一次后运行时全同步，写回 write-through。 */
-class CooldownStore {
-  private persisted = new Map<string, CooldownRecord>();
-  private session = new Map<string, number>();
-  private storage: AsyncableStorage | undefined;
-  private storageKey: string;
-
-  constructor(storage: AsyncableStorage | undefined, storageKey: string) {
-    this.storage = storage;
-    this.storageKey = storageKey;
-  }
-
-  /** 从存储读入历史冷却记录（只补尚无记录的 id）。 */
-  async hydrate(): Promise<void> {
-    if (!this.storage) return;
-    let raw: string | null;
-    try {
-      raw = await this.storage.get(this.storageKey);
-    } catch {
-      return;
-    }
-    if (!raw) return;
-    try {
-      const parsed = JSON.parse(raw) as Record<string, CooldownRecord>;
-      // 只填充尚未有记录的 id：hydrate() 的 storage.get() 是异步的，等待期间若已发生真实 open()，
-      // record()/bump() 会先写入内存里更新的记录——那必然比这份磁盘快照更新，不能被回填覆盖掉。
-      for (const id of Object.keys(parsed)) {
-        if (!this.persisted.has(id)) this.persisted.set(id, parsed[id]);
-      }
-    } catch {
-      /* 坏数据忽略 */
-    }
-  }
-
-  /** 把持久化记录整体写回存储（写失败静默忽略）。 */
-  private flush(): void {
-    if (!this.storage) return;
-    const obj: Record<string, CooldownRecord> = {};
-    for (const [id, rec] of this.persisted) obj[id] = rec;
-    try {
-      const result = this.storage.set(this.storageKey, JSON.stringify(obj));
-      // storage.set 可能是异步存储（返回 Promise 且可 reject）——同步 try/catch 接不住异步 rejection，
-      // 必须显式 catch 掉，否则写失败会变成未处理的 rejection 而不是按注释意图静默忽略。
-      if (result) {
-        result.catch(() => {
-          /* 写失败忽略 */
-        });
-      }
-    } catch {
-      /* 写失败忽略 */
-    }
-  }
-
-  /** 按冷却配置判断该 id 此刻能否展示（各字段 AND）。 */
-  canShow(id: string, cd: Cooldown, now: number): boolean {
-    if (cd.session != null && (this.session.get(id) ?? 0) >= cd.session) return false;
-    const rec = this.persisted.get(id);
-    if (cd.total != null && (rec?.total ?? 0) >= cd.total) return false;
-    if (cd.day != null) {
-      const c = rec && rec.dayBucket === dayBucketOf(now) ? rec.dayCount : 0;
-      if (c >= cd.day) return false;
-    }
-    if (cd.hour != null) {
-      const c = rec && rec.hourBucket === hourBucketOf(now) ? rec.hourCount : 0;
-      if (c >= cd.hour) return false;
-    }
-    if (cd.minute != null) {
-      const c = rec && rec.minuteBucket === minuteBucketOf(now) ? rec.minuteCount : 0;
-      if (c >= cd.minute) return false;
-    }
-    if (cd.minGap != null && rec?.lastShownAt != null && now - rec.lastShownAt < durationToMs(cd.minGap)) return false;
-    return true;
-  }
-
-  /** 记一次展示（open 时调用）。返回持久化记录（用于跨标签页广播），无持久化字段时返回 undefined。 */
-  record(id: string, cd: Cooldown, now: number): CooldownRecord | undefined {
-    if (cd.session != null) this.session.set(id, (this.session.get(id) ?? 0) + 1);
-    const needsPersist = cd.total != null || cd.day != null || cd.hour != null || cd.minute != null || cd.minGap != null;
-    if (!needsPersist) return undefined;
-    const rec = this.bump(id, now);
-    this.flush();
-    return rec;
-  }
-
-  /** 给该 id 的持久化记录各计数 +1（跨桶则重新从 1 计）。 */
-  private bump(id: string, now: number): CooldownRecord {
-    const dayB = dayBucketOf(now);
-    const hourB = hourBucketOf(now);
-    const minuteB = minuteBucketOf(now);
-    const prev = this.persisted.get(id);
-    const rec: CooldownRecord = {
-      total: (prev?.total ?? 0) + 1,
-      dayBucket: dayB,
-      dayCount: (prev && prev.dayBucket === dayB ? prev.dayCount : 0) + 1,
-      hourBucket: hourB,
-      hourCount: (prev && prev.hourBucket === hourB ? prev.hourCount : 0) + 1,
-      minuteBucket: minuteB,
-      minuteCount: (prev && prev.minuteBucket === minuteB ? prev.minuteCount : 0) + 1,
-      lastShownAt: now,
-    };
-    this.persisted.set(id, rec);
-    return rec;
-  }
-
-  /** 桶标签不同时取更新（更大）的那个桶，而不是无条件采用 remote——否则一条延迟到达的旧桶
-   * 广播会把本地已经滚动到新桶的记录冲回旧桶，导致 canShow() 用当前真实时间一算「桶不匹配」→
-   * 误判计数为 0，冷却限制被绕过。桶标签是零填充的等长字符串，字典序即时间序。 */
-  private static mergeBucket(prevBucket: string, prevCount: number, remoteBucket: string, remoteCount: number): { bucket: string; count: number } {
-    if (prevBucket === remoteBucket) return { bucket: prevBucket, count: Math.max(prevCount, remoteCount) };
-    return prevBucket > remoteBucket ? { bucket: prevBucket, count: prevCount } : { bucket: remoteBucket, count: remoteCount };
-  }
-
-  /** 合并来自其他标签页的记录（取更大计数 / 更新的时间戳 / 更新的桶）。 */
-  mergeRemote(id: string, remote: CooldownRecord): void {
-    const prev = this.persisted.get(id);
-    if (!prev) {
-      this.persisted.set(id, remote);
-      return;
-    }
-    const day = CooldownStore.mergeBucket(prev.dayBucket, prev.dayCount, remote.dayBucket, remote.dayCount);
-    const hour = CooldownStore.mergeBucket(prev.hourBucket, prev.hourCount, remote.hourBucket, remote.hourCount);
-    const minute = CooldownStore.mergeBucket(prev.minuteBucket, prev.minuteCount, remote.minuteBucket, remote.minuteCount);
-    this.persisted.set(id, {
-      total: Math.max(prev.total, remote.total),
-      dayBucket: day.bucket,
-      dayCount: day.count,
-      hourBucket: hour.bucket,
-      hourCount: hour.count,
-      minuteBucket: minute.bucket,
-      minuteCount: minute.count,
-      lastShownAt: Math.max(prev.lastShownAt, remote.lastShownAt),
-    });
-  }
-}
-
+/** 管理串行槽、叠加条目和批次内生命周期。 */
 class LayermanImpl implements Layerman {
+  /** 嵌套变更深度，排空期间保持为一。 */
+  private depth = 0;
+  /** 等待重评的槽。 */
+  private dirtySlots = new Set<string>();
+  /** 已提交状态对应的宿主副作用。 */
+  private effects: Array<() => void> = [];
+  /** 批次末需要刷新快照。 */
+  private needEmit = false;
+  /** 当前快照尚未通知的订阅者，重入排空后接续。 */
+  private pendingListeners: Array<(state: OverlayState) => void> = [];
+  /** 条件求值深度，期间禁止变更。 */
+  private judging = 0;
+  /** 正在释放，禁止回调重新登记条目。 */
+  private destroying = false;
+  /** 已完成释放。 */
+  private destroyed = false;
+
+  /** 合并嵌套变更，先稳定调度，再执行副作用，最后通知。 */
+  private batch<T>(fn: () => T): T {
+    this.depth++;
+    try {
+      return fn();
+    } finally {
+      if (this.depth === 1) {
+        try {
+          let notifyRounds = 0;
+          let notificationsStopped = false;
+          let finalFanoutPending = false;
+          while (this.dirtySlots.size || this.effects.length || this.needEmit || this.pendingListeners.length || finalFanoutPending) {
+            while (this.dirtySlots.size) {
+              const slots = [...this.dirtySlots];
+              this.dirtySlots.clear();
+              for (const slot of slots) this.scheduleNow(slot);
+            }
+            const effect = this.effects.shift();
+            if (effect) this.safeInvoke(effect);
+            else if (this.needEmit || this.pendingListeners.length) {
+              if (this.needEmit && !notificationsStopped) {
+                if (notifyRounds >= MAX_NOTIFY_ROUNDS) {
+                  notificationsStopped = true;
+                  finalFanoutPending = true;
+                  this.reportNotifyLimit();
+                } else notifyRounds++;
+              }
+              this.emitNow(!notificationsStopped);
+            } else if (finalFanoutPending) {
+              finalFanoutPending = false;
+              const snapshot = this.snap;
+              // 固定快照和名单；回调内的变更留给后续静默排空，不再补发。
+              const listeners = [...this.subscribers];
+              for (const listener of listeners) {
+                if (this.subscribers.has(listener)) this.safeInvoke(() => listener(snapshot));
+              }
+            }
+          }
+          if (this.destroyed) this.subscribers.clear();
+        } finally {
+          this.depth--;
+        }
+      } else this.depth--;
+    }
+  }
+
+  /** 条件求值期间拒绝任何变更，且不触碰状态。 */
+  private assertMutable(): void {
+    if (this.judging) throw new Error("[layerman] 条件求值期间禁止修改管理器");
+  }
+
   private gap: number;
   private autoRemoveDefault: boolean | number;
   private now: () => number;
   private debug: boolean;
-  private logger: (message: string) => void;
+  private logger?: (message: string) => void;
   private storageKey: string;
 
   private cooldown: CooldownStore;
@@ -462,7 +362,7 @@ class LayermanImpl implements Layerman {
   private queues = new Map<string, Entry[]>();
   private serial = new Map<string, Entry>(); // 每 slot 的占用者（resolving/open/closing）
   private overlapping: Entry[] = [];
-  private pendingOverlaps: Entry[] = []; // 暂停期间被冻结、待 resume 放行的 overlap
+  private pendingOverlaps: Entry[] = []; // 因暂停或异步 hydrate 持有的 overlap
   private byId = new Map<string, Entry>();
   private lastClosedAt = new Map<string, number>();
   private openTimers = new Map<string, Timer>();
@@ -470,6 +370,8 @@ class LayermanImpl implements Layerman {
   private startedAt: number;
   private seqCounter = 0;
   private keyCounter = 0;
+  /** 真正进入展示态时递增的层序计数。 */
+  private enteredCounter = 0;
   private idCounter = 0;
   private paused = false;
 
@@ -485,22 +387,34 @@ class LayermanImpl implements Layerman {
     this.autoRemoveDefault = options.autoRemove ?? true;
     this.now = options.now ?? Date.now;
     this.debug = options.debug ?? false;
-    this.logger = options.logger ?? ((m) => console.log(m));
+    this.logger = options.logger;
     this.storageKey = options.storageKey ?? "layerman:v1";
     this.startedAt = this.now();
 
     const storage = options.storage ?? defaultStorage();
     this.cooldown = new CooldownStore(storage, this.storageKey);
-    this.readyPromise = this.cooldown.hydrate();
+    this.readyPromise = this.cooldown.hydrate().then(() => {
+      if (this.destroying || this.destroyed) return;
+      this.batch(() => {
+        for (const slot of this.queues.keys()) this.schedule(slot);
+        this.removeCappedOverlaps();
+        this.resumePending();
+      });
+    });
 
-    const wantCrossTab = options.crossTab ?? typeof BroadcastChannel !== "undefined";
+    const wantCrossTab = options.crossTab ?? (typeof BroadcastChannel !== "undefined" && typeof window !== "undefined");
     if (wantCrossTab && typeof BroadcastChannel !== "undefined") {
       this.channel = new BroadcastChannel(`${this.storageKey}:sync`);
+      (this.channel as BroadcastChannel & { /** Node 中释放事件循环引用。 */ unref?: () => void }).unref?.();
       this.channel.onmessage = (ev: MessageEvent) => {
         const msg = ev.data as { id?: string; rec?: CooldownRecord } | null;
         if (msg && typeof msg.id === "string" && msg.rec) {
-          this.cooldown.mergeRemote(msg.id, msg.rec);
-          for (const slot of this.queues.keys()) this.schedule(slot);
+          if (this.destroying || this.destroyed) return;
+          this.batch(() => {
+            this.cooldown.mergeRemote(msg.id!, msg.rec!);
+            this.removeCappedOverlaps();
+            for (const slot of this.queues.keys()) this.schedule(slot);
+          });
         }
       };
     }
@@ -521,7 +435,30 @@ class LayermanImpl implements Layerman {
   /* ── 日志 ── */
   /** 开启 debug 时输出状态跃迁日志。 */
   private log(id: string, state: LogState): void {
-    if (this.debug) this.logger(`[layerman]:${id}:${state}`);
+    this.logMessage(`[layerman]:${id}:${state}`);
+  }
+
+  /** 通过统一日志通道输出调试消息，隔离宿主日志异常。 */
+  private logMessage(message: string): void {
+    try {
+      if (this.debug) {
+        if (this.logger) this.logger(message);
+        else console.log(message);
+      }
+    } catch {
+      /* 日志异常不影响状态推进。 */
+    }
+  }
+
+  /** 超限诊断不受 debug 限制，隔离宿主日志异常。 */
+  private reportNotifyLimit(): void {
+    const message = `[layerman] 订阅者重入通知超过 ${MAX_NOTIFY_ROUNDS} 轮，已停止补发，请确认订阅者里的变更有收敛条件`;
+    try {
+      if (this.logger) this.logger(message);
+      else if (typeof console !== "undefined") console.warn(message);
+    } catch {
+      /* 日志异常不影响最终扇出和状态推进。 */
+    }
   }
 
   /** 安全调用宿主回调：抛错不应打断内部状态推进（emit/schedule 等后续步骤仍需执行）。 */
@@ -537,9 +474,16 @@ class LayermanImpl implements Layerman {
   /* ── 入口：open ── */
   /** 入口：登记一个 overlay，处理同 id 覆盖 / overlap / replace，返回带 result 的句柄。 */
   open<TData = unknown, TResult = unknown>(config: OverlayConfig<TData>): OverlayHandle<TResult> {
+    this.assertMutable();
+    if (this.destroying || this.destroyed) return { id: config.id || this.genId(), result: Promise.resolve({ dismissed: true, reason: DismissReason.destroyed }) };
+    return this.batch(() => this.openImpl<TData, TResult>(config));
+  }
+
+  /** 在批次内提交变更。 */
+  private openImpl<TData = unknown, TResult = unknown>(config: OverlayConfig<TData>): OverlayHandle<TResult> {
     const slot = config.slot ?? "";
     const id = config.id || this.genId();
-    const entry = this.createEntry(config as OverlayConfig, slot, id);
+    const entry = this.createEntry(config as OverlayConfig, slot, id) as Entry;
     const handle: OverlayHandle<TResult> = {
       id: entry.id,
       result: new Promise<TResult | DismissResult>((res, rej) => {
@@ -571,26 +515,34 @@ class LayermanImpl implements Layerman {
         // 在队列 → 覆盖旧的那条
         this.removeFromQueue(existing);
         this.byId.delete(existing.id);
-        this.finalizeRemoved(existing);
+        this.finalizeRemoved(existing, DismissReason.replaced);
       }
     }
 
     this.byId.set(entry.id, entry);
+    if (existing) this.emit();
     this.log(entry.id, LOG_STATE.pending);
 
-    if (immediateActivate) {
+    if (this.isCapped(entry)) {
+      this.removeImpl(entry.id, DismissReason.capped);
+      return handle;
+    }
+
+    if (immediateActivate && !this.needsHydration(entry)) {
       this.activate(entry);
       return handle;
     }
 
     if (config.overlap) {
-      if (this.conditionsPass(entry) && this.cooldownPass(entry)) {
+      if (this.needsHydration(entry)) {
+        this.pendingOverlaps.push(entry);
+      } else if (this.evaluate(entry) === ELIGIBILITY.pass) {
         if (this.paused)
           this.pendingOverlaps.push(entry); // 暂停中：冻结，resume 时再叠加
         else this.openOverlap(entry);
       } else {
         this.byId.delete(entry.id);
-        this.finalizeRemoved(entry);
+        this.finalizeRemoved(entry, DismissReason.unmet);
       }
       // overlap 不占用 serial 槽；若上面的自更新分支刚 discardActive() 腾空了本 slot 的槽位，
       // 必须重新调度，否则该 slot 队列里排在后面的条目会一直卡住，直到某个不相关事件碰到这个 slot。
@@ -600,7 +552,7 @@ class LayermanImpl implements Layerman {
 
     // replace 仅在替换者「当下就够资格显示」且未暂停时才生效；否则不该顶掉当前活跃者，
     // 退化为普通排队等待（避免「把当前弹窗顶掉、自己却因条件/冷却/暂停显示不出来」）。
-    if (!this.paused && config.replace && this.conditionsPass(entry) && this.cooldownPass(entry)) {
+    if (!this.paused && config.replace && this.evaluate(entry) === ELIGIBILITY.pass) {
       const cur = this.serial.get(slot);
       entry.skipGap = true;
       if (cur && this.isActive(cur)) {
@@ -615,7 +567,7 @@ class LayermanImpl implements Layerman {
 
     this.enqueue(entry);
     this.schedule(slot);
-    if (entry.phase === LOG_STATE.pending) this.emit(); // 仍在排队 → 让 queued 变化可观测
+    this.emit(); // 批次排空前仍在排队，让 queued 变化可观测
     return handle;
   }
 
@@ -629,7 +581,7 @@ class LayermanImpl implements Layerman {
   }
 
   /** 由配置创建一个内部条目（初始 pending）。 */
-  private createEntry(cfg: OverlayConfig, slot: string, id: string): Entry {
+  private createEntry(cfg: OverlayConfig, slot: string, id: string): Omit<Entry, "settle" | "fail"> {
     return {
       cfg,
       id,
@@ -637,19 +589,19 @@ class LayermanImpl implements Layerman {
       priority: cfg.priority ?? 0,
       instanceKey: ++this.keyCounter,
       seq: ++this.seqCounter,
+      enteredSeq: 0,
+      epoch: 0,
       overlapping: false,
       affix: cfg.affix ?? false,
       replaceJumped: false,
       skipGap: false,
       exemptCooldown: false,
-      hasPendingResolve: false,
+      resolveState: { hasPendingResolve: false, resolvePatches: [] },
       phase: LOG_STATE.pending,
       settled: false,
-      settle: () => {},
-      fail: () => {},
-      paused: false,
-      closePending: false,
-    };
+      timers: { paused: false },
+      close: { pending: false },
+    }; // 唯一调用方立即在 Promise 同步执行器内补齐 settle/fail。
   }
 
   /** 条目是否处于活跃态（resolving/open/closing）。 */
@@ -668,6 +620,8 @@ class LayermanImpl implements Layerman {
   /** 从等待队列摘掉（不在队列里则什么都不做）。 */
   private removeFromQueue(entry: Entry): void {
     const q = this.queues.get(entry.slot);
+    this.pendingOverlaps = this.pendingOverlaps.filter((e) => e !== entry);
+    this.schedule(entry.slot);
     if (!q) return;
     const i = q.indexOf(entry);
     if (i >= 0) q.splice(i, 1);
@@ -677,6 +631,7 @@ class LayermanImpl implements Layerman {
   /** 条件门控：when 优先，否则看 route / requiresAuth；when 抛错按不满足处理。 */
   private conditionsPass(entry: Entry): boolean {
     const cfg = entry.cfg;
+    this.judging++;
     try {
       if (cfg.when) return cfg.when(this.context);
       if (cfg.route != null && !LayermanImpl.routeMatch(cfg.route, this.context.route)) return false;
@@ -684,7 +639,10 @@ class LayermanImpl implements Layerman {
       return true;
     } catch {
       // 宿主 when() 抛错——视为条件不满足，不让异常打断 setContext/schedule 的整轮推进
+      this.log(entry.id, entry.phase);
       return false;
+    } finally {
+      this.judging--;
     }
   }
 
@@ -697,29 +655,69 @@ class LayermanImpl implements Layerman {
     return pattern.test(route);
   }
 
-  /** 冷却门控；被 replace 退回后重开的豁免条目直接放行。 */
-  private cooldownPass(entry: Entry): boolean {
-    if (!entry.cfg.cooldown || entry.exemptCooldown) return true;
-    return this.cooldown.canShow(entry.id, entry.cfg.cooldown, this.now());
+  /** 只读评估资格，按调用场景保留条件与冷却的短路顺序，不推进条目状态。 */
+  private evaluate(
+    entry: Entry,
+    options: {
+      /** 已展示项只复检条件，不重新扣算冷却资格。 */
+      conditionsOnly?: boolean;
+      /** 请求落地时允许按配置忽略条件，冷却仍复检。 */
+      ignoreConditions?: boolean;
+    } = {},
+  ): (typeof ELIGIBILITY)[keyof typeof ELIGIBILITY] {
+    if (!options.conditionsOnly) {
+      if (this.needsHydration(entry)) return ELIGIBILITY.wait;
+      if (this.isCapped(entry)) return ELIGIBILITY.drop;
+    }
+    if (!options.ignoreConditions && !this.conditionsPass(entry)) return ELIGIBILITY.wait;
+    if (!options.conditionsOnly && entry.cfg.cooldown && !entry.exemptCooldown && !this.cooldown.canShow(entry.id, entry.cfg.cooldown, this.now())) return ELIGIBILITY.wait;
+    return ELIGIBILITY.pass;
+  }
+
+  /** 历史未读取时，带持久化冷却的条目必须等待。 */
+  private needsHydration(entry: Entry): boolean {
+    return !!entry.cfg.cooldown && this.cooldown.needsHydration(entry.cfg.cooldown);
+  }
+
+  /** 只读判断永久受阻，保留连续展示的冷却豁免。 */
+  private isCapped(entry: Entry): boolean {
+    return !entry.exemptCooldown && !!entry.cfg.cooldown && !this.needsHydration(entry) && this.cooldown.isCapped(entry.id, entry.cfg.cooldown);
+  }
+
+  /** 立即清理暂停或 hydrate 期间持有的永久耗尽叠加项。 */
+  private removeCappedOverlaps(): void {
+    for (const entry of this.pendingOverlaps) {
+      if (this.isCapped(entry)) this.removeImpl(entry.id, DismissReason.capped);
+    }
   }
 
   /* ── 调度（每 slot 独立；等待期不锁定候选） ── */
   /** 重评某 slot：槽空闲时挑出第一个合格候选，按 gap/delay 等待或直接激活。 */
   private schedule(slot: string): void {
-    if (this.paused) return;
-    if (this.serial.has(slot)) return; // 槽被占用（resolving/open/closing）
+    this.dirtySlots.add(slot);
+    if (!this.depth) this.batch(() => {});
+  }
+
+  /** 实际重评槽并清除失效开场计时器。 */
+  private scheduleNow(slot: string): void {
+    // 槽被占用（resolving/open/closing）
     const t = this.openTimers.get(slot);
     if (t != null) {
       clearTimeout(t);
       this.openTimers.delete(slot);
     }
+    if (this.destroying || this.destroyed) return;
+    for (const entry of (this.queues.get(slot) ?? []).slice()) {
+      if (this.isCapped(entry)) this.removeImpl(entry.id, DismissReason.capped);
+    }
+    if (this.paused || this.serial.has(slot)) return;
     const q = this.queues.get(slot);
     if (!q || q.length === 0) return;
 
     const sorted = q.slice().sort(cmpEntry);
     let front: Entry | undefined;
     for (const e of sorted) {
-      if (this.conditionsPass(e) && this.cooldownPass(e)) {
+      if (this.evaluate(e) === ELIGIBILITY.pass) {
         front = e;
         break;
       }
@@ -743,16 +741,18 @@ class LayermanImpl implements Layerman {
   private activate(entry: Entry): void {
     this.removeFromQueue(entry);
     if (entry.cfg.resolve) {
+      entry.resolveState.resolvePatches = [];
+      entry.epoch++;
       entry.phase = LOG_STATE.resolving;
       this.serial.set(entry.slot, entry); // 占位，resolving 期间不被插队打断
       this.log(entry.id, LOG_STATE.resolving);
       const ac = new AbortController();
-      entry.abort = ac;
+      entry.resolveState.abort = ac;
       const run = entry.cfg.resolve;
       // 本次请求已被 abort（被顶掉/移除，甚至同一条目重新激活了）就丢弃结果，别污染新一轮
       const land = (data: unknown): void => {
-        if (ac.signal.aborted || entry.abort !== ac) return;
-        this.onResolved(entry, data);
+        if (ac.signal.aborted || entry.resolveState.abort !== ac) return;
+        this.batch(() => this.onResolved(entry, data));
       };
       Promise.resolve()
         .then(() => run(ac.signal))
@@ -765,14 +765,12 @@ class LayermanImpl implements Layerman {
     this.doOpen(entry);
   }
 
-  /** resolve 请求落地：确认仍是槽占用者且处于 resolving，暂停中则先记下。 */
+  /** resolve 请求落地（身份已由 land 校验）：暂停中先缓存，否则收尾。 */
   private onResolved(entry: Entry, data: unknown): void {
-    // resolving 期间被 displace/clear → 不再是槽占用者，丢弃本次结果
-    if (this.serial.get(entry.slot) !== entry || entry.phase !== LOG_STATE.resolving) return;
     if (this.paused) {
       // 暂停期间不得变为活跃（pauseAll 是全量冻结）：记下结果，resumeAll 时再处理。
-      entry.hasPendingResolve = true;
-      entry.pendingResolveData = data;
+      entry.resolveState.hasPendingResolve = true;
+      entry.resolveState.pendingResolveData = data;
       return;
     }
     this.finishResolve(entry, data);
@@ -780,20 +778,26 @@ class LayermanImpl implements Layerman {
 
   /** resolve 结果的收尾：空数据则移除；请求期间条件/冷却变了就退回队列重排，否则展示。 */
   private finishResolve(entry: Entry, data: unknown): void {
+    const patches = entry.resolveState.resolvePatches;
+    entry.resolveState.resolvePatches = [];
     if (data === null || data === undefined) {
       this.serial.delete(entry.slot);
       this.byId.delete(entry.id);
-      this.finalizeRemoved(entry);
+      this.finalizeRemoved(entry, DismissReason.empty);
       this.emit();
       this.schedule(entry.slot);
       return;
     }
     // 条件不满足仅在 dismissWhenUnmet !== false 时退回（与 setContext 对已展示项的语义一致）；冷却始终复检
-    const unmet = entry.cfg.dismissWhenUnmet !== false && !this.conditionsPass(entry);
-    if (unmet || !this.cooldownPass(entry)) {
+    const verdict = this.evaluate(entry, { ignoreConditions: entry.cfg.dismissWhenUnmet === false });
+    if (verdict === ELIGIBILITY.drop) {
+      this.removeImpl(entry.id, DismissReason.capped);
+      return;
+    }
+    if (verdict === ELIGIBILITY.wait) {
       // 请求期间 setContext 改了 route/auth 等：不展示，退回队列等再次合格（该项不合格，schedule 不会空转）
       this.serial.delete(entry.slot);
-      entry.abort = undefined;
+      entry.resolveState.abort = undefined;
       entry.phase = LOG_STATE.pending;
       this.enqueue(entry);
       this.log(entry.id, LOG_STATE.pending);
@@ -801,6 +805,7 @@ class LayermanImpl implements Layerman {
       this.schedule(entry.slot);
       return;
     }
+    for (const patch of patches) data = LayermanImpl.mergeData(data, patch);
     entry.cfg = { ...entry.cfg, data };
     this.doOpen(entry);
   }
@@ -808,6 +813,8 @@ class LayermanImpl implements Layerman {
   /** 串行展示：占槽、置 open 并走统一的展示后流程。 */
   private doOpen(entry: Entry): void {
     this.serial.set(entry.slot, entry);
+    entry.epoch++;
+    entry.resolveState.abort = undefined;
     entry.phase = LOG_STATE.open;
     this.markShown(entry);
   }
@@ -815,28 +822,37 @@ class LayermanImpl implements Layerman {
   /** 叠加展示：不占串行槽，登记进 overlapping 后走统一的展示后流程。 */
   private openOverlap(entry: Entry): void {
     entry.overlapping = true;
+    entry.epoch++;
+    entry.resolveState.abort = undefined;
     entry.phase = LOG_STATE.open;
     this.overlapping.push(entry);
     this.markShown(entry);
   }
 
-  /** 条目刚变为 open 后的共用收尾：记冷却并广播、onShow、启动 duration、通知订阅者。 */
+  /** 展示后记冷却并启动倒计时，再登记展示钩子与通知。 */
   private markShown(entry: Entry): void {
+    entry.enteredSeq = ++this.enteredCounter;
     if (!entry.exemptCooldown && entry.cfg.cooldown) {
       const rec = this.cooldown.record(entry.id, entry.cfg.cooldown, this.now());
       if (rec && this.channel) this.channel.postMessage({ id: entry.id, rec });
     }
     entry.exemptCooldown = false;
     this.log(entry.id, LOG_STATE.open);
-    this.safeInvoke(entry.cfg.onShow);
     if (entry.cfg.duration != null) this.startDuration(entry);
+    this.effects.push(() => this.safeInvoke(entry.cfg.onShow));
     this.emit();
   }
 
   /** 把条目从活跃态拆下来：清定时器、中止 resolve、让出串行槽、退出 overlap 列表。返回它是否占着串行槽。 */
   private detach(e: Entry): boolean {
     this.clearTimers(e);
-    if (e.abort) e.abort.abort();
+    const abort = e.resolveState.abort;
+    e.resolveState.abort = undefined;
+    e.resolveState.hasPendingResolve = false;
+    e.resolveState.pendingResolveData = undefined;
+    e.resolveState.resolvePatches = [];
+    e.close.pending = false;
+    if (abort) this.effects.push(() => abort.abort());
     const wasSerial = this.serial.get(e.slot) === e;
     if (wasSerial) this.serial.delete(e.slot);
     if (e.overlapping) {
@@ -855,7 +871,7 @@ class LayermanImpl implements Layerman {
     cur.replaceJumped = false;
     cur.skipGap = false;
     this.enqueue(cur);
-    if (wasOpen) this.safeInvoke(cur.cfg.onClose);
+    if (wasOpen) this.effects.push(() => this.safeInvoke(cur.cfg.onClose));
     this.log(cur.id, LOG_STATE.pending);
   }
 
@@ -864,37 +880,48 @@ class LayermanImpl implements Layerman {
     const wasOpen = existing.phase === LOG_STATE.open;
     this.detach(existing);
     this.byId.delete(existing.id);
-    if (wasOpen) this.safeInvoke(existing.cfg.onClose);
-    this.finalizeRemoved(existing);
+    if (wasOpen) this.effects.push(() => this.safeInvoke(existing.cfg.onClose));
+    this.finalizeRemoved(existing, DismissReason.replaced);
   }
 
   /* ── 关闭握手（两阶段） ── */
-  /** 请求关闭（open → closing）；有 beforeClose 守卫时先过守卫。 */
+  /** 请求关闭；设计取舍，已文档化：有守卫时通过后统一在微任务内进入 closing。 */
   close(id: string): void {
+    this.assertMutable();
+    if (this.destroying || this.destroyed) return;
+    this.batch(() => this.closeImpl(id));
+  }
+
+  /** 仅展示项执行关闭守卫，其余阶段保持不变。 */
+  private closeImpl(id: string): void {
     const e = this.byId.get(id);
-    if (!e || e.phase !== LOG_STATE.open || e.closePending) return;
+    if (!e || e.phase !== LOG_STATE.open || e.close.pending) return;
+    const epoch = e.epoch;
     const guard = e.cfg.beforeClose;
     if (guard) {
       // beforeClose 关闭守卫：返回（或 Promise resolve）`false` 则取消本次关闭；其余值放行。
       // guard() 本身可能同步抛错——放进 try 里，视同守卫拒绝，不让异常穿透 close()。
-      // closePending 挡掉守卫决议期间的重复 close() 调用（如双击）——否则每次调用都会重新触发一次
+      // close.pending 挡掉守卫决议期间的重复 close() 调用（如双击）——否则每次调用都会重新触发一次
       // 可能带副作用（确认弹窗/埋点/网络请求）的宿主守卫。
-      e.closePending = true;
+      e.close.pending = true;
       let result: boolean | Promise<boolean>;
       try {
         result = guard();
       } catch {
-        e.closePending = false;
+        e.close.pending = false;
         return;
       }
       Promise.resolve(result).then(
-        (ok) => {
-          e.closePending = false;
-          if (ok !== false && this.byId.get(id) === e && e.phase === LOG_STATE.open) this.doClose(e);
-        },
+        (ok) =>
+          this.batch(() => {
+            if (e.epoch !== epoch) return;
+            e.close.pending = false;
+            if (ok !== false && this.byId.get(id) === e && e.phase === LOG_STATE.open) this.doClose(e);
+          }),
         () => {
+          if (e.epoch !== epoch) return;
           /* 守卫抛错 → 视为取消关闭 */
-          e.closePending = false;
+          e.close.pending = false;
         },
       );
       return;
@@ -904,13 +931,12 @@ class LayermanImpl implements Layerman {
 
   /** 进入 closing：清 duration、触发 onClose，再按需安排自动移除。 */
   private doClose(e: Entry): void {
+    e.close.pending = false;
     e.phase = LOG_STATE.closing;
     this.clearDuration(e);
     this.log(e.id, LOG_STATE.closing);
-    this.safeInvoke(e.cfg.onClose);
+    this.effects.push(() => this.safeInvoke(e.cfg.onClose));
     this.emit();
-    // onClose / 订阅者里可能已经 remove 甚至重开了同 id，此时不能再给旧实例挂定时器
-    if (this.byId.get(e.id) !== e || e.phase !== LOG_STATE.closing) return;
     this.scheduleAutoRemove(e);
   }
 
@@ -919,8 +945,8 @@ class LayermanImpl implements Layerman {
     const ar = e.cfg.autoRemove ?? this.autoRemoveDefault;
     if (ar === false) return;
     const ms = ar === true ? DEFAULT_AUTO_REMOVE_MS : ar;
-    if (this.paused || e.paused) {
-      e.autoRemoveRemaining = ms;
+    if (this.paused || e.timers.paused) {
+      e.timers.autoRemoveRemaining = ms;
       return;
     }
     this.armAutoRemove(e, ms);
@@ -928,28 +954,39 @@ class LayermanImpl implements Layerman {
 
   /** 启动自动移除定时器；触发时确认仍是 byId 里的那个实例才移除。 */
   private armAutoRemove(e: Entry, ms: number): void {
-    e.autoRemoveEndsAt = this.now() + ms;
-    e.autoRemoveTimer = setTimeout(() => {
+    e.timers.autoRemoveEndsAt = this.now() + ms;
+    e.timers.autoRemoveTimer = setTimeout(() => {
+      e.timers.autoRemoveTimer = undefined;
       if (this.byId.get(e.id) === e) this.remove(e.id);
     }, ms);
   }
 
   /** 启动 duration 定时器；触发时确认仍是 byId 里的那个实例才 close。 */
   private armDuration(e: Entry, ms: number): void {
-    e.durationEndsAt = this.now() + ms;
-    e.durationTimer = setTimeout(() => {
+    const epoch = e.epoch;
+    e.timers.durationEndsAt = this.now() + ms;
+    e.timers.durationTimer = setTimeout(() => {
+      if (e.epoch !== epoch) return;
+      e.timers.durationTimer = undefined;
       if (this.byId.get(e.id) === e) this.close(e.id);
     }, ms);
   }
 
   /** 彻底移除一个条目（活跃或排队皆可），兑现 result 并重评所在 slot。 */
   remove(id: string): void {
+    this.assertMutable();
+    if (this.destroying || this.destroyed) return;
+    this.batch(() => this.removeImpl(id));
+  }
+
+  /** 原子摘除并按显式原因或当前关闭阶段兑现结果。 */
+  private removeImpl(id: string, reason?: DismissReason): void {
     const e = this.byId.get(id);
     if (!e) return;
     this.byId.delete(id);
     if (this.detach(e)) this.lastClosedAt.set(e.slot, this.now());
     this.removeFromQueue(e);
-    this.finalizeRemoved(e);
+    this.finalizeRemoved(e, reason ?? (e.phase === LOG_STATE.closing ? DismissReason.closed : DismissReason.removed));
     this.emit();
     // 无论移除的是活跃者还是队列项，都重评该 slot：
     // 移除队首候选后需重新挑选，并清掉可能残留的过期 open 定时器。
@@ -957,44 +994,81 @@ class LayermanImpl implements Layerman {
   }
 
   /** 条目离场的统一收尾：记日志、触发 onRemove、兑现 result。 */
-  private finalizeRemoved(e: Entry): void {
+  private finalizeRemoved(e: Entry, reason: DismissReason): void {
     this.log(e.id, LOG_STATE.closed);
-    this.safeInvoke(e.cfg.onRemove);
-    this.settleDismiss(e);
+    this.effects.push(() => this.safeInvoke(e.cfg.onRemove));
+    this.settleDismiss(e, reason);
   }
 
-  /** 若 result 尚未兑现，以 `{ dismissed: true }` 兑现。 */
-  private settleDismiss(e: Entry): void {
+  /** 尚未兑现时附上被动结束原因并兑现结果。 */
+  private settleDismiss(e: Entry, reason: DismissReason): void {
     if (e.settled) return;
     e.settled = true;
-    e.settle({ dismissed: true });
+    e.settle({ dismissed: true, reason });
   }
 
   /* ── result 投递 ── */
-  /** 向 result 投递成功值（已兑现则忽略）。 */
+  /** 向曾展示的条目投递成功值；未展示或已兑现时忽略。 */
   resolve(id: string, value: unknown): void {
+    this.assertMutable();
+    if (this.destroying || this.destroyed) return;
+    this.batch(() => this.resolveImpl(id, value));
+  }
+
+  /** 仅向曾经展示且尚未兑现的条目投递成功值。 */
+  private resolveImpl(id: string, value: unknown): void {
     const e = this.byId.get(id);
-    if (!e || e.settled) return;
+    if (!e || e.settled || e.enteredSeq === 0) return;
     e.settled = true;
     e.settle(value);
   }
 
-  /** 让 result 以错误 reject（已兑现则忽略）。 */
+  /** 拒绝曾展示条目的结果；未展示或已兑现时忽略。 */
   reject(id: string, error: unknown): void {
+    this.assertMutable();
+    if (this.destroying || this.destroyed) return;
+    this.batch(() => this.rejectImpl(id, error));
+  }
+
+  /** 仅向曾经展示且尚未兑现的条目投递错误。 */
+  private rejectImpl(id: string, error: unknown): void {
     const e = this.byId.get(id);
-    if (!e || e.settled) return;
+    if (!e || e.settled || e.enteredSeq === 0) return;
     e.settled = true;
     e.fail(error);
   }
 
-  /** 就地更新某条目的 `data`（对象则浅合并，否则替换）并通知渲染；不触发队列变更（区别于 replace）。 */
+  /** 就地更新数据，仅展示或关闭中的条目通知渲染，不触发队列变更。 */
   update(id: string, patch: unknown): void {
+    this.assertMutable();
+    if (this.destroying || this.destroyed) return;
+    this.batch(() => this.updateImpl(id, patch));
+  }
+
+  /** 在批次内提交变更。 */
+  private updateImpl(id: string, patch: unknown): void {
     const e = this.byId.get(id);
     if (!e) return;
-    const prev = e.cfg.data;
-    const next = prev && typeof prev === "object" && patch && typeof patch === "object" ? { ...(prev as object), ...(patch as object) } : patch;
-    e.cfg = { ...e.cfg, data: next };
-    this.emit();
+    const active = e.phase === LOG_STATE.open || e.phase === LOG_STATE.closing;
+    if (active && LayermanImpl.isUnchangedPatch(e.cfg.data, patch)) return;
+    e.cfg = { ...e.cfg, data: LayermanImpl.mergeData(e.cfg.data, patch) };
+    if (e.phase === LOG_STATE.resolving) e.resolveState.resolvePatches.push(patch);
+    if (active) this.emit();
+  }
+
+  /** 按浅合并的可枚举键判断补丁是否保持原值，兼顾符号键与 Object.is 语义。 */
+  private static isUnchangedPatch(prev: unknown, patch: unknown): boolean {
+    if (prev && typeof prev === "object" && patch && typeof patch === "object") {
+      return Reflect.ownKeys(patch)
+        .filter((key) => Object.prototype.propertyIsEnumerable.call(patch, key))
+        .every((key) => Object.is(Reflect.get(prev, key), Reflect.get(patch, key)));
+    }
+    return Object.is(prev, patch);
+  }
+
+  /** 对象浅合并，其余数据按补丁整体替换。 */
+  private static mergeData(prev: unknown, patch: unknown): unknown {
+    return prev && typeof prev === "object" && patch && typeof patch === "object" ? { ...(prev as object), ...(patch as object) } : patch;
   }
 
   /** 全部受管条目的轻量快照（供 clear 选择器判断）。 */
@@ -1009,42 +1083,34 @@ class LayermanImpl implements Layerman {
   /* ── 清空 ── */
   /** 清理：传选择器精确清理，否则清空等待队列（可选连活跃一起关）。 */
   clear(arg?: ClearSelector | { closeActive?: boolean }): void {
-    if (typeof arg === "function") {
-      // 选择器模式：select(ctx, records) 返回要清理的 id 数组；返回非数组 → 全部清理。
-      const records = this.records();
-      const picked = arg(this.context, records);
-      const ids = Array.isArray(picked) ? picked : records.map((r) => r.id);
-      for (const id of ids) this.remove(id);
-      return;
-    }
-    // 传统模式：清空各 slot 等待队列 + 冻结的 overlap；closeActive 时连活跃一起关。
-    const options = arg ?? {};
-    for (const q of this.queues.values()) {
-      for (const e of q) {
-        this.byId.delete(e.id);
-        this.finalizeRemoved(e);
-      }
-      q.length = 0;
-    }
-    for (const e of this.pendingOverlaps) {
-      this.byId.delete(e.id);
-      this.finalizeRemoved(e);
-    }
-    this.pendingOverlaps = [];
-    if (options.closeActive) {
-      for (const e of Array.from(this.byId.values())) this.remove(e.id);
-    }
-    this.emit();
+    this.assertMutable();
+    if (this.destroying || this.destroyed) return;
+    this.batch(() => this.clearImpl(arg));
+  }
+
+  /** 在批次内提交变更。 */
+  private clearImpl(arg?: ClearSelector | { closeActive?: boolean }): void {
+    const records = this.records();
+    const picked = typeof arg === "function" ? arg(this.context, records) : undefined;
+    const ids = typeof arg === "function" ? (Array.isArray(picked) ? picked : records.map((r) => r.id)) : records.filter((r) => arg?.closeActive || r.phase === LOG_STATE.pending).map((r) => r.id);
+    for (const id of ids) this.removeImpl(id, this.destroying ? DismissReason.destroyed : DismissReason.cleared);
   }
 
   /* ── 上下文（push 模型，触发重评） ── */
   /** 推入上下文并重评：撤下条件不再满足的已展示项，再重新调度各 slot。 */
   setContext(partial: Partial<OverlayContext>): void {
+    this.assertMutable();
+    if (this.destroying || this.destroyed) return;
+    this.batch(() => this.setContextImpl(partial));
+  }
+
+  /** 在批次内提交变更。 */
+  private setContextImpl(partial: Partial<OverlayContext>): void {
     this.context = { ...this.context, ...partial };
     // 已展示(open/closing)但条件不再满足者：dismissWhenUnmet(默认 true) 时自动撤下并推进下一个。
     for (const e of [...this.serial.values(), ...this.overlapping]) {
-      if ((e.phase === LOG_STATE.open || e.phase === LOG_STATE.closing) && e.cfg.dismissWhenUnmet !== false && !this.conditionsPass(e)) {
-        this.remove(e.id);
+      if ((e.phase === LOG_STATE.open || e.phase === LOG_STATE.closing) && e.cfg.dismissWhenUnmet !== false && this.evaluate(e, { conditionsOnly: true }) === ELIGIBILITY.wait) {
+        this.removeImpl(e.id, DismissReason.unmet);
       }
     }
     for (const slot of this.queues.keys()) this.schedule(slot);
@@ -1053,6 +1119,13 @@ class LayermanImpl implements Layerman {
   /* ── 暂停 / 恢复 ── */
   /** 全量冻结：停掉开场计时与所有倒计时，期间不放行任何新展示。 */
   pauseAll(): void {
+    this.assertMutable();
+    if (this.destroying || this.destroyed) return;
+    this.batch(() => this.pauseAllImpl());
+  }
+
+  /** 在批次内提交变更。 */
+  private pauseAllImpl(): void {
     if (this.paused) return;
     this.paused = true;
     for (const [slot, t] of this.openTimers) {
@@ -1067,59 +1140,85 @@ class LayermanImpl implements Layerman {
 
   /** 解除全量冻结，放行暂停期间积压的 overlap / resolve 结果并恢复倒计时。 */
   resumeAll(): void {
+    this.assertMutable();
+    if (this.destroying || this.destroyed) return;
+    this.batch(() => this.resumeAllImpl());
+  }
+
+  /** 在批次内提交变更。 */
+  private resumeAllImpl(): void {
     if (!this.paused) return;
     this.paused = false;
-    // 放行暂停期间被冻结的 overlap（仍在册且仍合格才叠加）
-    const pend = this.pendingOverlaps;
-    this.pendingOverlaps = [];
-    for (const e of pend) {
-      if (this.byId.get(e.id) !== e) continue;
-      if (this.conditionsPass(e) && this.cooldownPass(e)) this.openOverlap(e);
+    this.resumePending();
+  }
+
+  /** 逐个放行，前一项钩子执行后重新检查暂停与身份。 */
+  private resumePending(): void {
+    if (this.paused || this.destroying || this.destroyed) return;
+    const index = this.pendingOverlaps.findIndex((entry) => !this.needsHydration(entry));
+    const e = index < 0 ? undefined : this.pendingOverlaps.splice(index, 1)[0];
+    if (e) {
+      if (this.evaluate(e) === ELIGIBILITY.pass) this.openOverlap(e);
       else {
         this.byId.delete(e.id);
-        this.finalizeRemoved(e);
+        this.finalizeRemoved(e, this.isCapped(e) ? DismissReason.capped : DismissReason.unmet);
       }
+      this.effects.push(() => this.resumePending());
+      return;
     }
-    // 放行暂停期间落地的 resolve() 结果（此前被冻结，未变为活跃）
-    for (const e of Array.from(this.serial.values())) {
-      if (e.hasPendingResolve) {
-        e.hasPendingResolve = false;
-        const data = e.pendingResolveData;
-        e.pendingResolveData = undefined;
-        this.finishResolve(e, data);
-      }
+    const resolved = [...this.serial.values()].find((entry) => entry.resolveState.hasPendingResolve);
+    if (resolved) {
+      resolved.resolveState.hasPendingResolve = false;
+      const data = resolved.resolveState.pendingResolveData;
+      resolved.resolveState.pendingResolveData = undefined;
+      this.finishResolve(resolved, data);
+      this.effects.push(() => this.resumePending());
+      return;
     }
-    for (const e of this.byId.values()) {
-      this.thawDuration(e);
-      this.thawAutoRemove(e);
+    for (const entry of this.byId.values()) {
+      this.thawDuration(entry);
+      this.thawAutoRemove(entry);
     }
     for (const slot of this.queues.keys()) this.schedule(slot);
   }
 
   /** 暂停单个条目的倒计时。 */
   pause(id: string): void {
+    this.assertMutable();
+    if (this.destroying || this.destroyed) return;
+    this.batch(() => this.pauseImpl(id));
+  }
+
+  /** 在批次内提交变更。 */
+  private pauseImpl(id: string): void {
     const e = this.byId.get(id);
-    if (!e || e.paused) return;
-    e.paused = true;
+    if (!e || e.timers.paused) return;
+    e.timers.paused = true;
     this.freezeDuration(e);
     this.freezeAutoRemove(e);
   }
 
   /** 恢复单个条目的倒计时。 */
   resume(id: string): void {
+    this.assertMutable();
+    if (this.destroying || this.destroyed) return;
+    this.batch(() => this.resumeImpl(id));
+  }
+
+  /** 在批次内提交变更。 */
+  private resumeImpl(id: string): void {
     const e = this.byId.get(id);
-    if (!e || !e.paused) return;
-    e.paused = false;
+    if (!e || !e.timers.paused) return;
+    e.timers.paused = false;
     this.thawDuration(e);
     this.thawAutoRemove(e);
   }
 
   /** 开始 duration 倒计时；暂停期间只记剩余时长。 */
   private startDuration(e: Entry): void {
-    const ms = e.cfg.duration;
-    if (ms == null) return;
-    if (this.paused || e.paused) {
-      e.durationRemaining = ms;
+    const ms = e.cfg.duration!;
+    if (this.paused || e.timers.paused) {
+      e.timers.durationRemaining = ms;
       return;
     }
     this.armDuration(e, ms);
@@ -1127,79 +1226,94 @@ class LayermanImpl implements Layerman {
 
   /** 冻结 duration 倒计时，记下剩余毫秒。 */
   private freezeDuration(e: Entry): void {
-    if (e.durationTimer == null) return;
-    clearTimeout(e.durationTimer);
-    e.durationTimer = undefined;
-    e.durationRemaining = Math.max(0, (e.durationEndsAt ?? this.now()) - this.now());
+    if (e.timers.durationTimer == null) return;
+    clearTimeout(e.timers.durationTimer);
+    e.timers.durationTimer = undefined;
+    e.timers.durationRemaining = Math.max(0, e.timers.durationEndsAt! - this.now());
   }
 
   /** 恢复 duration 倒计时（仍暂停或不在 open 态则不动）。 */
   private thawDuration(e: Entry): void {
-    if (this.paused || e.paused) return;
-    if (e.durationRemaining == null || e.phase !== LOG_STATE.open) return;
-    const ms = e.durationRemaining;
-    e.durationRemaining = undefined;
+    if (this.paused || e.timers.paused) return;
+    if (e.timers.durationRemaining == null || e.phase !== LOG_STATE.open) return;
+    const ms = e.timers.durationRemaining;
+    e.timers.durationRemaining = undefined;
     this.armDuration(e, ms);
   }
 
   /** 冻结「关闭后自动移除」的倒计时（pause/pauseAll）——否则 closing 期间暂停的弹窗仍会被
    * 未被冻结的 autoRemove 定时器如期移除，与「暂停」的直觉矛盾。 */
   private freezeAutoRemove(e: Entry): void {
-    if (e.autoRemoveTimer == null) return;
-    clearTimeout(e.autoRemoveTimer);
-    e.autoRemoveTimer = undefined;
-    e.autoRemoveRemaining = Math.max(0, (e.autoRemoveEndsAt ?? this.now()) - this.now());
+    if (e.timers.autoRemoveTimer == null) return;
+    clearTimeout(e.timers.autoRemoveTimer);
+    e.timers.autoRemoveTimer = undefined;
+    e.timers.autoRemoveRemaining = Math.max(0, e.timers.autoRemoveEndsAt! - this.now());
   }
 
   /** 恢复自动移除倒计时（仍暂停则不动）。 */
   private thawAutoRemove(e: Entry): void {
-    if (this.paused || e.paused) return;
-    if (e.autoRemoveRemaining == null) return;
-    const ms = e.autoRemoveRemaining;
-    e.autoRemoveRemaining = undefined;
+    if (this.paused || e.timers.paused) return;
+    if (e.timers.autoRemoveRemaining == null) return;
+    const ms = e.timers.autoRemoveRemaining;
+    e.timers.autoRemoveRemaining = undefined;
     this.armAutoRemove(e, ms);
   }
 
   /** 清掉 duration 定时器和剩余时长。 */
   private clearDuration(e: Entry): void {
-    if (e.durationTimer != null) {
-      clearTimeout(e.durationTimer);
-      e.durationTimer = undefined;
+    if (e.timers.durationTimer != null) {
+      clearTimeout(e.timers.durationTimer);
+      e.timers.durationTimer = undefined;
     }
-    e.durationRemaining = undefined;
+    e.timers.durationRemaining = undefined;
   }
 
   /** 清掉条目上所有计时（duration + 自动移除）。 */
   private clearTimers(e: Entry): void {
     this.clearDuration(e);
-    if (e.autoRemoveTimer != null) {
-      clearTimeout(e.autoRemoveTimer);
-      e.autoRemoveTimer = undefined;
+    e.timers.autoRemoveRemaining = undefined;
+    if (e.timers.autoRemoveTimer != null) {
+      clearTimeout(e.timers.autoRemoveTimer);
+      e.timers.autoRemoveTimer = undefined;
     }
   }
 
   /* ── 快照 & 订阅 ── */
-  /** 重算快照并通知订阅者（订阅者抛错不影响内部推进）。 */
+  /** 标记批次末需要刷新快照。 */
   private emit(): void {
-    const actives: Entry[] = [];
-    for (const e of this.serial.values()) {
-      if (e.phase === LOG_STATE.open || e.phase === LOG_STATE.closing) actives.push(e);
-    }
-    for (const e of this.overlapping) {
-      if (e.phase === LOG_STATE.open || e.phase === LOG_STATE.closing) actives.push(e);
-    }
-    actives.sort((a, b) => a.instanceKey - b.instanceKey);
-    // stackIndex = 叠加渲染层序（入场序），isTopmost = 最上层。headless 不设 z-index，
-    // 只把层序喂给宿主，由宿主算 z-index / 给非顶层加 pointer-events:none。
-    const last = actives.length - 1;
-    const active = actives.map((e, i) => LayermanImpl.toInstance(e, i, i === last));
+    this.needEmit = true;
+  }
 
-    const queued: string[] = [];
-    for (const q of this.queues.values()) for (const e of q) queued.push(e.id);
+  /** 发布或接续快照通知；超限时仅刷新快照并清理待通知项。 */
+  private emitNow(notify = true): void {
+    if (this.needEmit) {
+      this.needEmit = false;
+      const actives: Entry[] = [];
+      for (const e of this.serial.values()) {
+        if (e.phase === LOG_STATE.open || e.phase === LOG_STATE.closing) actives.push(e);
+      }
+      for (const e of this.overlapping) {
+        actives.push(e);
+      }
+      actives.sort((a, b) => a.enteredSeq - b.enteredSeq);
+      // stackIndex = 叠加渲染层序（入场序），isTopmost = 最上层。headless 不设 z-index，
+      // 只把层序喂给宿主，由宿主算 z-index / 给非顶层加 pointer-events:none。
+      const last = actives.length - 1;
+      const active = actives.map((e, i) => LayermanImpl.toInstance(e, i, i === last));
 
-    this.snap = { active, queued };
-    // 每次读最新快照：订阅者重入触发嵌套 emit 后，外层循环不会发过期快照
-    for (const listener of this.subscribers) this.safeInvoke(() => listener(this.snap));
+      const queued: string[] = [];
+      for (const q of this.queues.values()) for (const e of q) queued.push(e.id);
+
+      this.snap = { active, queued };
+      this.pendingListeners = notify ? [...this.subscribers] : [];
+    }
+    if (!notify) this.pendingListeners = [];
+    // 只有可见变更才开启新一轮；仅调度或副作用时接续剩余订阅者。
+    while (this.pendingListeners.length) {
+      const listener = this.pendingListeners.shift()!;
+      if (this.subscribers.has(listener)) this.safeInvoke(() => listener(this.snap));
+      if (this.needEmit || this.dirtySlots.size || this.effects.length) break;
+    }
   }
 
   /** 内部条目转对外的活跃实例。 */
@@ -1242,18 +1356,86 @@ class LayermanImpl implements Layerman {
   }
 
   /* ── 释放 ── */
+  /** 只读校验稳定边界的内部状态；不求值宿主谓词，也不触发通知或调度。 */
+  // @ts-expect-error TS6133：诊断入口仅由测试经内部视图调用，生产路径刻意不引用。
+  private checkInvariants(): void {
+    /** 统一输出不变量编号及可定位的条目或槽位。 */
+    const fail = (code: string, id: string, detail: string): never => {
+      throw new Error(`[layerman] invariant ${code}: id=${id} ${detail}`);
+    };
+    const memberships = new Map<Entry, number>();
+    const active: Entry[] = [];
+    const destroyed = this.destroyed;
+    if (destroyed) {
+      const residual = this.byId.values().next().value ?? this.serial.values().next().value ?? this.overlapping[0] ?? this.pendingOverlaps[0];
+      const queued = Array.from(this.queues.values()).flat();
+      if (residual || queued.length || this.openTimers.size) fail("h", residual?.id ?? queued[0]?.id ?? this.openTimers.keys().next().value!, "销毁后仍有条目或计时器");
+    }
+    /** 统计容器成员并校验身份、阶段与串行槽归属。 */
+    const visit = (e: Entry, kind: "queue" | "serial" | "overlap" | "pending", slot?: string): void => {
+      if (this.byId.get(e.id) !== e) fail("b", e.id, "容器条目不属于 byId");
+      memberships.set(e, (memberships.get(e) ?? 0) + 1);
+      if (kind === "serial" && e.slot !== slot) fail("d", e.id, `串行槽不匹配 ${slot}`);
+      const visible = e.phase === LOG_STATE.open || e.phase === LOG_STATE.closing;
+      if (kind === "queue" || kind === "pending") {
+        if (e.phase !== LOG_STATE.pending) fail("c", e.id, "等待容器中的条目不是 pending");
+        if (this.isCapped(e)) fail("i", e.id, "永久耗尽条目仍在等待容器");
+        if (kind === "pending" && !this.paused && !this.needsHydration(e)) fail("j", e.id, "叠加等待项缺少暂停或 hydrate 原因");
+      } else if (kind === "serial") {
+        if (!visible && e.phase !== LOG_STATE.resolving) fail("c", e.id, "串行容器阶段非法");
+        if (visible) active.push(e);
+      } else {
+        if (!visible || !e.overlapping) fail("c", e.id, "叠加容器阶段或标记非法");
+        active.push(e);
+      }
+    };
+    for (const q of this.queues.values()) for (const e of q) visit(e, "queue");
+    for (const [slot, e] of this.serial) visit(e, "serial", slot);
+    for (const e of this.overlapping) visit(e, "overlap");
+    for (const e of this.pendingOverlaps) visit(e, "pending");
+    for (const [id, e] of this.byId) {
+      if (id !== e.id || memberships.get(e) !== 1) fail("a", id, "条目必须恰好属于一个容器");
+      const paused = this.paused || e.timers.paused;
+      if (e.timers.durationTimer != null && (e.phase !== LOG_STATE.open || paused)) fail("e", id, "durationTimer 要求 open 且未暂停");
+      if (e.timers.autoRemoveTimer != null && (e.phase !== LOG_STATE.closing || paused)) fail("e", id, "autoRemoveTimer 要求 closing 且未暂停");
+      if ((e.timers.durationRemaining != null || e.timers.autoRemoveRemaining != null) && !paused) fail("e", id, "剩余时长要求暂停");
+      if (e.resolveState.abort != null && e.phase !== LOG_STATE.resolving) fail("e", id, "abort 要求 resolving");
+      if (e.close.pending && e.phase !== LOG_STATE.open) fail("e", id, "closePending 要求 open");
+      if (e.resolveState.hasPendingResolve && e.phase !== LOG_STATE.resolving) fail("e", id, "hasPendingResolve 要求 resolving");
+    }
+    for (const slot of this.openTimers.keys()) {
+      if (this.paused || this.serial.has(slot) || !this.queues.get(slot)?.length) fail("f", this.queues.get(slot)?.[0]?.id ?? slot, "开场计时器没有合法等待队列");
+    }
+    active.sort((a, b) => a.enteredSeq - b.enteredSeq);
+    const length = Math.max(active.length, this.snap.active.length);
+    for (let i = 0; i < length; i++) {
+      const expected = active[i];
+      const actual = this.snap.active[i];
+      if (!expected || !actual || expected.id !== actual.id || expected.instanceKey !== actual.instanceKey) fail("g", expected?.id ?? actual!.id, "活跃快照身份或顺序不一致");
+    }
+  }
+
   /** 释放：清定时器、清空条目、断开跨标签页广播、清订阅者。 */
   destroy(): void {
+    this.assertMutable();
+    if (this.destroying || this.destroyed) return;
+    this.batch(() => this.destroyImpl());
+  }
+
+  /** 在批次内提交变更。 */
+  private destroyImpl(): void {
+    this.destroying = true;
     for (const t of this.openTimers.values()) clearTimeout(t);
     this.openTimers.clear();
     for (const e of this.byId.values()) this.clearTimers(e);
-    this.clear({ closeActive: true });
+    this.clearImpl({ closeActive: true });
     if (this.channel) {
       this.channel.onmessage = null;
       this.channel.close();
       this.channel = undefined;
     }
-    this.subscribers.clear();
+    this.destroyed = true;
+    this.destroying = false;
   }
 }
 

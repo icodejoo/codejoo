@@ -24,6 +24,31 @@ afterEach(() => {
 });
 
 describe("@codejoo/layerman/vue", () => {
+  it.each([
+    ["同步 undefined", (): undefined => undefined],
+    ["Promise undefined", (): Promise<undefined> => Promise.resolve(undefined)],
+    ["Promise 0", (): Promise<number> => Promise.resolve(0)],
+    ["Promise null", (): Promise<null> => Promise.resolve(null)],
+  ] as const)("[R3] model 关闭接受守卫返回 %s，autoRemove:false 仍完成移除", async (_label, guard) => {
+    const m = make();
+    const scope = effectScope();
+    try {
+      const overlay = scope.run(() => useOverlay("guarded", { beforeClose: guard as never, autoRemove: false }, m))!;
+      const onRemove = vi.fn();
+      const handle = overlay.open({ onRemove });
+      expect(overlay.model.value).toBe(true);
+      overlay.model.value = false;
+      await vi.advanceTimersByTimeAsync(0);
+      expect(m.get("guarded")).toBeUndefined();
+      expect(overlay.model.value).toBe(false);
+      expect(overlay.phase.value).toBeUndefined();
+      expect(onRemove).toHaveBeenCalledTimes(1);
+      await expect(handle.result).resolves.toEqual({ dismissed: true, reason: "closed" });
+    } finally {
+      scope.stop();
+    }
+  });
+
   it("useOverlayState：状态桥成响应式，open 后 ref 更新", () => {
     const m = make();
     const scope = effectScope();

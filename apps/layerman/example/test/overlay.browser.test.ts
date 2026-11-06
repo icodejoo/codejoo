@@ -102,7 +102,7 @@ describe("核心 API（真实浏览器）", () => {
 
     const { result } = m.open({ id: "ovx", overlap: true, requiresAuth: true });
     expect(m.get("ovx")).toBeUndefined();
-    expect(await result).toEqual({ dismissed: true });
+    expect(await result).toEqual({ dismissed: true, reason: "unmet" });
   });
 
   it("replace 抢占（被替换退回队列）；不合格不顶当前", () => {
@@ -136,7 +136,7 @@ describe("核心 API（真实浏览器）", () => {
     expect(m.get("dup")?.data).toBe(2);
     expect(m.get("dup")?.instanceKey).not.toBe(k1);
     expect(m.getSnapshot().queued).not.toContain("dup");
-    expect(await h1.result).toEqual({ dismissed: true });
+    expect(await h1.result).toEqual({ dismissed: true, reason: "replaced" });
   });
 
   it("重复 id：队列中→覆盖旧配置", () => {
@@ -214,13 +214,15 @@ describe("核心 API（真实浏览器）", () => {
     m.resolve("res1", 42);
     expect(await a.result).toBe(42);
 
+    m.remove("res1");
     const b = m.open({ id: "res2" });
+    expect(m.get("res2")?.phase).toBe("open");
     m.reject("res2", new Error("nope"));
     await expect(b.result).rejects.toThrow("nope");
 
     const c = m.open({ id: "dm" });
     m.remove("dm");
-    expect(await c.result).toEqual({ dismissed: true });
+    expect(await c.result).toEqual({ dismissed: true, reason: "removed" });
   });
 
   it("clear / clear({closeActive})", () => {

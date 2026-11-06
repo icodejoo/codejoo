@@ -94,7 +94,7 @@ export interface UseOverlayReturn<TData = unknown> {
    * - set(true)：若未展示且未排队则 `open()`（无额外配置；要 priority/cooldown 等请改用 `open(config)`）。
    * - set(false)：走 `close()`（尊重 `beforeClose` 守卫，不再被硬闯过去）。无 `beforeClose` 时
    *   `close()` 内部同步转 `closing`，随即紧跟 `remove()` 收尾——效果等同「立即移除」，第三方弹窗
-   *   仍不需要我们的 closing 期；配了 `beforeClose` 时守卫异步决定是否真正关闭，此时不强制移除。
+   *   仍不需要我们的 closing 期；配了 `beforeClose` 时等同一实例进入 closing 再移除。
    * 注意：队列/gap/条件/冷却仍生效,`set(true)` 若被排队则不会立刻可见,getter 如实反映真实状态。
    */
   model: WritableComputedRef<boolean>;
@@ -136,6 +136,69 @@ export function useOverlay<TData = unknown>(id: string, defaults?: MaybeRefOrGet
   // 核心把这个正在进行中的 resolve 直接丢弃重开。用这个本地闩锁挡掉 open() 调用落地前的重复
   // set(true)：直到 open() 返回的 result 结算（正常关闭/resolve/reject/dismiss 任一）才放开。
   let opening = false;
+  /** 当前模型关闭请求，仅跟踪发起时的实例。 */
+  let pendingClose:
+    | {
+        /** 发起关闭时的实例编号。 */
+        key: number;
+        /** 释放关闭阶段监听。 */
+        unsubscribe: () => void;
+      }
+    | undefined;
+  /** 结束模型关闭监听，避免旧决议影响后续请求。 */
+  function stopClosing(): void {
+    pendingClose?.unsubscribe();
+    pendingClose = undefined;
+  }
+  onScopeDispose(stopClosing);
+
+  /** 合并配置并观察守卫的拒绝决议，保留核心的关闭时序。 */
+  function open<TResult = unknown>(config?: Omit<OverlayConfig<TData>, "id">): OverlayHandle<TResult> {
+    const merged = { ...toValue(defaults), ...config, id };
+    const guard = merged.beforeClose;
+    if (guard) {
+      merged.beforeClose = () => {
+        const key = m.get(id)?.instanceKey;
+        /** 只取消本次守卫对应的模型关闭请求。 */
+        const cancel = () => {
+          if (pendingClose?.key === key) stopClosing();
+        };
+        try {
+          const result = guard();
+          if (result === false) cancel();
+          else
+            void Promise.resolve(result).then((ok) => {
+              if (ok === false) cancel();
+              return undefined;
+            }, cancel);
+          return result;
+        } catch (error) {
+          cancel();
+          throw error;
+        }
+      };
+    }
+    return m.open<TData, TResult>(merged);
+  }
+
+  /** 等待同一实例关闭后收尾；替换或消失时只退订。 */
+  function closeModel(current: OverlayInstance): void {
+    if (pendingClose?.key === current.instanceKey) return;
+    stopClosing();
+    /** 每次通知都重新核对身份，避免误删同编号的新实例。 */
+    const checkClosing = () => {
+      const next = m.get(id);
+      if (next?.instanceKey !== current.instanceKey) {
+        stopClosing();
+      } else if (next.phase === "closing") {
+        stopClosing();
+        m.remove(id);
+      }
+    };
+    pendingClose = { key: current.instanceKey, unsubscribe: m.subscribe(checkClosing) };
+    m.close(id);
+    if (pendingClose) checkClosing();
+  }
   return {
     instance,
     visible: computed(() => instance.value !== undefined),
@@ -145,27 +208,22 @@ export function useOverlay<TData = unknown>(id: string, defaults?: MaybeRefOrGet
         if (value) {
           if (!opening && instance.value === undefined && !state.value.queued.includes(id)) {
             opening = true;
-            m.open({ ...toValue(defaults), id })
+            open()
               .result.finally(() => {
                 opening = false;
               })
               .catch(() => {});
           }
-        } else if (m.get(id)) {
-          // 已展示（open/closing）：走 close()（尊重 beforeClose）。无 beforeClose 时 close() 已同步
-          // 转 closing——按原「立即移除」的第三方 v-model 契约收尾；有 beforeClose 时 close() 是异步
-          // 的（守卫未决），此时 phase 仍是 open，交给守卫自行处理，不强制 remove。
-          m.close(id);
-          if (m.get(id)?.phase === "closing") m.remove(id);
         } else {
-          // 尚未展示（还在排队/pending）：beforeClose 语义上只守「已展示时的关闭」，对排队项不适用
-          // ——直接 remove() 撤下，维持原「立即移除」契约（否则会卡在队列里出不来）。
-          m.remove(id);
+          const current = m.get(id);
+          if (current) closeModel(current);
+          // 排队项不受 beforeClose 保护，直接撤下。
+          else m.remove(id);
         }
       },
     }),
     phase: computed(() => instance.value?.phase),
-    open: <TResult = unknown>(config?: Omit<OverlayConfig<TData>, "id">) => m.open<TData, TResult>({ ...toValue(defaults), ...config, id }),
+    open,
     close: () => m.close(id),
     remove: () => m.remove(id),
     resolve: (value: unknown) => m.resolve(id, value),

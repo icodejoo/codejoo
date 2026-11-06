@@ -1,3 +1,4 @@
+import { DismissReason } from "../src/index.ts";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { type AsyncableStorage, createLayerman, type Layerman, type LayermanOptions } from "../src/index.ts";
@@ -153,7 +154,7 @@ describe("@codejoo/layerman", () => {
     const m = make();
     const h = m.open({ id: "f", overlap: true, requiresAuth: true }); // ctx.auth 未定义
     expect(ids(m)).toEqual([]);
-    await expect(h.result).resolves.toEqual({ dismissed: true });
+    await expect(h.result).resolves.toEqual({ dismissed: true, reason: DismissReason.unmet });
   });
 
   it("条件：route 匹配才显示；setContext 触发重评", () => {
@@ -187,7 +188,7 @@ describe("@codejoo/layerman", () => {
     m.remove("a");
     m.open({ id: "a", cooldown: { session: 1 } });
     expect(ids(m)).toEqual([]);
-    expect(m.getSnapshot().queued).toEqual(["a"]);
+    expect(m.getSnapshot().queued).toEqual([]);
   });
 
   it("重开已激活 id：即使配了 cooldown 也无条件顶替更新（自更新语义，不受 cooldown 门控）", () => {
@@ -363,7 +364,7 @@ describe("@codejoo/layerman", () => {
     const m = make();
     const h = m.open({ id: "a" });
     m.remove("a");
-    await expect(h.result).resolves.toEqual({ dismissed: true });
+    await expect(h.result).resolves.toEqual({ dismissed: true, reason: DismissReason.removed });
   });
 
   it("重复 id：正在展示 → 直接 replace，旧的丢弃不回队列", async () => {
@@ -375,7 +376,7 @@ describe("@codejoo/layerman", () => {
     expect(m.get("a")?.data).toBe(2);
     expect(m.get("a")?.instanceKey).not.toBe(key1);
     expect(m.getSnapshot().queued).toEqual([]); // 未回队列
-    await expect(h1.result).resolves.toEqual({ dismissed: true });
+    await expect(h1.result).resolves.toEqual({ dismissed: true, reason: DismissReason.replaced });
     // h2 仍活跃、未兑现
     m.resolve("a", "ok");
     await expect(h2.result).resolves.toBe("ok");
@@ -386,7 +387,7 @@ describe("@codejoo/layerman", () => {
     m.open({ id: "block" }); // 占住串行槽
     const h1 = m.open({ id: "a", priority: 1, data: 1 });
     m.open({ id: "a", priority: 5, data: 2 }); // 覆盖队列里的 a
-    await expect(h1.result).resolves.toEqual({ dismissed: true });
+    await expect(h1.result).resolves.toEqual({ dismissed: true, reason: DismissReason.replaced });
     m.remove("block");
     expect(ids(m)).toEqual(["a"]);
     expect(m.get("a")?.data).toBe(2);
@@ -594,7 +595,7 @@ describe("@codejoo/layerman", () => {
       expect(m.get("a")?.phase).toBe("closing");
     });
 
-    it("hydrate 竟态：storage.get() 落地前发生的真实 open() 写入不应被随后落地的旧磁盘快照覆盖", async () => {
+    it("hydrate 竞态：读取前移除未展示项不消耗额度，读取后可正常展示", async () => {
       const staleRaw = JSON.stringify({
         a: { total: 0, dayBucket: "1970-01-01", dayCount: 0, hourBucket: "x", hourCount: 0, minuteBucket: "y", minuteCount: 0, lastShownAt: 0 },
       });
@@ -605,14 +606,15 @@ describe("@codejoo/layerman", () => {
       };
       const m = make({ storage }); // 构造函数已发起 hydrate()，storage.get() 尚未落地
 
-      m.open({ id: "a", cooldown: { total: 1 } }); // hydrate 落地前的真实 open：写入 total=1
+      m.open({ id: "a", cooldown: { total: 1 } });
+      expect(ids(m)).toEqual([]); // 读取完成前不展示，也不计数
       m.remove("a");
 
       resolveGet(staleRaw); // hydrate 此刻才落地：磁盘快照是旧的 total:0
       await flush();
 
-      m.open({ id: "a", cooldown: { total: 1 } }); // 若旧快照把 total 冲回 0，这里会被误判为额度未耗尽而放行
-      expect(ids(m)).toEqual([]);
+      m.open({ id: "a", cooldown: { total: 1 } });
+      expect(ids(m)).toEqual(["a"]); // 先前移除的是等待项，额度仍可用
     });
 
     it("flush 写入失败：异步 storage.set() reject 不应变成未处理的 rejection", async () => {
@@ -712,7 +714,7 @@ describe("@codejoo/layerman", () => {
       await flush();
       expect(ids(m)).toEqual([]);
       expect(m.getSnapshot().queued).toEqual([]);
-      await expect(h.result).resolves.toEqual({ dismissed: true });
+      await expect(h.result).resolves.toEqual({ dismissed: true, reason: DismissReason.replaced });
     });
 
     it("pauseAll 期间 close：autoRemove 不计时，resumeAll 后才开始倒计时", async () => {

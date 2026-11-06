@@ -161,16 +161,19 @@ export interface CurrentOverlayProviderProps {
  * 中央渲染器逐条为「当前 overlay」提供 id（包裹每个活跃项），使被渲染的 overlay 组件内部可用
  * `useCurrentOverlay()` 零透传拿到自身控制句柄。
  */
-export const provideCurrentOverlay: FunctionComponent<CurrentOverlayProviderProps> = ({ id, children }) => createElement(CurrentOverlayContext.Provider, { value: id }, children);
+export const CurrentOverlayProvider: FunctionComponent<CurrentOverlayProviderProps> = ({ id, children }) => createElement(CurrentOverlayContext.Provider, { value: id }, children);
+
+/** @deprecated 请改用可直接在 JSX 中使用的 `CurrentOverlayProvider`。 */
+export const provideCurrentOverlay = CurrentOverlayProvider;
 
 /**
  * 在 overlay 组件**内部**使用：经 Context 拿到自身 id，返回与 `useOverlay(id)` 相同的句柄，
- * 无需父层透传 id。需外层用 `<provideCurrentOverlay id={id}>`（或直接用 `useOverlay(id)`）。
+ * 无需父层透传 id。需外层用 `<CurrentOverlayProvider id={id}>`（或直接用 `useOverlay(id)`）。
  */
 export function useCurrentOverlay<TData = unknown>(om?: Layerman): UseOverlayReturn<TData> {
   const id = useContext(CurrentOverlayContext);
   if (!id) {
-    throw new Error("[layerman/react] useCurrentOverlay(): no current overlay — wrap the rendered overlay with <provideCurrentOverlay id={id}>");
+    throw new Error("[layerman/react] useCurrentOverlay(): no current overlay — wrap the rendered overlay with <CurrentOverlayProvider id={id}>");
   }
   return useOverlay<TData>(id, undefined, om);
 }

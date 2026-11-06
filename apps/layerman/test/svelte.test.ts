@@ -91,7 +91,7 @@ describe("@codejoo/layerman/svelte", () => {
     const o = overlay("toast", undefined, m);
     const h = o.open();
     o.remove();
-    await expect(h.result).resolves.toEqual({ dismissed: true });
+    await expect(h.result).resolves.toEqual({ dismissed: true, reason: "removed" });
   });
 
   it("overlay：defaults 与 open(config) 合并，config 覆盖 defaults", () => {
@@ -158,5 +158,48 @@ describe("@codejoo/layerman/svelte", () => {
     expect(calls).toBe(1);
     expect(typeof unsub).toBe("function");
     unsub();
+  });
+});
+
+// 服务端渲染器建立真实的组件 Context；不模拟 getContext/setContext。
+import { render as renderSvelte } from "svelte/server";
+import { currentOverlay } from "../src/svelte.ts";
+
+describe("Svelte 组件上下文覆盖", () => {
+  it("组件初始化期读取默认管理器及当前编号并转发全部控制命令", async () => {
+    const m = make();
+    let result!: Promise<unknown>;
+    /** 服务端组件初始化函数，读取真实 Context。 */
+    function ContextConsumer() {
+      setLayerman(m);
+      provideCurrentOverlay("context-overlay");
+      expect(getLayerman()).toBe(m);
+      const o = currentOverlay();
+      const h = o.open();
+      result = h.result;
+      expect(get(o.visible)).toBe(true);
+      expect(get(o.phase)).toBe("open");
+      o.pause();
+      o.resume();
+      o.resolve("done");
+      o.close();
+      expect(get(o.phase)).toBe("closing");
+      o.remove();
+      expect(get(o.visible)).toBe(false);
+      return {};
+    }
+    expect(renderSvelte(ContextConsumer as Parameters<typeof renderSvelte>[0], { props: {} }).body).toBeTypeOf("string");
+    await expect(result).resolves.toBe("done");
+  });
+
+  it("组件存在但未注入管理器或当前编号时给出适配器错误", () => {
+    const m = make();
+    /** 空上下文内的错误消费者。 */
+    function MissingContext() {
+      expect(() => overlayState()).toThrow(/no manager/);
+      expect(() => currentOverlay(m)).toThrow(/no current overlay/);
+      return {};
+    }
+    expect(renderSvelte(MissingContext as Parameters<typeof renderSvelte>[0], { props: {} }).body).toBeTypeOf("string");
   });
 });
