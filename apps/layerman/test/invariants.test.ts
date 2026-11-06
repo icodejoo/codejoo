@@ -1,5 +1,6 @@
+import { createManager } from "./helpers.ts";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { createLayerman, type Layerman } from "../src/index.ts";
+import { type Layerman } from "../src/index.ts";
 
 /** 供反向测试使用的可损坏条目视图。 */
 type TestEntry = Record<string, unknown> & {
@@ -39,9 +40,7 @@ const managers: Layerman[] = [];
 
 /** 创建隔离存储的管理器。 */
 function make(): Layerman {
-  const m = createLayerman({ crossTab: false, storage: { get: () => null, set: () => {} } });
-  managers.push(m);
-  return m;
+  return createManager(managers, { crossTab: false, storage: { get: () => null, set: () => {} } });
 }
 /** 获取仅供测试的内部视图。 */
 function internal(m: Layerman): Internals {
@@ -396,7 +395,7 @@ it("未暂停且不等待 hydrate 的叠加候选属于非法持有，报告 j",
 
 it("慢 hydrate 持有的串行与 overlap 属于合法等待状态", async () => {
   let finish!: (value: null) => void;
-  const m = createLayerman({
+  const m = createManager(managers, {
     crossTab: false,
     storage: {
       get: () =>
@@ -406,7 +405,6 @@ it("慢 hydrate 持有的串行与 overlap 属于合法等待状态", async () =
       set: () => {},
     },
   });
-  managers.push(m);
   m.open({ id: ID, cooldown: { total: 1 } });
   m.open({ id: SLOT, overlap: true, cooldown: { minGap: { seconds: 1 } } });
   check(m);

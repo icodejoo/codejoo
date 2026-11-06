@@ -1,3 +1,4 @@
+import { deferred } from "./helpers.ts";
 import { execFileSync } from "node:child_process";
 import { describe, expect, it, vi } from "vitest";
 import { CooldownStore, type CooldownRecord } from "../src/cooldown.ts";
@@ -12,16 +13,14 @@ const OTHER = "other";
 const QUOTA_ERROR = "quota";
 /** 固定本地日历时刻。 */
 const NOW = new Date(2026, 0, 2, 3, 4).getTime();
-/** 构造可控制完成顺序的异步操作。 */
-function deferred<T>() {
-  let resolve!: (value: T) => void;
-  let reject!: (error: Error) => void;
-  const promise = new Promise<T>((done, fail) => {
-    resolve = done;
-    reject = fail;
-  });
-  return { promise, resolve, reject };
-}
+/** 子进程加载的冷却模块地址。 */
+const SOURCE_URL = new URL("../src/cooldown.ts", import.meta.url);
+/** 子进程直接加载 TypeScript 模块的参数。 */
+const NODE_TYPE_ARGS = ["--experimental-strip-types", "--input-type=module", "-e"];
+/** 子进程启动与执行的时间预算。 */
+const CHILD_TIMEOUT_MS = 5000;
+/** 覆盖夏令时回拨的纽约时区。 */
+const DST_TZ = "America/New_York";
 /** 冲刷异步存储的完成回调。 */
 async function flush(): Promise<void> {
   await Promise.resolve();
@@ -195,6 +194,57 @@ describe("存储降级与隔离", () => {
 });
 
 describe("本地日历桶与广播合并", () => {
+  it("新旧桶标签在固定随机时间戳与日历边界上完全一致", () => {
+    const script = `
+      import assert from 'node:assert/strict';
+      const { CooldownStore } = await import(${JSON.stringify(SOURCE_URL.href)});
+      /** 保留旧实现的补零规则作为参照。 */
+      function pad(n) { return n < 10 ? '0' + n : '' + n; }
+      /** 保留旧实现的本地日桶计算。 */
+      function dayBucketOf(t) {
+        const d = new Date(t);
+        return d.getFullYear() + '-' + pad(d.getMonth() + 1) + '-' + pad(d.getDate());
+      }
+      /** 保留旧实现的嵌套小时桶计算。 */
+      function hourBucketOf(t) { return dayBucketOf(t) + 'T' + pad(new Date(t).getHours()); }
+      /** 保留旧实现的嵌套分钟桶计算。 */
+      function minuteBucketOf(t) { return hourBucketOf(t) + ':' + pad(new Date(t).getMinutes()); }
+      const times = [
+        '2026-03-08T06:59:59Z', '2026-03-08T07:00:00Z',
+        '2026-11-01T05:50:00Z', '2026-11-01T06:10:00Z',
+        '2024-02-28T23:59:59Z', '2024-02-29T00:00:00Z',
+        '2024-02-29T23:59:59Z', '2024-03-01T00:00:00Z',
+        '2026-01-31T23:59:59Z', '2026-02-01T00:00:00Z',
+        '2026-12-31T23:59:59Z', '2027-01-01T00:00:00Z'
+      ].map(value => Date.parse(value));
+      const start = Date.UTC(1900, 0, 1);
+      const span = Date.UTC(2200, 0, 1) - start;
+      let seed = 0x12345678;
+      for (let i = 0; i < 2048; i++) {
+        seed = (Math.imul(seed, 1664525) + 1013904223) >>> 0;
+        times.push(start + Math.floor(seed / 4294967296 * span));
+      }
+      const store = new CooldownStore(undefined, ${JSON.stringify(KEY)});
+      for (const now of times) {
+        const rec = store.record(${JSON.stringify(ID)}, { total: 1 }, now);
+        assert.deepEqual(
+          [rec.dayBucket, rec.hourBucket, rec.minuteBucket],
+          [dayBucketOf(now), hourBucketOf(now), minuteBucketOf(now)],
+          '时间戳 ' + now
+        );
+      }
+    `;
+    for (const timezone of ["UTC", DST_TZ, "Asia/Kathmandu", "Australia/Lord_Howe"]) {
+      expect(() =>
+        execFileSync(process.execPath, [...NODE_TYPE_ARGS, script], {
+          env: { ...process.env, TZ: timezone },
+          encoding: "utf8",
+          timeout: CHILD_TIMEOUT_MS,
+        }),
+      ).not.toThrow();
+    }
+  });
+
   it.each([
     [new Date(2026, 0, 31, 23, 59), new Date(2026, 1, 1)],
     [new Date(2024, 1, 28, 23, 59), new Date(2024, 1, 29)],
@@ -240,9 +290,8 @@ describe("本地日历桶与广播合并", () => {
   });
 
   it("纽约 DST 回拨按时间戳选分钟桶，相同小时桶取最大计数", () => {
-    const source = new URL("../src/cooldown.ts", import.meta.url).href;
     const script = `
-      const { CooldownStore } = await import(${JSON.stringify(source)});
+      const { CooldownStore } = await import(${JSON.stringify(SOURCE_URL.href)});
       const store = new CooldownStore(undefined, ${JSON.stringify(KEY)});
       await store.hydrate();
       const before = Date.parse('2026-11-01T05:50:00Z');
@@ -253,10 +302,10 @@ describe("本地日历桶与广播合并", () => {
       store.mergeRemote(id, old);
       console.log(JSON.stringify({ hours: [new Date(before).getHours(), new Date(after).getHours()], minute: store.canShow(id, { minute: 1 }, after), hour: store.canShow(id, { hour: 2 }, after) }));
     `;
-    const output = execFileSync(process.execPath, ["--experimental-strip-types", "--input-type=module", "-e", script], {
-      env: { ...process.env, TZ: "America/New_York" },
+    const output = execFileSync(process.execPath, [...NODE_TYPE_ARGS, script], {
+      env: { ...process.env, TZ: DST_TZ },
       encoding: "utf8",
-      timeout: 5000,
+      timeout: CHILD_TIMEOUT_MS,
     });
     expect(JSON.parse(output)).toEqual({ hours: [1, 1], minute: false, hour: false });
   });

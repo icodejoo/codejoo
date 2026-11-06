@@ -1,14 +1,13 @@
+import { createManager } from "./helpers.ts";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { createLayerman, type Layerman, type LayermanOptions } from "../src/index.ts";
+import { type Layerman, type LayermanOptions } from "../src/index.ts";
 import { defaultStorage } from "../src/cooldown.ts";
 
 /** 本文件拥有的管理器。 */
 const managers: Layerman[] = [];
 /** 创建独立管理器并登记清理。 */
 function make(options: LayermanOptions = {}): Layerman {
-  const manager = createLayerman({ crossTab: false, ...options });
-  managers.push(manager);
-  return manager;
+  return createManager(managers, { crossTab: false, ...options });
 }
 /** 只暴露诊断反向测试所需的内部状态。 */
 type Diagnostics = {

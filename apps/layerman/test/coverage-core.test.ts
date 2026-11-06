@@ -1,6 +1,7 @@
+import { createManager } from "./helpers.ts";
 import { DismissReason } from "../src/index.ts";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { createLayerman, type Layerman, type LayermanOptions, type Cooldown } from "../src/index.ts";
+import { type Layerman, type LayermanOptions, type Cooldown } from "../src/index.ts";
 
 /** 重复使用的条目编号。 */
 const FIRST_ID = "a";
@@ -16,9 +17,7 @@ const START = new Date(2026, 0, 1, 12).getTime();
 const managers: Layerman[] = [];
 /** 创建隔离的测试管理器。 */
 function make(options: LayermanOptions = {}): Layerman {
-  const m = createLayerman({ crossTab: false, autoRemove: false, ...options });
-  managers.push(m);
-  return m;
+  return createManager(managers, { crossTab: false, autoRemove: false, ...options });
 }
 beforeEach(() => {
   vi.useFakeTimers();

@@ -1,15 +1,15 @@
+import { createManager } from "./helpers.ts";
 import { createRoot } from "solid-js";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { createLayerman, type Layerman } from "../src/index.ts";
+import { type Layerman } from "../src/index.ts";
 import { provideCurrentOverlay, provideLayerman, useCurrentOverlay, useOverlay, useOverlays, useOverlayState } from "../src/solid.ts";
 
 const managers: Layerman[] = [];
 
+/** 创建并登记本文件的隔离管理器。 */
 function make(): Layerman {
-  const m = createLayerman({ crossTab: false });
-  managers.push(m);
-  return m;
+  return createManager(managers, { crossTab: false });
 }
 
 beforeEach(() => {

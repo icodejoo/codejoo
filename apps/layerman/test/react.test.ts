@@ -1,18 +1,18 @@
 /** @vitest-environment jsdom */
+import { createManager } from "./helpers.ts";
 import { createElement, type ReactNode } from "react";
 import { act, renderHook } from "@testing-library/react";
 import { afterEach, describe, expect, it } from "vitest";
 
-import { createLayerman, type Layerman } from "../src/index.ts";
+import { type Layerman } from "../src/index.ts";
 import { LayermanProvider, useCurrentOverlay, useOverlay, useLayerman, useOverlays, useOverlayState } from "../src/react.ts";
 import { CurrentOverlayContext } from "../src/react.ts";
 
 const managers: Layerman[] = [];
 
+/** 创建并登记本文件的隔离管理器。 */
 function make(): Layerman {
-  const m = createLayerman({ crossTab: false });
-  managers.push(m);
-  return m;
+  return createManager(managers, { crossTab: false });
 }
 
 afterEach(() => {

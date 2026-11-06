@@ -1,15 +1,15 @@
+import { createManager } from "./helpers.ts";
 import { get, type Readable } from "svelte/store";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { createLayerman, type Layerman, type OverlayState } from "../src/index.ts";
+import { type Layerman, type OverlayState } from "../src/index.ts";
 import { getLayerman, overlay, overlays, overlayState, provideCurrentOverlay, setLayerman } from "../src/svelte.ts";
 
 const managers: Layerman[] = [];
 
+/** 创建并登记本文件的隔离管理器。 */
 function make(): Layerman {
-  const m = createLayerman({ crossTab: false });
-  managers.push(m);
-  return m;
+  return createManager(managers, { crossTab: false });
 }
 
 beforeEach(() => {

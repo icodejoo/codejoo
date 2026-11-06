@@ -1,5 +1,6 @@
+import { createManager } from "./helpers.ts";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { createLayerman, type Layerman, type OverlayConfig } from "../src/index.ts";
+import { type Layerman, type OverlayConfig } from "../src/index.ts";
 
 const SEED_COUNT = 200;
 const STEP_COUNT = 60;
@@ -102,7 +103,7 @@ async function runSeed(seed: number, reentrant = false): Promise<void> {
   });
   let hydrationDone = !slowHydrate;
   if (slowHydrate) cover("slowHydrate");
-  const m = createLayerman({
+  const m = createManager(managers, {
     crossTab: false,
     gap: 3,
     storage: {
@@ -112,7 +113,6 @@ async function runSeed(seed: number, reentrant = false): Promise<void> {
       },
     },
   });
-  managers.push(m);
   if (!slowHydrate) await m.ready();
   const state = m as unknown as {
     /** 不变量检查入口。 */

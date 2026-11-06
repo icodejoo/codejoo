@@ -1,13 +1,14 @@
 /**
- * 终审缺陷安全网：it.fails 的断言描述修复后的行为，修复时翻为 it。
+ * 终审缺陷回归集：按缺陷分组，修复后均以普通 it 验证预期行为。
  * B1（多 Tab 后写覆盖）与 B3（跨 Tab 最终一致）属文档/设计取舍，不设回归。
  * N2(D5)/N3/N5 已按阶段 5 的推荐语义落实；N6 的异步守卫契约是设计取舍，已文档化。
  */
+import { createManager, deferred, memStorage } from "./helpers.ts";
 import { execFileSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { type AsyncableStorage, createLayerman, type Layerman, type LayermanOptions, type OverlayHandle, OverlayPhase, type OverlayState } from "../src/index.ts";
+import { type Layerman, type LayermanOptions, type OverlayHandle, OverlayPhase, type OverlayState } from "../src/index.ts";
 
 const A = "a";
 const B = "b";
@@ -34,34 +35,9 @@ const NODE_TYPE_ARGS = ["--experimental-strip-types", "--input-type=module", "-e
 const PENDING = Symbol("尚未兑现");
 const managers: Layerman[] = [];
 
-/** 创建隔离的内存存储，允许检查实际写回内容。 */
-function memStorage() {
-  const map = new Map<string, string>();
-  const storage: AsyncableStorage = {
-    /** 读取当前磁盘快照。 */
-    get: (key) => map.get(key) ?? null,
-    /** 同步记录写入内容。 */
-    set: (key, value) => {
-      map.set(key, value);
-    },
-  };
-  return { map, storage };
-}
-
 /** 创建不使用真实广播、默认手动移除的管理器。 */
 function make(options: LayermanOptions = {}): Layerman {
-  const m = createLayerman({ crossTab: false, autoRemove: false, storage: memStorage().storage, ...options });
-  managers.push(m);
-  return m;
-}
-
-/** 建立可由测试确定落地时刻的 Promise。 */
-function deferred<T>() {
-  let resolve!: (value: T) => void;
-  const promise = new Promise<T>((done) => {
-    resolve = done;
-  });
-  return { promise, resolve };
+  return createManager(managers, { crossTab: false, autoRemove: false, storage: memStorage().storage, ...options });
 }
 
 /** 观察结果而不等待可能永久 pending 的 Promise。 */
@@ -423,12 +399,7 @@ describe("[B4][阶段1] 日志异常隔离", () => {
     });
     const result = observe(m.open({ id: A }).result);
     m.open({ id: B });
-    // 捕获宿主异常，单独断言状态，避免以抛错冒充回归失败。
-    try {
-      m.remove(A);
-    } catch {
-      /* 当前缺陷会穿透调用栈。 */
-    }
+    m.remove(A);
     await flush();
     expect({ result: result(), active: ids(m) }).toEqual({ result: DISMISSED, active: [B] });
   });

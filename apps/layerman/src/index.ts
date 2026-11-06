@@ -659,18 +659,14 @@ class LayermanImpl implements Layerman {
   private evaluate(
     entry: Entry,
     options: {
-      /** 已展示项只复检条件，不重新扣算冷却资格。 */
-      conditionsOnly?: boolean;
       /** 请求落地时允许按配置忽略条件，冷却仍复检。 */
       ignoreConditions?: boolean;
     } = {},
   ): (typeof ELIGIBILITY)[keyof typeof ELIGIBILITY] {
-    if (!options.conditionsOnly) {
-      if (this.needsHydration(entry)) return ELIGIBILITY.wait;
-      if (this.isCapped(entry)) return ELIGIBILITY.drop;
-    }
+    if (this.needsHydration(entry)) return ELIGIBILITY.wait;
+    if (this.isCapped(entry)) return ELIGIBILITY.drop;
     if (!options.ignoreConditions && !this.conditionsPass(entry)) return ELIGIBILITY.wait;
-    if (!options.conditionsOnly && entry.cfg.cooldown && !entry.exemptCooldown && !this.cooldown.canShow(entry.id, entry.cfg.cooldown, this.now())) return ELIGIBILITY.wait;
+    if (entry.cfg.cooldown && !entry.exemptCooldown && !this.cooldown.canShow(entry.id, entry.cfg.cooldown, this.now())) return ELIGIBILITY.wait;
     return ELIGIBILITY.pass;
   }
 
@@ -1109,7 +1105,7 @@ class LayermanImpl implements Layerman {
     this.context = { ...this.context, ...partial };
     // 已展示(open/closing)但条件不再满足者：dismissWhenUnmet(默认 true) 时自动撤下并推进下一个。
     for (const e of [...this.serial.values(), ...this.overlapping]) {
-      if ((e.phase === LOG_STATE.open || e.phase === LOG_STATE.closing) && e.cfg.dismissWhenUnmet !== false && this.evaluate(e, { conditionsOnly: true }) === ELIGIBILITY.wait) {
+      if ((e.phase === LOG_STATE.open || e.phase === LOG_STATE.closing) && e.cfg.dismissWhenUnmet !== false && !this.conditionsPass(e)) {
         this.removeImpl(e.id, DismissReason.unmet);
       }
     }
@@ -1166,8 +1162,8 @@ class LayermanImpl implements Layerman {
       this.effects.push(() => this.resumePending());
       return;
     }
-    const resolved = [...this.serial.values()].find((entry) => entry.resolveState.hasPendingResolve);
-    if (resolved) {
+    for (const resolved of this.serial.values()) {
+      if (!resolved.resolveState.hasPendingResolve) continue;
       resolved.resolveState.hasPendingResolve = false;
       const data = resolved.resolveState.pendingResolveData;
       resolved.resolveState.pendingResolveData = undefined;

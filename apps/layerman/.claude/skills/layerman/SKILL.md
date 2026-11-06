@@ -33,13 +33,14 @@ defaults?, om?)` + provider + `useCurrentOverlay`/`provideCurrentOverlay` shape)
 - `src/solid.ts` → `/solid` (`createSignal`+`onCleanup`; plain derived accessors, NOT `createMemo` —
   under node/SSR-build test `createMemo` freezes)
 
-Tests (vitest; **14 files, 862 passed, 0 failed, no expected fail** — measured with `pnpm test`; counts drift as tests are added, re-run to refresh):
+Tests (vitest; **14 files, 863 passed, 0 failed, no expected fail** — measured with `pnpm test`; counts drift as tests are added, re-run to refresh):
 - core: `layerman.test.ts` (68), `coverage-core.test.ts` (25), `invariants.test.ts` (36 — the
   `checkInvariants()` checker, its **reverse-break cases** that corrupt internals on purpose, and fixed-bug
   regressions), `fuzz.test.ts` (401 — see Verify workflow), `regressions.test.ts` (149 — final-review defect
-  net, no `it.fails` left, see Verify workflow), `cooldown-store.test.ts` (42), `coverage-gaps.test.ts` (7 — the last uncovered lines, brings src to 100%).
+  net, no `it.fails` left, see Verify workflow), `cooldown-store.test.ts` (43), `coverage-gaps.test.ts` (7 — the last uncovered lines, brings src to 100%).
 - adapters: `{vue,react,svelte,solid}.test.ts` (21/10/13/11), `adapters-contract.test.ts` (20 — one contract
   run against all four adapters), `coverage-adapters.test.ts` (56).
+- Shared test helpers (`memStorage`, `deferred`, the manager factory that registers cleanup) live in `test/helpers.ts` — not a `.test.ts` file, so vitest does not collect it.
 - `types.test.ts` (3; type-level via `expectTypeOf`, gated by tsc since tsconfig includes `test/**`).
 `react.test.ts`/contract/coverage-adapters use a `/** @vitest-environment jsdom */` docblock +
 `@testing-library/react`; the rest are node (svelte = store contract, solid = `createRoot`).
@@ -121,8 +122,8 @@ Vue (both function-style and template+ref), or anything, via `subscribe` + `getS
   then priority desc, then FIFO `seq`) among *eligible* entries, computes
   `remaining = (front.delay ?? gap) - (now - lastClosedAt[slot] ?? startedAt)`, opens if `<=0`
   else sets a timer. Cold start uses `startedAt`.
-- **Eligibility** — one entry point `evaluate(entry, {conditionsOnly?, ignoreConditions?}) → 'pass'|'wait'`
-  (no `drop`): `conditionsPass` first (`when(ctx)` is sole authority if present; else `route` AND
+- **Eligibility** — one entry point `evaluate(entry, {ignoreConditions?}) → 'pass'|'wait'|'drop'`
+  (`drop` = permanently capped; hydrate gate and capped are checked first, then): `conditionsPass` (`when(ctx)` is sole authority if present; else `route` AND
   `requiresAuth` read reserved context keys `ctx.route`/`ctx.auth`), then `CooldownStore.canShow` unless
   `exemptCooldown`. Same-id reopen takeover deliberately bypasses it.
 - **CooldownStore** — hydrate-once-then-sync. `session` counts in memory; `total`/`day`/`hour`/
@@ -355,7 +356,7 @@ standalone vite + playwright script.)
 
 ## Verify workflow
 
-Acceptance = **`pnpm test` green** (vitest through `vp test`): **14 files, 862 passed, 0 failed**
+Acceptance = **`pnpm test` green** (vitest through `vp test`): **14 files, 863 passed, 0 failed**
 (verified 2026-11-06, node + jsdom; per-file counts in the Tests list above — if a number drifts, re-run and
 update both). There is no expected-fail test any more. Tests inject an in-memory
 `AsyncableStorage`, set `crossTab:false` (a dedicated `crossTab:true` test drives the real global
@@ -365,7 +366,7 @@ fake timers, and assert on `getSnapshot().active`/`.queued`, callbacks
 
 ```bash
 cd apps/layerman
-pnpm test          # vitest — the real acceptance gate (862 passed, 14 files, no expected fail)
+pnpm test          # vitest — the real acceptance gate (863 passed, 14 files, no expected fail)
 pnpm check         # oxfmt --check + type-aware oxlint (green; on a CRLF checkout run `vp fmt` first — see above)
 pnpm build         # vp pack → dist/esm
 ```

@@ -94,13 +94,13 @@ closing ─ autoRemove 定时 / remove() ─▶ closed（finalizeRemoved：登�
 4. `wait = front.skipGap ? 0 : max(0, (front.delay ?? gap) - (now - (lastClosedAt[slot] ?? startedAt)))`；`wait>0` 则起开场计时器（到点再 `schedule`），否则 `activate(front)`。
 5. 有 `resolve` 的先占槽进入 `resolving` 再发请求；落地入口 `land` 只校验 abort 身份（`ac.signal.aborted` 或 `resolveState.abort !== ac` 即丢弃；`abort` 仅在 resolving 占槽期间存在，所有离开该状态的路径都会清掉它，故等价于槽位校验），晚到/被顶掉的结果丢弃（见 §7）；暂停期间落地的结果缓存，`resumeAll` 时再处理。
 
-**`evaluate(entry, options)`**：统一的只读资格判断，返回 `pass | wait | drop`。非 `conditionsOnly` 时短路顺序固定：hydrate 门控 → capped → 条件 → 冷却。
+**`evaluate(entry, options)`**：统一的只读资格判断，返回 `pass | wait | drop`。短路顺序固定：hydrate 门控 → capped → 条件 → 冷却。
 
 - hydrate 门控（`wait` 的来源之一）：条目配了持久化冷却字段（`total/day/hour/minute/minGap`）且 `CooldownStore` 尚未 hydrate 完成，返回 `wait`。只配 `session` 或没有冷却的条目不受影响。
 - capped（`drop`）：`isCapped(entry)`：未带 `exemptCooldown`、已 hydrate、且 `session` 或 `total` 已耗尽。`minGap/day/hour/minute` 到期会自行解除，**不**算 capped。
 - 条件：`when(ctx)` 是唯一权威（配了就忽略 `route/requiresAuth`）；否则 `route`（字符串全等 / 数组包含 / 正则，先重置 `lastIndex`）AND `requiresAuth`（读保留键 `ctx.route/ctx.auth`）。`when` 抛错视为不满足（`wait`）。
 - 冷却：`entry.cfg.cooldown` 存在、该条目未带 `exemptCooldown`，才查 `CooldownStore.canShow`，不过为 `wait`。
-- `conditionsOnly`：已展示项只复检条件，跳过门控与 capped（`setContext` 的 `dismissWhenUnmet` 撤下用）。`ignoreConditions`：`resolve` 落地时 `dismissWhenUnmet:false` 的条目忽略条件、冷却仍复检。
+- `setContext` 撤下已展示项（`dismissWhenUnmet`）只需复检条件，直接调用 `conditionsPass`，不经 `evaluate`。`ignoreConditions`：`resolve` 落地时 `dismissWhenUnmet:false` 的条目忽略条件、冷却仍复检。
 - 调用点：`scheduleNow`、overlap 的 open 发射门、`replace` 资格、`finishResolve`、`resumePending`、`setContext`。同 id 重开接管路径刻意绕过它（但提交时仍会先做 capped 检查，且门控中的条目不直接接管）。
 
 ### 5.1 capped 流程（D3）与 hydrate 门控（D5）

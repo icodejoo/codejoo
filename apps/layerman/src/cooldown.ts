@@ -50,18 +50,22 @@ function pad(n: number): string {
   return n < 10 ? `0${n}` : `${n}`;
 }
 
-/** 本地自然日/时/分的桶标识。 */
-function dayBucketOf(t: number): string {
+/** 一个时间点对应的本地自然日/时/分桶标识。 */
+interface Buckets {
+  /** 日桶，如 `2026-01-02`。 */
+  day: string;
+  /** 小时桶，如 `2026-01-02T03`。 */
+  hour: string;
+  /** 分钟桶，如 `2026-01-02T03:04`。 */
+  minute: string;
+}
+
+/** 用同一个本地 `Date` 一次性算出日/时/分桶；桶格式只在这里定义，`canShow` 与 `bump` 共用，避免两处漂移。 */
+function bucketsOf(t: number): Buckets {
   const d = new Date(t);
-  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
-}
-/** 本地自然小时桶，如 `2026-01-02T03`。 */
-function hourBucketOf(t: number): string {
-  return `${dayBucketOf(t)}T${pad(new Date(t).getHours())}`;
-}
-/** 本地自然分钟桶，如 `2026-01-02T03:04`。 */
-function minuteBucketOf(t: number): string {
-  return `${hourBucketOf(t)}:${pad(new Date(t).getMinutes())}`;
+  const day = `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+  const hour = `${day}T${pad(d.getHours())}`;
+  return { day, hour, minute: `${hour}:${pad(d.getMinutes())}` };
 }
 
 /** 校验桶标签的格式与真实日历日期。 */
@@ -211,17 +215,11 @@ export class CooldownStore {
     if (cd.session != null && (this.session.get(id) ?? 0) >= cd.session) return false;
     const rec = this.persisted.get(id);
     if (cd.total != null && (rec?.total ?? 0) >= cd.total) return false;
-    if (cd.day != null) {
-      const c = rec && rec.dayBucket === dayBucketOf(now) ? rec.dayCount : 0;
-      if (c >= cd.day) return false;
-    }
-    if (cd.hour != null) {
-      const c = rec && rec.hourBucket === hourBucketOf(now) ? rec.hourCount : 0;
-      if (c >= cd.hour) return false;
-    }
-    if (cd.minute != null) {
-      const c = rec && rec.minuteBucket === minuteBucketOf(now) ? rec.minuteCount : 0;
-      if (c >= cd.minute) return false;
+    if (cd.day != null || cd.hour != null || cd.minute != null) {
+      const b = bucketsOf(now);
+      if (cd.day != null && (rec && rec.dayBucket === b.day ? rec.dayCount : 0) >= cd.day) return false;
+      if (cd.hour != null && (rec && rec.hourBucket === b.hour ? rec.hourCount : 0) >= cd.hour) return false;
+      if (cd.minute != null && (rec && rec.minuteBucket === b.minute ? rec.minuteCount : 0) >= cd.minute) return false;
     }
     if (cd.minGap != null && rec?.lastShownAt != null && now - rec.lastShownAt < durationToMs(cd.minGap)) return false;
     return true;
@@ -239,9 +237,7 @@ export class CooldownStore {
 
   /** 给该 id 的持久化记录各计数 +1（跨桶则重新从 1 计）。 */
   private bump(id: string, now: number): CooldownRecord {
-    const dayB = dayBucketOf(now);
-    const hourB = hourBucketOf(now);
-    const minuteB = minuteBucketOf(now);
+    const { day: dayB, hour: hourB, minute: minuteB } = bucketsOf(now);
     const prev = this.persisted.get(id);
     const rec: CooldownRecord = {
       total: (prev?.total ?? 0) + 1,

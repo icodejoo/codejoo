@@ -1,28 +1,14 @@
+import { createManager, memStorage } from "./helpers.ts";
 import { DismissReason } from "../src/index.ts";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { type AsyncableStorage, createLayerman, type Layerman, type LayermanOptions } from "../src/index.ts";
+import { type AsyncableStorage, type Layerman, type LayermanOptions } from "../src/index.ts";
 
 const managers: Layerman[] = [];
 
+/** 创建并登记本文件的隔离管理器。 */
 function make(opts: LayermanOptions = {}): Layerman {
-  const m = createLayerman({ crossTab: false, ...opts });
-  managers.push(m);
-  return m;
-}
-
-/** 内存存储 + 其后备 Map，用于跨"刷新"持久化断言。 */
-function memStorage(): { storage: AsyncableStorage; map: Map<string, string> } {
-  const map = new Map<string, string>();
-  return {
-    map,
-    storage: {
-      get: (k) => map.get(k) ?? null,
-      set: (k, v) => {
-        map.set(k, v);
-      },
-    },
-  };
+  return createManager(managers, { crossTab: false, ...opts });
 }
 
 /** 当前活跃 id（排序，便于断言）。 */
