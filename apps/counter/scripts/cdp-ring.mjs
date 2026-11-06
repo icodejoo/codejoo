@@ -34,7 +34,10 @@ let id = 1;
 const pend = new Map();
 ws.onmessage = (e) => {
   const m = JSON.parse(e.data);
-  if (m.id && pend.has(m.id)) (pend.get(m.id)(m), pend.delete(m.id));
+  if (m.id && pend.has(m.id)) {
+    pend.get(m.id)(m);
+    pend.delete(m.id);
+  }
 };
 const cmd = (method, params = {}) => {
   const i = id++;

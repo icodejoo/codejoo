@@ -7,74 +7,243 @@
     <!-- 卡片/里程表渲染样式（构建产物，post-minify 时从 src/plugins/card.css 拷贝） -->
     <link rel="stylesheet" href="./dist/card.css" />
     <style>
-      :root { color-scheme: light dark; --cd-duration: 120ms; }
-      * { box-sizing: border-box; }
+      :root {
+        color-scheme: light dark;
+        --cd-duration: 120ms;
+      }
+      * {
+        box-sizing: border-box;
+      }
       body {
         font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-        margin: 0; padding: 20px; color: #1d1d1f; background: #f5f5f7; line-height: 1.5;
+        margin: 0;
+        padding: 20px;
+        color: #1d1d1f;
+        background: #f5f5f7;
+        line-height: 1.5;
       }
-      h1 { font-size: 20px; margin: 0 0 4px; }
-      h2 { font-size: 15px; margin: 18px 0 10px; color: #06c; }
-      .sub { color: #888; font-size: 12px; margin: 0 0 16px; }
-      .grid { display: grid; grid-template-columns: 1fr 420px; gap: 16px; align-items: start; }
-      section { background: #fff; border: 1px solid #e2e2e6; border-radius: 10px; padding: 16px; margin-bottom: 16px; }
-      .row { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; margin: 8px 0; }
-      .lbl { min-width: 110px; color: #555; font-size: 13px; }
+      h1 {
+        font-size: 20px;
+        margin: 0 0 4px;
+      }
+      h2 {
+        font-size: 15px;
+        margin: 18px 0 10px;
+        color: #06c;
+      }
+      .sub {
+        color: #888;
+        font-size: 12px;
+        margin: 0 0 16px;
+      }
+      .grid {
+        display: grid;
+        grid-template-columns: 1fr 420px;
+        gap: 16px;
+        align-items: start;
+      }
+      section {
+        background: #fff;
+        border: 1px solid #e2e2e6;
+        border-radius: 10px;
+        padding: 16px;
+        margin-bottom: 16px;
+      }
+      .row {
+        display: flex;
+        gap: 8px;
+        flex-wrap: wrap;
+        align-items: center;
+        margin: 8px 0;
+      }
+      .lbl {
+        min-width: 110px;
+        color: #555;
+        font-size: 13px;
+      }
       button {
-        padding: 7px 14px; border: 1px solid #c7c7cc; background: #fff;
-        border-radius: 6px; cursor: pointer; font-size: 13px; transition: .12s;
+        padding: 7px 14px;
+        border: 1px solid #c7c7cc;
+        background: #fff;
+        border-radius: 6px;
+        cursor: pointer;
+        font-size: 13px;
+        transition: 0.12s;
       }
-      button:hover { background: #06c; color: #fff; border-color: #06c; }
-      button.run { border-color: #34c759; color: #248a3d; font-weight: 700; font-size: 15px; padding: 10px 22px; }
+      button:hover {
+        background: #06c;
+        color: #fff;
+        border-color: #06c;
+      }
+      button.run {
+        border-color: #34c759;
+        color: #248a3d;
+        font-weight: 700;
+        font-size: 15px;
+        padding: 10px 22px;
+      }
       .num {
-        display: inline-block; min-width: 150px; padding: 4px 12px;
-        background: #111; color: #30d158; font-family: ui-monospace, "SF Mono", monospace;
-        border-radius: 5px; font-size: 14px; text-align: center;
+        display: inline-block;
+        min-width: 150px;
+        padding: 4px 12px;
+        background: #111;
+        color: #30d158;
+        font-family: ui-monospace, "SF Mono", monospace;
+        border-radius: 5px;
+        font-size: 14px;
+        text-align: center;
       }
-      .tag { font-size: 11px; color: #888; }
-      code { background: #f0f0f3; padding: 1px 5px; border-radius: 4px; font-size: 12px; }
+      .tag {
+        font-size: 11px;
+        color: #888;
+      }
+      code {
+        background: #f0f0f3;
+        padding: 1px 5px;
+        border-radius: 4px;
+        font-size: 12px;
+      }
 
       /* 断言结果 */
-      #summary { font-size: 15px; font-weight: 700; padding: 12px 16px; border-radius: 10px; margin-bottom: 12px; }
-      #summary.ok  { background: #e6f8ed; color: #1a7f37; border: 1px solid #2da44e; }
-      #summary.bad { background: #ffeef0; color: #cf222e; border: 1px solid #cf222e; }
-      #summary.idle{ background: #eef; color: #339; border: 1px solid #aab; }
-      .grp { margin: 10px 0 4px; font-weight: 700; font-size: 13px; color: #333; }
-      .grp .badge { font-weight: 600; font-size: 11px; padding: 1px 8px; border-radius: 99px; margin-left: 6px; }
-      .grp .badge.ok { background: #e6f8ed; color: #1a7f37; }
-      .grp .badge.bad{ background: #ffeef0; color: #cf222e; }
-      ul.cases { list-style: none; margin: 0 0 8px; padding: 0; }
-      ul.cases li { font-size: 12px; padding: 2px 0 2px 22px; position: relative; font-family: ui-monospace, monospace; }
-      ul.cases li.ok::before  { content: "✓"; color: #2da44e; position: absolute; left: 4px; }
-      ul.cases li.bad::before { content: "✗"; color: #cf222e; position: absolute; left: 4px; }
-      ul.cases li .err { color: #cf222e; display: block; padding-left: 0; white-space: pre-wrap; }
+      #summary {
+        font-size: 15px;
+        font-weight: 700;
+        padding: 12px 16px;
+        border-radius: 10px;
+        margin-bottom: 12px;
+      }
+      #summary.ok {
+        background: #e6f8ed;
+        color: #1a7f37;
+        border: 1px solid #2da44e;
+      }
+      #summary.bad {
+        background: #ffeef0;
+        color: #cf222e;
+        border: 1px solid #cf222e;
+      }
+      #summary.idle {
+        background: #eef;
+        color: #339;
+        border: 1px solid #aab;
+      }
+      .grp {
+        margin: 10px 0 4px;
+        font-weight: 700;
+        font-size: 13px;
+        color: #333;
+      }
+      .grp .badge {
+        font-weight: 600;
+        font-size: 11px;
+        padding: 1px 8px;
+        border-radius: 99px;
+        margin-left: 6px;
+      }
+      .grp .badge.ok {
+        background: #e6f8ed;
+        color: #1a7f37;
+      }
+      .grp .badge.bad {
+        background: #ffeef0;
+        color: #cf222e;
+      }
+      ul.cases {
+        list-style: none;
+        margin: 0 0 8px;
+        padding: 0;
+      }
+      ul.cases li {
+        font-size: 12px;
+        padding: 2px 0 2px 22px;
+        position: relative;
+        font-family: ui-monospace, monospace;
+      }
+      ul.cases li.ok::before {
+        content: "✓";
+        color: #2da44e;
+        position: absolute;
+        left: 4px;
+      }
+      ul.cases li.bad::before {
+        content: "✗";
+        color: #cf222e;
+        position: absolute;
+        left: 4px;
+      }
+      ul.cases li .err {
+        color: #cf222e;
+        display: block;
+        padding-left: 0;
+        white-space: pre-wrap;
+      }
 
       /* 覆盖清单 */
-      .cover { font-size: 12px; }
-      .cover .api { font-family: ui-monospace, monospace; }
-      .cover .done { color: #1a7f37; }
+      .cover {
+        font-size: 12px;
+      }
+      .cover .api {
+        font-family: ui-monospace, monospace;
+      }
+      .cover .done {
+        color: #1a7f37;
+      }
 
       /* 演示面板 */
-      .panel { display: inline-flex; flex-direction: column; gap: 6px; padding: 12px 16px;
-        background: #fff; border: 1px solid #e3e5e8; border-radius: 8px; min-width: 150px; }
-      .panel b { font-size: 12px; color: #888; font-weight: 500; }
-      .timer { font-size: 34px; font-weight: 700; font-family: ui-monospace, Consolas, monospace; line-height: 1.25; }
-      .timer .cd-root { --cd-bg: #1b1e24; --cd-color: #fff; gap: 3px; }
+      .panel {
+        display: inline-flex;
+        flex-direction: column;
+        gap: 6px;
+        padding: 12px 16px;
+        background: #fff;
+        border: 1px solid #e3e5e8;
+        border-radius: 8px;
+        min-width: 150px;
+      }
+      .panel b {
+        font-size: 12px;
+        color: #888;
+        font-weight: 500;
+      }
+      .timer {
+        font-size: 34px;
+        font-weight: 700;
+        font-family: ui-monospace, Consolas, monospace;
+        line-height: 1.25;
+      }
+      .timer .cd-root {
+        --cd-bg: #1b1e24;
+        --cd-color: #fff;
+        gap: 3px;
+      }
     </style>
   </head>
   <body>
-  <nav style="position:sticky;top:0;z-index:999;display:flex;gap:6px;flex-wrap:wrap;padding:6px 10px;background:rgba(255,255,255,.92);backdrop-filter:blur(8px);border-bottom:1px solid #e0e0e6;font-size:12px;">
-    <a href="/index.html" style="padding:3px 8px;border-radius:5px;text-decoration:none;background:#f0f0f5;color:#1d1d1f;">src 手动测试台</a>
-    <a href="/test.html" style="padding:3px 8px;border-radius:5px;text-decoration:none;background:#f0f0f5;color:#1d1d1f;">API 断言测试台</a>
-    <a href="/stress.html" style="padding:3px 8px;border-radius:5px;text-decoration:none;background:#f0f0f5;color:#1d1d1f;">压测</a>
-    <a href="/ring-demo.html" style="padding:3px 8px;border-radius:5px;text-decoration:none;background:#f0f0f5;color:#1d1d1f;">Ring Demo</a>
-    <a href="/ring-stress.html" style="padding:3px 8px;border-radius:5px;text-decoration:none;background:#f0f0f5;color:#1d1d1f;">Ring 压测</a>
-  </nav>
+    <nav
+      style="
+        position: sticky;
+        top: 0;
+        z-index: 999;
+        display: flex;
+        gap: 6px;
+        flex-wrap: wrap;
+        padding: 6px 10px;
+        background: rgba(255, 255, 255, 0.92);
+        backdrop-filter: blur(8px);
+        border-bottom: 1px solid #e0e0e6;
+        font-size: 12px;
+      "
+    >
+      <a href="/index.html" style="padding: 3px 8px; border-radius: 5px; text-decoration: none; background: #f0f0f5; color: #1d1d1f">src 手动测试台</a>
+      <a href="/test.html" style="padding: 3px 8px; border-radius: 5px; text-decoration: none; background: #f0f0f5; color: #1d1d1f">API 断言测试台</a>
+      <a href="/stress.html" style="padding: 3px 8px; border-radius: 5px; text-decoration: none; background: #f0f0f5; color: #1d1d1f">压测</a>
+      <a href="/ring-demo.html" style="padding: 3px 8px; border-radius: 5px; text-decoration: none; background: #f0f0f5; color: #1d1d1f">Ring Demo</a>
+      <a href="/ring-stress.html" style="padding: 3px 8px; border-radius: 5px; text-decoration: none; background: #f0f0f5; color: #1d1d1f">Ring 压测</a>
+    </nav>
     <h1>@codejoo/counter — API 100% 覆盖测试台</h1>
     <p class="sub">
-      黑盒导入构建产物 <code>./dist/index.mjs</code>。点击「运行全部断言」对全部公开 API（counter / countup /
-      countdown / createCardRender / createOdometerRender）逐项断言验证；下方为可视化实时演示。
-      <br />先 <code>npm run build</code> 生成 dist，再用任意静态服务器打开本页（如 <code>npx vite</code> 或 <code>npx serve</code>）。
+      黑盒导入构建产物 <code>./dist/index.mjs</code>。点击「运行全部断言」对全部公开 API（counter / countup / countdown / createCardRender / createOdometerRender）逐项断言验证；下方为可视化实时演示。 <br />先
+      <code>npm run build</code> 生成 dist，再用任意静态服务器打开本页（如 <code>npx vite</code> 或 <code>npx serve</code>）。
     </p>
 
     <div class="row">
@@ -93,10 +262,22 @@
         <section>
           <h2>可视化演示 · countdown 卡片渲染（createCardRender）</h2>
           <div class="row">
-            <div class="panel"><b>flip 翻转</b><div class="timer" id="dFlip"></div></div>
-            <div class="panel"><b>slide 位移(up)</b><div class="timer" id="dSlide"></div></div>
-            <div class="panel"><b>calendar 翻页</b><div class="timer" id="dCal"></div></div>
-            <div class="panel"><b>flip 绕 Y 轴</b><div class="timer" id="dFlipY"></div></div>
+            <div class="panel">
+              <b>flip 翻转</b>
+              <div class="timer" id="dFlip"></div>
+            </div>
+            <div class="panel">
+              <b>slide 位移(up)</b>
+              <div class="timer" id="dSlide"></div>
+            </div>
+            <div class="panel">
+              <b>calendar 翻页</b>
+              <div class="timer" id="dCal"></div>
+            </div>
+            <div class="panel">
+              <b>flip 绕 Y 轴</b>
+              <div class="timer" id="dFlipY"></div>
+            </div>
           </div>
           <div class="row">
             <button id="demoCards">开始 (90s, mm:ss)</button>
@@ -105,15 +286,20 @@
 
           <h2>countdown 毫秒 / 自定义模板（默认文本渲染）</h2>
           <div class="row">
-            <span class="lbl">mm:ss.sss</span><span class="num" id="dMs">--</span>
-            <span class="lbl">DD天 HH:mm:ss</span><span class="num" id="dDays">--</span>
+            <span class="lbl">mm:ss.sss</span><span class="num" id="dMs">--</span> <span class="lbl">DD天 HH:mm:ss</span><span class="num" id="dDays">--</span>
             <button id="demoText">开始</button>
           </div>
 
           <h2>可视化演示 · countup 里程表（createOdometerRender）</h2>
           <div class="row">
-            <div class="panel"><b>minimal</b><div class="timer" id="dOdoMin"></div></div>
-            <div class="panel"><b>full</b><div class="timer" id="dOdoFull"></div></div>
+            <div class="panel">
+              <b>minimal</b>
+              <div class="timer" id="dOdoMin"></div>
+            </div>
+            <div class="panel">
+              <b>full</b>
+              <div class="timer" id="dOdoFull"></div>
+            </div>
             <span class="lbl">纯文本</span><span class="num" id="dCuText">0</span>
           </div>
           <div class="row">
@@ -125,7 +311,7 @@
       </div>
 
       <!-- ====== 覆盖清单 ====== -->
-      <section style="position: sticky; top: 16px;">
+      <section style="position: sticky; top: 16px">
         <h2>公开 API 覆盖清单</h2>
         <div class="cover" id="coverList"></div>
       </section>
@@ -140,10 +326,19 @@
         const fn = (host, remaining, value, ctx) => {
           const c = { ...ctx, remaining, el: host };
           let s = sm.get(host);
-          if (!s) { s = r.mount(host, c); sm.set(host, s); }
+          if (!s) {
+            s = r.mount(host, c);
+            sm.set(host, s);
+          }
           r.update(s, remaining, value, c);
         };
-        fn.destroy = (el) => { if (el) { const s = sm.get(el); if (s) r.destroy(s); sm.delete(el); } };
+        fn.destroy = (el) => {
+          if (el) {
+            const s = sm.get(el);
+            if (s) r.destroy(s);
+            sm.delete(el);
+          }
+        };
         return fn;
       }
       function wrapOdo(r) {
@@ -151,7 +346,10 @@
         return (host, _fmtStr, ctx) => {
           const c = { ...ctx, el: host };
           let s = sm.get(host);
-          if (!s) { s = r.mount(host, c); sm.set(host, s); }
+          if (!s) {
+            s = r.mount(host, c);
+            sm.set(host, s);
+          }
           r.update(s, ctx.value, c);
         };
       }
@@ -192,8 +390,7 @@
       // ============================================================
       //  迷你断言框架
       // ============================================================
-      const fmt = (v) =>
-        v instanceof Int32Array ? `Int32Array[${Array.from(v)}]` : typeof v === "object" ? JSON.stringify(v) : String(v);
+      const fmt = (v) => (v instanceof Int32Array ? `Int32Array[${Array.from(v)}]` : typeof v === "object" ? JSON.stringify(v) : String(v));
       function expect(a) {
         return {
           toBe: (b) => {
@@ -585,9 +782,7 @@
         });
 
         test("defaults 可读且含 duration/fps/easing/fmt/render", () => {
-          ["duration", "fps", "easing", "fmt", "render"].forEach((k) =>
-            assert(k in countup.defaults, `缺少 ${k}`),
-          );
+          ["duration", "fps", "easing", "fmt", "render"].forEach((k) => assert(k in countup.defaults, `缺少 ${k}`));
         });
 
         test("counter.up(...) 经挂载 api 调用等价于 countup(...)", () => {
@@ -854,9 +1049,7 @@
         });
 
         test("defaults 含 timeOffset/dateParser/fmt/showDays/showMilliseconds/render", () => {
-          ["timeOffset", "dateParser", "fmt", "showDays", "showMilliseconds", "render"].forEach((k) =>
-            assert(k in countdown.defaults, `缺少 ${k}`),
-          );
+          ["timeOffset", "dateParser", "fmt", "showDays", "showMilliseconds", "render"].forEach((k) => assert(k in countdown.defaults, `缺少 ${k}`));
         });
 
         resetAll();
@@ -918,7 +1111,8 @@
         test("countup：pause 后不 busy 且不推进；resume 后补偿暂停时长续接", () => {
           resetAll();
           const e = el();
-          let p = 0, r = 0;
+          let p = 0,
+            r = 0;
           const id = countup({ to: 100, el: e, ...linear, onPause: () => p++, onResume: () => r++ });
           upTick(0, 0);
           upTick(500, 500);
@@ -939,7 +1133,8 @@
           resetAll();
           setNow(BASE2);
           const e = el();
-          let p = 0, r = 0;
+          let p = 0,
+            r = 0;
           const id = countdown(5000, e, { lazy: false, onPause: () => p++, onResume: () => r++ });
           downTick();
           expect(e.textContent).toBe("00:00:05");
@@ -1036,7 +1231,12 @@
 
         test("非数字渲染为 li.cd-sep，不是翻转结构", () => {
           const host = el();
-          wrapCard(createCardRender())(host, 0, cval, cc(() => "1:2")); // 含分隔符
+          wrapCard(createCardRender())(
+            host,
+            0,
+            cval,
+            cc(() => "1:2"),
+          ); // 含分隔符
           const its = items(host);
           expect(its.length).toBe(3);
           assert(its[1].classList.contains("cd-sep"), "中间应为 sep");
@@ -1046,16 +1246,31 @@
         test("字符数变化整体重建、不播动画", () => {
           const host = el();
           const r = wrapCard(createCardRender());
-          r(host, 100, cval, cc(() => "9")); // remaining 不同才不被跳帧跳过
+          r(
+            host,
+            100,
+            cval,
+            cc(() => "9"),
+          ); // remaining 不同才不被跳帧跳过
           const before = root(host);
-          r(host, 99, cval, cc(() => "10")); // 1 位 → 2 位
+          r(
+            host,
+            99,
+            cval,
+            cc(() => "10"),
+          ); // 1 位 → 2 位
           assert(root(host) !== before, "应重建 ul");
           expect(items(host).length).toBe(2);
         });
 
         test("自定义 prefix（prefix + effect + name 组合类）", () => {
           const host = el();
-          wrapCard(createCardRender({ prefix: "tk-", effect: "slide" }))(host, 7, cval, cc(() => "7"));
+          wrapCard(createCardRender({ prefix: "tk-", effect: "slide" }))(
+            host,
+            7,
+            cval,
+            cc(() => "7"),
+          );
           const ul = host.querySelector(".tk-root"); // 自定义前缀，根类为 tk-root
           assert(ul, "缺 tk-root");
           assert(ul.classList.contains("tk-slide-root"), "缺 tk-slide-root");
@@ -1063,19 +1278,34 @@
 
         test("effect 类应用到 root（calendar）", () => {
           const host = el();
-          wrapCard(createCardRender({ effect: "calendar" }))(host, 8, cval, cc(() => "8"));
+          wrapCard(createCardRender({ effect: "calendar" }))(
+            host,
+            8,
+            cval,
+            cc(() => "8"),
+          );
           assert(root(host).classList.contains("cd-calendar-root"), "缺 calendar root 类");
         });
 
         test("axis:y 给 flip 加 cd-flip-y 修饰类", () => {
           const host = el();
-          wrapCard(createCardRender({ axis: "y" }))(host, 8, cval, cc(() => "8"));
+          wrapCard(createCardRender({ axis: "y" }))(
+            host,
+            8,
+            cval,
+            cc(() => "8"),
+          );
           assert(root(host).classList.contains("cd-flip-y"), "缺 cd-flip-y");
         });
 
         test("direction:up 给 slide 加 cd-slide-up 修饰类", () => {
           const host = el();
-          wrapCard(createCardRender({ effect: "slide", direction: "up" }))(host, 8, cval, cc(() => "8"));
+          wrapCard(createCardRender({ effect: "slide", direction: "up" }))(
+            host,
+            8,
+            cval,
+            cc(() => "8"),
+          );
           assert(root(host).classList.contains("cd-slide-up"), "缺 cd-slide-up");
         });
 
@@ -1083,8 +1313,18 @@
           const r = wrapCard(createCardRender());
           const h1 = el(),
             h2 = el();
-          r(h1, 1, cval, cc(() => "1"));
-          r(h2, 2, cval, cc(() => "2"));
+          r(
+            h1,
+            1,
+            cval,
+            cc(() => "1"),
+          );
+          r(
+            h2,
+            2,
+            cval,
+            cc(() => "2"),
+          );
           expect(root(h1).querySelector(".cd-now").dataset.digit).toBe("1");
           expect(root(h2).querySelector(".cd-now").dataset.digit).toBe("2");
         });
@@ -1103,9 +1343,7 @@
           expect(before).toBe("03:00");
           setNow(BASE + 1000);
           downTick(); // → 02:59，秒/分变化位进入 flipping
-          const flipping = items(host).some(
-            (c) => !c.classList.contains("cd-sep") && c.querySelector(".cd-next").classList.contains("cd-flipping"),
-          );
+          const flipping = items(host).some((c) => !c.classList.contains("cd-sep") && c.querySelector(".cd-next").classList.contains("cd-flipping"));
           assert(flipping, "应有数字位进入翻转");
           resetAll();
           realTime();
@@ -1187,11 +1425,7 @@
 
         test("[minimal] 平移以 --cd-cell-height 为单位，仅表达 roll(0~1)", () => {
           const host = el();
-          wrapOdo(createOdometerRender({ rollWindow: 1 }))(
-            host,
-            "0",
-            { value: 7.5, from: 0, to: 99, fmt: () => "0" },
-          );
+          wrapOdo(createOdometerRender({ rollWindow: 1 }))(host, "0", { value: 7.5, from: 0, to: 99, fmt: () => "0" });
           const t = strips(host)[0].style.transform;
           assert(t.includes("var(--cd-cell-height, 1.25em)"), "缺 cell-height 变量");
           const m = t.match(/\*\s*(-?[\d.]+)\)/);
@@ -1203,7 +1437,11 @@
           wrapOdo(createOdometerRender({ strip: "full" }))(host, NF.format(12), ctx(12, 0, 99));
           const s = strips(host)[0];
           expect(s.children.length).toBe(11);
-          expect(Array.from(s.children).map((c) => c.textContent).join("")).toBe("01234567890");
+          expect(
+            Array.from(s.children)
+              .map((c) => c.textContent)
+              .join(""),
+          ).toBe("01234567890");
         });
 
         test("自定义 prefix 生成对应类名", () => {
@@ -1402,9 +1640,7 @@
         }
         const total = pass + fail;
         summaryEl.className = fail ? "bad" : "ok";
-        summaryEl.textContent = fail
-          ? `✗ ${fail} 个失败 · ${pass}/${total} 通过`
-          : `✓ 全部通过 · ${pass}/${total} · 公开 API 100% 覆盖`;
+        summaryEl.textContent = fail ? `✗ ${fail} 个失败 · ${pass}/${total} 通过` : `✓ 全部通过 · ${pass}/${total} · 公开 API 100% 覆盖`;
 
         coverEl.innerHTML = COVERAGE.map(([api, grp]) => {
           const g = groups.find((x) => x.name.includes(grp));

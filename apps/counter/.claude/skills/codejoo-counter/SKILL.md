@@ -10,8 +10,12 @@ description: Work on apps/counter (@codejoo/counter) — a browser count-up/coun
 
 ## Architecture (src/)
 
-- **core/** — the singleton ticker. `counter.start/stop/use(plugin)/destroy`; plugins are
-  `{ name, install(now,dt), api?, dispose? }`. count-up & count-down each self-`use()` on first task.
+- **core/** — the singleton ticker (`index.ts`) and page clock (`clock.ts`: `monoNow()` monotonic clock with
+  sleep compensation, `isHidden()`, `onVisibility()`). `counter.start/stop/use(plugin)/destroy`; plugins are
+  `{ name, install(now,dt), api?, dispose? }`. `install` returns `true`/`undefined` (next frame), `false` (idle) or a
+  positive number = ms until it needs to run again (all-number → the ticker sleeps on a timer; hidden page → timers
+  instead of rAF). `nudge()` (internal, called by groups on remove/clear) wakes a sleeping ticker so it can wind down.
+  count-up & count-down each self-`use()` on first task.
 - **groups.ts** — shared group/queue scaffold (label → `Map<id, task>`), used by both up & down.
 - **count-up/** — `countup` (default export). `count-up.ts` = engine/tick, `helper.ts` = easings +
   formatter builders (internal), `type.ts` = public types.
@@ -35,6 +39,14 @@ description: Work on apps/counter (@codejoo/counter) — a browser count-up/coun
   which units just rolled over. Contexts/tuples are **reused per frame — never hold across frames**.
 
 ## Conventions / invariants
+
+- count-down: relative durations (`number` ≤ 1971-ms with the built-in parser) anchor on the **monotonic clock**
+  (`task.mono`); absolute deadlines on `Date.now()`; `resume()` re-anchors on mono. `ctx.deadline` is always a wall-clock
+  timestamp. In tests, advance time with `vi.advanceTimersByTime` — `vi.setSystemTime(Date.now()+n)` only jumps the wall
+  clock and (correctly) does **not** move relative countdowns. `vitest.config.ts` fakes `performance` too.
+- Mute (`muteHidden`, default on): page hidden or element off-screen (`watchOffscreen`, persistent IntersectionObserver)
+  ⇒ no `render`/`onUpdate`, but completion still fires on time; un-mute forces a refresh. count-up tasks without `el` never mute.
+- count-down `fps` only throttles `showMilliseconds` tasks (fixed grid, half-vsync tolerance, never delays completion).
 
 - Zero-allocation hot path; reuse arrays/objects, no per-frame allocation in tick/render.
 - State is keyed per host `Element` in a `WeakMap`, so one render instance serves many elements.
@@ -67,6 +79,10 @@ pnpm build           # multi-entry ESM (dist/*.mjs + *.d.mts) + copy css
   no-GPU/headless boxes capping fps). `glow` (drop-shadow) is the dominant GPU cost — default off.
 
 ## Gotchas
+
+- Each task's callbacks run in their own `try/catch` (`reportTaskError`): a throwing `render`/`onUpdate`/`onDone` must not starve
+  siblings or keep a finished task in the queue. Keep `render` and `onDone` guarded separately.
+- Coverage gate is 100% (statements/branches/functions/lines). Prefer deleting provably-unreachable defensive branches over `ignore` comments.
 
 - Don't break the reuse contract: a render must tolerate being called every frame with the same
   value (idempotent, cached writes).

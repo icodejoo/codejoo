@@ -41,6 +41,19 @@ countdown(300_000, "#ring", { fmt: "mm:ss", render: createRingRender() });
 
 各插件选项与 API：[card](./docs/card.md) · [odometer](./docs/odometer.md) · [ring](./docs/ring.md)。
 
+## 省电与可见性
+
+- **共享定时器会休眠。** 插件的 `install(now, dt)` 可返回 `true`（下一帧）、`false`（空闲）或正数毫秒（"至少这么久之后再叫我"）。
+  所有忙碌插件都返回数字时，核心不再逐帧空转，只挂一个定时器休眠；新增 / 恢复 / 移除任务会唤醒它。同一时刻批量创建的整秒倒计时，开销约每秒 1 次唤醒，而不是 60 帧。
+- **后台标签页。** 页面隐藏时 `requestAnimationFrame` 会停摆，核心改用定时器驱动，倒计时的 `onDone` 仍会准时触发（受浏览器对隐藏页定时器节流的限制），不必等用户切回来。
+- **`muteHidden`（默认 `true`）。** 页面隐藏或元素离开视口时，任务跳过 `render` / `onUpdate`；进度与完成仍按真实时间推进，重新可见时立即刷新为当前值。
+  没有 `el` 的 count-up 任务不会被静音。需要始终更新时传 `muteHidden: false`。
+- **时钟。** 相对时长倒计时（如 `countdown(60000, …)`）走单调钟，修改系统时间不会让它跳变；绝对 `Date` / 时间戳 / 日期字符串跟随墙钟。
+  `pause()` → `resume()` 之后任务统一按单调钟继续。
+- **`fps`（count-down）。** 仅限制 `showMilliseconds` 任务的显示频率，完成不受影响。
+
+详见 [CHANGELOG](CHANGELOG.md)。
+
 ## 入口
 
 | import                                            | 内容                                        |

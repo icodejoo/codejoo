@@ -28,8 +28,10 @@ const pend = new Map(),
   lis = new Map();
 ws.onmessage = (e) => {
   const m = JSON.parse(e.data);
-  if (m.id && pend.has(m.id)) (pend.get(m.id)(m), pend.delete(m.id));
-  else if (m.method && lis.has(m.method)) lis.get(m.method)(m.params);
+  if (m.id && pend.has(m.id)) {
+    pend.get(m.id)(m);
+    pend.delete(m.id);
+  } else if (m.method && lis.has(m.method)) lis.get(m.method)(m.params);
 };
 const cmd = (method, params = {}) => {
   const i = id++;
